@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Boxes, RefreshCw, Network, LayoutGrid } from "lucide-react";
+import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
+import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ export function Workspace({
 }) {
   const [view, setView] = useState<View>("canvas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [projectsOpen, setProjectsOpen] = useState(false);
   const router = useRouter();
 
   // Re-resolve the selected service from fresh props so the drawer updates.
@@ -59,6 +61,12 @@ export function Workspace({
             </ViewToggle>
           </div>
           <button
+            onClick={() => setProjectsOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+          >
+            <FolderGit2 className="size-3.5" /> Projects
+          </button>
+          <button
             onClick={() => router.refresh()}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
           >
@@ -83,6 +91,7 @@ export function Workspace({
       )}
 
       <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
+      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
     </div>
   );
 }

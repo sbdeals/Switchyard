@@ -5,6 +5,11 @@ import {
   createDatabase,
   databaseAction,
   createProject,
+  renameProject,
+  removeProject,
+  createEnvironment,
+  renameEnvironment,
+  removeEnvironment,
   listProjects,
   saveEnvironment,
   updateDatabase,
@@ -122,6 +127,40 @@ export async function saveEnvironmentAction(
   } catch (e) {
     return fail(e);
   }
+}
+
+// --- projects & environments ------------------------------------------------
+
+async function wrap(fn: () => Promise<void>): Promise<ActionResult> {
+  try {
+    await fn();
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function createProjectAction(name: string): Promise<ActionResult> {
+  return wrap(() => createProject(name));
+}
+export async function renameProjectAction(id: string, name: string): Promise<ActionResult> {
+  return wrap(() => renameProject(id, name));
+}
+export async function removeProjectAction(id: string): Promise<ActionResult> {
+  return wrap(() => removeProject(id));
+}
+export async function createEnvironmentAction(
+  projectId: string,
+  name: string
+): Promise<ActionResult> {
+  return wrap(() => createEnvironment(projectId, name));
+}
+export async function renameEnvironmentAction(id: string, name: string): Promise<ActionResult> {
+  return wrap(() => renameEnvironment(id, name));
+}
+export async function removeEnvironmentAction(id: string): Promise<ActionResult> {
+  return wrap(() => removeEnvironment(id));
 }
 
 // --- applications -----------------------------------------------------------

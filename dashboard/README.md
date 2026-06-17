@@ -74,15 +74,15 @@ deployable on one canvas. See `src/lib/dokploy.ts` (`listServices`).
 - [x] **Databases** (5 engines): one-click deploy (auto name/password/latest
       version), editable Settings (rename, version, port, CPU/memory), connection
       string, env editor
-- [x] **Applications**: one-click deploy from a Docker image; drawer tabs for
-      Source, **Domains** (attach domain + auto-SSL), Variables, Metrics, Logs,
-      editable Settings
+- [x] **Applications**: one-click deploy from a **Docker image** or a **public
+      Git repo** (Nixpacks build); drawer tabs for Source, **Domains** (attach
+      domain + auto-SSL), Variables, Metrics, Logs, editable Settings
 - [x] **Compose**: create a `docker-compose` stack with an in-app YAML editor →
       Save & deploy
+- [x] **Projects & environments**: create / rename / delete from the dashboard
 - [x] Lifecycle for every kind: deploy / start / stop / redeploy / destroy
 - [x] **Railway-style canvas** (React Flow): draggable nodes (per-kind icon &
       colour), persisted layout, env-inferred connection arrows, minimap;
       live-syncs on data change
 - [x] Live **Logs** + **Metrics** straight from the Docker API (SSE)
-- [ ] Git/GitHub app source, project/environment management, backups,
-      deploy-log history (next — see the porting roadmap in the repo plan)
+- [ ] Backups (S3 destinations), deploy-log history (next)

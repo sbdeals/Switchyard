@@ -212,6 +212,26 @@ export async function createProject(name: string): Promise<void> {
   await request("project.create", { method: "POST", body: { name } });
 }
 
+export async function renameProject(projectId: string, name: string): Promise<void> {
+  await request("project.update", { method: "POST", body: { projectId, name } });
+}
+
+export async function removeProject(projectId: string): Promise<void> {
+  await request("project.remove", { method: "POST", body: { projectId } });
+}
+
+export async function createEnvironment(projectId: string, name: string): Promise<void> {
+  await request("environment.create", { method: "POST", body: { projectId, name } });
+}
+
+export async function renameEnvironment(environmentId: string, name: string): Promise<void> {
+  await request("environment.update", { method: "POST", body: { environmentId, name } });
+}
+
+export async function removeEnvironment(environmentId: string): Promise<void> {
+  await request("environment.remove", { method: "POST", body: { environmentId } });
+}
+
 // --- databases --------------------------------------------------------------
 
 function summariesFromTree(tree: RawProject[]): DatabaseSummary[] {
