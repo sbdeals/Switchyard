@@ -87,8 +87,14 @@ export interface Application extends ServiceBase {
   domains: AppDomain[];
 }
 
+export interface ComposeService extends ServiceBase {
+  kind: "compose";
+  composeFile: string | null;
+  composeType: string | null;
+}
+
 /** Any deployable service rendered in the dashboard. */
-export type Service = Database | Application;
+export type Service = Database | Application | ComposeService;
 
 /** A directed connection between two services, inferred from env references. */
 export interface ServiceEdge {
@@ -176,6 +182,7 @@ interface RawEnvironment {
   mongo: { mongoId: string }[];
   redis: { redisId: string }[];
   applications: { applicationId: string }[];
+  compose: { composeId: string }[];
 }
 interface RawProject {
   projectId: string;
@@ -517,10 +524,96 @@ export async function createDomain(applicationId: string, host: string, port = 8
   });
 }
 
+// --- compose ----------------------------------------------------------------
+
+interface RawComposeDetail {
+  name?: string;
+  appName?: string;
+  composeStatus?: ServiceStatus;
+  composeType?: string | null;
+  composeFile?: string | null;
+  env?: string | null;
+  createdAt?: string | null;
+}
+
+export const STARTER_COMPOSE = `services:
+  web:
+    image: nginx:alpine
+    ports:
+      - 8080:80
+`;
+
+/** List every compose stack across all projects, enriched with detail. */
+export async function listCompose(): Promise<ComposeService[]> {
+  const tree = await rawTree();
+  const refs: { id: string; p: RawProject; env: RawEnvironment }[] = [];
+  for (const p of tree)
+    for (const env of p.environments)
+      for (const c of env.compose ?? []) refs.push({ id: c.composeId, p, env });
+
+  return Promise.all(
+    refs.map(async ({ id, p, env }) => {
+      const d = await request<RawComposeDetail>(
+        `compose.one?composeId=${encodeURIComponent(id)}`
+      );
+      return {
+        kind: "compose",
+        id,
+        name: d.name ?? id,
+        appName: d.appName ?? "",
+        status: d.composeStatus ?? "idle",
+        projectId: p.projectId,
+        projectName: p.name,
+        environmentId: env.environmentId,
+        environmentName: env.name,
+        dockerImage: null,
+        env: d.env ?? null,
+        createdAt: d.createdAt ?? null,
+        cpuLimit: null,
+        memoryLimit: null,
+        replicas: null,
+        composeFile: d.composeFile ?? null,
+        composeType: d.composeType ?? null,
+      } satisfies ComposeService;
+    })
+  );
+}
+
+/** Create a raw docker-compose stack and seed its file. Returns the new id. */
+export async function createCompose(
+  name: string,
+  environmentId: string,
+  composeFile = STARTER_COMPOSE
+): Promise<string> {
+  const created = await request<{ composeId: string }>("compose.create", {
+    method: "POST",
+    body: { name, environmentId },
+  });
+  await request("compose.update", {
+    method: "POST",
+    body: { composeId: created.composeId, sourceType: "raw", composeFile },
+  });
+  return created.composeId;
+}
+
+export async function updateComposeFile(id: string, composeFile: string): Promise<void> {
+  await request("compose.update", { method: "POST", body: { composeId: id, composeFile } });
+}
+
+export async function composeAction(id: string, action: Action): Promise<void> {
+  // compose uses delete instead of remove.
+  const proc = action === "remove" ? "delete" : action;
+  await request(`compose.${proc}`, { method: "POST", body: { composeId: id } });
+}
+
 // --- unified service listing ------------------------------------------------
 
-/** Every deployable service (databases + applications) across all projects. */
+/** Every deployable service (databases + applications + compose). */
 export async function listServices(): Promise<Service[]> {
-  const [databases, applications] = await Promise.all([listDatabases(), listApplications()]);
-  return [...databases, ...applications].sort((a, b) => a.name.localeCompare(b.name));
+  const [databases, applications, compose] = await Promise.all([
+    listDatabases(),
+    listApplications(),
+    listCompose(),
+  ]);
+  return [...databases, ...applications, ...compose].sort((a, b) => a.name.localeCompare(b.name));
 }

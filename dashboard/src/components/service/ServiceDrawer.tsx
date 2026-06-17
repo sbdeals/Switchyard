@@ -22,6 +22,8 @@ import {
   EyeOff,
   Box,
   Globe,
+  Layers,
+  FileCode,
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -33,19 +35,33 @@ import { VariablesTab } from "@/components/service/VariablesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { AppOverviewTab, AppSettingsTab, DomainsTab } from "@/components/service/AppTabs";
+import {
+  ComposeOverviewTab,
+  ComposeEditorTab,
+  ComposeSettingsTab,
+} from "@/components/service/ComposeTabs";
 import { cn } from "@/lib/utils";
 
-type TabId = "overview" | "variables" | "domains" | "metrics" | "logs" | "settings";
+type TabId =
+  | "overview"
+  | "variables"
+  | "domains"
+  | "editor"
+  | "metrics"
+  | "logs"
+  | "settings";
 const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
   variables: { label: "Variables", icon: <KeyRound className="size-4" /> },
   domains: { label: "Domains", icon: <Globe className="size-4" /> },
+  editor: { label: "Compose", icon: <FileCode className="size-4" /> },
   metrics: { label: "Metrics", icon: <Cpu className="size-4" /> },
   logs: { label: "Logs", icon: <ScrollText className="size-4" /> },
   settings: { label: "Settings", icon: <Settings2 className="size-4" /> },
 };
 const DB_TABS: TabId[] = ["overview", "variables", "metrics", "logs", "settings"];
 const APP_TABS: TabId[] = ["overview", "variables", "domains", "metrics", "logs", "settings"];
+const COMPOSE_TABS: TabId[] = ["overview", "editor", "logs", "settings"];
 
 export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
@@ -56,7 +72,12 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
     setShownId(service.id);
     setTab("overview");
   }
-  const tabs = service?.kind === "application" ? APP_TABS : DB_TABS;
+  const tabs =
+    service?.kind === "application"
+      ? APP_TABS
+      : service?.kind === "compose"
+        ? COMPOSE_TABS
+        : DB_TABS;
 
   return (
     <AnimatePresence>
@@ -99,16 +120,25 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               {tab === "overview" &&
                 (service.kind === "database" ? (
                   <OverviewTab db={service} />
+                ) : service.kind === "compose" ? (
+                  <ComposeOverviewTab compose={service} />
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "variables" && service.kind !== "compose" && (
+                <VariablesTab service={service} />
+              )}
               {tab === "domains" && service.kind === "application" && <DomainsTab app={service} />}
+              {tab === "editor" && service.kind === "compose" && (
+                <ComposeEditorTab compose={service} />
+              )}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
               {tab === "logs" && <LogsTab key={service.appName} appName={service.appName} active />}
               {tab === "settings" &&
                 (service.kind === "database" ? (
                   <SettingsTab db={service} onClose={onClose} />
+                ) : service.kind === "compose" ? (
+                  <ComposeSettingsTab compose={service} onClose={onClose} />
                 ) : (
                   <AppSettingsTab app={service} onClose={onClose} />
                 ))}
@@ -122,7 +152,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
 
 function Header({ service, onClose }: { service: Service; onClose: () => void }) {
   const accent = serviceAccent(service);
-  const Icon = service.kind === "database" ? DatabaseIcon : Box;
+  const Icon = service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
       <div className="flex items-center gap-3">

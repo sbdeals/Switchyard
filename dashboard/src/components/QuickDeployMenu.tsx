@@ -2,10 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Database as DatabaseIcon, Box, Loader2, AlertCircle } from "lucide-react";
+import { Plus, Database as DatabaseIcon, Box, Layers, Loader2, AlertCircle } from "lucide-react";
 import type { Engine, ProjectNode } from "@/lib/dokploy";
 import { ENGINE_LIST } from "@/lib/engines";
-import { quickDeployDatabaseAction, quickDeployImageAction } from "@/app/actions";
+import {
+  quickDeployDatabaseAction,
+  quickDeployImageAction,
+  createComposeAction,
+} from "@/app/actions";
 
 /**
  * One-click provisioning: pick a database engine (auto name/password/version) or
@@ -52,6 +56,7 @@ export function QuickDeployMenu({
   const deployDb = (engine: Engine) =>
     run(`db:${engine}`, () => quickDeployDatabaseAction(engine, targetEnv));
   const deployImage = () => run("app", () => quickDeployImageAction(image, undefined, targetEnv));
+  const createComposeStack = () => run("compose", () => createComposeAction(undefined, targetEnv));
 
   return (
     <div className="relative">
@@ -107,6 +112,20 @@ export function QuickDeployMenu({
                   {busy === "app" ? <Loader2 className="size-4 animate-spin" /> : "Deploy"}
                 </button>
               </div>
+              <button
+                onClick={createComposeStack}
+                disabled={busy !== null}
+                className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)] disabled:opacity-50"
+              >
+                <span
+                  className="flex size-7 items-center justify-center rounded-md"
+                  style={{ backgroundColor: "#2dd4bf1a", color: "#2dd4bf" }}
+                >
+                  {busy === "compose" ? <Loader2 className="size-4 animate-spin" /> : <Layers className="size-4" />}
+                </span>
+                <span className="flex-1">Compose stack</span>
+                <span className="text-[11px] text-[var(--color-fg-subtle)]">docker-compose</span>
+              </button>
 
               <SectionLabel>Database</SectionLabel>
               <div className="grid grid-cols-1">

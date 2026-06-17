@@ -68,14 +68,21 @@ bundle via `serverExternalPackages` in `next.config.ts`.
 
 ## Status
 
-- [x] List databases across projects with live status
-- [x] **One-click deploy** — pick an engine and it provisions a random name,
-      password, and latest version, then deploys (no form). Configure after.
-- [x] Lifecycle: deploy / start / stop / redeploy / destroy
-- [x] **Railway-style canvas** (React Flow): draggable nodes, persisted layout,
-      env-inferred connection arrows, minimap; live-syncs on data change
-- [x] **Service drawer** with tabs: Overview/Config, Variables (env editor),
-      live **Metrics** (CPU/memory charts), live **Logs**, and an **editable
-      Settings** tab (rename, version, port, CPU/memory limits) + danger zone
-- [ ] Applications & compose nodes, domains, backups, deploy-log history (next —
-      see the porting roadmap in the repo plan)
+A unified **Service** model (`database | application | compose`) renders every
+deployable on one canvas. See `src/lib/dokploy.ts` (`listServices`).
+
+- [x] **Databases** (5 engines): one-click deploy (auto name/password/latest
+      version), editable Settings (rename, version, port, CPU/memory), connection
+      string, env editor
+- [x] **Applications**: one-click deploy from a Docker image; drawer tabs for
+      Source, **Domains** (attach domain + auto-SSL), Variables, Metrics, Logs,
+      editable Settings
+- [x] **Compose**: create a `docker-compose` stack with an in-app YAML editor →
+      Save & deploy
+- [x] Lifecycle for every kind: deploy / start / stop / redeploy / destroy
+- [x] **Railway-style canvas** (React Flow): draggable nodes (per-kind icon &
+      colour), persisted layout, env-inferred connection arrows, minimap;
+      live-syncs on data change
+- [x] Live **Logs** + **Metrics** straight from the Docker API (SSE)
+- [ ] Git/GitHub app source, project/environment management, backups,
+      deploy-log history (next — see the porting roadmap in the repo plan)

@@ -3,14 +3,18 @@ import { ENGINE_META } from "@/lib/engines";
 
 /** Brand accent for applications (databases use their engine accent). */
 export const APP_ACCENT = "#a06bff";
+export const COMPOSE_ACCENT = "#2dd4bf";
 
 export function serviceAccent(s: Service): string {
-  return s.kind === "database" ? ENGINE_META[s.engine].accent : APP_ACCENT;
+  if (s.kind === "database") return ENGINE_META[s.engine].accent;
+  if (s.kind === "compose") return COMPOSE_ACCENT;
+  return APP_ACCENT;
 }
 
 /** Human label, e.g. "PostgreSQL" or "Docker image". */
 export function serviceLabel(s: Service): string {
   if (s.kind === "database") return ENGINE_META[s.engine].label;
+  if (s.kind === "compose") return "Compose";
   switch (s.sourceType) {
     case "docker":
       return "Docker image";

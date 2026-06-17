@@ -15,6 +15,9 @@ import {
   updateApplication,
   saveApplicationEnvironment,
   createDomain,
+  createCompose,
+  composeAction,
+  updateComposeFile,
   type DatabasePatch,
   type ApplicationPatch,
   type Engine,
@@ -189,6 +192,51 @@ export async function createDomainAction(
 ): Promise<ActionResult> {
   try {
     await createDomain(applicationId, host.trim(), port);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// --- compose ----------------------------------------------------------------
+
+/** Create a blank compose stack (seeded with a starter file). */
+export async function createComposeAction(
+  name?: string,
+  environmentId?: string
+): Promise<QuickDeployResult> {
+  try {
+    const environment = await resolveTargetEnv(environmentId);
+    const id = await createCompose(name?.trim() || randomServiceName("compose"), environment);
+    revalidatePath("/");
+    return { ok: true, id };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function composeLifecycleAction(
+  id: string,
+  action: "deploy" | "start" | "stop" | "remove"
+): Promise<ActionResult> {
+  try {
+    await composeAction(id, action);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function saveComposeFileAction(
+  id: string,
+  composeFile: string,
+  redeploy = false
+): Promise<ActionResult> {
+  try {
+    await updateComposeFile(id, composeFile);
+    if (redeploy) await composeAction(id, "deploy");
     revalidatePath("/");
     return { ok: true };
   } catch (e) {

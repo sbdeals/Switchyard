@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
-import { Database as DatabaseIcon, Box, Rocket, ChevronRight } from "lucide-react";
+import { Database as DatabaseIcon, Box, Layers, Rocket, ChevronRight } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
-import { lifecycleAction, appLifecycleAction } from "@/app/actions";
+import { lifecycleAction, appLifecycleAction, composeLifecycleAction } from "@/app/actions";
 import { serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -15,7 +15,7 @@ import { StatusBadge } from "@/components/StatusBadge";
  */
 export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: () => void }) {
   const accent = serviceAccent(service);
-  const Icon = service.kind === "database" ? DatabaseIcon : Box;
+  const Icon = service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +26,9 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
       const res =
         service.kind === "database"
           ? await lifecycleAction(service.engine, service.id, "deploy")
-          : await appLifecycleAction(service.id, "deploy");
+          : service.kind === "compose"
+            ? await composeLifecycleAction(service.id, "deploy")
+            : await appLifecycleAction(service.id, "deploy");
       if (!res.ok) setError(res.error);
     });
   };

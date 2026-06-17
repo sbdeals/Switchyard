@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Database as DatabaseIcon, Box } from "lucide-react";
+import { Database as DatabaseIcon, Box, Layers } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import { STATUS_META } from "@/lib/engines";
 import { serviceAccent, serviceSubtitle } from "@/lib/service-meta";
@@ -16,7 +16,8 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
   const { service, onSelect } = data;
   const accent = serviceAccent(service);
   const status = STATUS_META[service.status] ?? STATUS_META.idle;
-  const Icon = service.kind === "database" ? DatabaseIcon : Box;
+  const Icon =
+    service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
 
   return (
     <div
