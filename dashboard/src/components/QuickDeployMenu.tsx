@@ -2,12 +2,13 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Database as DatabaseIcon, Box, Layers, Loader2, AlertCircle } from "lucide-react";
+import { Plus, Database as DatabaseIcon, Box, Layers, GitBranch, Loader2, AlertCircle } from "lucide-react";
 import type { Engine, ProjectNode } from "@/lib/dokploy";
 import { ENGINE_LIST } from "@/lib/engines";
 import {
   quickDeployDatabaseAction,
   quickDeployImageAction,
+  quickDeployRepoAction,
   createComposeAction,
 } from "@/app/actions";
 
@@ -27,6 +28,7 @@ export function QuickDeployMenu({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [image, setImage] = useState("");
+  const [repo, setRepo] = useState("");
   const [, startTransition] = useTransition();
 
   const envOptions = useMemo(
@@ -48,6 +50,7 @@ export function QuickDeployMenu({
       if (res.ok) {
         setOpen(false);
         setImage("");
+        setRepo("");
         onDeployed(res.id);
       } else setError(res.error);
     });
@@ -56,6 +59,7 @@ export function QuickDeployMenu({
   const deployDb = (engine: Engine) =>
     run(`db:${engine}`, () => quickDeployDatabaseAction(engine, targetEnv));
   const deployImage = () => run("app", () => quickDeployImageAction(image, undefined, targetEnv));
+  const deployRepo = () => run("repo", () => quickDeployRepoAction(repo, undefined, targetEnv));
   const createComposeStack = () => run("compose", () => createComposeAction(undefined, targetEnv));
 
   return (
@@ -110,6 +114,25 @@ export function QuickDeployMenu({
                   className="shrink-0 rounded-md bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
                 >
                   {busy === "app" ? <Loader2 className="size-4 animate-spin" /> : "Deploy"}
+                </button>
+              </div>
+              <div className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1">
+                <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
+                  <GitBranch className="size-4" />
+                </span>
+                <input
+                  value={repo}
+                  onChange={(e) => setRepo(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && repo.trim() && deployRepo()}
+                  placeholder="git repo url (Nixpacks build)"
+                  className="min-w-0 flex-1 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
+                />
+                <button
+                  onClick={deployRepo}
+                  disabled={!repo.trim() || busy !== null}
+                  className="shrink-0 rounded-md bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+                >
+                  {busy === "repo" ? <Loader2 className="size-4 animate-spin" /> : "Deploy"}
                 </button>
               </div>
               <button

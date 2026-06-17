@@ -11,6 +11,7 @@ import {
   reloadDatabase,
   createApplication,
   setAppDockerSource,
+  setAppGitSource,
   applicationAction,
   updateApplication,
   saveApplicationEnvironment,
@@ -139,6 +140,28 @@ export async function quickDeployImageAction(
     const derived = trimmed.split("/").pop()!.split(":")[0];
     const id = await createApplication(name?.trim() || randomServiceName(derived), environment);
     await setAppDockerSource(id, trimmed);
+    await applicationAction(id, "deploy");
+    revalidatePath("/");
+    return { ok: true, id };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Deploy an application from a public Git repository (Nixpacks build). */
+export async function quickDeployRepoAction(
+  repoUrl: string,
+  branch?: string,
+  environmentId?: string
+): Promise<QuickDeployResult> {
+  try {
+    const url = repoUrl.trim();
+    if (!url) return { ok: false, error: "Repository URL is required." };
+    const environment = await resolveTargetEnv(environmentId);
+    // Derive a name from the repo (".../my-app.git" -> "my-app").
+    const derived = url.replace(/\.git$/, "").split("/").filter(Boolean).pop() || "app";
+    const id = await createApplication(randomServiceName(derived), environment);
+    await setAppGitSource(id, url, branch?.trim() || "main");
     await applicationAction(id, "deploy");
     revalidatePath("/");
     return { ok: true, id };

@@ -84,6 +84,8 @@ export interface Application extends ServiceBase {
   sourceType: AppSource | null;
   buildType: string | null;
   description: string | null;
+  /** Source repo/image reference for display (git URL or owner/repo). */
+  repository: string | null;
   domains: AppDomain[];
 }
 
@@ -397,6 +399,9 @@ interface RawApplicationDetail {
   sourceType?: AppSource | null;
   buildType?: string | null;
   description?: string | null;
+  customGitUrl?: string | null;
+  owner?: string | null;
+  repository?: string | null;
   dockerImage?: string | null;
   env?: string | null;
   createdAt?: string | null;
@@ -447,6 +452,8 @@ export async function listApplications(): Promise<Application[]> {
         sourceType: d.sourceType ?? null,
         buildType: d.buildType ?? null,
         description: d.description ?? null,
+        repository:
+          d.customGitUrl ?? (d.owner && d.repository ? `${d.owner}/${d.repository}` : null),
         dockerImage: d.dockerImage ?? null,
         env: d.env ?? null,
         createdAt: d.createdAt ?? null,
@@ -488,6 +495,28 @@ export async function setAppDockerSource(
       username: registry?.username ?? null,
       password: registry?.password ?? null,
       registryUrl: registry?.registryUrl ?? null,
+    },
+  });
+}
+
+/**
+ * Point an application at a public Git repository (built with Nixpacks, the
+ * default build type). No OAuth needed — uses a plain clone URL.
+ */
+export async function setAppGitSource(
+  applicationId: string,
+  url: string,
+  branch = "main",
+  buildPath = "/"
+): Promise<void> {
+  await request("application.saveGitProvider", {
+    method: "POST",
+    body: {
+      applicationId,
+      customGitUrl: url,
+      customGitBranch: branch,
+      customGitBuildPath: buildPath,
+      watchPaths: [],
     },
   });
 }

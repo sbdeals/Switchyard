@@ -85,7 +85,11 @@ export function AppOverviewTab({ app }: { app: Application }) {
 
       <div className="grid grid-cols-2 gap-3">
         <Info label="Source" value={app.sourceType ?? "—"} />
-        <Info label="Image" value={app.dockerImage ?? "—"} mono />
+        <Info
+          label={app.sourceType === "docker" ? "Image" : "Repository"}
+          value={app.dockerImage ?? app.repository ?? "—"}
+          mono
+        />
         <Info label="Build" value={app.buildType ?? "—"} />
         <Info label="Replicas" value={String(app.replicas ?? 1)} />
       </div>
