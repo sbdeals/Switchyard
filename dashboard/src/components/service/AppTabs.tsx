@@ -173,6 +173,36 @@ export function DomainsTab({ app }: { app: Application }) {
   );
 }
 
+export function DeploymentsTab({ app }: { app: Application }) {
+  const deployments = [...app.deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const color = (s: string) =>
+    s === "done" ? "var(--color-ok)" : s === "error" ? "var(--color-danger)" : s === "running" ? "var(--color-warn)" : "var(--color-idle)";
+  return (
+    <div className="space-y-2">
+      <p className="mb-1 text-xs text-[var(--color-fg-muted)]">Deployment history (newest first).</p>
+      {deployments.length === 0 ? (
+        <p className="text-xs text-[var(--color-fg-subtle)]">No deployments yet.</p>
+      ) : (
+        deployments.map((d) => (
+          <div
+            key={d.deploymentId}
+            className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
+          >
+            <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm">{d.title}</div>
+              <div className="text-[11px] text-[var(--color-fg-subtle)]">
+                {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
+              </div>
+            </div>
+            <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 export function AppSettingsTab({ app, onClose }: { app: Application; onClose: () => void }) {
   const { pending: lifePending, error: lifeError, run } = useAppLifecycle(app);
   const [name, setName] = useState(app.name);

@@ -34,7 +34,12 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
-import { AppOverviewTab, AppSettingsTab, DomainsTab } from "@/components/service/AppTabs";
+import {
+  AppOverviewTab,
+  AppSettingsTab,
+  DomainsTab,
+  DeploymentsTab,
+} from "@/components/service/AppTabs";
 import {
   ComposeOverviewTab,
   ComposeEditorTab,
@@ -46,6 +51,7 @@ type TabId =
   | "overview"
   | "variables"
   | "domains"
+  | "deployments"
   | "editor"
   | "metrics"
   | "logs"
@@ -54,13 +60,22 @@ const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
   variables: { label: "Variables", icon: <KeyRound className="size-4" /> },
   domains: { label: "Domains", icon: <Globe className="size-4" /> },
+  deployments: { label: "Deploys", icon: <Rocket className="size-4" /> },
   editor: { label: "Compose", icon: <FileCode className="size-4" /> },
   metrics: { label: "Metrics", icon: <Cpu className="size-4" /> },
   logs: { label: "Logs", icon: <ScrollText className="size-4" /> },
   settings: { label: "Settings", icon: <Settings2 className="size-4" /> },
 };
 const DB_TABS: TabId[] = ["overview", "variables", "metrics", "logs", "settings"];
-const APP_TABS: TabId[] = ["overview", "variables", "domains", "metrics", "logs", "settings"];
+const APP_TABS: TabId[] = [
+  "overview",
+  "variables",
+  "domains",
+  "deployments",
+  "metrics",
+  "logs",
+  "settings",
+];
 const COMPOSE_TABS: TabId[] = ["overview", "editor", "logs", "settings"];
 
 export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
@@ -129,6 +144,9 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 <VariablesTab service={service} />
               )}
               {tab === "domains" && service.kind === "application" && <DomainsTab app={service} />}
+              {tab === "deployments" && service.kind === "application" && (
+                <DeploymentsTab app={service} />
+              )}
               {tab === "editor" && service.kind === "compose" && (
                 <ComposeEditorTab compose={service} />
               )}

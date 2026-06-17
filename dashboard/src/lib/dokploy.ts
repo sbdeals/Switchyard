@@ -79,6 +79,13 @@ export interface AppDomain {
   path: string | null;
 }
 
+export interface AppDeployment {
+  deploymentId: string;
+  status: string;
+  title: string;
+  createdAt: string;
+}
+
 export interface Application extends ServiceBase {
   kind: "application";
   sourceType: AppSource | null;
@@ -87,6 +94,7 @@ export interface Application extends ServiceBase {
   /** Source repo/image reference for display (git URL or owner/repo). */
   repository: string | null;
   domains: AppDomain[];
+  deployments: AppDeployment[];
 }
 
 export interface ComposeService extends ServiceBase {
@@ -435,6 +443,7 @@ interface RawApplicationDetail {
     port?: number | null;
     path?: string | null;
   }[];
+  deployments?: { deploymentId: string; status?: string; title?: string; createdAt?: string }[];
 }
 
 /** List every application across all projects, enriched with detail. */
@@ -486,6 +495,12 @@ export async function listApplications(): Promise<Application[]> {
           https: dm.https ?? false,
           port: dm.port ?? null,
           path: dm.path ?? null,
+        })),
+        deployments: (d.deployments ?? []).map((dp) => ({
+          deploymentId: dp.deploymentId,
+          status: dp.status ?? "idle",
+          title: dp.title ?? "Deployment",
+          createdAt: dp.createdAt ?? "",
         })),
       } satisfies Application;
     })
