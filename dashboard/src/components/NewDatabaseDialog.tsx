@@ -132,7 +132,7 @@ export function NewDatabaseDialog({
                       }
                     >
                       <DatabaseIcon className="size-4" style={{ color: e.accent }} />
-                      {e.label.split(/(?=[A-Z])/)[0]}
+                      {e.short}
                     </button>
                   ))}
                 </div>
