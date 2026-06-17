@@ -5,6 +5,7 @@ import {
   createDatabase,
   databaseAction,
   createProject,
+  saveEnvironment,
   type CreateDatabaseInput,
   type Engine,
 } from "@/lib/dokploy";
@@ -33,6 +34,20 @@ export async function lifecycleAction(
 ): Promise<ActionResult> {
   try {
     await databaseAction(engine, id, action);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function saveEnvironmentAction(
+  engine: Engine,
+  id: string,
+  env: string
+): Promise<ActionResult> {
+  try {
+    await saveEnvironment(engine, id, env);
     revalidatePath("/");
     return { ok: true };
   } catch (e) {

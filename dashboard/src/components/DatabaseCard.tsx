@@ -41,7 +41,7 @@ function connectionString(db: Database): string | null {
   }
 }
 
-export function DatabaseCard({ db }: { db: Database }) {
+export function DatabaseCard({ db, onOpen }: { db: Database; onOpen?: () => void }) {
   const meta = ENGINE_META[db.engine];
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -74,21 +74,27 @@ export function DatabaseCard({ db }: { db: Database }) {
         style={{ background: `linear-gradient(90deg, transparent, ${meta.accent}, transparent)` }}
       />
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <button
+          onClick={onOpen}
+          className="flex flex-1 items-center gap-3 text-left"
+          title="Open service"
+        >
           <div
             className="flex size-10 items-center justify-center rounded-xl"
             style={{ backgroundColor: `${meta.accent}1a`, color: meta.accent }}
           >
             <DatabaseIcon className="size-5" />
           </div>
-          <div>
-            <div className="font-medium leading-tight">{db.name}</div>
-            <div className="text-xs text-[var(--color-fg-muted)]">
+          <div className="min-w-0">
+            <div className="truncate font-medium leading-tight hover:text-[var(--color-brand)]">
+              {db.name}
+            </div>
+            <div className="truncate text-xs text-[var(--color-fg-muted)]">
               {meta.label}
               {db.dockerImage ? ` · ${db.dockerImage}` : ""}
             </div>
           </div>
-        </div>
+        </button>
         <StatusBadge status={db.status} />
       </div>
 

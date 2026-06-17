@@ -46,15 +46,33 @@ npm run dev                  # http://localhost:3001  (Dokploy owns :3000)
 ```
 src/lib/dokploy.ts    Typed, server-only Dokploy API client + session auth
 src/lib/engines.ts    Per-engine display metadata (versions, accents, fields)
-src/app/actions.ts    Server Actions: create / lifecycle / create-project
-src/app/page.tsx      Server component: fetches the live tree, renders the view
-src/components/       DatabasesView, DatabaseCard, NewDatabaseDialog, StatusBadge
+src/lib/docker.ts     Server-only Docker API access (logs + stats) via the socket
+src/lib/connection.ts Connection-string builder shared by card and drawer
+src/app/actions.ts    Server Actions: create / lifecycle / save-env / create-project
+src/app/api/services/logs    SSE: streams container logs
+src/app/api/services/metrics SSE: streams container CPU/memory samples
+src/app/page.tsx      Server component: fetches the live tree, renders the workspace
+src/components/       Workspace, DatabaseCard, NewDatabaseDialog, StatusBadge
+src/components/canvas Railway-style React Flow canvas (FlowCanvas, ServiceNode)
+src/components/service Service drawer + tabs (Overview, Variables, Metrics, Logs)
 ```
+
+## Logs & metrics
+
+The BFF runs on the host with access to the Docker socket (the same one Dokploy
+uses), so live logs and metrics come straight from the **Docker API** — a
+service's `appName` maps to its Swarm task container. The browser consumes two
+Server-Sent-Event routes (`/api/services/logs`, `/api/services/metrics`); no
+Dokploy WebSocket reverse-engineering needed. `dockerode` is kept out of the
+bundle via `serverExternalPackages` in `next.config.ts`.
 
 ## Status
 
 - [x] List databases across projects with live status
 - [x] Create + deploy a database (engine, version, project/env, credentials)
 - [x] Lifecycle: deploy / start / stop / redeploy / destroy
-- [x] Reveal + copy connection string
-- [ ] Logs & metrics, backups, applications (next)
+- [x] **Railway-style canvas** (React Flow): draggable nodes, persisted layout,
+      env-inferred connection arrows, minimap
+- [x] **Service drawer** with tabs: Overview/Config, Variables (env editor),
+      live **Metrics** (CPU/memory charts), live **Logs**, Settings/danger zone
+- [ ] Applications & compose nodes, backups, deploy-log history (next)

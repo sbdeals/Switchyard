@@ -54,3 +54,28 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-strong) transparent;
 }
+
+/* Dark-theme the React Flow controls (they ship light by default). */
+.react-flow__controls {
+  box-shadow: 0 8px 24px -12px #000;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-fg-muted);
+}
+.react-flow__controls-button:hover {
+  background: var(--color-surface-hover);
+}
+.react-flow__controls-button svg {
+  fill: var(--color-fg-muted);
+}
+.react-flow__minimap {
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+}
+.react-flow__edge-path {
+  stroke-linecap: round;
+}

@@ -44,6 +44,18 @@ export interface Database extends DatabaseSummary {
   databasePassword: string | null;
   externalPort: number | null;
   createdAt: string | null;
+  /** Raw env block ("KEY=value\n..."). */
+  env: string | null;
+  cpuLimit: number | null;
+  memoryLimit: number | null;
+  command: string | null;
+  replicas: number | null;
+}
+
+/** A directed connection between two services, inferred from env references. */
+export interface ServiceEdge {
+  source: string; // database id
+  target: string; // database id
 }
 
 export interface EnvironmentNode {
@@ -183,6 +195,11 @@ interface RawDatabaseDetail {
   databasePassword?: string | null;
   externalPort?: number | null;
   createdAt?: string | null;
+  env?: string | null;
+  cpuLimit?: number | null;
+  memoryLimit?: number | null;
+  command?: string | null;
+  replicas?: number | null;
 }
 
 async function getDetail(engine: Engine, id: string): Promise<RawDatabaseDetail> {
@@ -206,10 +223,49 @@ export async function listDatabases(): Promise<Database[]> {
         databasePassword: d.databasePassword ?? null,
         externalPort: d.externalPort ?? null,
         createdAt: d.createdAt ?? null,
+        env: d.env ?? null,
+        cpuLimit: d.cpuLimit ?? null,
+        memoryLimit: d.memoryLimit ?? null,
+        command: d.command ?? null,
+        replicas: d.replicas ?? null,
       } satisfies Database;
     })
   );
   return detailed.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Infer connections between services: if service A's env references service B's
+ * appName or name (e.g. a host in a connection string), draw A -> B. Dokploy has
+ * no native connection concept, so this is the closest signal available.
+ */
+export function inferEdges(databases: Database[]): ServiceEdge[] {
+  const edges: ServiceEdge[] = [];
+  const seen = new Set<string>();
+  for (const a of databases) {
+    const haystack = (a.env ?? "").toLowerCase();
+    if (!haystack) continue;
+    for (const b of databases) {
+      if (a.id === b.id) continue;
+      const needles = [b.appName, b.name].filter(Boolean).map((s) => s.toLowerCase());
+      if (needles.some((n) => n.length > 2 && haystack.includes(n))) {
+        const key = `${a.id}->${b.id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          edges.push({ source: a.id, target: b.id });
+        }
+      }
+    }
+  }
+  return edges;
+}
+
+/** Replace a database's environment variables (raw "KEY=value" block). */
+export async function saveEnvironment(engine: Engine, id: string, env: string): Promise<void> {
+  await request(`${engine}.saveEnvironment`, {
+    method: "POST",
+    body: { [idKey(engine)]: id, env },
+  });
 }
 
 export interface CreateDatabaseInput {
