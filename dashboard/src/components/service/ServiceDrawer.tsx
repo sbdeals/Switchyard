@@ -17,11 +17,14 @@ import {
   Settings2,
   SlidersHorizontal,
   KeyRound,
+  Loader2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
-import type { Database } from "@/lib/dokploy";
+import type { Database, DatabasePatch } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { connectionString } from "@/lib/connection";
-import { lifecycleAction } from "@/app/actions";
+import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
@@ -204,7 +207,7 @@ function OverviewTab({ db }: { db: Database }) {
           label="Resources"
           value={
             db.cpuLimit || db.memoryLimit
-              ? `${db.cpuLimit ?? "∞"} CPU · ${db.memoryLimit ? `${Math.round(db.memoryLimit / 1024 / 1024)}MB` : "∞"}`
+              ? `${db.cpuLimit ?? "∞"} CPU · ${db.memoryLimit ?? "∞"} mem`
               : "unlimited"
           }
         />
@@ -214,9 +217,92 @@ function OverviewTab({ db }: { db: Database }) {
 }
 
 function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
-  const { pending, error, run } = useLifecycle(db);
+  const { pending: lifePending, error: lifeError, run } = useLifecycle(db);
+  const meta = ENGINE_META[db.engine];
+  const currentVersion = db.dockerImage?.split(":")[1] ?? meta.versions[0];
+
+  const [name, setName] = useState(db.name);
+  const [version, setVersion] = useState(currentVersion);
+  const [port, setPort] = useState(db.externalPort != null ? String(db.externalPort) : "");
+  const [cpu, setCpu] = useState(db.cpuLimit ?? "");
+  const [mem, setMem] = useState(db.memoryLimit ?? "");
+  const [saving, startSave] = useTransition();
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const dirty =
+    name !== db.name ||
+    version !== currentVersion ||
+    port !== (db.externalPort != null ? String(db.externalPort) : "") ||
+    cpu !== (db.cpuLimit ?? "") ||
+    mem !== (db.memoryLimit ?? "");
+
+  function save() {
+    setSaveError(null);
+    setSaved(false);
+    const patch: DatabasePatch = {};
+    if (name !== db.name) patch.name = name.trim();
+    if (version !== currentVersion) patch.dockerImage = `${meta.image}:${version}`;
+    if (port !== (db.externalPort != null ? String(db.externalPort) : ""))
+      patch.externalPort = port ? Number(port) : null;
+    if (cpu !== (db.cpuLimit ?? "")) patch.cpuLimit = cpu || null;
+    if (mem !== (db.memoryLimit ?? "")) patch.memoryLimit = mem || null;
+    startSave(async () => {
+      const res = await updateDatabaseAction(db.engine, db.id, db.appName, patch);
+      if (res.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 1800);
+      } else setSaveError(res.error);
+    });
+  }
+
   return (
     <div className="space-y-5">
+      <div className="space-y-3">
+        <EditField label="Name">
+          <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
+        </EditField>
+        <div className="grid grid-cols-2 gap-3">
+          <EditField label="Version" hint="changing redeploys">
+            <select value={version} onChange={(e) => setVersion(e.target.value)} className={inputCls}>
+              {meta.versions.map((v) => (
+                <option key={v} value={v}>
+                  {meta.image}:{v}
+                </option>
+              ))}
+            </select>
+          </EditField>
+          <EditField label="External port" hint="blank = internal only">
+            <input
+              value={port}
+              onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="—"
+              className={inputCls}
+            />
+          </EditField>
+          <EditField label="CPU limit" hint='e.g. "0.5"'>
+            <input value={cpu} onChange={(e) => setCpu(e.target.value)} placeholder="unlimited" className={inputCls} />
+          </EditField>
+          <EditField label="Memory limit" hint='e.g. "256m"'>
+            <input value={mem} onChange={(e) => setMem(e.target.value)} placeholder="unlimited" className={inputCls} />
+          </EditField>
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          {saveError && <span className="text-xs text-[var(--color-danger)]">{saveError}</span>}
+          {saved && <span className="text-xs text-[var(--color-ok)]">Saved</span>}
+          <button
+            onClick={save}
+            disabled={saving || !dirty}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+          >
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            Save changes
+          </button>
+        </div>
+      </div>
+
+      <PasswordRow db={db} />
+
       <Info label="App name" value={db.appName} mono />
       <Info label="Created" value={db.createdAt ? new Date(db.createdAt).toLocaleString() : "—"} />
 
@@ -230,14 +316,68 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
             if (confirm(`Destroy "${db.name}"? This cannot be undone.`))
               run("remove", onClose);
           }}
-          disabled={pending}
+          disabled={lifePending}
           className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] disabled:opacity-50"
         >
           <Trash2 className="size-3.5" /> Destroy {db.name}
         </button>
-        {error && <p className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
+        {lifeError && <p className="mt-2 text-xs text-[var(--color-danger)]">{lifeError}</p>}
       </div>
     </div>
+  );
+}
+
+const inputCls =
+  "w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]";
+
+function EditField({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <span className="text-xs font-medium text-[var(--color-fg-muted)]">{label}</span>
+        {hint && <span className="text-[10px] text-[var(--color-fg-subtle)]">{hint}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function PasswordRow({ db }: { db: Database }) {
+  const [show, setShow] = useState(false);
+  const [copied, setCopied] = useState(false);
+  if (!db.databasePassword) return null;
+  return (
+    <EditField label="Password" hint="rotation coming soon">
+      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2">
+        <code className="flex-1 truncate font-mono text-xs text-[var(--color-fg-muted)]">
+          {show ? db.databasePassword : "•".repeat(16)}
+        </code>
+        <button
+          onClick={() => setShow((s) => !s)}
+          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+        >
+          {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+        </button>
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(db.databasePassword ?? "");
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+          }}
+          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+        >
+          {copied ? <Check className="size-3.5 text-[var(--color-ok)]" /> : <Copy className="size-3.5" />}
+        </button>
+      </div>
+    </EditField>
   );
 }
 

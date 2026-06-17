@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect } from "react";
 import {
   ReactFlow,
   Background,
@@ -60,41 +60,44 @@ export function FlowCanvas({
   edges: ServiceEdge[];
   onSelect: (db: Database) => void;
 }) {
-  const initialNodes = useMemo<Node[]>(() => {
-    const saved = loadPositions();
-    // Group by project / environment for a tidy default layout.
-    const groups = new Map<string, Database[]>();
-    for (const db of databases) {
-      const key = `${db.projectName} / ${db.environmentName}`;
-      (groups.get(key) ?? groups.set(key, []).get(key)!).push(db);
-    }
-    const nodes: Node[] = [];
-    let col = 0;
-    for (const [label, dbs] of groups) {
-      const x = col * COL_W;
-      nodes.push({
-        id: `label:${label}`,
-        type: "label",
-        position: { x, y: -40 },
-        data: { label },
-        draggable: false,
-        selectable: false,
-      });
-      dbs.forEach((db, row) => {
+  const buildNodes = useCallback(
+    (overrides?: Positions): Node[] => {
+      const saved = { ...loadPositions(), ...(overrides ?? {}) };
+      // Group by project / environment for a tidy default layout.
+      const groups = new Map<string, Database[]>();
+      for (const db of databases) {
+        const key = `${db.projectName} / ${db.environmentName}`;
+        (groups.get(key) ?? groups.set(key, []).get(key)!).push(db);
+      }
+      const nodes: Node[] = [];
+      let col = 0;
+      for (const [label, dbs] of groups) {
+        const x = col * COL_W;
         nodes.push({
-          id: db.id,
-          type: "service",
-          position: saved[db.id] ?? { x, y: row * ROW_H },
-          data: { db, onSelect } as ServiceNodeData,
+          id: `label:${label}`,
+          type: "label",
+          position: { x, y: -40 },
+          data: { label },
+          draggable: false,
+          selectable: false,
         });
-      });
-      col++;
-    }
-    return nodes;
-  }, [databases, onSelect]);
+        dbs.forEach((db, row) => {
+          nodes.push({
+            id: db.id,
+            type: "service",
+            position: saved[db.id] ?? { x, y: row * ROW_H },
+            data: { db, onSelect } as ServiceNodeData,
+          });
+        });
+        col++;
+      }
+      return nodes;
+    },
+    [databases, onSelect]
+  );
 
-  const initialEdges = useMemo<Edge[]>(
-    () =>
+  const buildEdges = useCallback(
+    (): Edge[] =>
       serviceEdges.map((e) => {
         const accent = ENGINE_META[databases.find((d) => d.id === e.target)?.engine ?? "postgres"].accent;
         return {
@@ -108,8 +111,20 @@ export function FlowCanvas({
     [serviceEdges, databases]
   );
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState(buildNodes());
+  const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges());
+
+  // Re-sync with fresh server data (added/removed services, status changes)
+  // while keeping any in-session node positions. Standard React Flow
+  // controlled-data pattern.
+  useEffect(() => {
+    setNodes((curr) => {
+      const pos: Positions = {};
+      for (const n of curr) if (n.type === "service") pos[n.id] = n.position;
+      return buildNodes(pos);
+    });
+    setEdges(buildEdges());
+  }, [buildNodes, buildEdges, setNodes, setEdges]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {

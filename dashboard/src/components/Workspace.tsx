@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Database as DatabaseIcon, RefreshCw, Network, LayoutGrid } from "lucide-react";
+import { Database as DatabaseIcon, RefreshCw, Network, LayoutGrid } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Database, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { DatabaseCard } from "@/components/DatabaseCard";
-import { NewDatabaseDialog } from "@/components/NewDatabaseDialog";
+import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { cn } from "@/lib/utils";
@@ -23,12 +23,17 @@ export function Workspace({
   edges: ServiceEdge[];
 }) {
   const [view, setView] = useState<View>("canvas");
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const router = useRouter();
 
   // Re-resolve the selected db from fresh props so the drawer reflects updates.
   const selected = databases.find((d) => d.id === selectedId) ?? null;
+
+  // Open the new service's drawer and pull fresh state in.
+  const onDeployed = (id: string) => {
+    setSelectedId(id);
+    router.refresh();
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
@@ -59,17 +64,12 @@ export function Workspace({
           >
             <RefreshCw className="size-3.5" /> Refresh
           </button>
-          <button
-            onClick={() => setDialogOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)]"
-          >
-            <Plus className="size-4" /> New database
-          </button>
+          <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
         </div>
       </header>
 
       {databases.length === 0 ? (
-        <EmptyState onCreate={() => setDialogOpen(true)} />
+        <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
         <FlowCanvas databases={databases} edges={edges} onSelect={(db) => setSelectedId(db.id)} />
       ) : (
@@ -87,7 +87,6 @@ export function Workspace({
       )}
 
       <ServiceDrawer db={selected} onClose={() => setSelectedId(null)} />
-      <NewDatabaseDialog open={dialogOpen} onClose={() => setDialogOpen(false)} projects={projects} />
     </div>
   );
 }
@@ -116,7 +115,13 @@ function ViewToggle({
   );
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState({
+  projects,
+  onDeployed,
+}: {
+  projects: ProjectNode[];
+  onDeployed: (id: string) => void;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -127,15 +132,10 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         <DatabaseIcon className="size-7" />
       </div>
       <h3 className="mt-4 font-medium">No databases yet</h3>
-      <p className="mt-1 max-w-sm text-sm text-[var(--color-fg-muted)]">
-        Spin up a Postgres, MySQL, MariaDB, MongoDB, or Redis instance in seconds.
+      <p className="mb-5 mt-1 max-w-sm text-sm text-[var(--color-fg-muted)]">
+        Spin up a Postgres, MySQL, MariaDB, MongoDB, or Redis instance in one click.
       </p>
-      <button
-        onClick={onCreate}
-        className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-4 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)]"
-      >
-        <Plus className="size-4" /> Create your first database
-      </button>
+      <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
     </motion.div>
   );
 }

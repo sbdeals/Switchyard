@@ -69,10 +69,13 @@ bundle via `serverExternalPackages` in `next.config.ts`.
 ## Status
 
 - [x] List databases across projects with live status
-- [x] Create + deploy a database (engine, version, project/env, credentials)
+- [x] **One-click deploy** — pick an engine and it provisions a random name,
+      password, and latest version, then deploys (no form). Configure after.
 - [x] Lifecycle: deploy / start / stop / redeploy / destroy
 - [x] **Railway-style canvas** (React Flow): draggable nodes, persisted layout,
-      env-inferred connection arrows, minimap
+      env-inferred connection arrows, minimap; live-syncs on data change
 - [x] **Service drawer** with tabs: Overview/Config, Variables (env editor),
-      live **Metrics** (CPU/memory charts), live **Logs**, Settings/danger zone
-- [ ] Applications & compose nodes, backups, deploy-log history (next)
+      live **Metrics** (CPU/memory charts), live **Logs**, and an **editable
+      Settings** tab (rename, version, port, CPU/memory limits) + danger zone
+- [ ] Applications & compose nodes, domains, backups, deploy-log history (next —
+      see the porting roadmap in the repo plan)

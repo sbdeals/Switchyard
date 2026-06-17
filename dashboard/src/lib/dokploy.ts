@@ -46,8 +46,9 @@ export interface Database extends DatabaseSummary {
   createdAt: string | null;
   /** Raw env block ("KEY=value\n..."). */
   env: string | null;
-  cpuLimit: number | null;
-  memoryLimit: number | null;
+  // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
+  cpuLimit: string | null;
+  memoryLimit: string | null;
   command: string | null;
   replicas: number | null;
 }
@@ -196,8 +197,8 @@ interface RawDatabaseDetail {
   externalPort?: number | null;
   createdAt?: string | null;
   env?: string | null;
-  cpuLimit?: number | null;
-  memoryLimit?: number | null;
+  cpuLimit?: string | null;
+  memoryLimit?: string | null;
   command?: string | null;
   replicas?: number | null;
 }
@@ -278,8 +279,8 @@ export interface CreateDatabaseInput {
   dockerImage?: string;
 }
 
-/** Create a database record. Field set depends on the engine. */
-export async function createDatabase(input: CreateDatabaseInput): Promise<void> {
+/** Create a database record. Returns the new id. Field set depends on the engine. */
+export async function createDatabase(input: CreateDatabaseInput): Promise<string> {
   const { engine, name, environmentId, databasePassword, dockerImage } = input;
   const body: Record<string, unknown> = { name, environmentId, databasePassword };
   if (dockerImage) body.dockerImage = dockerImage;
@@ -287,7 +288,11 @@ export async function createDatabase(input: CreateDatabaseInput): Promise<void> 
   if (engine !== "redis") body.databaseUser = input.databaseUser ?? "admin";
   if (engine !== "redis" && engine !== "mongo")
     body.databaseName = input.databaseName ?? name;
-  await request(`${engine}.create`, { method: "POST", body });
+  const created = await request<Record<string, string>>(`${engine}.create`, {
+    method: "POST",
+    body,
+  });
+  return created[idKey(engine)];
 }
 
 type Action = "deploy" | "start" | "stop" | "remove";
@@ -297,5 +302,42 @@ export async function databaseAction(engine: Engine, id: string, action: Action)
   await request(`${engine}.${action}`, {
     method: "POST",
     body: { [idKey(engine)]: id },
+  });
+}
+
+/** Editable settings on a database (verified accepted by `<engine>.update`). */
+export interface DatabasePatch {
+  name?: string;
+  dockerImage?: string;
+  externalPort?: number | null;
+  cpuLimit?: string | null;
+  memoryLimit?: string | null;
+}
+
+/** Patch a database's settings. Image/resource changes need a reload to apply. */
+export async function updateDatabase(
+  engine: Engine,
+  id: string,
+  patch: DatabasePatch
+): Promise<void> {
+  const { externalPort, ...rest } = patch;
+  await request(`${engine}.update`, {
+    method: "POST",
+    body: { [idKey(engine)]: id, ...rest },
+  });
+  // External port lives on a dedicated endpoint.
+  if (externalPort !== undefined) {
+    await request(`${engine}.saveExternalPort`, {
+      method: "POST",
+      body: { [idKey(engine)]: id, externalPort },
+    });
+  }
+}
+
+/** Re-apply a database's config to its running container. */
+export async function reloadDatabase(engine: Engine, id: string, appName: string): Promise<void> {
+  await request(`${engine}.reload`, {
+    method: "POST",
+    body: { [idKey(engine)]: id, appName },
   });
 }
