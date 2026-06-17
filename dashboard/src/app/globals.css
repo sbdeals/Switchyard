@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/*
+ * Switchyard — dark, Railway-inspired theme.
+ * Tailwind v4 is configured in CSS via @theme.
+ */
+@theme {
+  --color-bg: #0a0a0f;
+  --color-bg-elevated: #12121a;
+  --color-surface: #16161f;
+  --color-surface-hover: #1d1d28;
+  --color-border: #26263340;
+  --color-border-strong: #34344a;
+  --color-fg: #ededf2;
+  --color-fg-muted: #9a9aae;
+  --color-fg-subtle: #6b6b80;
+
+  --color-brand: #a06bff;
+  --color-brand-strong: #8b5cf6;
+  --color-brand-soft: #a06bff1a;
+
+  --color-ok: #3ecf8e;
+  --color-ok-soft: #3ecf8e1a;
+  --color-warn: #f5a623;
+  --color-warn-soft: #f5a6231a;
+  --color-danger: #ff5c5c;
+  --color-danger-soft: #ff5c5c1a;
+  --color-idle: #6b6b80;
+  --color-idle-soft: #6b6b801a;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 14px;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+  /* Subtle radial glow, the Railway look. */
+  background-image:
+    radial-gradient(60rem 60rem at 80% -10%, #6d28d918, transparent 60%),
+    radial-gradient(50rem 50rem at -10% 10%, #4f46e514, transparent 55%),
+    linear-gradient(to bottom, transparent, var(--color-bg));
+  background-attachment: fixed;
+}
+
+/* Thin, dark scrollbars to match the theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+/* Dark-theme the React Flow controls (they ship light by default). */
+.react-flow__controls {
+  box-shadow: 0 8px 24px -12px #000;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-fg-muted);
+}
+.react-flow__controls-button:hover {
+  background: var(--color-surface-hover);
+}
+.react-flow__controls-button svg {
+  fill: var(--color-fg-muted);
+}
+.react-flow__minimap {
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+}
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
