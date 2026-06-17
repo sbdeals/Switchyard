@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Database as DatabaseIcon, RefreshCw, Network, LayoutGrid } from "lucide-react";
+import { Boxes, RefreshCw, Network, LayoutGrid } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { Database, ProjectNode, ServiceEdge } from "@/lib/dokploy";
-import { DatabaseCard } from "@/components/DatabaseCard";
+import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
+import { ServiceCard } from "@/components/ServiceCard";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
@@ -14,11 +14,11 @@ import { cn } from "@/lib/utils";
 type View = "canvas" | "grid";
 
 export function Workspace({
-  databases,
+  services,
   projects,
   edges,
 }: {
-  databases: Database[];
+  services: Service[];
   projects: ProjectNode[];
   edges: ServiceEdge[];
 }) {
@@ -26,8 +26,8 @@ export function Workspace({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const router = useRouter();
 
-  // Re-resolve the selected db from fresh props so the drawer reflects updates.
-  const selected = databases.find((d) => d.id === selectedId) ?? null;
+  // Re-resolve the selected service from fresh props so the drawer updates.
+  const selected = services.find((s) => s.id === selectedId) ?? null;
 
   // Open the new service's drawer and pull fresh state in.
   const onDeployed = (id: string) => {
@@ -41,12 +41,12 @@ export function Workspace({
         <div>
           <div className="flex items-center gap-2.5">
             <div className="flex size-8 items-center justify-center rounded-lg bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
-              <DatabaseIcon className="size-4.5" />
+              <Boxes className="size-4.5" />
             </div>
-            <h1 className="text-xl font-semibold tracking-tight">Databases</h1>
+            <h1 className="text-xl font-semibold tracking-tight">Services</h1>
           </div>
           <p className="mt-1.5 text-sm text-[var(--color-fg-muted)]">
-            Managed databases across your Dokploy projects.
+            Apps and databases across your Dokploy projects.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -68,25 +68,21 @@ export function Workspace({
         </div>
       </header>
 
-      {databases.length === 0 ? (
+      {services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas databases={databases} edges={edges} onSelect={(db) => setSelectedId(db.id)} />
+        <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
-            {databases.map((db) => (
-              <DatabaseCard
-                key={`${db.engine}:${db.id}`}
-                db={db}
-                onOpen={() => setSelectedId(db.id)}
-              />
+            {services.map((s) => (
+              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => setSelectedId(s.id)} />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
 
-      <ServiceDrawer db={selected} onClose={() => setSelectedId(null)} />
+      <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
     </div>
   );
 }
@@ -129,11 +125,11 @@ function EmptyState({
       className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-border-strong)] py-20 text-center"
     >
       <div className="flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
-        <DatabaseIcon className="size-7" />
+        <Boxes className="size-7" />
       </div>
-      <h3 className="mt-4 font-medium">No databases yet</h3>
+      <h3 className="mt-4 font-medium">No services yet</h3>
       <p className="mb-5 mt-1 max-w-sm text-sm text-[var(--color-fg-muted)]">
-        Spin up a Postgres, MySQL, MariaDB, MongoDB, or Redis instance in one click.
+        Deploy an app from a Docker image, or spin up a managed database in one click.
       </p>
       <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
     </motion.div>

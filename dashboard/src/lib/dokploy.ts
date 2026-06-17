@@ -23,7 +23,32 @@ export type Engine = (typeof ENGINES)[number];
 /** The id query/body key each engine uses, e.g. postgres -> postgresId. */
 const idKey = (engine: Engine) => `${engine}Id` as const;
 
-export type DatabaseStatus = "idle" | "running" | "done" | "error";
+/** A deployable unit's lifecycle status (shared by all service kinds). */
+export type ServiceStatus = "idle" | "running" | "done" | "error";
+export type DatabaseStatus = ServiceStatus;
+
+export type ServiceKind = "database" | "application" | "compose";
+
+/** Fields common to every service kind — what the canvas/grid/drawer render. */
+export interface ServiceBase {
+  kind: ServiceKind;
+  id: string;
+  name: string;
+  appName: string;
+  status: ServiceStatus;
+  projectId: string;
+  projectName: string;
+  environmentId: string;
+  environmentName: string;
+  dockerImage: string | null;
+  /** Raw env block ("KEY=value\n..."). */
+  env: string | null;
+  createdAt: string | null;
+  // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
+  cpuLimit: string | null;
+  memoryLimit: string | null;
+  replicas: number | null;
+}
 
 export interface DatabaseSummary {
   engine: Engine;
@@ -34,29 +59,41 @@ export interface DatabaseSummary {
   environmentName: string;
 }
 
-export interface Database extends DatabaseSummary {
-  name: string;
-  appName: string;
-  status: DatabaseStatus;
-  dockerImage: string | null;
+export interface Database extends ServiceBase {
+  kind: "database";
+  engine: Engine;
   databaseName: string | null;
   databaseUser: string | null;
   databasePassword: string | null;
   externalPort: number | null;
-  createdAt: string | null;
-  /** Raw env block ("KEY=value\n..."). */
-  env: string | null;
-  // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
-  cpuLimit: string | null;
-  memoryLimit: string | null;
   command: string | null;
-  replicas: number | null;
 }
+
+export type AppSource = "github" | "gitlab" | "bitbucket" | "gitea" | "git" | "docker";
+
+export interface AppDomain {
+  domainId: string;
+  host: string;
+  https: boolean;
+  port: number | null;
+  path: string | null;
+}
+
+export interface Application extends ServiceBase {
+  kind: "application";
+  sourceType: AppSource | null;
+  buildType: string | null;
+  description: string | null;
+  domains: AppDomain[];
+}
+
+/** Any deployable service rendered in the dashboard. */
+export type Service = Database | Application;
 
 /** A directed connection between two services, inferred from env references. */
 export interface ServiceEdge {
-  source: string; // database id
-  target: string; // database id
+  source: string; // service id
+  target: string; // service id
 }
 
 export interface EnvironmentNode {
@@ -138,6 +175,7 @@ interface RawEnvironment {
   mariadb: { mariadbId: string }[];
   mongo: { mongoId: string }[];
   redis: { redisId: string }[];
+  applications: { applicationId: string }[];
 }
 interface RawProject {
   projectId: string;
@@ -215,6 +253,7 @@ export async function listDatabases(): Promise<Database[]> {
       const d = await getDetail(s.engine, s.id);
       return {
         ...s,
+        kind: "database",
         name: d.name ?? s.id,
         appName: d.appName ?? "",
         status: d.applicationStatus ?? "idle",
@@ -240,13 +279,13 @@ export async function listDatabases(): Promise<Database[]> {
  * appName or name (e.g. a host in a connection string), draw A -> B. Dokploy has
  * no native connection concept, so this is the closest signal available.
  */
-export function inferEdges(databases: Database[]): ServiceEdge[] {
+export function inferEdges(services: Service[]): ServiceEdge[] {
   const edges: ServiceEdge[] = [];
   const seen = new Set<string>();
-  for (const a of databases) {
+  for (const a of services) {
     const haystack = (a.env ?? "").toLowerCase();
     if (!haystack) continue;
-    for (const b of databases) {
+    for (const b of services) {
       if (a.id === b.id) continue;
       const needles = [b.appName, b.name].filter(Boolean).map((s) => s.toLowerCase());
       if (needles.some((n) => n.length > 2 && haystack.includes(n))) {
@@ -340,4 +379,148 @@ export async function reloadDatabase(engine: Engine, id: string, appName: string
     method: "POST",
     body: { [idKey(engine)]: id, appName },
   });
+}
+
+// --- applications -----------------------------------------------------------
+
+interface RawApplicationDetail {
+  name?: string;
+  appName?: string;
+  applicationStatus?: ServiceStatus;
+  sourceType?: AppSource | null;
+  buildType?: string | null;
+  description?: string | null;
+  dockerImage?: string | null;
+  env?: string | null;
+  createdAt?: string | null;
+  cpuLimit?: string | null;
+  memoryLimit?: string | null;
+  replicas?: number | null;
+  domains?: {
+    domainId: string;
+    host: string;
+    https?: boolean;
+    port?: number | null;
+    path?: string | null;
+  }[];
+}
+
+/** List every application across all projects, enriched with detail. */
+export async function listApplications(): Promise<Application[]> {
+  const tree = await rawTree();
+  const summaries: { id: string; base: Omit<ServiceBase, keyof RawApplicationDetail | "kind" | "id"> }[] =
+    [];
+  for (const p of tree) {
+    for (const env of p.environments) {
+      for (const a of env.applications ?? []) {
+        summaries.push({
+          id: a.applicationId,
+          base: {
+            projectId: p.projectId,
+            projectName: p.name,
+            environmentId: env.environmentId,
+            environmentName: env.name,
+          } as ServiceBase,
+        });
+      }
+    }
+  }
+  return Promise.all(
+    summaries.map(async ({ id, base }) => {
+      const d = await request<RawApplicationDetail>(
+        `application.one?applicationId=${encodeURIComponent(id)}`
+      );
+      return {
+        ...base,
+        kind: "application",
+        id,
+        name: d.name ?? id,
+        appName: d.appName ?? "",
+        status: d.applicationStatus ?? "idle",
+        sourceType: d.sourceType ?? null,
+        buildType: d.buildType ?? null,
+        description: d.description ?? null,
+        dockerImage: d.dockerImage ?? null,
+        env: d.env ?? null,
+        createdAt: d.createdAt ?? null,
+        cpuLimit: d.cpuLimit ?? null,
+        memoryLimit: d.memoryLimit ?? null,
+        replicas: d.replicas ?? null,
+        domains: (d.domains ?? []).map((dm) => ({
+          domainId: dm.domainId,
+          host: dm.host,
+          https: dm.https ?? false,
+          port: dm.port ?? null,
+          path: dm.path ?? null,
+        })),
+      } satisfies Application;
+    })
+  );
+}
+
+/** Create an empty application. Returns the new id. */
+export async function createApplication(name: string, environmentId: string): Promise<string> {
+  const created = await request<{ applicationId: string }>("application.create", {
+    method: "POST",
+    body: { name, environmentId },
+  });
+  return created.applicationId;
+}
+
+/** Point an application at a public/private Docker image. */
+export async function setAppDockerSource(
+  applicationId: string,
+  dockerImage: string,
+  registry?: { username: string; password: string; registryUrl: string }
+): Promise<void> {
+  await request("application.saveDockerProvider", {
+    method: "POST",
+    body: {
+      applicationId,
+      dockerImage,
+      username: registry?.username ?? null,
+      password: registry?.password ?? null,
+      registryUrl: registry?.registryUrl ?? null,
+    },
+  });
+}
+
+export interface ApplicationPatch {
+  name?: string;
+  description?: string;
+  cpuLimit?: string | null;
+  memoryLimit?: string | null;
+  command?: string | null;
+}
+
+export async function updateApplication(id: string, patch: ApplicationPatch): Promise<void> {
+  await request("application.update", { method: "POST", body: { applicationId: id, ...patch } });
+}
+
+export async function saveApplicationEnvironment(id: string, env: string): Promise<void> {
+  // application.saveEnvironment also accepts build args/secrets; send empty.
+  await request("application.saveEnvironment", {
+    method: "POST",
+    body: { applicationId: id, env, buildArgs: "", buildSecrets: "", createEnvFile: false },
+  });
+}
+
+export async function applicationAction(id: string, action: Action): Promise<void> {
+  await request(`application.${action}`, { method: "POST", body: { applicationId: id } });
+}
+
+/** Create a domain (public URL) for an application. */
+export async function createDomain(applicationId: string, host: string, port = 80): Promise<void> {
+  await request("domain.create", {
+    method: "POST",
+    body: { applicationId, host, port, https: true, certificateType: "letsencrypt" },
+  });
+}
+
+// --- unified service listing ------------------------------------------------
+
+/** Every deployable service (databases + applications) across all projects. */
+export async function listServices(): Promise<Service[]> {
+  const [databases, applications] = await Promise.all([listDatabases(), listApplications()]);
+  return [...databases, ...applications].sort((a, b) => a.name.localeCompare(b.name));
 }

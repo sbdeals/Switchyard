@@ -2,23 +2,26 @@
 
 import { useState, useTransition } from "react";
 import { Loader2, Check, AlertCircle } from "lucide-react";
-import type { Database } from "@/lib/dokploy";
-import { saveEnvironmentAction } from "@/app/actions";
+import type { Service } from "@/lib/dokploy";
+import { saveEnvironmentAction, saveApplicationEnvAction } from "@/app/actions";
 
-export function VariablesTab({ db }: { db: Database }) {
-  const [value, setValue] = useState(db.env ?? "");
+export function VariablesTab({ service }: { service: Service }) {
+  const [value, setValue] = useState(service.env ?? "");
   const [pending, start] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const dirty = value !== (db.env ?? "");
+  const dirty = value !== (service.env ?? "");
   const count = value.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).length;
 
   function save() {
     setError(null);
     setSaved(false);
     start(async () => {
-      const res = await saveEnvironmentAction(db.engine, db.id, value);
+      const res =
+        service.kind === "database"
+          ? await saveEnvironmentAction(service.engine, service.id, value)
+          : await saveApplicationEnvAction(service.id, value);
       if (res.ok) {
         setSaved(true);
         setTimeout(() => setSaved(false), 1800);

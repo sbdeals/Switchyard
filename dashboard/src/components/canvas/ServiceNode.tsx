@@ -2,43 +2,45 @@
 
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Database as DatabaseIcon } from "lucide-react";
-import type { Database } from "@/lib/dokploy";
-import { ENGINE_META, STATUS_META } from "@/lib/engines";
+import { Database as DatabaseIcon, Box } from "lucide-react";
+import type { Service } from "@/lib/dokploy";
+import { STATUS_META } from "@/lib/engines";
+import { serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 
 export interface ServiceNodeData extends Record<string, unknown> {
-  db: Database;
-  onSelect: (db: Database) => void;
+  service: Service;
+  onSelect: (service: Service) => void;
 }
 
 function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData }) {
-  const { db, onSelect } = data;
-  const meta = ENGINE_META[db.engine];
-  const status = STATUS_META[db.status] ?? STATUS_META.idle;
+  const { service, onSelect } = data;
+  const accent = serviceAccent(service);
+  const status = STATUS_META[service.status] ?? STATUS_META.idle;
+  const Icon = service.kind === "database" ? DatabaseIcon : Box;
 
   return (
     <div
-      onClick={() => onSelect(db)}
+      onClick={() => onSelect(service)}
       className="w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)]"
       style={{
-        borderColor: selected ? meta.accent : "var(--color-border-strong)",
-        boxShadow: selected ? `0 0 0 1px ${meta.accent}, 0 8px 30px -12px ${meta.accent}80` : undefined,
+        borderColor: selected ? accent : "var(--color-border-strong)",
+        boxShadow: selected ? `0 0 0 1px ${accent}, 0 8px 30px -12px ${accent}80` : undefined,
       }}
     >
-      <Handle type="target" position={Position.Left} style={{ background: meta.accent, border: "none" }} />
-      <Handle type="source" position={Position.Right} style={{ background: meta.accent, border: "none" }} />
+      <Handle type="target" position={Position.Left} style={{ background: accent, border: "none" }} />
+      <Handle type="source" position={Position.Right} style={{ background: accent, border: "none" }} />
 
       <div className="flex items-center gap-2.5">
         <div
           className="flex size-9 items-center justify-center rounded-lg"
-          style={{ backgroundColor: `${meta.accent}1a`, color: meta.accent }}
+          style={{ backgroundColor: `${accent}1a`, color: accent }}
         >
-          <DatabaseIcon className="size-4.5" />
+          <Icon className="size-4.5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">{db.name}</div>
+          <div className="truncate text-sm font-medium">{service.name}</div>
           <div className="truncate text-[11px] text-[var(--color-fg-muted)]">
-            {db.dockerImage ?? meta.label}
+            {serviceSubtitle(service)}
           </div>
         </div>
         <span

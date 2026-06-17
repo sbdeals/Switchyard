@@ -9,7 +9,14 @@ import {
   saveEnvironment,
   updateDatabase,
   reloadDatabase,
+  createApplication,
+  setAppDockerSource,
+  applicationAction,
+  updateApplication,
+  saveApplicationEnvironment,
+  createDomain,
   type DatabasePatch,
+  type ApplicationPatch,
   type Engine,
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -106,6 +113,82 @@ export async function saveEnvironmentAction(
 ): Promise<ActionResult> {
   try {
     await saveEnvironment(engine, id, env);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// --- applications -----------------------------------------------------------
+
+/** One-click: create an application from a Docker image and deploy it. */
+export async function quickDeployImageAction(
+  image: string,
+  name?: string,
+  environmentId?: string
+): Promise<QuickDeployResult> {
+  try {
+    const trimmed = image.trim();
+    if (!trimmed) return { ok: false, error: "Image is required." };
+    const environment = await resolveTargetEnv(environmentId);
+    // Derive a friendly name from the image (e.g. "nginx:alpine" -> "nginx").
+    const derived = trimmed.split("/").pop()!.split(":")[0];
+    const id = await createApplication(name?.trim() || randomServiceName(derived), environment);
+    await setAppDockerSource(id, trimmed);
+    await applicationAction(id, "deploy");
+    revalidatePath("/");
+    return { ok: true, id };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function appLifecycleAction(
+  id: string,
+  action: "deploy" | "start" | "stop" | "remove"
+): Promise<ActionResult> {
+  try {
+    await applicationAction(id, action);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function updateApplicationAction(
+  id: string,
+  patch: ApplicationPatch,
+  redeploy = false
+): Promise<ActionResult> {
+  try {
+    await updateApplication(id, patch);
+    if (redeploy) await applicationAction(id, "deploy");
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function saveApplicationEnvAction(id: string, env: string): Promise<ActionResult> {
+  try {
+    await saveApplicationEnvironment(id, env);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function createDomainAction(
+  applicationId: string,
+  host: string,
+  port: number
+): Promise<ActionResult> {
+  try {
+    await createDomain(applicationId, host.trim(), port);
     revalidatePath("/");
     return { ok: true };
   } catch (e) {

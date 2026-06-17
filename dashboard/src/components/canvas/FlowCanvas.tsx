@@ -15,8 +15,8 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { Database, ServiceEdge } from "@/lib/dokploy";
-import { ENGINE_META } from "@/lib/engines";
+import type { Service, ServiceEdge } from "@/lib/dokploy";
+import { serviceAccent } from "@/lib/service-meta";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
 
 const POS_KEY = "switchyard:positions";
@@ -52,26 +52,26 @@ function GroupLabel({ data }: NodeProps & { data: { label: string } }) {
 const nodeTypes = { service: ServiceNode, label: GroupLabel };
 
 export function FlowCanvas({
-  databases,
+  services,
   edges: serviceEdges,
   onSelect,
 }: {
-  databases: Database[];
+  services: Service[];
   edges: ServiceEdge[];
-  onSelect: (db: Database) => void;
+  onSelect: (service: Service) => void;
 }) {
   const buildNodes = useCallback(
     (overrides?: Positions): Node[] => {
       const saved = { ...loadPositions(), ...(overrides ?? {}) };
       // Group by project / environment for a tidy default layout.
-      const groups = new Map<string, Database[]>();
-      for (const db of databases) {
-        const key = `${db.projectName} / ${db.environmentName}`;
-        (groups.get(key) ?? groups.set(key, []).get(key)!).push(db);
+      const groups = new Map<string, Service[]>();
+      for (const svc of services) {
+        const key = `${svc.projectName} / ${svc.environmentName}`;
+        (groups.get(key) ?? groups.set(key, []).get(key)!).push(svc);
       }
       const nodes: Node[] = [];
       let col = 0;
-      for (const [label, dbs] of groups) {
+      for (const [label, svcs] of groups) {
         const x = col * COL_W;
         nodes.push({
           id: `label:${label}`,
@@ -81,25 +81,26 @@ export function FlowCanvas({
           draggable: false,
           selectable: false,
         });
-        dbs.forEach((db, row) => {
+        svcs.forEach((service, row) => {
           nodes.push({
-            id: db.id,
+            id: service.id,
             type: "service",
-            position: saved[db.id] ?? { x, y: row * ROW_H },
-            data: { db, onSelect } as ServiceNodeData,
+            position: saved[service.id] ?? { x, y: row * ROW_H },
+            data: { service, onSelect } as ServiceNodeData,
           });
         });
         col++;
       }
       return nodes;
     },
-    [databases, onSelect]
+    [services, onSelect]
   );
 
   const buildEdges = useCallback(
     (): Edge[] =>
       serviceEdges.map((e) => {
-        const accent = ENGINE_META[databases.find((d) => d.id === e.target)?.engine ?? "postgres"].accent;
+        const target = services.find((s) => s.id === e.target);
+        const accent = target ? serviceAccent(target) : "#a06bff";
         return {
           id: `${e.source}->${e.target}`,
           source: e.source,
@@ -108,7 +109,7 @@ export function FlowCanvas({
           style: { stroke: accent, strokeWidth: 1.5 },
         };
       }),
-    [serviceEdges, databases]
+    [serviceEdges, services]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(buildNodes());
@@ -165,7 +166,7 @@ export function FlowCanvas({
           zoomable
           nodeColor={(n) =>
             n.type === "service"
-              ? ENGINE_META[(n.data as ServiceNodeData).db.engine].accent
+              ? serviceAccent((n.data as ServiceNodeData).service)
               : "transparent"
           }
           maskColor="#0a0a0fcc"

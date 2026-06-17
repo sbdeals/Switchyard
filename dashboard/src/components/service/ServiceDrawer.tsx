@@ -20,39 +20,47 @@ import {
   Loader2,
   Eye,
   EyeOff,
+  Box,
+  Globe,
 } from "lucide-react";
-import type { Database, DatabasePatch } from "@/lib/dokploy";
+import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
+import { serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
+import { AppOverviewTab, AppSettingsTab, DomainsTab } from "@/components/service/AppTabs";
 import { cn } from "@/lib/utils";
 
-type TabId = "overview" | "variables" | "metrics" | "logs" | "settings";
-const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: "overview", label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
-  { id: "variables", label: "Variables", icon: <KeyRound className="size-4" /> },
-  { id: "metrics", label: "Metrics", icon: <Cpu className="size-4" /> },
-  { id: "logs", label: "Logs", icon: <ScrollText className="size-4" /> },
-  { id: "settings", label: "Settings", icon: <Settings2 className="size-4" /> },
-];
+type TabId = "overview" | "variables" | "domains" | "metrics" | "logs" | "settings";
+const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
+  overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
+  variables: { label: "Variables", icon: <KeyRound className="size-4" /> },
+  domains: { label: "Domains", icon: <Globe className="size-4" /> },
+  metrics: { label: "Metrics", icon: <Cpu className="size-4" /> },
+  logs: { label: "Logs", icon: <ScrollText className="size-4" /> },
+  settings: { label: "Settings", icon: <Settings2 className="size-4" /> },
+};
+const DB_TABS: TabId[] = ["overview", "variables", "metrics", "logs", "settings"];
+const APP_TABS: TabId[] = ["overview", "variables", "domains", "metrics", "logs", "settings"];
 
-export function ServiceDrawer({ db, onClose }: { db: Database | null; onClose: () => void }) {
+export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
   // Reset to Overview when a different service is opened (adjust state during
   // render — the React-recommended alternative to a resetting effect).
   const [shownId, setShownId] = useState<string | null>(null);
-  if (db && db.id !== shownId) {
-    setShownId(db.id);
+  if (service && service.id !== shownId) {
+    setShownId(service.id);
     setTab("overview");
   }
+  const tabs = service?.kind === "application" ? APP_TABS : DB_TABS;
 
   return (
     <AnimatePresence>
-      {db && (
+      {service && (
         <>
           <motion.div
             className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
@@ -68,31 +76,42 @@ export function ServiceDrawer({ db, onClose }: { db: Database | null; onClose: (
             transition={{ type: "spring", stiffness: 320, damping: 34 }}
             className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
           >
-            <Header db={db} onClose={onClose} />
+            <Header service={service} onClose={onClose} />
             <nav className="flex gap-1 border-b border-[var(--color-border)] px-4">
-              {TABS.map((t) => (
+              {tabs.map((id) => (
                 <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
+                  key={id}
+                  onClick={() => setTab(id)}
                   className={cn(
                     "flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
-                    tab === t.id
+                    tab === id
                       ? "border-[var(--color-brand)] text-[var(--color-fg)]"
                       : "border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
                   )}
                 >
-                  {t.icon}
-                  {t.label}
+                  {TAB_META[id].icon}
+                  {TAB_META[id].label}
                 </button>
               ))}
             </nav>
 
             <div className="flex-1 overflow-auto p-5">
-              {tab === "overview" && <OverviewTab db={db} />}
-              {tab === "variables" && <VariablesTab db={db} />}
-              {tab === "metrics" && <MetricsTab key={db.appName} appName={db.appName} active />}
-              {tab === "logs" && <LogsTab key={db.appName} appName={db.appName} active />}
-              {tab === "settings" && <SettingsTab db={db} onClose={onClose} />}
+              {tab === "overview" &&
+                (service.kind === "database" ? (
+                  <OverviewTab db={service} />
+                ) : (
+                  <AppOverviewTab app={service} />
+                ))}
+              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "domains" && service.kind === "application" && <DomainsTab app={service} />}
+              {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
+              {tab === "logs" && <LogsTab key={service.appName} appName={service.appName} active />}
+              {tab === "settings" &&
+                (service.kind === "database" ? (
+                  <SettingsTab db={service} onClose={onClose} />
+                ) : (
+                  <AppSettingsTab app={service} onClose={onClose} />
+                ))}
             </div>
           </motion.aside>
         </>
@@ -101,24 +120,25 @@ export function ServiceDrawer({ db, onClose }: { db: Database | null; onClose: (
   );
 }
 
-function Header({ db, onClose }: { db: Database; onClose: () => void }) {
-  const meta = ENGINE_META[db.engine];
+function Header({ service, onClose }: { service: Service; onClose: () => void }) {
+  const accent = serviceAccent(service);
+  const Icon = service.kind === "database" ? DatabaseIcon : Box;
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
       <div className="flex items-center gap-3">
         <div
           className="flex size-11 items-center justify-center rounded-xl"
-          style={{ backgroundColor: `${meta.accent}1a`, color: meta.accent }}
+          style={{ backgroundColor: `${accent}1a`, color: accent }}
         >
-          <DatabaseIcon className="size-5.5" />
+          <Icon className="size-5.5" />
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold">{db.name}</h2>
-            <StatusBadge status={db.status} />
+            <h2 className="font-semibold">{service.name}</h2>
+            <StatusBadge status={service.status} />
           </div>
           <div className="text-xs text-[var(--color-fg-muted)]">
-            {meta.label} · {db.projectName} / {db.environmentName}
+            {serviceLabel(service)} · {service.projectName} / {service.environmentName}
           </div>
         </div>
       </div>

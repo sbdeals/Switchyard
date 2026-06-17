@@ -2,15 +2,15 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Database as DatabaseIcon, Loader2, AlertCircle } from "lucide-react";
+import { Plus, Database as DatabaseIcon, Box, Loader2, AlertCircle } from "lucide-react";
 import type { Engine, ProjectNode } from "@/lib/dokploy";
 import { ENGINE_LIST } from "@/lib/engines";
-import { quickDeployDatabaseAction } from "@/app/actions";
+import { quickDeployDatabaseAction, quickDeployImageAction } from "@/app/actions";
 
 /**
- * One-click database provisioning: pick an engine and it deploys immediately
- * with an auto name, password, and latest version. Everything is editable
- * afterward in the service drawer.
+ * One-click provisioning: pick a database engine (auto name/password/version) or
+ * deploy an application from a Docker image. Everything is editable afterward in
+ * the service drawer.
  */
 export function QuickDeployMenu({
   projects,
@@ -20,8 +20,9 @@ export function QuickDeployMenu({
   onDeployed: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [pendingEngine, setPendingEngine] = useState<Engine | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [image, setImage] = useState("");
   const [, startTransition] = useTransition();
 
   const envOptions = useMemo(
@@ -34,20 +35,23 @@ export function QuickDeployMenu({
   const [target, setTarget] = useState<string>("");
   const targetEnv = target || envOptions[0]?.id;
 
-  function deploy(engine: Engine) {
+  function run(key: string, fn: () => Promise<{ ok: true; id: string } | { ok: false; error: string }>) {
     setError(null);
-    setPendingEngine(engine);
+    setBusy(key);
     startTransition(async () => {
-      const res = await quickDeployDatabaseAction(engine, targetEnv);
-      setPendingEngine(null);
+      const res = await fn();
+      setBusy(null);
       if (res.ok) {
         setOpen(false);
+        setImage("");
         onDeployed(res.id);
-      } else {
-        setError(res.error);
-      }
+      } else setError(res.error);
     });
   }
+
+  const deployDb = (engine: Engine) =>
+    run(`db:${engine}`, () => quickDeployDatabaseAction(engine, targetEnv));
+  const deployImage = () => run("app", () => quickDeployImageAction(image, undefined, targetEnv));
 
   return (
     <div className="relative">
@@ -55,7 +59,7 @@ export function QuickDeployMenu({
         onClick={() => setOpen((o) => !o)}
         className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)]"
       >
-        <Plus className="size-4" /> New database
+        <Plus className="size-4" /> New service
       </button>
 
       <AnimatePresence>
@@ -67,12 +71,8 @@ export function QuickDeployMenu({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.12 }}
-              className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl"
+              className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl"
             >
-              <div className="px-2 py-1.5 text-xs text-[var(--color-fg-muted)]">
-                Deploys instantly with a random name &amp; password and the latest version.
-              </div>
-
               {envOptions.length > 1 && (
                 <select
                   value={targetEnv}
@@ -87,19 +87,41 @@ export function QuickDeployMenu({
                 </select>
               )}
 
+              <SectionLabel>Application</SectionLabel>
+              <div className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1">
+                <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
+                  <Box className="size-4" />
+                </span>
+                <input
+                  value={image}
+                  onChange={(e) => setImage(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && image.trim() && deployImage()}
+                  placeholder="docker image, e.g. nginx:alpine"
+                  className="min-w-0 flex-1 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
+                />
+                <button
+                  onClick={deployImage}
+                  disabled={!image.trim() || busy !== null}
+                  className="shrink-0 rounded-md bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+                >
+                  {busy === "app" ? <Loader2 className="size-4 animate-spin" /> : "Deploy"}
+                </button>
+              </div>
+
+              <SectionLabel>Database</SectionLabel>
               <div className="grid grid-cols-1">
                 {ENGINE_LIST.map((e) => (
                   <button
                     key={e.id}
-                    onClick={() => deploy(e.id)}
-                    disabled={pendingEngine !== null}
+                    onClick={() => deployDb(e.id)}
+                    disabled={busy !== null}
                     className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)] disabled:opacity-50"
                   >
                     <span
                       className="flex size-7 items-center justify-center rounded-md"
                       style={{ backgroundColor: `${e.accent}1a`, color: e.accent }}
                     >
-                      {pendingEngine === e.id ? (
+                      {busy === `db:${e.id}` ? (
                         <Loader2 className="size-4 animate-spin" />
                       ) : (
                         <DatabaseIcon className="size-4" />
@@ -122,6 +144,14 @@ export function QuickDeployMenu({
           </>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-subtle)]">
+      {children}
     </div>
   );
 }

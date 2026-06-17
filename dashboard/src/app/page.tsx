@@ -1,12 +1,12 @@
-import { listDatabases, listProjects, inferEdges } from "@/lib/dokploy";
+import { listServices, listProjects, inferEdges } from "@/lib/dokploy";
 import { Workspace } from "@/components/Workspace";
 
 // Always fetch fresh state from Dokploy.
 export const dynamic = "force-dynamic";
 
 async function loadWorkspace() {
-  const [databases, projects] = await Promise.all([listDatabases(), listProjects()]);
-  return { databases, projects, edges: inferEdges(databases) };
+  const [services, projects] = await Promise.all([listServices(), listProjects()]);
+  return { services, projects, edges: inferEdges(services) };
 }
 
 export default async function Page() {
@@ -20,7 +20,7 @@ export default async function Page() {
 
   if (result) {
     return (
-      <Workspace databases={result.databases} projects={result.projects} edges={result.edges} />
+      <Workspace services={result.services} projects={result.projects} edges={result.edges} />
     );
   }
 
