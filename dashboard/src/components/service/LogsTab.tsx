@@ -9,7 +9,10 @@ interface Line {
 }
 
 export function LogsTab({ appName, active }: { appName: string; active: boolean }) {
-  const [lines, setLines] = useState<Line[]>([]);
+  // Lines carry a monotonic id assigned on arrival: the buffer is trimmed from
+  // the front, so array indexes are not stable React keys.
+  const [lines, setLines] = useState<(Line & { id: number })[]>([]);
+  const nextId = useRef(0);
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -24,7 +27,7 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
         const line = JSON.parse(e.data) as Line;
         setLines((prev) => {
           const next = prev.length > 2000 ? prev.slice(-1500) : prev;
-          return [...next, line];
+          return [...next, { ...line, id: nextId.current++ }];
         });
       } catch {
         /* ignore */
@@ -77,8 +80,8 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
             <Loader2 className="size-4 animate-spin" /> waiting for logs…
           </div>
         ) : (
-          shown.map((l, i) => (
-            <div key={i} className="flex gap-3 whitespace-pre-wrap break-all">
+          shown.map((l) => (
+            <div key={l.id} className="flex gap-3 whitespace-pre-wrap break-all">
               <span className="shrink-0 select-none text-[var(--color-fg-subtle)]">
                 {new Date(l.ts).toLocaleTimeString()}
               </span>

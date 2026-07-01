@@ -32,10 +32,16 @@ detect_advertise_addr() {
   if [ -n "${ADVERTISE_ADDR:-}" ]; then
     echo "$ADVERTISE_ADDR"; return 0
   fi
-  ip -4 -o addr show scope global 2>/dev/null \
-    | awk '$2 != "docker0" {print $4}' \
-    | cut -d/ -f1 \
-    | head -n1
+  if command -v ip >/dev/null 2>&1; then
+    ip -4 -o addr show scope global 2>/dev/null \
+      | awk '$2 != "docker0" {print $4}' \
+      | cut -d/ -f1 \
+      | head -n1
+    return 0
+  fi
+  # Minimal containers may lack iproute2. `hostname -I` lists all addresses;
+  # skip 172.17.x.x (docker0's default subnet) to match the ip(8) path above.
+  hostname -I 2>/dev/null | tr ' ' '\n' | grep -v '^172\.17\.' | grep . | head -n1
 }
 
 # Add the pull-through mirror to /etc/docker/daemon.json. Returns 10 when the
@@ -169,6 +175,20 @@ wait_dokploy_healthy() {
       status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo "")
       [ "$status" = "healthy" ] && return 0
     fi
+    sleep 3
+  done
+  return 1
+}
+
+# Wait for the Dokploy app to actually serve HTTP on :3000. The container
+# healthcheck can report healthy while the app returns 500s (e.g. when its
+# database credentials are wrong), so this is the real readiness signal.
+wait_dokploy_http() {
+  local tries="${1:-40}"
+  for _ in $(seq 1 "$tries"); do
+    local code
+    code=$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' http://localhost:3000 2>/dev/null || true)
+    case "$code" in 2*|3*) return 0 ;; esac
     sleep 3
   done
   return 1

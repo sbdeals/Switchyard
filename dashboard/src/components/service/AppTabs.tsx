@@ -1,69 +1,34 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  Rocket,
-  Play,
-  Square,
-  RefreshCw,
-  Trash2,
-  Globe,
-  ExternalLink,
-  Plus,
-  Loader2,
-} from "lucide-react";
+import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { Application } from "@/lib/dokploy";
 import {
   appLifecycleAction,
   updateApplicationAction,
   createDomainAction,
 } from "@/app/actions";
+import {
+  inputCls,
+  Field,
+  Info,
+  LifecycleButtons,
+  SaveRow,
+  DangerZone,
+  useLifecycle,
+  useSavedFlash,
+} from "@/components/service/primitives";
 
-const inputCls =
-  "w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]";
-
-function useAppLifecycle(app: Application) {
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const run = (action: "deploy" | "start" | "stop" | "remove", after?: () => void) => {
-    setError(null);
-    start(async () => {
-      const res = await appLifecycleAction(app.id, action);
-      if (!res.ok) setError(res.error);
-      else after?.();
-    });
-  };
-  return { pending, error, run };
-}
+const useAppLifecycle = (app: Application) =>
+  useLifecycle((action) => appLifecycleAction(app.id, action));
 
 export function AppOverviewTab({ app }: { app: Application }) {
   const { pending, error, run } = useAppLifecycle(app);
-  const running = app.status === "done";
   const primary = app.domains[0];
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap gap-2">
-        {app.status === "idle" ? (
-          <Btn onClick={() => run("deploy")} disabled={pending} primary>
-            <Rocket className="size-3.5" /> Deploy
-          </Btn>
-        ) : running ? (
-          <Btn onClick={() => run("stop")} disabled={pending}>
-            <Square className="size-3.5" /> Stop
-          </Btn>
-        ) : (
-          <Btn onClick={() => run("start")} disabled={pending}>
-            <Play className="size-3.5" /> Start
-          </Btn>
-        )}
-        {app.status !== "idle" && (
-          <Btn onClick={() => run("deploy")} disabled={pending}>
-            <RefreshCw className="size-3.5" /> Redeploy
-          </Btn>
-        )}
-      </div>
-      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+      <LifecycleButtons status={app.status} pending={pending} error={error} run={run} />
 
       <Field label="Public URL">
         {primary ? (
@@ -143,21 +108,23 @@ export function DomainsTab({ app }: { app: Application }) {
 
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <div className="mb-1.5 text-xs font-medium text-[var(--color-fg-muted)]">Host</div>
-          <input
-            value={host}
-            onChange={(e) => setHost(e.target.value)}
-            placeholder="app.example.com"
-            className={inputCls}
-          />
+          <Field label="Host">
+            <input
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+              placeholder="app.example.com"
+              className={inputCls}
+            />
+          </Field>
         </div>
         <div className="w-20">
-          <div className="mb-1.5 text-xs font-medium text-[var(--color-fg-muted)]">Port</div>
-          <input
-            value={port}
-            onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ""))}
-            className={inputCls}
-          />
+          <Field label="Port">
+            <input
+              value={port}
+              onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ""))}
+              className={inputCls}
+            />
+          </Field>
         </div>
         <button
           onClick={add}
@@ -209,14 +176,13 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
   const [cpu, setCpu] = useState(app.cpuLimit ?? "");
   const [mem, setMem] = useState(app.memoryLimit ?? "");
   const [saving, startSave] = useTransition();
-  const [saved, setSaved] = useState(false);
+  const [saved, flashSaved] = useSavedFlash();
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const dirty = name !== app.name || cpu !== (app.cpuLimit ?? "") || mem !== (app.memoryLimit ?? "");
 
   function save() {
     setSaveError(null);
-    setSaved(false);
     startSave(async () => {
       const res = await updateApplicationAction(
         app.id,
@@ -227,10 +193,8 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
         },
         cpu !== (app.cpuLimit ?? "") || mem !== (app.memoryLimit ?? "")
       );
-      if (res.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 1800);
-      } else setSaveError(res.error);
+      if (res.ok) flashSaved();
+      else setSaveError(res.error);
     });
   }
 
@@ -248,87 +212,18 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
             <input value={mem} onChange={(e) => setMem(e.target.value)} placeholder="unlimited" className={inputCls} />
           </Field>
         </div>
-        <div className="flex items-center justify-end gap-2">
-          {saveError && <span className="text-xs text-[var(--color-danger)]">{saveError}</span>}
-          {saved && <span className="text-xs text-[var(--color-ok)]">Saved</span>}
-          <button
-            onClick={save}
-            disabled={saving || !dirty}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
-          >
-            {saving && <Loader2 className="size-4 animate-spin" />}
-            Save changes
-          </button>
-        </div>
+        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
       </div>
 
       <Info label="App name" value={app.appName} mono />
 
-      <div className="rounded-xl border border-[var(--color-danger)]/40 bg-[var(--color-danger-soft)] p-4">
-        <h3 className="text-sm font-semibold text-[var(--color-danger)]">Danger zone</h3>
-        <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
-          Destroying removes the application and its container. This cannot be undone.
-        </p>
-        <button
-          onClick={() => {
-            if (confirm(`Destroy "${app.name}"? This cannot be undone.`)) run("remove", onClose);
-          }}
-          disabled={lifePending}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] disabled:opacity-50"
-        >
-          <Trash2 className="size-3.5" /> Destroy {app.name}
-        </button>
-        {lifeError && <p className="mt-2 text-xs text-[var(--color-danger)]">{lifeError}</p>}
-      </div>
-    </div>
-  );
-}
-
-// --- shared primitives ------------------------------------------------------
-
-function Btn({
-  children,
-  onClick,
-  disabled,
-  primary,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  primary?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={
-        "inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-40 " +
-        (primary
-          ? "bg-[var(--color-brand-strong)] text-white hover:bg-[var(--color-brand)]"
-          : "border border-[var(--color-border-strong)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]")
-      }
-    >
-      {children}
-    </button>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="mb-1.5 text-xs font-medium text-[var(--color-fg-muted)]">{label}</div>
-      {children}
-    </div>
-  );
-}
-
-function Info({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
-      <div className="text-xs text-[var(--color-fg-subtle)]">{label}</div>
-      <div className={"mt-0.5 truncate text-sm " + (mono ? "font-mono text-xs" : "")} title={value}>
-        {value}
-      </div>
+      <DangerZone
+        name={app.name}
+        message="Destroying removes the application and its container."
+        pending={lifePending}
+        error={lifeError}
+        onDestroy={() => run("remove", onClose)}
+      />
     </div>
   );
 }

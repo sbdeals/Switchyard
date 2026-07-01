@@ -86,3 +86,7 @@ deployable on one canvas. See `src/lib/dokploy.ts` (`listServices`).
       live-syncs on data change
 - [x] Live **Logs** + **Metrics** straight from the Docker API (SSE)
 - [ ] Backups (S3 destinations), deploy-log history (next)
+- [ ] **Dashboard auth** — Switchyard itself has no login: anyone who can reach
+      :3001 gets full admin over Dokploy (and can read database passwords and
+      container logs). Fine on localhost; gate it before binding to a public
+      interface.

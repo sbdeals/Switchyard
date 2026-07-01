@@ -74,18 +74,3 @@ export const ENGINE_META: Record<Engine, EngineMeta> = {
 };
 
 export const ENGINE_LIST = Object.values(ENGINE_META);
-
-export const STATUS_META: Record<
-  string,
-  { label: string; color: string; soft: string; pulse?: boolean }
-> = {
-  done: { label: "Running", color: "var(--color-ok)", soft: "var(--color-ok-soft)" },
-  running: {
-    label: "Deploying",
-    color: "var(--color-warn)",
-    soft: "var(--color-warn-soft)",
-    pulse: true,
-  },
-  error: { label: "Error", color: "var(--color-danger)", soft: "var(--color-danger-soft)" },
-  idle: { label: "Idle", color: "var(--color-idle)", soft: "var(--color-idle-soft)" },
-};

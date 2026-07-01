@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Check, AlertCircle } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import { saveEnvironmentAction, saveApplicationEnvAction } from "@/app/actions";
+import { SaveRow, useSavedFlash } from "@/components/service/primitives";
 
 export function VariablesTab({ service }: { service: Service }) {
   const [value, setValue] = useState(service.env ?? "");
   const [pending, start] = useTransition();
-  const [saved, setSaved] = useState(false);
+  const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
 
   const dirty = value !== (service.env ?? "");
@@ -16,16 +16,13 @@ export function VariablesTab({ service }: { service: Service }) {
 
   function save() {
     setError(null);
-    setSaved(false);
     start(async () => {
       const res =
         service.kind === "database"
           ? await saveEnvironmentAction(service.engine, service.id, value)
           : await saveApplicationEnvAction(service.id, value);
-      if (res.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 1800);
-      } else setError(res.error);
+      if (res.ok) flashSaved();
+      else setError(res.error);
     });
   }
 
@@ -44,26 +41,7 @@ export function VariablesTab({ service }: { service: Service }) {
       />
       <div className="mt-3 flex items-center justify-between">
         <span className="text-xs text-[var(--color-fg-subtle)]">{count} variable{count === 1 ? "" : "s"}</span>
-        <div className="flex items-center gap-2">
-          {error && (
-            <span className="flex items-center gap-1 text-xs text-[var(--color-danger)]">
-              <AlertCircle className="size-3.5" /> {error}
-            </span>
-          )}
-          {saved && (
-            <span className="flex items-center gap-1 text-xs text-[var(--color-ok)]">
-              <Check className="size-3.5" /> Saved
-            </span>
-          )}
-          <button
-            onClick={save}
-            disabled={pending || !dirty}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
-          >
-            {pending && <Loader2 className="size-4 animate-spin" />}
-            Save variables
-          </button>
-        </div>
+        <SaveRow saving={pending} saved={saved} error={error} disabled={!dirty} onSave={save} label="Save variables" />
       </div>
     </div>
   );

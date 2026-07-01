@@ -1,0 +1,239 @@
+"use client";
+
+/**
+ * Shared building blocks for the service drawer tabs. Databases, applications
+ * and compose stacks render the same buttons, fields, lifecycle controls and
+ * danger zone — parameterized only by which server action they call.
+ */
+
+import { useState, useTransition } from "react";
+import {
+  Rocket,
+  Play,
+  Square,
+  RefreshCw,
+  Trash2,
+  Copy,
+  Check,
+  Loader2,
+} from "lucide-react";
+import type { Action, ServiceStatus } from "@/lib/dokploy";
+import type { ActionResult } from "@/app/actions";
+import { cn } from "@/lib/utils";
+
+export const inputCls =
+  "w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]";
+
+// --- hooks --------------------------------------------------------------------
+
+/** Run lifecycle actions with shared pending/error handling. */
+export function useLifecycle(runAction: (action: Action) => Promise<ActionResult>) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const run = (action: Action, after?: () => void) => {
+    setError(null);
+    start(async () => {
+      const res = await runAction(action);
+      if (!res.ok) setError(res.error);
+      else after?.();
+    });
+  };
+  return { pending, error, run };
+}
+
+/** A "Saved" indicator that shows briefly after a successful save. */
+export function useSavedFlash(ms = 1800) {
+  const [saved, setSaved] = useState(false);
+  const flash = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), ms);
+  };
+  return [saved, flash] as const;
+}
+
+// --- primitives ---------------------------------------------------------------
+
+export function Btn({
+  children,
+  onClick,
+  disabled,
+  primary,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-40",
+        primary
+          ? "bg-[var(--color-brand-strong)] text-white hover:bg-[var(--color-brand)]"
+          : "border border-[var(--color-border-strong)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <span className="text-xs font-medium text-[var(--color-fg-muted)]">{label}</span>
+        {hint && <span className="text-[10px] text-[var(--color-fg-subtle)]">{hint}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export function Info({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+      <div className="text-xs text-[var(--color-fg-subtle)]">{label}</div>
+      <div className={cn("mt-0.5 truncate text-sm", mono && "font-mono text-xs")} title={value}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+/** Copy-to-clipboard icon button with a brief confirmation state. */
+export function CopyButton({ text }: { text: string }) {
+  const [copied, flash] = useSavedFlash(1200);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        flash();
+      }}
+      className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+    >
+      {copied ? <Check className="size-3.5 text-[var(--color-ok)]" /> : <Copy className="size-3.5" />}
+    </button>
+  );
+}
+
+// --- composed blocks ------------------------------------------------------------
+
+/** Deploy / Start / Stop / Redeploy buttons driven by the service status. */
+export function LifecycleButtons({
+  status,
+  pending,
+  error,
+  run,
+}: {
+  status: ServiceStatus;
+  pending: boolean;
+  error: string | null;
+  run: (action: Action) => void;
+}) {
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        {status === "idle" ? (
+          <Btn onClick={() => run("deploy")} disabled={pending} primary>
+            <Rocket className="size-3.5" /> Deploy
+          </Btn>
+        ) : status === "done" ? (
+          <Btn onClick={() => run("stop")} disabled={pending}>
+            <Square className="size-3.5" /> Stop
+          </Btn>
+        ) : (
+          <Btn onClick={() => run("start")} disabled={pending}>
+            <Play className="size-3.5" /> Start
+          </Btn>
+        )}
+        {status !== "idle" && (
+          <Btn onClick={() => run("deploy")} disabled={pending}>
+            <RefreshCw className="size-3.5" /> Redeploy
+          </Btn>
+        )}
+      </div>
+      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+    </>
+  );
+}
+
+/** Right-aligned save button with inline error / saved feedback. */
+export function SaveRow({
+  saving,
+  saved,
+  error,
+  disabled,
+  onSave,
+  label = "Save changes",
+}: {
+  saving: boolean;
+  saved: boolean;
+  error: string | null;
+  disabled?: boolean;
+  onSave: () => void;
+  label?: string;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {error && <span className="text-xs text-[var(--color-danger)]">{error}</span>}
+      {saved && (
+        <span className="flex items-center gap-1 text-xs text-[var(--color-ok)]">
+          <Check className="size-3.5" /> Saved
+        </span>
+      )}
+      <button
+        onClick={onSave}
+        disabled={saving || disabled}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+      >
+        {saving && <Loader2 className="size-4 animate-spin" />}
+        {label}
+      </button>
+    </div>
+  );
+}
+
+/** Destroy block with confirmation; `message` names what gets removed. */
+export function DangerZone({
+  name,
+  message,
+  pending,
+  error,
+  onDestroy,
+}: {
+  name: string;
+  message: string;
+  pending: boolean;
+  error: string | null;
+  onDestroy: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--color-danger)]/40 bg-[var(--color-danger-soft)] p-4">
+      <h3 className="text-sm font-semibold text-[var(--color-danger)]">Danger zone</h3>
+      <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
+        {message} This cannot be undone.
+      </p>
+      <button
+        onClick={() => {
+          if (confirm(`Destroy "${name}"? This cannot be undone.`)) onDestroy();
+        }}
+        disabled={pending}
+        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] disabled:opacity-50"
+      >
+        <Trash2 className="size-3.5" /> Destroy {name}
+      </button>
+      {error && <p className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
+    </div>
+  );
+}

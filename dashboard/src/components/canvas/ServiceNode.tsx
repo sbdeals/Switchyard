@@ -4,8 +4,7 @@ import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { Database as DatabaseIcon, Box, Layers } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
-import { STATUS_META } from "@/lib/engines";
-import { serviceAccent, serviceSubtitle } from "@/lib/service-meta";
+import { STATUS_META, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 
 export interface ServiceNodeData extends Record<string, unknown> {
   service: Service;

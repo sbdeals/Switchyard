@@ -1,4 +1,4 @@
-import { STATUS_META } from "@/lib/engines";
+import { STATUS_META } from "@/lib/service-meta";
 
 export function StatusBadge({ status }: { status: string }) {
   const meta = STATUS_META[status] ?? STATUS_META.idle;

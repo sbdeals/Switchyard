@@ -1,50 +1,25 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Rocket, Play, Square, RefreshCw, Trash2, Loader2, Check } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
 import { composeLifecycleAction, saveComposeFileAction } from "@/app/actions";
+import {
+  Info,
+  LifecycleButtons,
+  SaveRow,
+  DangerZone,
+  useLifecycle,
+  useSavedFlash,
+} from "@/components/service/primitives";
 
-function useComposeLifecycle(c: ComposeService) {
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const run = (action: "deploy" | "start" | "stop" | "remove", after?: () => void) => {
-    setError(null);
-    start(async () => {
-      const res = await composeLifecycleAction(c.id, action);
-      if (!res.ok) setError(res.error);
-      else after?.();
-    });
-  };
-  return { pending, error, run };
-}
+const useComposeLifecycle = (c: ComposeService) =>
+  useLifecycle((action) => composeLifecycleAction(c.id, action));
 
 export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   const { pending, error, run } = useComposeLifecycle(compose);
-  const running = compose.status === "done";
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap gap-2">
-        {compose.status === "idle" ? (
-          <Btn onClick={() => run("deploy")} disabled={pending} primary>
-            <Rocket className="size-3.5" /> Deploy
-          </Btn>
-        ) : running ? (
-          <Btn onClick={() => run("stop")} disabled={pending}>
-            <Square className="size-3.5" /> Stop
-          </Btn>
-        ) : (
-          <Btn onClick={() => run("start")} disabled={pending}>
-            <Play className="size-3.5" /> Start
-          </Btn>
-        )}
-        {compose.status !== "idle" && (
-          <Btn onClick={() => run("deploy")} disabled={pending}>
-            <RefreshCw className="size-3.5" /> Redeploy
-          </Btn>
-        )}
-      </div>
-      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+      <LifecycleButtons status={compose.status} pending={pending} error={error} run={run} />
       <p className="text-xs text-[var(--color-fg-muted)]">
         A raw <code className="font-mono">docker-compose</code> stack. Edit the file in the Compose
         tab, then deploy.
@@ -60,19 +35,16 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
 export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
   const [value, setValue] = useState(compose.composeFile ?? "");
   const [pending, start] = useTransition();
-  const [saved, setSaved] = useState(false);
+  const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
   const dirty = value !== (compose.composeFile ?? "");
 
   function save(redeploy: boolean) {
     setError(null);
-    setSaved(false);
     start(async () => {
       const res = await saveComposeFileAction(compose.id, value, redeploy);
-      if (res.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 1800);
-      } else setError(res.error);
+      if (res.ok) flashSaved();
+      else setError(res.error);
     });
   }
 
@@ -86,12 +58,6 @@ export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
         className="min-h-72 flex-1 resize-none rounded-lg border border-[var(--color-border-strong)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)]"
       />
       <div className="mt-3 flex items-center justify-end gap-2">
-        {error && <span className="text-xs text-[var(--color-danger)]">{error}</span>}
-        {saved && (
-          <span className="flex items-center gap-1 text-xs text-[var(--color-ok)]">
-            <Check className="size-3.5" /> Saved
-          </span>
-        )}
         <button
           onClick={() => save(false)}
           disabled={pending || !dirty}
@@ -99,14 +65,7 @@ export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
         >
           Save
         </button>
-        <button
-          onClick={() => save(true)}
-          disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
-        >
-          {pending && <Loader2 className="size-4 animate-spin" />}
-          Save &amp; deploy
-        </button>
+        <SaveRow saving={pending} saved={saved} error={error} onSave={() => save(true)} label="Save & deploy" />
       </div>
     </div>
   );
@@ -127,60 +86,13 @@ export function ComposeSettingsTab({
         label="Created"
         value={compose.createdAt ? new Date(compose.createdAt).toLocaleString() : "—"}
       />
-      <div className="rounded-xl border border-[var(--color-danger)]/40 bg-[var(--color-danger-soft)] p-4">
-        <h3 className="text-sm font-semibold text-[var(--color-danger)]">Danger zone</h3>
-        <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
-          Destroying removes the stack and all its containers. This cannot be undone.
-        </p>
-        <button
-          onClick={() => {
-            if (confirm(`Destroy "${compose.name}"? This cannot be undone.`)) run("remove", onClose);
-          }}
-          disabled={pending}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] disabled:opacity-50"
-        >
-          <Trash2 className="size-3.5" /> Destroy {compose.name}
-        </button>
-        {error && <p className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
-      </div>
-    </div>
-  );
-}
-
-function Btn({
-  children,
-  onClick,
-  disabled,
-  primary,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  primary?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={
-        "inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-40 " +
-        (primary
-          ? "bg-[var(--color-brand-strong)] text-white hover:bg-[var(--color-brand)]"
-          : "border border-[var(--color-border-strong)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]")
-      }
-    >
-      {children}
-    </button>
-  );
-}
-
-function Info({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
-      <div className="text-xs text-[var(--color-fg-subtle)]">{label}</div>
-      <div className={"mt-0.5 truncate text-sm " + (mono ? "font-mono text-xs" : "")} title={value}>
-        {value}
-      </div>
+      <DangerZone
+        name={compose.name}
+        message="Destroying removes the stack and all its containers."
+        pending={pending}
+        error={error}
+        onDestroy={() => run("remove", onClose)}
+      />
     </div>
   );
 }

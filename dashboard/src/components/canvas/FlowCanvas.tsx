@@ -130,11 +130,12 @@ export function FlowCanvas({
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
       onNodesChange(changes);
-      // Persist positions after a drag.
+      // Persist positions after a drag. Rebuilding from the current nodes (not
+      // merging into the stored map) also prunes entries for deleted services.
       const moved = changes.some((c) => c.type === "position" && !c.dragging);
       if (moved) {
         setNodes((curr) => {
-          const pos: Positions = loadPositions();
+          const pos: Positions = {};
           for (const n of curr) if (n.type === "service") pos[n.id] = n.position;
           savePositions(pos);
           return curr;
