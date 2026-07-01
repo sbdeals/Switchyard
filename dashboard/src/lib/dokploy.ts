@@ -50,15 +50,6 @@ export interface ServiceBase {
   replicas: number | null;
 }
 
-export interface DatabaseSummary {
-  engine: Engine;
-  id: string;
-  projectId: string;
-  projectName: string;
-  environmentId: string;
-  environmentName: string;
-}
-
 export interface Database extends ServiceBase {
   kind: "database";
   engine: Engine;
@@ -204,8 +195,35 @@ async function rawTree(): Promise<RawProject[]> {
   return request<RawProject[]>("project.all");
 }
 
-export async function listProjects(): Promise<ProjectNode[]> {
-  const tree = await rawTree();
+/** The project/environment scope every service carries. */
+type Scope = Pick<
+  ServiceBase,
+  "projectId" | "projectName" | "environmentId" | "environmentName"
+>;
+
+/** Flatten the tree into per-service refs: one {id + scope} per extracted id. */
+function collectIds(
+  tree: RawProject[],
+  ids: (env: RawEnvironment) => string[]
+): ({ id: string } & Scope)[] {
+  const out: ({ id: string } & Scope)[] = [];
+  for (const p of tree) {
+    for (const env of p.environments) {
+      for (const id of ids(env)) {
+        out.push({
+          id,
+          projectId: p.projectId,
+          projectName: p.name,
+          environmentId: env.environmentId,
+          environmentName: env.name,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function projectsFromTree(tree: RawProject[]): ProjectNode[] {
   return tree.map((p) => ({
     projectId: p.projectId,
     name: p.name,
@@ -214,6 +232,10 @@ export async function listProjects(): Promise<ProjectNode[]> {
       name: e.name,
     })),
   }));
+}
+
+export async function listProjects(): Promise<ProjectNode[]> {
+  return projectsFromTree(await rawTree());
 }
 
 export async function createProject(name: string): Promise<void> {
@@ -242,25 +264,6 @@ export async function removeEnvironment(environmentId: string): Promise<void> {
 
 // --- databases --------------------------------------------------------------
 
-function summariesFromTree(tree: RawProject[]): DatabaseSummary[] {
-  const out: DatabaseSummary[] = [];
-  for (const p of tree) {
-    for (const env of p.environments) {
-      const base = {
-        projectId: p.projectId,
-        projectName: p.name,
-        environmentId: env.environmentId,
-        environmentName: env.name,
-      };
-      for (const e of ENGINES) {
-        const arr = (env[e] ?? []) as Record<string, string>[];
-        for (const item of arr) out.push({ engine: e, id: item[idKey(e)], ...base });
-      }
-    }
-  }
-  return out;
-}
-
 interface RawDatabaseDetail {
   name?: string;
   appName?: string;
@@ -282,9 +285,13 @@ async function getDetail(engine: Engine, id: string): Promise<RawDatabaseDetail>
   return request<RawDatabaseDetail>(`${engine}.one?${idKey(engine)}=${encodeURIComponent(id)}`);
 }
 
-/** List every database across all projects, enriched with detail. */
-export async function listDatabases(): Promise<Database[]> {
-  const summaries = summariesFromTree(await rawTree());
+/** List every database in the tree, enriched with detail. */
+async function listDatabases(tree: RawProject[]): Promise<Database[]> {
+  const summaries = ENGINES.flatMap((engine) =>
+    collectIds(tree, (env) =>
+      ((env[engine] ?? []) as Record<string, string>[]).map((item) => item[idKey(engine)])
+    ).map((ref) => ({ ...ref, engine }))
+  );
   const detailed = await Promise.all(
     summaries.map(async (s) => {
       const d = await getDetail(s.engine, s.id);
@@ -371,7 +378,8 @@ export async function createDatabase(input: CreateDatabaseInput): Promise<string
   return created[idKey(engine)];
 }
 
-type Action = "deploy" | "start" | "stop" | "remove";
+/** Lifecycle actions shared by every service kind. */
+export type Action = "deploy" | "start" | "stop" | "remove";
 
 /** Run a lifecycle action against a database. */
 export async function databaseAction(engine: Engine, id: string, action: Action): Promise<void> {
@@ -446,33 +454,16 @@ interface RawApplicationDetail {
   deployments?: { deploymentId: string; status?: string; title?: string; createdAt?: string }[];
 }
 
-/** List every application across all projects, enriched with detail. */
-export async function listApplications(): Promise<Application[]> {
-  const tree = await rawTree();
-  const summaries: { id: string; base: Omit<ServiceBase, keyof RawApplicationDetail | "kind" | "id"> }[] =
-    [];
-  for (const p of tree) {
-    for (const env of p.environments) {
-      for (const a of env.applications ?? []) {
-        summaries.push({
-          id: a.applicationId,
-          base: {
-            projectId: p.projectId,
-            projectName: p.name,
-            environmentId: env.environmentId,
-            environmentName: env.name,
-          } as ServiceBase,
-        });
-      }
-    }
-  }
+/** List every application in the tree, enriched with detail. */
+async function listApplications(tree: RawProject[]): Promise<Application[]> {
+  const refs = collectIds(tree, (env) => (env.applications ?? []).map((a) => a.applicationId));
   return Promise.all(
-    summaries.map(async ({ id, base }) => {
+    refs.map(async ({ id, ...scope }) => {
       const d = await request<RawApplicationDetail>(
         `application.one?applicationId=${encodeURIComponent(id)}`
       );
       return {
-        ...base,
+        ...scope,
         kind: "application",
         id,
         name: d.name ?? id,
@@ -607,29 +598,21 @@ export const STARTER_COMPOSE = `services:
       - 8080:80
 `;
 
-/** List every compose stack across all projects, enriched with detail. */
-export async function listCompose(): Promise<ComposeService[]> {
-  const tree = await rawTree();
-  const refs: { id: string; p: RawProject; env: RawEnvironment }[] = [];
-  for (const p of tree)
-    for (const env of p.environments)
-      for (const c of env.compose ?? []) refs.push({ id: c.composeId, p, env });
-
+/** List every compose stack in the tree, enriched with detail. */
+async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
+  const refs = collectIds(tree, (env) => (env.compose ?? []).map((c) => c.composeId));
   return Promise.all(
-    refs.map(async ({ id, p, env }) => {
+    refs.map(async ({ id, ...scope }) => {
       const d = await request<RawComposeDetail>(
         `compose.one?composeId=${encodeURIComponent(id)}`
       );
       return {
+        ...scope,
         kind: "compose",
         id,
         name: d.name ?? id,
         appName: d.appName ?? "",
         status: d.composeStatus ?? "idle",
-        projectId: p.projectId,
-        projectName: p.name,
-        environmentId: env.environmentId,
-        environmentName: env.name,
         dockerImage: null,
         env: d.env ?? null,
         createdAt: d.createdAt ?? null,
@@ -672,12 +655,23 @@ export async function composeAction(id: string, action: Action): Promise<void> {
 
 // --- unified service listing ------------------------------------------------
 
-/** Every deployable service (databases + applications + compose). */
-export async function listServices(): Promise<Service[]> {
+/**
+ * Everything the workspace page needs, from a single `project.all` fetch:
+ * services of all kinds (enriched with per-service detail) plus the
+ * project/environment tree.
+ */
+export async function loadWorkspace(): Promise<{
+  services: Service[];
+  projects: ProjectNode[];
+}> {
+  const tree = await rawTree();
   const [databases, applications, compose] = await Promise.all([
-    listDatabases(),
-    listApplications(),
-    listCompose(),
+    listDatabases(tree),
+    listApplications(tree),
+    listCompose(tree),
   ]);
-  return [...databases, ...applications, ...compose].sort((a, b) => a.name.localeCompare(b.name));
+  const services = [...databases, ...applications, ...compose].sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
+  return { services, projects: projectsFromTree(tree) };
 }

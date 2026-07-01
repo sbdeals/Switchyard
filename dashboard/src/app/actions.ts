@@ -24,6 +24,7 @@ import {
   createCompose,
   composeAction,
   updateComposeFile,
+  type Action,
   type DatabasePatch,
   type ApplicationPatch,
   type Engine,
@@ -38,6 +39,28 @@ function fail(e: unknown): { ok: false; error: string } {
   return { ok: false, error: e instanceof Error ? e.message : String(e) };
 }
 
+/** Run a mutation, revalidate the page, normalize errors into the result. */
+async function wrap(fn: () => Promise<unknown>): Promise<ActionResult> {
+  try {
+    await fn();
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Like `wrap`, but returns the created id so the UI can open its drawer. */
+async function wrapId(fn: () => Promise<string>): Promise<QuickDeployResult> {
+  try {
+    const id = await fn();
+    revalidatePath("/");
+    return { ok: true, id };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 /** Resolve a target environment, creating a default project/env if none exist. */
 async function resolveTargetEnv(environmentId?: string): Promise<string> {
   if (environmentId) return environmentId;
@@ -50,44 +73,36 @@ async function resolveTargetEnv(environmentId?: string): Promise<string> {
   return after[0].environmentId;
 }
 
+// --- databases ----------------------------------------------------------------
+
 /**
  * One-click: provision a database with a random name + password and the latest
- * version, then deploy it. Returns the new id so the UI can open its drawer.
+ * version, then deploy it.
  */
 export async function quickDeployDatabaseAction(
   engine: Engine,
   environmentId?: string
 ): Promise<QuickDeployResult> {
-  try {
+  return wrapId(async () => {
     const meta = ENGINE_META[engine];
-    const environment = await resolveTargetEnv(environmentId);
     const id = await createDatabase({
       engine,
       name: randomServiceName(engine),
-      environmentId: environment,
+      environmentId: await resolveTargetEnv(environmentId),
       databasePassword: randomPassword(),
       dockerImage: `${meta.image}:${meta.versions[0]}`,
     });
     await databaseAction(engine, id, "deploy");
-    revalidatePath("/");
-    return { ok: true, id };
-  } catch (e) {
-    return fail(e);
-  }
+    return id;
+  });
 }
 
 export async function lifecycleAction(
   engine: Engine,
   id: string,
-  action: "deploy" | "start" | "stop" | "remove"
+  action: Action
 ): Promise<ActionResult> {
-  try {
-    await databaseAction(engine, id, action);
-    revalidatePath("/");
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
+  return wrap(() => databaseAction(engine, id, action));
 }
 
 /**
@@ -100,7 +115,7 @@ export async function updateDatabaseAction(
   appName: string,
   patch: DatabasePatch
 ): Promise<ActionResult> {
-  try {
+  return wrap(async () => {
     await updateDatabase(engine, id, patch);
     const needsReload =
       patch.dockerImage !== undefined ||
@@ -108,11 +123,7 @@ export async function updateDatabaseAction(
       patch.memoryLimit !== undefined ||
       patch.externalPort !== undefined;
     if (needsReload) await reloadDatabase(engine, id, appName);
-    revalidatePath("/");
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
+  });
 }
 
 export async function saveEnvironmentAction(
@@ -120,26 +131,10 @@ export async function saveEnvironmentAction(
   id: string,
   env: string
 ): Promise<ActionResult> {
-  try {
-    await saveEnvironment(engine, id, env);
-    revalidatePath("/");
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
+  return wrap(() => saveEnvironment(engine, id, env));
 }
 
 // --- projects & environments ------------------------------------------------
-
-async function wrap(fn: () => Promise<void>): Promise<ActionResult> {
-  try {
-    await fn();
-    revalidatePath("/");
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
-}
 
 export async function createProjectAction(name: string): Promise<ActionResult> {
   return wrap(() => createProject(name));
@@ -171,20 +166,19 @@ export async function quickDeployImageAction(
   name?: string,
   environmentId?: string
 ): Promise<QuickDeployResult> {
-  try {
+  return wrapId(async () => {
     const trimmed = image.trim();
-    if (!trimmed) return { ok: false, error: "Image is required." };
-    const environment = await resolveTargetEnv(environmentId);
+    if (!trimmed) throw new Error("Image is required.");
     // Derive a friendly name from the image (e.g. "nginx:alpine" -> "nginx").
     const derived = trimmed.split("/").pop()!.split(":")[0];
-    const id = await createApplication(name?.trim() || randomServiceName(derived), environment);
+    const id = await createApplication(
+      name?.trim() || randomServiceName(derived),
+      await resolveTargetEnv(environmentId)
+    );
     await setAppDockerSource(id, trimmed);
     await applicationAction(id, "deploy");
-    revalidatePath("/");
-    return { ok: true, id };
-  } catch (e) {
-    return fail(e);
-  }
+    return id;
+  });
 }
 
 /** Deploy an application from a public Git repository (Nixpacks build). */
@@ -193,33 +187,23 @@ export async function quickDeployRepoAction(
   branch?: string,
   environmentId?: string
 ): Promise<QuickDeployResult> {
-  try {
+  return wrapId(async () => {
     const url = repoUrl.trim();
-    if (!url) return { ok: false, error: "Repository URL is required." };
-    const environment = await resolveTargetEnv(environmentId);
+    if (!url) throw new Error("Repository URL is required.");
     // Derive a name from the repo (".../my-app.git" -> "my-app").
     const derived = url.replace(/\.git$/, "").split("/").filter(Boolean).pop() || "app";
-    const id = await createApplication(randomServiceName(derived), environment);
+    const id = await createApplication(
+      randomServiceName(derived),
+      await resolveTargetEnv(environmentId)
+    );
     await setAppGitSource(id, url, branch?.trim() || "main");
     await applicationAction(id, "deploy");
-    revalidatePath("/");
-    return { ok: true, id };
-  } catch (e) {
-    return fail(e);
-  }
+    return id;
+  });
 }
 
-export async function appLifecycleAction(
-  id: string,
-  action: "deploy" | "start" | "stop" | "remove"
-): Promise<ActionResult> {
-  try {
-    await applicationAction(id, action);
-    revalidatePath("/");
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
+export async function appLifecycleAction(id: string, action: Action): Promise<ActionResult> {
+  return wrap(() => applicationAction(id, action));
 }
 
 export async function updateApplicationAction(
@@ -227,24 +211,14 @@ export async function updateApplicationAction(
   patch: ApplicationPatch,
   redeploy = false
 ): Promise<ActionResult> {
-  try {
+  return wrap(async () => {
     await updateApplication(id, patch);
     if (redeploy) await applicationAction(id, "deploy");
-    revalidatePath("/");
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
+  });
 }
 
 export async function saveApplicationEnvAction(id: string, env: string): Promise<ActionResult> {
-  try {
-    await saveApplicationEnvironment(id, env);
-    revalidatePath("/");
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
+  return wrap(() => saveApplicationEnvironment(id, env));
 }
 
 export async function createDomainAction(
@@ -252,13 +226,7 @@ export async function createDomainAction(
   host: string,
   port: number
 ): Promise<ActionResult> {
-  try {
-    await createDomain(applicationId, host.trim(), port);
-    revalidatePath("/");
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
+  return wrap(() => createDomain(applicationId, host.trim(), port));
 }
 
 // --- compose ----------------------------------------------------------------
@@ -268,27 +236,13 @@ export async function createComposeAction(
   name?: string,
   environmentId?: string
 ): Promise<QuickDeployResult> {
-  try {
-    const environment = await resolveTargetEnv(environmentId);
-    const id = await createCompose(name?.trim() || randomServiceName("compose"), environment);
-    revalidatePath("/");
-    return { ok: true, id };
-  } catch (e) {
-    return fail(e);
-  }
+  return wrapId(async () =>
+    createCompose(name?.trim() || randomServiceName("compose"), await resolveTargetEnv(environmentId))
+  );
 }
 
-export async function composeLifecycleAction(
-  id: string,
-  action: "deploy" | "start" | "stop" | "remove"
-): Promise<ActionResult> {
-  try {
-    await composeAction(id, action);
-    revalidatePath("/");
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
+export async function composeLifecycleAction(id: string, action: Action): Promise<ActionResult> {
+  return wrap(() => composeAction(id, action));
 }
 
 export async function saveComposeFileAction(
@@ -296,12 +250,8 @@ export async function saveComposeFileAction(
   composeFile: string,
   redeploy = false
 ): Promise<ActionResult> {
-  try {
+  return wrap(async () => {
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");
-    revalidatePath("/");
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
+  });
 }

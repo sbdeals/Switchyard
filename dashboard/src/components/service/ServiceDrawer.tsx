@@ -6,18 +6,11 @@ import {
   X,
   Database as DatabaseIcon,
   Rocket,
-  Play,
-  Square,
-  RefreshCw,
-  Trash2,
-  Copy,
-  Check,
   Cpu,
   ScrollText,
   Settings2,
   SlidersHorizontal,
   KeyRound,
-  Loader2,
   Eye,
   EyeOff,
   Box,
@@ -45,6 +38,17 @@ import {
   ComposeEditorTab,
   ComposeSettingsTab,
 } from "@/components/service/ComposeTabs";
+import {
+  inputCls,
+  Field,
+  Info,
+  CopyButton,
+  LifecycleButtons,
+  SaveRow,
+  DangerZone,
+  useLifecycle,
+  useSavedFlash,
+} from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
 
 type TabId =
@@ -200,50 +204,17 @@ function Header({ service, onClose }: { service: Service; onClose: () => void })
   );
 }
 
-function useLifecycle(db: Database) {
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const run = (action: "deploy" | "start" | "stop" | "remove", after?: () => void) => {
-    setError(null);
-    start(async () => {
-      const res = await lifecycleAction(db.engine, db.id, action);
-      if (!res.ok) setError(res.error);
-      else after?.();
-    });
-  };
-  return { pending, error, run };
-}
+const useDbLifecycle = (db: Database) =>
+  useLifecycle((action) => lifecycleAction(db.engine, db.id, action));
 
 function OverviewTab({ db }: { db: Database }) {
   const meta = ENGINE_META[db.engine];
-  const { pending, error, run } = useLifecycle(db);
+  const { pending, error, run } = useDbLifecycle(db);
   const conn = connectionString(db);
-  const [copied, setCopied] = useState(false);
-  const running = db.status === "done";
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap gap-2">
-        {db.status === "idle" ? (
-          <Btn onClick={() => run("deploy")} disabled={pending} primary>
-            <Rocket className="size-3.5" /> Deploy
-          </Btn>
-        ) : running ? (
-          <Btn onClick={() => run("stop")} disabled={pending}>
-            <Square className="size-3.5" /> Stop
-          </Btn>
-        ) : (
-          <Btn onClick={() => run("start")} disabled={pending}>
-            <Play className="size-3.5" /> Start
-          </Btn>
-        )}
-        {db.status !== "idle" && (
-          <Btn onClick={() => run("deploy")} disabled={pending}>
-            <RefreshCw className="size-3.5" /> Redeploy
-          </Btn>
-        )}
-      </div>
-      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+      <LifecycleButtons status={db.status} pending={pending} error={error} run={run} />
 
       {conn && (
         <Field label="Connection string">
@@ -251,23 +222,14 @@ function OverviewTab({ db }: { db: Database }) {
             <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
               {conn}
             </code>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(conn);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1200);
-              }}
-              className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
-            >
-              {copied ? <Check className="size-3.5 text-[var(--color-ok)]" /> : <Copy className="size-3.5" />}
-            </button>
+            <CopyButton text={conn} />
           </div>
         </Field>
       )}
 
       <div className="grid grid-cols-2 gap-3">
         <Info label="Image" value={db.dockerImage ?? "—"} mono />
-        <Info label="Internal port" value={String(db.externalPort ?? meta.defaultPort)} />
+        <Info label="Internal port" value={String(meta.defaultPort)} />
         <Info label="Replicas" value={String(db.replicas ?? 1)} />
         <Info label="Database" value={db.databaseName ?? "—"} mono />
         <Info label="User" value={db.databaseUser ?? "—"} mono />
@@ -285,7 +247,7 @@ function OverviewTab({ db }: { db: Database }) {
 }
 
 function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
-  const { pending: lifePending, error: lifeError, run } = useLifecycle(db);
+  const { pending: lifePending, error: lifeError, run } = useDbLifecycle(db);
   const meta = ENGINE_META[db.engine];
   const currentVersion = db.dockerImage?.split(":")[1] ?? meta.versions[0];
 
@@ -295,7 +257,7 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
   const [cpu, setCpu] = useState(db.cpuLimit ?? "");
   const [mem, setMem] = useState(db.memoryLimit ?? "");
   const [saving, startSave] = useTransition();
-  const [saved, setSaved] = useState(false);
+  const [saved, flashSaved] = useSavedFlash();
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const dirty =
@@ -307,7 +269,6 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
 
   function save() {
     setSaveError(null);
-    setSaved(false);
     const patch: DatabasePatch = {};
     if (name !== db.name) patch.name = name.trim();
     if (version !== currentVersion) patch.dockerImage = `${meta.image}:${version}`;
@@ -317,21 +278,19 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
     if (mem !== (db.memoryLimit ?? "")) patch.memoryLimit = mem || null;
     startSave(async () => {
       const res = await updateDatabaseAction(db.engine, db.id, db.appName, patch);
-      if (res.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 1800);
-      } else setSaveError(res.error);
+      if (res.ok) flashSaved();
+      else setSaveError(res.error);
     });
   }
 
   return (
     <div className="space-y-5">
       <div className="space-y-3">
-        <EditField label="Name">
+        <Field label="Name">
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
-        </EditField>
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <EditField label="Version" hint="changing redeploys">
+          <Field label="Version" hint="changing redeploys">
             <select value={version} onChange={(e) => setVersion(e.target.value)} className={inputCls}>
               {meta.versions.map((v) => (
                 <option key={v} value={v}>
@@ -339,34 +298,23 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
                 </option>
               ))}
             </select>
-          </EditField>
-          <EditField label="External port" hint="blank = internal only">
+          </Field>
+          <Field label="External port" hint="blank = internal only">
             <input
               value={port}
               onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ""))}
               placeholder="—"
               className={inputCls}
             />
-          </EditField>
-          <EditField label="CPU limit" hint='e.g. "0.5"'>
+          </Field>
+          <Field label="CPU limit" hint='e.g. "0.5"'>
             <input value={cpu} onChange={(e) => setCpu(e.target.value)} placeholder="unlimited" className={inputCls} />
-          </EditField>
-          <EditField label="Memory limit" hint='e.g. "256m"'>
+          </Field>
+          <Field label="Memory limit" hint='e.g. "256m"'>
             <input value={mem} onChange={(e) => setMem(e.target.value)} placeholder="unlimited" className={inputCls} />
-          </EditField>
+          </Field>
         </div>
-        <div className="flex items-center justify-end gap-2">
-          {saveError && <span className="text-xs text-[var(--color-danger)]">{saveError}</span>}
-          {saved && <span className="text-xs text-[var(--color-ok)]">Saved</span>}
-          <button
-            onClick={save}
-            disabled={saving || !dirty}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
-          >
-            {saving && <Loader2 className="size-4 animate-spin" />}
-            Save changes
-          </button>
-        </div>
+        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
       </div>
 
       <PasswordRow db={db} />
@@ -374,56 +322,22 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
       <Info label="App name" value={db.appName} mono />
       <Info label="Created" value={db.createdAt ? new Date(db.createdAt).toLocaleString() : "—"} />
 
-      <div className="rounded-xl border border-[var(--color-danger)]/40 bg-[var(--color-danger-soft)] p-4">
-        <h3 className="text-sm font-semibold text-[var(--color-danger)]">Danger zone</h3>
-        <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
-          Destroying removes the service and its container. This cannot be undone.
-        </p>
-        <button
-          onClick={() => {
-            if (confirm(`Destroy "${db.name}"? This cannot be undone.`))
-              run("remove", onClose);
-          }}
-          disabled={lifePending}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] disabled:opacity-50"
-        >
-          <Trash2 className="size-3.5" /> Destroy {db.name}
-        </button>
-        {lifeError && <p className="mt-2 text-xs text-[var(--color-danger)]">{lifeError}</p>}
-      </div>
-    </div>
-  );
-}
-
-const inputCls =
-  "w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]";
-
-function EditField({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-xs font-medium text-[var(--color-fg-muted)]">{label}</span>
-        {hint && <span className="text-[10px] text-[var(--color-fg-subtle)]">{hint}</span>}
-      </div>
-      {children}
+      <DangerZone
+        name={db.name}
+        message="Destroying removes the service and its container."
+        pending={lifePending}
+        error={lifeError}
+        onDestroy={() => run("remove", onClose)}
+      />
     </div>
   );
 }
 
 function PasswordRow({ db }: { db: Database }) {
   const [show, setShow] = useState(false);
-  const [copied, setCopied] = useState(false);
   if (!db.databasePassword) return null;
   return (
-    <EditField label="Password" hint="rotation coming soon">
+    <Field label="Password" hint="rotation coming soon">
       <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2">
         <code className="flex-1 truncate font-mono text-xs text-[var(--color-fg-muted)]">
           {show ? db.databasePassword : "•".repeat(16)}
@@ -434,64 +348,8 @@ function PasswordRow({ db }: { db: Database }) {
         >
           {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
         </button>
-        <button
-          onClick={() => {
-            navigator.clipboard.writeText(db.databasePassword ?? "");
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1200);
-          }}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
-        >
-          {copied ? <Check className="size-3.5 text-[var(--color-ok)]" /> : <Copy className="size-3.5" />}
-        </button>
+        <CopyButton text={db.databasePassword} />
       </div>
-    </EditField>
-  );
-}
-
-function Btn({
-  children,
-  onClick,
-  disabled,
-  primary,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  primary?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-40",
-        primary
-          ? "bg-[var(--color-brand-strong)] text-white hover:bg-[var(--color-brand)]"
-          : "border border-[var(--color-border-strong)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="mb-1.5 text-xs font-medium text-[var(--color-fg-muted)]">{label}</div>
-      {children}
-    </div>
-  );
-}
-
-function Info({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
-      <div className="text-xs text-[var(--color-fg-subtle)]">{label}</div>
-      <div className={cn("mt-0.5 truncate text-sm", mono && "font-mono text-xs")} title={value}>
-        {value}
-      </div>
-    </div>
+    </Field>
   );
 }

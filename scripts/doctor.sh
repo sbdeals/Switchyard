@@ -13,6 +13,11 @@ echo "== Claude Code =="
 if command -v claude >/dev/null 2>&1; then pass "claude: $(claude --version 2>&1 | head -1)"; else fail "claude not installed (npm i -g @anthropic-ai/claude-code)"; fi
 if command -v node >/dev/null 2>&1;   then pass "node: $(node --version)"; else fail "node not installed"; fi
 
+echo "== Host commands used by the launch scripts =="
+if command -v curl >/dev/null 2>&1; then pass "curl"; else fail "curl not installed (required to fetch the Dokploy installer)"; fi
+if command -v ip >/dev/null 2>&1; then pass "ip (iproute2)"; else info "ip not installed -> advertise address falls back to 'hostname -I'"; fi
+if command -v jq >/dev/null 2>&1; then pass "jq"; else info "jq not installed -> can't merge an existing /etc/docker/daemon.json"; fi
+
 echo "== Dokploy / Docker =="
 if command -v docker >/dev/null 2>&1; then pass "docker: $(docker --version)"; else fail "docker not installed"; fi
 if docker info >/dev/null 2>&1; then
