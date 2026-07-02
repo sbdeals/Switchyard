@@ -3,7 +3,6 @@
 #   Usage: scripts/doctor.sh
 
 set -uo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 pass() { printf '\033[0;32m  ok \033[0m %s\n' "$*"; }
 fail() { printf '\033[0;31m FAIL\033[0m %s\n' "$*"; }
