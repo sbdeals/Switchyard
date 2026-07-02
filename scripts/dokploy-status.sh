@@ -32,4 +32,5 @@ if [ "$health" = "healthy" ]; then
 else
   warn "Dokploy health: $health"
 fi
-log "Dashboard: http://${addr:-<server-ip>}:3000  (also http://localhost:3000 on this host)"
+port="${DOKPLOY_PORT:-3000}"
+log "Dashboard: http://${addr:-<server-ip>}:${port}  (also http://localhost:${port} on this host)"

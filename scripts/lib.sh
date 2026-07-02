@@ -180,14 +180,16 @@ wait_dokploy_healthy() {
   return 1
 }
 
-# Wait for the Dokploy app to actually serve HTTP on :3000. The container
-# healthcheck can report healthy while the app returns 500s (e.g. when its
-# database credentials are wrong), so this is the real readiness signal.
+# Wait for the Dokploy app to actually serve HTTP. The container healthcheck
+# can report healthy while the app returns 500s (e.g. when its database
+# credentials are wrong), so this is the real readiness signal. DOKPLOY_PORT
+# overrides the host port to poll (default 3000) — used by the switchyard CLI
+# when Dokploy is published on a non-default port.
 wait_dokploy_http() {
-  local tries="${1:-40}"
+  local tries="${1:-40}" port="${DOKPLOY_PORT:-3000}"
   for _ in $(seq 1 "$tries"); do
     local code
-    code=$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' http://localhost:3000 2>/dev/null || true)
+    code=$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' "http://localhost:${port}" 2>/dev/null || true)
     case "$code" in 2*|3*) return 0 ;; esac
     sleep 3
   done
