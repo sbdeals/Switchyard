@@ -4,7 +4,8 @@ Docs for **dokploy-claudecode** — launch tooling for [Dokploy](https://dokploy
 
 | Doc | Read it when you want to… |
 |---|---|
-| [Getting started](getting-started.md) | Install and run the stack — Linux server (`make up`) or Windows 11 with Docker Desktop — and connect the dashboard |
+| [CLI reference](cli.md) | Use the one-command installer (`npx switchyard-cli up` / `install.sh`): commands, flags, the config file, security notes, migrations |
+| [Getting started](getting-started.md) | Install and run the stack — the fast path on any platform, or manually (Linux `make up`, Windows 11 Docker Desktop) — and connect the dashboard |
 | [Dashboard guide](dashboard-guide.md) | Tour every Switchyard feature: canvas, databases, applications, compose stacks, logs, metrics, projects |
 | [Architecture](architecture.md) | Understand how Switchyard works: the BFF over the Dokploy API, Server Actions, SSE logs/metrics, canvas edge inference |
 | [Launch tooling](launch-tooling.md) | Use or modify the `make` targets and `scripts/` that install and manage the Dokploy stack on a Linux host |

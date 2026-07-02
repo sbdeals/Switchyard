@@ -26,6 +26,8 @@ flowchart LR
 - **Control plane** (create, deploy, configure, destroy): the BFF calls Dokploy's RPC-style HTTP endpoints (`project.all`, `<engine>.one`, `application.create`, ...) from [`src/lib/dokploy.ts`](../dashboard/src/lib/dokploy.ts).
 - **Data plane** (live logs and metrics): the BFF reads the Docker Engine API directly via [`src/lib/docker.ts`](../dashboard/src/lib/docker.ts) — the same engine the Dokploy stack runs on.
 
+**Deployment topology.** Switchyard runs either from source (`npm run dev`, dev mode) or — the default the [CLI](cli.md) sets up — as a container built from [`dashboard/Dockerfile`](../dashboard/Dockerfile) (Next.js standalone output). The container joins `dokploy-network` and reaches Dokploy by service DNS (`DOKPLOY_URL=http://dokploy:3000`, so the host-published port is irrelevant), mounts `/var/run/docker.sock` for the data plane, and publishes 3001 on **127.0.0.1** unless explicitly exposed. `/api/health` reports liveness; `/api/health?deep=1` additionally proves the container → Dokploy sign-in path — the CLI gates on it after every (re)create.
+
 ## Why a backend-for-frontend
 
 The BFF exists so that credentials never reach the browser. [`src/lib/dokploy.ts`](../dashboard/src/lib/dokploy.ts) is server-only:

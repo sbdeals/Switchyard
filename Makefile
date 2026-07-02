@@ -5,13 +5,16 @@
 #   make down     Stop the Dokploy stack (add PURGE=1 to wipe data)
 #   make claude   Launch Claude Code in this repo
 #   make doctor   Check that prerequisites for both tools are present
+#
+#   One-command alternative (also registers the admin and runs the dashboard
+#   container, works on Windows/macOS too):  npx switchyard-cli up
 
 SHELL := /bin/bash
 
 .PHONY: up status down claude doctor help
 
 help:
-	@grep -E '^#   make' Makefile | sed 's/^#   //'
+	@grep -E '^#   (make|One-command|container)' Makefile | sed 's/^#   //'
 
 up:
 	sudo bash scripts/dokploy-up.sh

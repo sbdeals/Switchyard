@@ -1,16 +1,41 @@
 # Project context for Claude Code
 
 Goal: an open-source, Railway-style PaaS built on top of **Dokploy**, driven by
-**Claude Code**. This repo currently contains the launch tooling; the dashboard
-is the next milestone.
+**Claude Code**. Three parts live here: the bash launch tooling (`scripts/`),
+the Switchyard dashboard (`dashboard/`), and the `switchyard` CLI (`cli/`,
+npm package **`switchyard-cli`**) that turns everything into a one-command
+install.
 
 ## Launching things
 
+- `npx switchyard-cli up` — one-command install/converge of the whole stack:
+  Dokploy + terminal-guided admin registration + the dashboard as a managed
+  container. `install.sh` (repo root) is the curl-able Linux bootstrap that
+  ends in the same command.
 - `make up` / `scripts/dokploy-up.sh` — launch the Dokploy stack (idempotent).
 - `make status` — stack status + dashboard URL (http://localhost:3000).
 - `make down` — stop the stack (`PURGE=1` to also remove volumes/secrets).
 - `make claude` — launch Claude Code in this repo.
 - `make doctor` — verify prerequisites.
+
+## The CLI (`cli/`)
+
+- **npm naming landmine:** the bare npm name `switchyard` is an unrelated
+  abandoned package. Ours is **`switchyard-cli`** (bin name `switchyard`).
+  Never write `npx switchyard` in docs or code.
+- On Linux the CLI shells out to the repo's `scripts/*.sh` — change behavior
+  in the scripts, don't duplicate it in TypeScript. `cli/copy-scripts.mjs`
+  copies `scripts/` into the package at publish time (`prepack`).
+- On Windows/macOS it replays docs/getting-started.md Path B programmatically
+  (`cli/src/platform/docker-desktop.ts`) — keep that doc and module in sync.
+- `switchyard up` must stay **idempotent**, like `make up`. The dashboard
+  container is fingerprinted with a config-hash label; same config → no-op.
+- The dashboard image is `ghcr.io/sbdeals/switchyard`, built from
+  `dashboard/Dockerfile` (Next standalone output). Releasing: tag `vX.Y.Z`
+  (must equal `cli/package.json` version) → `.github/workflows/release.yml`
+  pushes the image then npm-publishes (needs the `NPM_TOKEN` repo secret).
+- The dashboard has **no auth** — the CLI binds it to 127.0.0.1 by default;
+  keep any new exposure path behind explicit `--expose`-style confirmation.
 
 ## This host's quirks (already handled by the scripts — don't re-debug from scratch)
 
