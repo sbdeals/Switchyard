@@ -1,0 +1,67 @@
+[
+  {
+    "file": "canvas-overview.png",
+    "title": "Canvas view",
+    "shows": "Hero shot of the workspace canvas: the whoami-snim application node (traefik/whoami) and the redis-mskd database node (redis:7), both Running, connected by an animated edge inferred from the app's REDIS_URL env var. Includes the 'My Project / production' group label, minimap, zoom controls, and the header actions (Canvas/Grid toggle, Projects, Refresh, New service)."
+  },
+  {
+    "file": "new-service-menu.png",
+    "title": "New service menu",
+    "shows": "The open 'New service' dropdown. APPLICATION section: docker-image quick deploy input, git-repo (Nixpacks build) input, and Compose stack row. DATABASE section: PostgreSQL, MySQL, MariaDB, MongoDB, and Redis rows with their image:version tags (postgres:18, mysql:8.4, mariadb:11, mongo:8, redis:7)."
+  },
+  {
+    "file": "deploy-image-filled.png",
+    "title": "Deploy from a Docker image",
+    "shows": "The New service menu with the docker-image input filled with 'traefik/whoami' and the Deploy button enabled, captured just before deploying."
+  },
+  {
+    "file": "db-overview.png",
+    "title": "Database drawer — Overview",
+    "shows": "redis-mskd drawer, Overview tab: Running status badge, internal connection string with copy button, and Image (redis:7), Internal port (6379), Replicas, Database, User, and Resources fields. Stop/Redeploy lifecycle buttons."
+  },
+  {
+    "file": "db-logs.png",
+    "title": "Database drawer — Logs",
+    "shows": "redis-mskd Logs tab streaming real Redis startup log lines over SSE, with timestamps, the log filter box, and the green 'Live' indicator."
+  },
+  {
+    "file": "db-metrics.png",
+    "title": "Database drawer — Metrics",
+    "shows": "redis-mskd Metrics tab: live CPU (0.3%) and Memory (4 MB) stat cards plus CPU % and Memory area charts populated with ~13s of real per-second docker stats samples."
+  },
+  {
+    "file": "db-settings.png",
+    "title": "Database drawer — Settings",
+    "shows": "redis-mskd Settings tab: rename field, version selector (redis:7, 'changing redeploys'), external port, CPU/memory limits with Save changes, masked password with reveal/copy, app name, created date, and the Danger zone."
+  },
+  {
+    "file": "app-overview.png",
+    "title": "Application drawer — Overview",
+    "shows": "whoami-snim drawer, Overview tab: Running badge, 'Docker image · My Project / production' subtitle, Public URL empty state pointing at the Domains tab, and Source (docker), Image (traefik/whoami), Build (nixpacks), Replicas fields."
+  },
+  {
+    "file": "app-variables.png",
+    "title": "Application drawer — Variables",
+    "shows": "whoami-snim Variables tab with the REDIS_URL entry set to the redis-mskd internal connection string ('1 variable' counter, Save variables button). This env reference is what draws the canvas edge between the two services."
+  },
+  {
+    "file": "app-domains.png",
+    "title": "Application drawer — Domains",
+    "shows": "whoami-snim Domains tab empty state: 'No domains attached.', the auto-SSL (Let's Encrypt) hint, and the add-domain form (Host, Port, Add). No domain was actually attached."
+  },
+  {
+    "file": "compose-editor.png",
+    "title": "Compose stack editor",
+    "shows": "The drawer opened by New service > Compose stack (compose-sgzh, Idle): the Compose tab's docker-compose.yml editor seeded with the starter template (nginx:alpine on port 8080), with Save and Save & deploy buttons. Closed without saving or deploying."
+  },
+  {
+    "file": "grid-view.png",
+    "title": "Grid view",
+    "shows": "The Grid view toggle active, showing both service cards — redis-mskd (redis:7) and whoami-snim (traefik/whoami) — each with a Running badge and its 'My Project / production' scope."
+  },
+  {
+    "file": "projects-view.png",
+    "title": "Projects & environments",
+    "shows": "The Projects panel: 'My Project' with its 'production' environment, rename/delete controls, an inline 'new environment' input with Add env, and the new-project input with create button."
+  }
+]

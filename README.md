@@ -3,73 +3,101 @@
 An open-source, Railway-style PaaS built on top of [Dokploy](https://dokploy.com)
 and driven by [Claude Code](https://claude.com/claude-code).
 
-This repo holds the launch tooling for running **Dokploy** and **Claude Code**
-on this machine. The next milestone is a Railway-like dashboard layered on top
-of Dokploy's API.
+Two pieces live here:
+
+- **Launch tooling** (`Makefile` + `scripts/`) — one-command, idempotent install
+  of the Dokploy stack (Swarm services + Traefik) on a Linux host, including the
+  workarounds hostile environments need (no systemd, no IPVS, registry rate
+  limits).
+- **Switchyard** (`dashboard/`) — a Railway-style dashboard over the Dokploy
+  API: one canvas for every service, one-click databases, app deploys from a
+  Docker image or Git repo, compose stacks, live logs and metrics.
+
+![Switchyard canvas with connected services](docs/images/canvas-overview.png)
 
 ## Quick start
 
+**Linux server** (the native path):
+
 ```bash
-make up        # launch Dokploy (Docker daemon + Swarm + services + Traefik)
-make status    # show stack status and the dashboard URL
-make claude    # launch Claude Code in this repo
-make doctor    # verify prerequisites for both tools
-make down      # stop the stack (make down PURGE=1 to also wipe data)
+make up        # install + launch Dokploy (Docker daemon, Swarm, services, Traefik)
+make status    # stack status + URL (http://localhost:3000)
 ```
 
-After `make up`, open the dashboard at **http://localhost:3000** (or
-`http://<server-ip>:3000`). On first run Dokploy redirects to `/register` so you
-can create the admin account.
+Open http://localhost:3000, create the admin at `/register`, then start the
+dashboard:
 
-## What `make up` does
+```bash
+cd dashboard
+cp .env.example .env.local   # fill in DOKPLOY_EMAIL / DOKPLOY_PASSWORD
+npm install
+npm run dev                  # Switchyard on http://localhost:3001
+```
 
-`scripts/dokploy-up.sh` is idempotent and brings up the whole stack:
+**Windows 11**: the bash tooling doesn't run natively, but the whole stack runs
+fine on Docker Desktop — follow the tested walkthrough in
+[docs/getting-started.md](docs/getting-started.md#path-b-windows-11-with-docker-desktop).
 
-| Component          | Image              | Role                                |
-|--------------------|--------------------|-------------------------------------|
-| `dokploy`          | `dokploy/dokploy`  | Web dashboard + API (port **3000**) |
-| `dokploy-postgres` | `postgres:16`      | Application database                |
-| `dokploy-redis`    | `redis:7`          | Queue / cache                       |
-| `dokploy-traefik`  | `traefik:v3.6.7`   | Reverse proxy (ports **80/443**)    |
+Other targets: `make down` (`PURGE=1` wipes data), `make claude` (launch Claude
+Code here), `make doctor` (check prerequisites).
 
-Postgres, Redis and Dokploy run as **Docker Swarm services**; Traefik runs as a
-plain container attached to the `dokploy-network` overlay.
+## Switchyard at a glance
 
-## Environment notes (why this isn't just `curl | sh`)
+- **Unified canvas** — databases, applications, and compose stacks as draggable
+  nodes (React Flow), with connection arrows inferred from env vars, a minimap,
+  and a per-browser persisted layout. Grid and per-project views included.
+- **Databases** — Postgres, MySQL, MariaDB, MongoDB, Redis: one-click deploy,
+  connection strings, env editor, resource/version/port settings.
+- **Applications** — deploy from a Docker image or a public Git repo (Nixpacks
+  build); domains with auto-SSL, variables, deployment history.
+- **Compose** — docker-compose stacks with an in-app YAML editor.
+- **Live logs & metrics** — streamed straight from the Docker Engine API over
+  SSE; no polling, no Dokploy WebSocket reverse-engineering.
+- **Projects & environments** — create, rename, delete from the dashboard.
 
-This host needed two adjustments beyond the stock Dokploy installer. Both are
-handled automatically by the scripts here:
+> **Security note:** Switchyard has no login of its own — anyone who can reach
+> its port has full admin over Dokploy. Keep it on localhost or gate it before
+> exposing it. (Dashboard auth is on the roadmap.)
 
-1. **Docker Hub pull-rate limit.** The shared cloud egress IP hits Docker Hub's
-   anonymous pull limit. `scripts/lib.sh` configures a pull-through mirror
-   (`https://mirror.gcr.io`) in `/etc/docker/daemon.json`, which serves the same
-   images without the limit.
+## Documentation
 
-2. **No IPVS in the kernel** (`CONFIG_IP_VS is not set`). Docker Swarm's default
-   service VIP load-balancing relies on IPVS, so service-to-service traffic
-   (e.g. Dokploy → Postgres) silently fails even though DNS resolves. The
-   scripts deploy every service with **`--endpoint-mode dnsrr`** (DNS
-   round-robin), which resolves service names straight to task IPs and bypasses
-   IPVS. This reuses the same code path Dokploy ships for Proxmox LXC hosts.
-
-There is also no `systemd` here (PID 1 is a sandbox supervisor), so the Docker
-daemon is started directly by the scripts rather than via `systemctl`.
+| Doc | What's inside |
+|---|---|
+| [Getting started](docs/getting-started.md) | Install on Linux (`make up`) or Windows 11 (Docker Desktop), connect the dashboard, verification checklist |
+| [Dashboard guide](docs/dashboard-guide.md) | Feature tour with screenshots |
+| [Architecture](docs/architecture.md) | The BFF design, data model, SSE logs/metrics, canvas internals |
+| [Launch tooling](docs/launch-tooling.md) | Every make target and script, and why they exist |
+| [Troubleshooting](docs/troubleshooting.md) | Symptom → cause → fix, for both platforms |
 
 ## Repo layout
 
 ```
-Makefile               # convenience targets (up / status / down / claude / doctor)
-scripts/
-  lib.sh               # shared helpers: dockerd, mirror, advertise addr, waits
-  dokploy-up.sh        # launch Dokploy (idempotent)
-  dokploy-status.sh    # stack status + dashboard URL
-  dokploy-down.sh      # stop the stack (--purge to wipe data)
-  claude-up.sh         # launch Claude Code in this repo
-  doctor.sh            # prerequisite / environment check
+Makefile               # up / status / down / claude / doctor
+scripts/               # bash launch tooling (Linux hosts)
+  lib.sh               #   shared helpers: dockerd, mirror, advertise addr, waits
+  dokploy-up.sh        #   install + launch Dokploy (idempotent)
+  dokploy-status.sh    #   stack status + dashboard URL
+  dokploy-down.sh      #   stop the stack (--purge to wipe data)
+  claude-up.sh         #   launch Claude Code in this repo
+  doctor.sh            #   prerequisite / environment check
+dashboard/             # Switchyard (Next.js 16 + TypeScript + Tailwind v4)
+docs/                  # documentation (see table above) + screenshots
 ```
+
+## Environment notes
+
+The launch scripts encode two workarounds that stock installers miss on
+sandboxed hosts: a Docker Hub pull-through mirror (rate-limited shared egress
+IPs) and `--endpoint-mode dnsrr` on every Swarm service (kernels without IPVS
+can't route service VIPs). Details and symptoms live in
+[docs/launch-tooling.md](docs/launch-tooling.md) and
+[docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Roadmap
 
 - [x] Install and launch Dokploy on this host
 - [x] One-command launch for Dokploy and Claude Code
-- [ ] Railway-style dashboard on top of the Dokploy API
+- [x] Railway-style dashboard on top of the Dokploy API (Switchyard): databases,
+      applications, compose, projects, canvas, live logs/metrics
+- [ ] Backups (S3 destinations) and deploy-log history
+- [ ] Dashboard auth (gate Switchyard before it binds beyond localhost)
