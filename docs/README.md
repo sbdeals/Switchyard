@@ -1,0 +1,24 @@
+# Documentation
+
+Docs for **dokploy-claudecode** — launch tooling for [Dokploy](https://dokploy.com) plus **Switchyard**, a Railway-style dashboard built on the Dokploy API.
+
+| Doc | Read it when you want to… |
+|---|---|
+| [Getting started](getting-started.md) | Install and run the stack — Linux server (`make up`) or Windows 11 with Docker Desktop — and connect the dashboard |
+| [Dashboard guide](dashboard-guide.md) | Tour every Switchyard feature: canvas, databases, applications, compose stacks, logs, metrics, projects |
+| [Architecture](architecture.md) | Understand how Switchyard works: the BFF over the Dokploy API, Server Actions, SSE logs/metrics, canvas edge inference |
+| [Launch tooling](launch-tooling.md) | Use or modify the `make` targets and `scripts/` that install and manage the Dokploy stack on a Linux host |
+| [Troubleshooting](troubleshooting.md) | Fix a specific failure — port conflicts, Swarm mount rejections, crash loops, Windows quirks |
+
+## Quick orientation
+
+```
+browser ──> Switchyard (Next.js BFF, :3001) ──> Dokploy API (:3000)
+                       └──────────────────────> Docker Engine API (logs/metrics)
+```
+
+- **Switchyard** lives in [`dashboard/`](../dashboard/) — see its [README](../dashboard/README.md) for the code-level layout.
+- The **launch scripts** live in [`scripts/`](../scripts/) and are driven by the root [`Makefile`](../Makefile).
+- Screenshots in these docs come from a live local deployment (Dokploy in Docker Swarm + Switchyard in dev mode).
+
+> **Security note:** Switchyard itself has no login. Anyone who can reach its port has full admin over Dokploy, including database passwords and container logs. Keep it on localhost or gate it behind auth before exposing it.
