@@ -28,6 +28,8 @@ flowchart LR
 
 **Deployment topology.** Switchyard runs either from source (`npm run dev`, dev mode) or — the default the [CLI](cli.md) sets up — as a container built from [`dashboard/Dockerfile`](../dashboard/Dockerfile) (Next.js standalone output). The container joins `dokploy-network` and reaches Dokploy by service DNS (`DOKPLOY_URL=http://dokploy:3000`, so the host-published port is irrelevant), mounts `/var/run/docker.sock` for the data plane, and publishes 3001 on **127.0.0.1** unless explicitly exposed. `/api/health` reports liveness; `/api/health?deep=1` additionally proves the container → Dokploy sign-in path — the CLI gates on it after every (re)create.
 
+One subtlety in container mode: Dokploy's auth layer (better-auth) validates the `Origin` header against its *host-facing* origins, so the service-DNS URL is rejected (`403 INVALID_ORIGIN`). The BFF therefore sends a configurable origin — `DOKPLOY_ORIGIN`, which the CLI sets to `http://localhost:<dokploy-port>` — while still connecting over service DNS. In dev mode `DOKPLOY_ORIGIN` is unset and the origin defaults to `DOKPLOY_URL`, the previous behavior.
+
 ## Why a backend-for-frontend
 
 The BFF exists so that credentials never reach the browser. [`src/lib/dokploy.ts`](../dashboard/src/lib/dokploy.ts) is server-only:

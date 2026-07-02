@@ -192,9 +192,11 @@ export async function upCommand(flags: UpFlags): Promise<void> {
   }
   if (!health.deep) {
     const err = health.deepError ?? "unknown error";
-    const remedy = /sign-in|401|403|credential/i.test(err)
-      ? `Dokploy rejected the stored admin credentials.\nFix them with: switchyard config set adminEmail <email> && switchyard config set adminPassword <password>`
-      : `The container could not reach Dokploy at ${cfg.dokployUrlInContainer}.\nIf service DNS doesn't resolve in your setup, point it at the host instead:\n  switchyard config set dokployUrlInContainer http://host.docker.internal:${cfg.dokployPort}`;
+    const remedy = /origin/i.test(err)
+      ? `Dokploy rejected the request origin. The container presents http://localhost:${cfg.dokployPort} — if you changed Dokploy's port or domain, re-run \`switchyard up\` so it converges.`
+      : /sign-in|401|403|credential/i.test(err)
+        ? `Dokploy rejected the stored admin credentials.\nFix them with: switchyard config set adminEmail <email> && switchyard config set adminPassword <password>`
+        : `The container could not reach Dokploy at ${cfg.dokployUrlInContainer}.\nIf service DNS doesn't resolve in your setup, point it at the host instead:\n  switchyard config set dokployUrlInContainer http://host.docker.internal:${cfg.dokployPort}`;
     throw new UserError(`Dashboard is running but can't talk to Dokploy (${err}).\n${remedy}`);
   }
 

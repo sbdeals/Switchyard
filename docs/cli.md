@@ -52,10 +52,12 @@ curl -fsSL .../install.sh | bash -s -- --headless --email you@example.com --pass
    them. Nothing to copy into env files.
 5. **Runs the dashboard as a managed container** —
    `ghcr.io/sbdeals/switchyard`, attached to `dokploy-network` (it reaches
-   Dokploy at `http://dokploy:3000` by service DNS), Docker socket mounted for
-   live logs/metrics, `--restart unless-stopped`, published on
-   **127.0.0.1**:3001 by default. Then verifies `/api/health?deep=1` — a
-   full container → Dokploy sign-in — before declaring success.
+   Dokploy at `http://dokploy:3000` by service DNS, while presenting the
+   host-facing `DOKPLOY_ORIGIN=http://localhost:<port>` that Dokploy's auth
+   layer trusts), Docker socket mounted for live logs/metrics,
+   `--restart unless-stopped`, published on **127.0.0.1**:3001 by default.
+   Then verifies `/api/health?deep=1` — a full container → Dokploy sign-in —
+   before declaring success.
 6. **Offers Claude Code** — installs `@anthropic-ai/claude-code` globally if
    missing; `switchyard claude` launches it (its own first run signs you in).
 
