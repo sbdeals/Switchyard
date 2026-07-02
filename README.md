@@ -17,29 +17,36 @@ Two pieces live here:
 
 ## Quick start
 
-**Linux server** (the native path):
+**One command.** On a fresh Linux server (installs Docker and Node.js if
+they're missing):
 
 ```bash
-make up        # install + launch Dokploy (Docker daemon, Swarm, services, Traefik)
-make status    # stack status + URL (http://localhost:3000)
+curl -fsSL https://raw.githubusercontent.com/sbdeals/dokploy-claudecode/main/install.sh | bash
 ```
 
-Open http://localhost:3000, create the admin at `/register`, then start the
-dashboard:
+Or anywhere with Node 20+ and Docker — including Windows 11 with Docker
+Desktop and macOS:
 
 ```bash
-cd dashboard
-cp .env.example .env.local   # fill in DOKPLOY_EMAIL / DOKPLOY_PASSWORD
-npm install
-npm run dev                  # Switchyard on http://localhost:3001
+npx switchyard-cli up
 ```
 
-**Windows 11**: the bash tooling doesn't run natively, but the whole stack runs
-fine on Docker Desktop — follow the tested walkthrough in
-[docs/getting-started.md](docs/getting-started.md#path-b-windows-11-with-docker-desktop).
+Either way the CLI stands up Dokploy, walks you through creating the admin
+account **in the terminal** (no browser round-trip, no env files to edit),
+runs the Switchyard dashboard as a managed container on
+http://127.0.0.1:3001, and offers to set up Claude Code. Re-running `up` is
+safe — it converges, and upgrades when a newer version is out. Settings are
+changed *after* setup with `switchyard config set <key> <value>`. Full
+reference: [docs/cli.md](docs/cli.md).
 
-Other targets: `make down` (`PURGE=1` wipes data), `make claude` (launch Claude
-Code here), `make doctor` (check prerequisites).
+> The npm package is `switchyard-cli` (the bare npm name `switchyard` is an
+> unrelated squatted package — don't `npx switchyard`).
+
+**Manual / contributor path**: `make up` on Linux plus the dev-mode dashboard
+(`npm run dev`) work exactly as before — see
+[docs/getting-started.md](docs/getting-started.md). Other targets:
+`make down` (`PURGE=1` wipes data), `make claude` (launch Claude Code here),
+`make doctor` (check prerequisites).
 
 ## Switchyard at a glance
 
@@ -63,7 +70,8 @@ Code here), `make doctor` (check prerequisites).
 
 | Doc | What's inside |
 |---|---|
-| [Getting started](docs/getting-started.md) | Install on Linux (`make up`) or Windows 11 (Docker Desktop), connect the dashboard, verification checklist |
+| [CLI reference](docs/cli.md) | `switchyard up/config/status/...` — the one-command install, every flag, config keys, migration notes |
+| [Getting started](docs/getting-started.md) | The fast path on all platforms, plus the manual installs (Linux `make up`, Windows Docker Desktop) and the verification checklist |
 | [Dashboard guide](docs/dashboard-guide.md) | Feature tour with screenshots |
 | [Architecture](docs/architecture.md) | The BFF design, data model, SSE logs/metrics, canvas internals |
 | [Launch tooling](docs/launch-tooling.md) | Every make target and script, and why they exist |
@@ -72,15 +80,17 @@ Code here), `make doctor` (check prerequisites).
 ## Repo layout
 
 ```
+install.sh             # curl-able bootstrap: Docker + Node if missing, then `npx switchyard-cli up`
+cli/                   # the switchyard CLI (npm: switchyard-cli) — up/status/down/config/doctor/...
 Makefile               # up / status / down / claude / doctor
-scripts/               # bash launch tooling (Linux hosts)
+scripts/               # bash launch tooling (Linux hosts; also bundled inside the npm package)
   lib.sh               #   shared helpers: dockerd, mirror, advertise addr, waits
   dokploy-up.sh        #   install + launch Dokploy (idempotent)
   dokploy-status.sh    #   stack status + dashboard URL
   dokploy-down.sh      #   stop the stack (--purge to wipe data)
   claude-up.sh         #   launch Claude Code in this repo
   doctor.sh            #   prerequisite / environment check
-dashboard/             # Switchyard (Next.js 16 + TypeScript + Tailwind v4)
+dashboard/             # Switchyard (Next.js 16 + TypeScript + Tailwind v4) + its Dockerfile
 docs/                  # documentation (see table above) + screenshots
 ```
 
@@ -99,5 +109,8 @@ can't route service VIPs). Details and symptoms live in
 - [x] One-command launch for Dokploy and Claude Code
 - [x] Railway-style dashboard on top of the Dokploy API (Switchyard): databases,
       applications, compose, projects, canvas, live logs/metrics
+- [x] One-command install for the whole stack (`curl … | bash` /
+      `npx switchyard-cli up`): terminal-guided admin setup, dashboard as a
+      managed container, post-setup `switchyard config`
 - [ ] Backups (S3 destinations) and deploy-log history
 - [ ] Dashboard auth (gate Switchyard before it binds beyond localhost)

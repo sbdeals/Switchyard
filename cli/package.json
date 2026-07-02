@@ -1,0 +1,42 @@
+{
+  "name": "switchyard-cli",
+  "version": "0.1.0",
+  "description": "One-command install & management for the Dokploy + Switchyard stack",
+  "type": "module",
+  "bin": {
+    "switchyard": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "scripts"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sbdeals/dokploy-claudecode.git",
+    "directory": "cli"
+  },
+  "keywords": [
+    "dokploy",
+    "paas",
+    "switchyard",
+    "docker",
+    "self-hosted"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test",
+    "prepack": "node copy-scripts.mjs && npm run build"
+  },
+  "devDependencies": {
+    "@clack/prompts": "^0.11.0",
+    "@types/node": "^20.19.0",
+    "commander": "^14.0.0",
+    "picocolors": "^1.1.1",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.0"
+  }
+}

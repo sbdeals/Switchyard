@@ -14,6 +14,12 @@
  */
 
 const BASE = process.env.DOKPLOY_URL ?? "http://localhost:3000";
+// Origin header for better-auth's CSRF check. Dokploy only trusts its
+// host-facing origins (e.g. http://localhost:3000) — when the BFF reaches it
+// through container service DNS (DOKPLOY_URL=http://dokploy:3000), that URL
+// is NOT a trusted origin, so the two must diverge. Defaults to BASE, which
+// preserves dev-mode behavior.
+const ORIGIN = process.env.DOKPLOY_ORIGIN ?? BASE;
 const EMAIL = process.env.DOKPLOY_EMAIL ?? "";
 const PASSWORD = process.env.DOKPLOY_PASSWORD ?? "";
 
@@ -120,7 +126,7 @@ let cookieCache: string | null = null;
 async function signIn(): Promise<string> {
   const res = await fetch(`${BASE}/api/auth/sign-in/email`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Origin: BASE },
+    headers: { "Content-Type": "application/json", Origin: ORIGIN },
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
     cache: "no-store",
   });
@@ -150,7 +156,7 @@ async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
       method: init.method ?? "GET",
       headers: {
         "Content-Type": "application/json",
-        Origin: BASE,
+        Origin: ORIGIN,
         Cookie: cookie,
       },
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
@@ -169,6 +175,15 @@ async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : null) as T;
+}
+
+/**
+ * Cheapest end-to-end probe: signs in (when there is no cached session) and
+ * lists projects. Used by /api/health?deep=1 so the installer can verify the
+ * container -> Dokploy path without parsing the workspace.
+ */
+export async function ping(): Promise<void> {
+  await request("project.all");
 }
 
 // --- projects ---------------------------------------------------------------

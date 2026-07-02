@@ -1,0 +1,5 @@
+# Shell scripts execute on Linux — CRLF breaks bash ($'\r': command not found).
+# Keep them LF even on Windows checkouts (WSL users share those files, and
+# cli/copy-scripts.mjs bundles them into the npm package).
+*.sh text eol=lf
+Makefile text eol=lf

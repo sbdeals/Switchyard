@@ -2,19 +2,65 @@
 
 This guide takes you from a clean machine to a working stack: **Dokploy** (the
 upstream PaaS engine) plus **Switchyard** (this repo's Railway-style dashboard
-in [`dashboard/`](../dashboard/)). There are two supported paths:
+in [`dashboard/`](../dashboard/)).
 
-- **[Path A: Linux server](#path-a-linux-server)** — the repo's native path,
-  driven by `make` and the scripts in [`scripts/`](../scripts/).
+**Start with the [fast path](#fast-path-one-command-all-platforms)** — one
+command on every supported platform. The manual procedures it automates are
+kept below as appendices, for contributors and for when you want to see every
+step:
+
+- **[Path A: Linux server](#path-a-linux-server)** — the repo's native manual
+  path, driven by `make` and the scripts in [`scripts/`](../scripts/).
 - **[Path B: Windows 11 with Docker Desktop](#path-b-windows-11-with-docker-desktop)** —
-  the `make`/bash tooling does not run natively on Windows, so you replay the
-  installer's core steps against Docker Desktop by hand. This procedure was
-  tested end-to-end on a real Windows 11 machine (2026-07-01).
+  replaying the installer's core steps against Docker Desktop by hand. Tested
+  end-to-end on a real Windows 11 machine (2026-07-01).
 
-Afterwards, [set up Switchyard](#set-up-switchyard-both-platforms) and run the
-[verification checklist](#verification-checklist). For how the pieces fit
-together, see [architecture.md](architecture.md); for a deep dive into the
-`make` targets and scripts, see [launch-tooling.md](launch-tooling.md).
+Afterwards, run the [verification checklist](#verification-checklist). For how
+the pieces fit together, see [architecture.md](architecture.md); for a deep
+dive into the `make` targets and scripts, see
+[launch-tooling.md](launch-tooling.md).
+
+## Fast path: one command (all platforms)
+
+**Linux** (fresh server or VPS — installs Docker and Node.js if missing):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sbdeals/dokploy-claudecode/main/install.sh | bash
+```
+
+**Windows 11 / macOS** (Docker Desktop running, Node 20+ installed):
+
+```powershell
+npx switchyard-cli up
+```
+
+The CLI then does everything this guide's manual paths describe:
+
+1. Checks prerequisites and catches port conflicts up front (an existing
+   Dokploy install has its published port adopted automatically).
+2. Stands up the Dokploy stack — on Linux via the same `scripts/dokploy-up.sh`
+   that `make up` runs; on Docker Desktop by replaying Path B programmatically.
+3. Asks you for the admin email and password **in the terminal** and registers
+   the account against Dokploy's API — no browser `/register` round-trip, no
+   credentials to copy anywhere.
+4. Runs Switchyard as a managed Docker container (restart policy, health
+   checked end to end), bound to **127.0.0.1:3001** — the dashboard has no
+   auth, so it is not exposed by default.
+5. Offers to install Claude Code, and prints where everything lives.
+
+Re-running `up` is idempotent and doubles as the upgrade path
+(`npx switchyard-cli@latest up`). Settings live in a config file you change
+*after* setup:
+
+```bash
+switchyard config set dashboardPort 3101   # applies by recreating the container
+switchyard status                          # services, health, URLs
+switchyard claude                          # launch Claude Code
+```
+
+The full command/flag/config reference — including `--headless` for
+cloud-init, `--expose` (and why not to), and migration notes for existing
+installs — is in [cli.md](cli.md).
 
 ## What gets deployed
 
@@ -24,7 +70,7 @@ together, see [architecture.md](architecture.md); for a deep dive into the
 | `dokploy-postgres` | `postgres:16`     | Swarm service   | internal only            |
 | `dokploy-redis`    | `redis:7`         | Swarm service   | internal only            |
 | `dokploy-traefik`  | `traefik:v3.6.7`  | plain container | **80/443** (reverse proxy) |
-| Switchyard         | Next.js dev server | node process   | **3001**                 |
+| Switchyard         | `ghcr.io/sbdeals/switchyard` (fast path) or Next.js dev server (manual) | container / node process | **3001** |
 
 Everything Dokploy-side attaches to the `dokploy-network` overlay network.
 Credentials live in two Swarm secrets, `dokploy_postgres_password` and
@@ -59,6 +105,10 @@ make doctor
 plus PowerShell.
 
 ## Path A: Linux server
+
+> The [fast path](#fast-path-one-command-all-platforms) runs this same script
+> for you (plus admin registration and the dashboard container). Path A is the
+> manual/contributor route.
 
 ### Bring the stack up
 
@@ -132,6 +182,9 @@ make claude    # requires: npm install -g @anthropic-ai/claude-code
 ```
 
 ## Path B: Windows 11 with Docker Desktop
+
+> `npx switchyard-cli up` replays every step below programmatically — this
+> appendix is the reference for what it does (and for doing it by hand).
 
 The repo's native tooling does **not** run on Windows: stock Windows has no
 `make.exe`, and the scripts are bash that expects root and direct control of
@@ -265,6 +318,11 @@ Switchyard is a Next.js app in [`dashboard/`](../dashboard/) that signs into
 the Dokploy API server-side. See [dashboard-guide.md](dashboard-guide.md) for
 what it can do once running.
 
+> This section is the **dev-mode** setup (run from source with `npm run dev`).
+> The [fast path](#fast-path-one-command-all-platforms) instead runs Switchyard
+> as a preconfigured container — no `.env.local` needed. Dev mode remains the
+> loop for working on the dashboard code itself.
+
 Linux:
 
 ```bash
@@ -308,12 +366,6 @@ Notes:
 - The dev server binds port **3001** (`next dev -p 3001`, because Dokploy owns
   3000). If 3001 is taken, run `npx next dev -p 3002` and open that port.
 - Restart `npm run dev` after changing `.env.local`.
-- **Known Windows bug:** `npm run build` fails with
-  `'NODE_ENV' is not recognized as an internal or external command` because
-  the build script uses the Unix `NODE_ENV=production` prefix. Workaround: run
-  `npx next build` directly — `next build` sets production mode itself.
-  `npm run dev` is unaffected. See
-  [troubleshooting](troubleshooting.md#npm-run-build-fails-on-windows-node_env-is-not-recognized).
 
 > **Security note:** Switchyard has no login of its own. Anyone who can reach
 > port 3001 gets full admin over Dokploy, including database passwords and

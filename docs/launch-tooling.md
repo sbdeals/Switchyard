@@ -2,6 +2,13 @@
 
 This is the reference for the root [`Makefile`](../Makefile) and the [`scripts/`](../scripts/) directory that install and manage the **Dokploy** stack — for operators bringing the stack up and down, and for contributors modifying the scripts. The scripts target a **Linux host**: they must run as root, they manage `dockerd` directly, and they assume Linux paths like `/etc/docker/daemon.json`. They do **not** run natively on Windows — for the Windows 11 / Docker Desktop path, see [Getting started](getting-started.md). How the Switchyard dashboard itself works is covered in [Architecture](architecture.md); failure diagnosis lives in [Troubleshooting](troubleshooting.md).
 
+> **These scripts are also the engine of the [`switchyard` CLI](cli.md)** — on
+> Linux, `npx switchyard-cli up` runs `dokploy-up.sh`/`dokploy-down.sh` from a
+> copy bundled into the npm package at publish time (`cli/copy-scripts.mjs`).
+> Change behavior here, not in the CLI. `wait_dokploy_http` and the status URL
+> honor a `DOKPLOY_PORT` env override (default 3000) for installs whose
+> Dokploy service was re-published on another port.
+
 ## Make targets
 
 `SHELL := /bin/bash`; a bare `make` runs `help`, which prints the target list from the Makefile's own header comment.

@@ -15,9 +15,10 @@ and on the dashboard in [architecture.md](architecture.md).
 6. [Docker Hub pull rate limit](#docker-hub-pull-rate-limit)
 7. [Switchyard shows the "Couldn't reach Dokploy" card](#switchyard-shows-the-couldnt-reach-dokploy-card)
 8. [Logs and Metrics tabs are empty on Windows](#logs-and-metrics-tabs-are-empty-on-windows)
-9. [npm run build fails on Windows (NODE_ENV is not recognized)](#npm-run-build-fails-on-windows-node_env-is-not-recognized)
-10. [make is not found on Windows](#make-is-not-found-on-windows)
-11. [Still stuck](#still-stuck)
+9. [switchyard up can't pull the dashboard image](#switchyard-up-cant-pull-the-dashboard-image)
+10. [Dashboard container can't talk to Dokploy (deep health check fails)](#dashboard-container-cant-talk-to-dokploy-deep-health-check-fails)
+11. [make is not found on Windows](#make-is-not-found-on-windows)
+12. [Still stuck](#still-stuck)
 
 ## Swarm rejects the Dokploy task: bind source path does not exist
 
@@ -226,12 +227,16 @@ then Apply & restart.
 card titled **"Couldn't reach Dokploy"** with an error message underneath.
 
 **Cause.** Switchyard's server side could not reach — or could not sign into —
-the Dokploy API using the values in `dashboard/.env.local`. The card
-(rendered by `dashboard/src/app/page.tsx`) prints the underlying error
-verbatim: read it first, since it distinguishes a connection failure (wrong
-URL/port, Dokploy down) from an authentication failure (wrong credentials).
+the Dokploy API using its `DOKPLOY_URL` / `DOKPLOY_EMAIL` / `DOKPLOY_PASSWORD`
+values (from `dashboard/.env.local` in dev mode, or the container env set by
+the CLI). The card (rendered by `dashboard/src/app/page.tsx`) prints the
+underlying error verbatim: read it first, since it distinguishes a connection
+failure (wrong URL/port, Dokploy down) from an authentication failure (wrong
+credentials).
 
-**Fix.** Checklist:
+**Fix.** For the CLI-managed container, see
+[Dashboard container can't talk to Dokploy](#dashboard-container-cant-talk-to-dokploy-deep-health-check-fails).
+For dev mode, this checklist:
 
 1. **Is Dokploy up?** `make status` (Linux) or `docker service ls` — the
    `dokploy` service must be `1/1`, and its URL must answer in a browser.
@@ -260,26 +265,50 @@ server:
 DOCKER_SOCKET=//./pipe/docker_engine
 ```
 
-## npm run build fails on Windows (NODE_ENV is not recognized)
+## switchyard up can't pull the dashboard image
 
-**Symptom.** In `dashboard/`, `npm run build` fails immediately with:
+**Symptom.** `switchyard up` fails at the container step with
+`Could not pull ghcr.io/sbdeals/switchyard:<tag> and no local copy exists`.
 
-```text
-'NODE_ENV' is not recognized as an internal or external command,
-operable program or batch file.
+**Cause.** Either no release with that tag has been published to GHCR yet
+(the CLI defaults its image tag to its own version), or the host can't reach
+ghcr.io.
+
+**Fix.** Point at a published tag, or build the image locally from a repo
+checkout:
+
+```bash
+switchyard up --tag latest
+# or:
+docker build -t ghcr.io/sbdeals/switchyard:dev dashboard/
+switchyard config set imageTag dev
 ```
 
-**Cause.** The `build` script in `dashboard/package.json` is
-`NODE_ENV=production next build`. The inline `VAR=value` prefix is POSIX
-shell syntax, which `cmd.exe` (what npm uses on Windows) does not understand.
+## Dashboard container can't talk to Dokploy (deep health check fails)
 
-**Fix.** Call Next.js directly — `next build` sets production mode by itself:
+**Symptom.** `switchyard up` reports the dashboard running but failing the
+`/api/health?deep=1` probe — with either a credentials or a network message.
 
-```powershell
-npx next build
-```
+**Cause & fix, by message:**
 
-`npm run dev` and `npm start` carry no prefix and work as-is.
+- **Credentials** (`sign-in failed`, 401/403): the stored admin credentials no
+  longer match Dokploy (password changed, database restored). Update them:
+
+  ```bash
+  switchyard config set adminEmail you@example.com
+  switchyard config set adminPassword <current-password>
+  ```
+
+- **Network** (timeouts, DNS errors): the container reaches Dokploy at
+  `http://dokploy:3000` over `dokploy-network` by default. If service DNS
+  doesn't resolve in your setup, go through the host instead:
+
+  ```bash
+  switchyard config set dokployUrlInContainer http://host.docker.internal:<dokploy-port>
+  ```
+
+  On a Linux host without `host.docker.internal`, use the host's LAN or
+  advertise IP.
 
 ## make is not found on Windows
 

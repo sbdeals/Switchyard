@@ -1,0 +1,5 @@
+# CLI package build artifacts
+cli/node_modules/
+cli/dist/
+# prepack-time copy of the repo-root scripts/ (see cli/copy-scripts.mjs)
+cli/scripts/
