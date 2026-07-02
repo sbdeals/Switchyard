@@ -32,8 +32,9 @@ export default async function Page() {
         <p className="mt-2 text-sm text-[var(--color-fg-muted)]">
           The dashboard couldn&apos;t talk to the Dokploy API. Check that Dokploy is running and that{" "}
           <code className="font-mono">DOKPLOY_URL</code>, <code className="font-mono">DOKPLOY_EMAIL</code>{" "}
-          and <code className="font-mono">DOKPLOY_PASSWORD</code> in{" "}
-          <code className="font-mono">.env.local</code> are correct.
+          and <code className="font-mono">DOKPLOY_PASSWORD</code> are correct — set them with{" "}
+          <code className="font-mono">switchyard config</code> for the managed container, or in{" "}
+          <code className="font-mono">.env.local</code> when running from source.
         </p>
         <pre className="mt-4 overflow-x-auto rounded-lg bg-[var(--color-bg-elevated)] p-3 font-mono text-xs text-[var(--color-fg-muted)]">
           {message}

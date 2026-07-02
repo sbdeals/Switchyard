@@ -171,6 +171,15 @@ async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
   return (text ? JSON.parse(text) : null) as T;
 }
 
+/**
+ * Cheapest end-to-end probe: signs in (when there is no cached session) and
+ * lists projects. Used by /api/health?deep=1 so the installer can verify the
+ * container -> Dokploy path without parsing the workspace.
+ */
+export async function ping(): Promise<void> {
+  await request("project.all");
+}
+
 // --- projects ---------------------------------------------------------------
 
 // The raw project.all tree (only the parts we use).
