@@ -21,7 +21,9 @@ ensure_docker
 
 if service_exists dokploy; then
   ok "Dokploy is already deployed."
-  exec "$SCRIPT_DIR/dokploy-status.sh"
+  # Via bash, not direct exec: the npm-bundled copy of these scripts has no
+  # execute bit (packed on Windows, where the bit doesn't exist).
+  exec bash "$SCRIPT_DIR/dokploy-status.sh"
 fi
 
 ADVERTISE_ADDR="$(detect_advertise_addr)"
@@ -76,4 +78,4 @@ else
   warn "Dokploy is not serving HTTP yet; check 'scripts/dokploy-status.sh' and the service logs."
 fi
 
-exec "$SCRIPT_DIR/dokploy-status.sh"
+exec bash "$SCRIPT_DIR/dokploy-status.sh"

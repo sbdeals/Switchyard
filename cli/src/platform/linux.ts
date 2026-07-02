@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { chmodSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,7 +20,18 @@ export function isRoot(): boolean {
 export function bundledScriptsDir(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   for (const candidate of [join(here, "..", "scripts"), join(here, "..", "..", "scripts")]) {
-    if (existsSync(join(candidate, "dokploy-up.sh"))) return candidate;
+    if (existsSync(join(candidate, "dokploy-up.sh"))) {
+      // Packages built on Windows ship without exec bits; the scripts
+      // exec/source each other, so restore them (best-effort).
+      try {
+        for (const name of readdirSync(candidate)) {
+          if (name.endsWith(".sh")) chmodSync(join(candidate, name), 0o755);
+        }
+      } catch {
+        /* read-only installs still work: everything is invoked via bash */
+      }
+      return candidate;
+    }
   }
   throw new UserError(
     "Could not locate the bundled launch scripts (dokploy-up.sh) — the package looks corrupted.",
