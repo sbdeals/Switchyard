@@ -1680,26 +1680,46 @@ export async function restoreBackup(input: RestoreBackupInput): Promise<void> {
 /**
  * A catalog entry from Dokploy's open-source template library (Plausible, n8n,
  * Postgres+app bundles, ...). Each template is a bundled docker-compose stack.
- * Shape mirrors Dokploy's `compose.templates` result (its template meta.json).
+ * Shape mirrors Dokploy's `compose.templates` result (its template meta.json),
+ * except `logo` is resolved to a full URL (see listTemplates).
  */
 export interface DokployTemplate {
   id: string;
   name: string;
   description: string;
   version: string;
+  /** Absolute logo URL, or "" when the template has none. */
   logo: string;
   tags: string[];
   links: { github: string; website?: string; docs?: string };
 }
+
+// Base for template assets. meta.json lists each `logo` as a bare filename
+// (e.g. "logo.png"); the real asset lives at <base>/blueprints/<id>/<logo>.
+// Matches Dokploy's default template source (`compose.templates` baseUrl).
+const TEMPLATE_BASE = "https://templates.dokploy.com";
 
 /**
  * List the available one-click templates via Dokploy's `compose.templates`.
  * Dokploy fetches this list from its templates repo (templates.dokploy.com) at
  * request time, so this needs outbound internet from the Dokploy host; Dokploy
  * returns an empty array when that upstream fetch fails.
+ *
+ * `logo` comes back as a bare filename, so we resolve it to the absolute
+ * blueprint asset URL here (a relative src would 404 against the dashboard's
+ * own origin — the cause of blank catalog icons).
  */
 export async function listTemplates(): Promise<DokployTemplate[]> {
-  return request<DokployTemplate[]>("compose.templates");
+  const raw = await request<DokployTemplate[]>("compose.templates");
+  return (raw ?? []).map((t) => ({ ...t, logo: resolveTemplateLogo(t.id, t.logo) }));
+}
+
+/** Turn a template's bare `logo` filename into an absolute URL (or "" if none). */
+function resolveTemplateLogo(id: string, logo: string | null | undefined): string {
+  const name = (logo ?? "").trim();
+  if (!name) return "";
+  if (/^https?:\/\//i.test(name)) return name; // already absolute — leave it
+  return `${TEMPLATE_BASE}/blueprints/${encodeURIComponent(id)}/${name}`;
 }
 
 /**
