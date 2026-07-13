@@ -25,6 +25,8 @@ export interface SwitchyardConfig {
   adminName: string;
   adminEmail: string;
   adminPassword: string;
+  /** Secret that signs the dashboard's session cookie (CSPRNG, seeded at install). */
+  sessionSecret: string;
   /** Switchyard image repo (no tag). */
   image: string;
   /** Image tag; "" means "same as the CLI version". */
@@ -55,6 +57,7 @@ export function defaultConfig(platform: Platform = detectPlatform()): Switchyard
     adminName: "Admin",
     adminEmail: "",
     adminPassword: "",
+    sessionSecret: "",
     image: "ghcr.io/sbdeals/switchyard",
     imageTag: "",
     dokployUrlInContainer: "http://dokploy:3000",
@@ -71,6 +74,7 @@ export const CONFIG_KEY_TYPES = {
   adminName: "string",
   adminEmail: "string",
   adminPassword: "string",
+  sessionSecret: "string",
   image: "string",
   imageTag: "string",
   dokployUrlInContainer: "string",

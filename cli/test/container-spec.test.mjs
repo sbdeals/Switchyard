@@ -54,3 +54,12 @@ test("run args carry the BFF env and labels", () => {
   assert.ok(plan.runArgs.includes(`switchyard.config-hash=${plan.hash}`));
   assert.equal(plan.runArgs.at(-1), plan.image);
 });
+
+test("session secret is passed to the dashboard and folds into the hash", () => {
+  const cfg = { ...defaultConfig("linux"), sessionSecret: "s3cr3t" };
+  const plan = renderContainer(cfg, "1.0.0");
+  assert.ok(plan.runArgs.includes("SWITCHYARD_SESSION_SECRET=s3cr3t"));
+  // Changing the secret must change the fingerprint so `up` recreates.
+  const other = renderContainer({ ...cfg, sessionSecret: "different" }, "1.0.0");
+  assert.notEqual(plan.hash, other.hash);
+});

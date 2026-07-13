@@ -1,17 +1,27 @@
 /**
  * Server-only client for the Dokploy API.
  *
- * Auth model (MVP): the dashboard is a backend-for-frontend. It signs into
- * Dokploy with admin credentials (from env) and reuses the returned session
- * cookie for subsequent calls. Credentials and cookie never leave the server.
- * Dokploy also supports an `x-api-key` token, gated behind the member
- * `canAccessToAPI` permission — we can switch to that later without touching
- * callers.
+ * Auth model: the dashboard is a backend-for-frontend with a PER-USER login.
+ * Each user signs in with their OWN Dokploy account (`/login`); we hold their
+ * Dokploy session cookie inside a sealed Switchyard session cookie and use it
+ * for every request THAT user makes (`request()` -> `userCookie()`, read from
+ * next/headers). The raw Dokploy cookie never reaches the browser. On a Dokploy
+ * 401 we bounce the user to /login rather than escalating privilege.
+ *
+ * The env admin credentials (`DOKPLOY_EMAIL`/`DOKPLOY_PASSWORD`) survive for a
+ * SINGLE purpose: the system self-probe `ping()` behind /api/health?deep=1,
+ * which the installer uses to prove the container -> Dokploy path. That admin
+ * session is never used to serve user requests.
  *
  * Dokploy models a database as a service nested under project -> environment.
  * `project.all` returns the tree but trims nested service objects down to their
  * IDs, so we enrich each database via `<engine>.one`.
  */
+import "server-only";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
+import { SESSION_COOKIE, openSession } from "./session";
 
 const BASE = process.env.DOKPLOY_URL ?? "http://localhost:3000";
 // Origin header for better-auth's CSRF check. Dokploy only trusts its
@@ -151,13 +161,16 @@ export interface ProjectNode {
 
 // --- session handling -------------------------------------------------------
 
-let cookieCache: string | null = null;
-
-async function signIn(): Promise<string> {
+/**
+ * Sign into Dokploy and return the session cookie as a "name=value; ..." string
+ * (attributes like Path/HttpOnly stripped). Shared by the per-user login flow
+ * (src/app/login/actions.ts) and the admin system probe below.
+ */
+export async function signInToDokploy(email: string, password: string): Promise<string> {
   const res = await fetch(`${BASE}/api/auth/sign-in/email`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Origin: ORIGIN },
-    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+    body: JSON.stringify({ email, password }),
     cache: "no-store",
   });
   if (!res.ok) {
@@ -167,38 +180,45 @@ async function signIn(): Promise<string> {
   const setCookie = res.headers.get("set-cookie");
   if (!setCookie) throw new Error("Dokploy sign-in returned no session cookie");
   // Keep just the cookie name=value pairs (drop attributes like Path/HttpOnly).
-  cookieCache = setCookie
+  return setCookie
     .split(/,(?=[^;]+=[^;]+)/)
     .map((c) => c.split(";")[0].trim())
     .join("; ");
-  return cookieCache;
 }
 
-async function getCookie(): Promise<string> {
-  return cookieCache ?? (await signIn());
+/**
+ * The CURRENT user's Dokploy cookie, read from the sealed Switchyard session.
+ * The proxy blocks anonymous requests up front, so reaching here without a
+ * valid session means the cookie is forged/expired -> send them to /login.
+ * `redirect()` throws NEXT_REDIRECT (never returns), so the return type holds.
+ */
+async function userCookie(): Promise<string> {
+  const store = await cookies();
+  const session = openSession(store.get(SESSION_COOKIE)?.value);
+  if (!session) redirect("/login");
+  return session.dokployCookie;
 }
 
 type ReqInit = { method?: "GET" | "POST"; body?: unknown };
 
+/**
+ * User-serving Dokploy request. Threads the per-user cookie via next/headers so
+ * the call signature stays `request(path, init)` for every existing caller. On
+ * a Dokploy 401 the user's session has expired -> redirect to /login (we do NOT
+ * silently fall back to the admin session).
+ */
 async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
-  const doFetch = async (cookie: string) =>
-    fetch(`${BASE}/api/${path}`, {
-      method: init.method ?? "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: ORIGIN,
-        Cookie: cookie,
-      },
-      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-      cache: "no-store",
-    });
-
-  let res = await doFetch(await getCookie());
-  if (res.status === 401) {
-    // Session expired — sign in again once and retry.
-    cookieCache = null;
-    res = await doFetch(await getCookie());
-  }
+  const res = await fetch(`${BASE}/api/${path}`, {
+    method: init.method ?? "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: ORIGIN,
+      Cookie: await userCookie(),
+    },
+    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    cache: "no-store",
+  });
+  if (res.status === 401) redirect("/login");
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Dokploy ${path} failed (${res.status}): ${body.slice(0, 300)}`);
@@ -207,13 +227,38 @@ async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
   return (text ? JSON.parse(text) : null) as T;
 }
 
+// --- system probe (admin session) -------------------------------------------
+// The ONLY consumer of the env admin credentials. Kept fully separate from the
+// user-serving path above so an anonymous /api/health?deep=1 probe still works.
+
+let adminCookieCache: string | null = null;
+
+async function adminSignIn(): Promise<string> {
+  adminCookieCache = await signInToDokploy(EMAIL, PASSWORD);
+  return adminCookieCache;
+}
+
 /**
- * Cheapest end-to-end probe: signs in (when there is no cached session) and
- * lists projects. Used by /api/health?deep=1 so the installer can verify the
- * container -> Dokploy path without parsing the workspace.
+ * Cheapest end-to-end probe: admin sign-in (when uncached) + list projects.
+ * Used by /api/health?deep=1 so the installer can verify the container ->
+ * Dokploy path without parsing the workspace or needing a logged-in user.
  */
 export async function ping(): Promise<void> {
-  await request("project.all");
+  const doFetch = (cookie: string) =>
+    fetch(`${BASE}/api/project.all`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+      cache: "no-store",
+    });
+  let res = await doFetch(adminCookieCache ?? (await adminSignIn()));
+  if (res.status === 401) {
+    adminCookieCache = null;
+    res = await doFetch(await adminSignIn());
+  }
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Dokploy project.all failed (${res.status}): ${body.slice(0, 300)}`);
+  }
 }
 
 // --- projects ---------------------------------------------------------------
@@ -1191,4 +1236,15 @@ export async function loadWorkspace(): Promise<{
     a.name.localeCompare(b.name)
   );
   return { services, projects: projectsFromTree(tree) };
+}
+
+/**
+ * The set of Swarm `appName`s the CURRENT user's Dokploy workspace manages.
+ * The logs/metrics routes validate the requested `?app=` against this before
+ * attaching to a container, so an authed user can't tail arbitrary host
+ * containers by name. Uses the per-user session (via `request()`).
+ */
+export async function knownAppNames(): Promise<Set<string>> {
+  const { services } = await loadWorkspace();
+  return new Set(services.map((s) => s.appName).filter((n): n is string => Boolean(n)));
 }

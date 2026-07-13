@@ -32,6 +32,9 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
     DOKPLOY_ORIGIN: `http://localhost:${cfg.dokployPort}`,
     DOKPLOY_EMAIL: cfg.adminEmail,
     DOKPLOY_PASSWORD: cfg.adminPassword,
+    // Signs the dashboard's session cookie. Part of the spec, so it folds into
+    // the config-hash: rotating it recreates the container (and logs users out).
+    SWITCHYARD_SESSION_SECRET: cfg.sessionSecret,
   };
   // Host IP for auto-URL on app deploys. Only set on Linux (Traefik managed);
   // its presence is the dashboard's signal that auto-URL is safe. Added only
