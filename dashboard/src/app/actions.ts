@@ -20,6 +20,14 @@ import {
   setAppGitSource,
   setAppAutoDeploy,
   rollbackToDeployment,
+  setAppGithubSource,
+  listGithubProviders,
+  listGithubRepositories,
+  listGithubBranches,
+  githubConnectUrl,
+  type GithubProvider,
+  type GithubRepository,
+  type GithubBranch,
   applicationAction,
   updateApplication,
   saveAppBuildType,
@@ -265,6 +273,74 @@ async function mintAutoDomain(applicationId: string): Promise<void> {
   } catch {
     /* leave the app domain-less rather than failing the deploy */
   }
+}
+
+// --- github app (private repos) ---------------------------------------------
+
+export type ListResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+function listOk<T>(data: T): ListResult<T> {
+  return { ok: true, data };
+}
+
+/** Configured GitHub App connections + the Dokploy URL to add a new one. */
+export async function githubConnectionsAction(): Promise<
+  ListResult<{ providers: GithubProvider[]; connectUrl: string }>
+> {
+  try {
+    const providers = await listGithubProviders();
+    return listOk({ providers, connectUrl: githubConnectUrl() });
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function githubRepositoriesAction(
+  githubId: string
+): Promise<ListResult<GithubRepository[]>> {
+  try {
+    return listOk(await listGithubRepositories(githubId));
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function githubBranchesAction(
+  githubId: string,
+  owner: string,
+  repo: string
+): Promise<ListResult<GithubBranch[]>> {
+  try {
+    return listOk(await listGithubBranches(githubId, owner, repo));
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * One-click: create an application pointed at a private repo through a GitHub
+ * App installation, then deploy it. A push to `branch` auto-deploys thereafter.
+ */
+export async function quickDeployGithubAction(input: {
+  githubId: string;
+  owner: string;
+  repository: string;
+  branch: string;
+  environmentId?: string;
+}): Promise<QuickDeployResult> {
+  return wrapId(async () => {
+    const { githubId, owner, repository, branch } = input;
+    if (!githubId || !owner || !repository || !branch)
+      throw new Error("Installation, repository and branch are required.");
+    const id = await createApplication(
+      randomServiceName(repository),
+      await resolveTargetEnv(input.environmentId)
+    );
+    await setAppGithubSource(id, { githubId, owner, repository, branch });
+    await applicationAction(id, "deploy");
+    await mintAutoDomain(id);
+    return id;
+  });
 }
 
 export async function appLifecycleAction(id: string, action: Action): Promise<ActionResult> {

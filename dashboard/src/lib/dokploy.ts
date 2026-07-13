@@ -575,6 +575,7 @@ interface RawApplicationDetail {
   refreshToken?: string | null;
   owner?: string | null;
   repository?: string | null;
+  branch?: string | null;
   dockerImage?: string | null;
   dockerfile?: string | null;
   dockerContextPath?: string | null;
@@ -648,7 +649,7 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
           rollbackId: dp.rollbackId ?? null,
         })),
         autoDeploy: d.autoDeploy ?? false,
-        branch: d.customGitBranch ?? null,
+        branch: d.branch ?? d.customGitBranch ?? null,
         buildPath: d.customGitBuildPath ?? null,
         gitUrl: d.customGitUrl ?? null,
         watchPaths: d.watchPaths ?? [],
@@ -749,6 +750,140 @@ export async function rollbackToDeployment(rollbackId: string): Promise<void> {
     method: "POST",
     body: { rollbackId },
   });
+}
+
+// --- github app (private repos) ---------------------------------------------
+
+/**
+ * A configured Dokploy GitHub App connection (one per installation). Dokploy's
+ * `github.githubProviders` returns installed providers only, each shaped as
+ * `{ githubId, gitProvider: { name, ... } }`. `githubId` is the handle every
+ * downstream call keys off; `name` is the connection's display label.
+ */
+export interface GithubProvider {
+  githubId: string;
+  name: string;
+}
+
+/** A repository reachable through a GitHub App installation. */
+export interface GithubRepository {
+  /** Repo owner login (org or user) — the `owner` saveGithubProvider expects. */
+  owner: string;
+  /** Repo short name — the `repository` saveGithubProvider expects. */
+  name: string;
+  url: string;
+  isPrivate: boolean;
+  defaultBranch: string | null;
+}
+
+export interface GithubBranch {
+  name: string;
+}
+
+// Raw shapes from Dokploy / Octokit passthrough (only the fields we read).
+interface RawGithubProvider {
+  githubId: string;
+  gitProvider?: { name?: string | null } | null;
+}
+interface RawGithubRepo {
+  name: string;
+  url?: string | null;
+  html_url?: string | null;
+  private?: boolean;
+  default_branch?: string | null;
+  owner?: { login?: string | null } | null;
+}
+interface RawGithubBranch {
+  name: string;
+}
+
+/** List configured GitHub App connections (installed providers only). */
+export async function listGithubProviders(): Promise<GithubProvider[]> {
+  const raw = await request<RawGithubProvider[]>("github.githubProviders");
+  return (raw ?? []).map((p) => ({
+    githubId: p.githubId,
+    name: p.gitProvider?.name ?? "GitHub App",
+  }));
+}
+
+/** List repositories reachable through a GitHub App installation. */
+export async function listGithubRepositories(githubId: string): Promise<GithubRepository[]> {
+  const raw = await request<RawGithubRepo[]>(
+    `github.getGithubRepositories?githubId=${encodeURIComponent(githubId)}`
+  );
+  return (raw ?? [])
+    .map((r) => ({
+      owner: r.owner?.login ?? "",
+      name: r.name,
+      url: r.url ?? r.html_url ?? "",
+      isPrivate: r.private ?? false,
+      defaultBranch: r.default_branch ?? null,
+    }))
+    .filter((r) => r.owner && r.name)
+    .sort((a, b) => `${a.owner}/${a.name}`.localeCompare(`${b.owner}/${b.name}`));
+}
+
+/** List branches of a repository reachable through an installation. */
+export async function listGithubBranches(
+  githubId: string,
+  owner: string,
+  repo: string
+): Promise<GithubBranch[]> {
+  const qs = new URLSearchParams({ githubId, owner, repo }).toString();
+  const raw = await request<RawGithubBranch[]>(`github.getGithubBranches?${qs}`);
+  return (raw ?? []).map((b) => ({ name: b.name }));
+}
+
+export interface GithubSourceInput {
+  githubId: string;
+  owner: string;
+  repository: string;
+  branch: string;
+  buildPath?: string;
+}
+
+/**
+ * Point an application at a repo through a Dokploy GitHub App installation.
+ * Private repos work because Dokploy clones through the App installation, and
+ * the App's push webhook drives auto-deploy: `triggerType: "push"` together
+ * with the application's `autoDeploy` flag redeploy on a push to `branch`.
+ * `autoDeploy` defaults to true on freshly-created apps; we still set it
+ * explicitly (it rides on `application.update`, which accepts every application
+ * column) so the behavior holds however the app was created. The save payload
+ * mirrors Dokploy's own save-github-provider form.
+ */
+export async function setAppGithubSource(
+  applicationId: string,
+  input: GithubSourceInput
+): Promise<void> {
+  await request("application.saveGithubProvider", {
+    method: "POST",
+    body: {
+      applicationId,
+      githubId: input.githubId,
+      owner: input.owner,
+      repository: input.repository,
+      branch: input.branch,
+      buildPath: input.buildPath ?? "/",
+      triggerType: "push",
+      enableSubmodules: false,
+      watchPaths: [],
+    },
+  });
+  await request("application.update", {
+    method: "POST",
+    body: { applicationId, autoDeploy: true },
+  });
+}
+
+/**
+ * Dokploy hosts the GitHub App creation + installation flow (an app-manifest
+ * exchange that needs a public callback — not something the BFF can proxy).
+ * Surface a deep link to that settings page so the user completes it there,
+ * then returns to pick an installation. Uses ORIGIN (the host-facing URL).
+ */
+export function githubConnectUrl(): string {
+  return `${ORIGIN.replace(/\/$/, "")}/dashboard/settings/git-providers`;
 }
 
 export interface ApplicationPatch {

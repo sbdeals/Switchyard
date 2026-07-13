@@ -97,6 +97,12 @@ export function AppOverviewTab({ app }: { app: Application }) {
           value={app.dockerImage ?? app.repository ?? "—"}
           mono
         />
+        {app.sourceType !== "docker" && app.branch && (
+          <Info label="Branch" value={app.branch} mono />
+        )}
+        {app.sourceType !== "docker" && app.sourceType && (
+          <Info label="Auto-deploy" value={app.autoDeploy ? "on push" : "off"} />
+        )}
         <Info label="Build" value={app.buildType ?? "—"} />
         <Info label="Replicas" value={String(app.replicas ?? 1)} />
       </div>
