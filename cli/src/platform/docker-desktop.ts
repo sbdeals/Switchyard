@@ -154,6 +154,7 @@ export const dockerDesktopPlatform: PlatformModule = {
     if (!cfg.skipTraefik) {
       log("Note: Traefik is not managed on Docker Desktop — domains will not route. (skipTraefik=false is ignored here.)");
     }
+    log("Auto-URL is off on Docker Desktop (Traefik is unmanaged) — app deploys won't get a public URL; add a domain manually if you need one.");
   },
 
   async downDokploy(opts, log) {

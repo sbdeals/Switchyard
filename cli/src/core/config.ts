@@ -31,6 +31,13 @@ export interface SwitchyardConfig {
   imageTag: string;
   /** What the container uses to reach Dokploy (service DNS by default). */
   dokployUrlInContainer: string;
+  /**
+   * Host advertise/public IP, handed to the dashboard as SWITCHYARD_HOST_IP so
+   * app deploys can mint an auto-URL with no manual DNS. Auto-detected on Linux
+   * (from scripts/host-ip.sh); "" disables auto-URL (the Docker Desktop / dev
+   * default, where Traefik isn't managed).
+   */
+  hostIp: string;
 }
 
 export function detectPlatform(): Platform {
@@ -51,6 +58,7 @@ export function defaultConfig(platform: Platform = detectPlatform()): Switchyard
     image: "ghcr.io/sbdeals/switchyard",
     imageTag: "",
     dokployUrlInContainer: "http://dokploy:3000",
+    hostIp: "",
   };
 }
 
@@ -66,6 +74,7 @@ export const CONFIG_KEY_TYPES = {
   image: "string",
   imageTag: "string",
   dokployUrlInContainer: "string",
+  hostIp: "string",
 } as const satisfies Partial<Record<keyof SwitchyardConfig, "number" | "boolean" | "string">>;
 
 export type ConfigKey = keyof typeof CONFIG_KEY_TYPES;
