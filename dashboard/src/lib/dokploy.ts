@@ -1193,18 +1193,12 @@ export async function restoreBackup(input: RestoreBackupInput): Promise<void> {
   // the superjson envelope is simply `{ json: payload }` (no `meta`).
   const inputParam = encodeURIComponent(JSON.stringify({ json: payload }));
   const url = `${BASE}/api/trpc/backup.restoreBackupWithLogs?input=${inputParam}`;
-  const run = (cookie: string) =>
-    fetch(url, {
-      method: "GET",
-      headers: { Accept: "text/event-stream", Origin: ORIGIN, Cookie: cookie },
-      cache: "no-store",
-    });
-
-  let res = await run(await getCookie());
-  if (res.status === 401) {
-    cookieCache = null;
-    res = await run(await getCookie());
-  }
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { Accept: "text/event-stream", Origin: ORIGIN, Cookie: await userCookie() },
+    cache: "no-store",
+  });
+  if (res.status === 401) redirect("/login");
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Dokploy restore failed (${res.status}): ${body.slice(0, 300)}`);
