@@ -36,6 +36,10 @@ import {
   updateSchedule,
   deleteSchedule,
   runSchedule,
+  listMounts,
+  createMount,
+  updateMount,
+  removeMount,
   type Action,
   type DatabasePatch,
   type ApplicationPatch,
@@ -45,6 +49,10 @@ import {
   type Schedule,
   type CreateScheduleInput,
   type UpdateScheduleInput,
+  type Mount,
+  type MountServiceType,
+  type CreateMountInput,
+  type MountPatch,
 } from "@/lib/dokploy";
 // Backups: S3 destinations + scheduled database backups (see the "backups"
 // section below). Kept as a separate import to reduce merge churn.
@@ -545,4 +553,35 @@ export async function quickDeployTemplateAction(
     await composeAction(composeId, "deploy");
     return composeId;
   });
+}
+
+// --- mounts (persistent volumes) --------------------------------------------
+
+export type MountsResult = { ok: true; mounts: Mount[] } | { ok: false; error: string };
+
+/** Read-only: the mounts attached to a service (fetched when the tab opens). */
+export async function listMountsAction(
+  serviceType: MountServiceType,
+  serviceId: string
+): Promise<MountsResult> {
+  try {
+    return { ok: true, mounts: await listMounts(serviceType, serviceId) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function createMountAction(input: CreateMountInput): Promise<ActionResult> {
+  return wrap(() => createMount(input));
+}
+
+export async function updateMountAction(
+  mountId: string,
+  patch: MountPatch
+): Promise<ActionResult> {
+  return wrap(() => updateMount(mountId, patch));
+}
+
+export async function removeMountAction(mountId: string): Promise<ActionResult> {
+  return wrap(() => removeMount(mountId));
 }

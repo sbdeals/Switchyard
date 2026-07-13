@@ -1025,6 +1025,91 @@ export async function runSchedule(scheduleId: string): Promise<void> {
   await request("schedule.runManually", { method: "POST", body: { scheduleId } });
 }
 
+// --- mounts (persistent volumes) --------------------------------------------
+
+/** Dokploy's mount kinds. `file` writes inline content into the container. */
+export type MountType = "volume" | "bind" | "file";
+/** The `serviceType` a service is addressed by in the mounts API (superset of our kinds). */
+export type MountServiceType = Engine | "application" | "compose";
+
+export interface Mount {
+  mountId: string;
+  type: MountType;
+  /** Path inside the container the mount is exposed at. */
+  mountPath: string;
+  /** Named Docker volume (type=volume). */
+  volumeName: string | null;
+  /** Host path bind-mounted in (type=bind). */
+  hostPath: string | null;
+  /** File name written from `content` (type=file). */
+  filePath: string | null;
+  /** Inline file contents (type=file). */
+  content: string | null;
+}
+
+interface RawMount {
+  mountId: string;
+  type?: MountType;
+  mountPath?: string | null;
+  volumeName?: string | null;
+  hostPath?: string | null;
+  filePath?: string | null;
+  content?: string | null;
+}
+
+/** List the mounts attached to a service. */
+export async function listMounts(
+  serviceType: MountServiceType,
+  serviceId: string
+): Promise<Mount[]> {
+  const raw = await request<RawMount[]>(
+    `mounts.listByServiceId?serviceType=${serviceType}&serviceId=${encodeURIComponent(serviceId)}`
+  );
+  return (raw ?? []).map((m) => ({
+    mountId: m.mountId,
+    type: m.type ?? "volume",
+    mountPath: m.mountPath ?? "",
+    volumeName: m.volumeName ?? null,
+    hostPath: m.hostPath ?? null,
+    filePath: m.filePath ?? null,
+    content: m.content ?? null,
+  }));
+}
+
+export interface CreateMountInput {
+  serviceType: MountServiceType;
+  serviceId: string;
+  type: MountType;
+  mountPath: string;
+  volumeName?: string;
+  hostPath?: string;
+  filePath?: string;
+  content?: string;
+}
+
+/** Attach a new mount. The service must be redeployed for it to take effect. */
+export async function createMount(input: CreateMountInput): Promise<void> {
+  await request("mounts.create", { method: "POST", body: input });
+}
+
+export interface MountPatch {
+  type?: MountType;
+  mountPath?: string;
+  volumeName?: string;
+  hostPath?: string;
+  filePath?: string;
+  content?: string;
+}
+
+/** Edit an existing mount. Changes need a redeploy to reach the container. */
+export async function updateMount(mountId: string, patch: MountPatch): Promise<void> {
+  await request("mounts.update", { method: "POST", body: { mountId, ...patch } });
+}
+
+export async function removeMount(mountId: string): Promise<void> {
+  await request("mounts.remove", { method: "POST", body: { mountId } });
+}
+
 // --- compose ----------------------------------------------------------------
 
 interface RawComposeDetail {
