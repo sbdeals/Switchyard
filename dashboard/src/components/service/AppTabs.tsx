@@ -13,7 +13,6 @@ import {
   EyeOff,
 } from "lucide-react";
 import type { Application, BuildType, BuildTypePatch } from "@/lib/dokploy";
-import { BUILD_TYPES } from "@/lib/dokploy";
 import {
   appLifecycleAction,
   updateApplicationAction,
@@ -44,6 +43,10 @@ const BUILD_TYPE_LABELS: Record<BuildType, string> = {
   heroku_buildpacks: "Heroku buildpacks",
   paketo_buildpacks: "Paketo buildpacks",
 };
+
+// Client-safe list of build types (dokploy.ts is server-only, so we can't import
+// its BUILD_TYPES value into this client component — derive it from the labels).
+const BUILD_TYPES = Object.keys(BUILD_TYPE_LABELS) as BuildType[];
 
 const useAppLifecycle = (app: Application) =>
   useLifecycle((action) => appLifecycleAction(app.id, action));
