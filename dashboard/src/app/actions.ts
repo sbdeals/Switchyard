@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 import {
   createDatabase,
   databaseAction,
@@ -46,6 +47,7 @@ async function wrap(fn: () => Promise<unknown>): Promise<ActionResult> {
     revalidatePath("/");
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
   }
 }
@@ -57,6 +59,7 @@ async function wrapId(fn: () => Promise<string>): Promise<QuickDeployResult> {
     revalidatePath("/");
     return { ok: true, id };
   } catch (e) {
+    unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
   }
 }

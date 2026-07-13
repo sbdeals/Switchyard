@@ -1,5 +1,8 @@
+import { unstable_rethrow } from "next/navigation";
+
 import { loadWorkspace, inferEdges } from "@/lib/dokploy";
 import { Workspace } from "@/components/Workspace";
+import { LogoutButton } from "@/components/LogoutButton";
 
 // Always fetch fresh state from Dokploy.
 export const dynamic = "force-dynamic";
@@ -10,16 +13,22 @@ export default async function Page() {
   try {
     result = await loadWorkspace();
   } catch (e) {
+    // Let framework control-flow errors (e.g. redirect to /login on an expired
+    // session) propagate instead of rendering them as an error panel.
+    unstable_rethrow(e);
     message = e instanceof Error ? e.message : String(e);
   }
 
   if (result) {
     return (
-      <Workspace
-        services={result.services}
-        projects={result.projects}
-        edges={inferEdges(result.services)}
-      />
+      <>
+        <LogoutButton />
+        <Workspace
+          services={result.services}
+          projects={result.projects}
+          edges={inferEdges(result.services)}
+        />
+      </>
     );
   }
 

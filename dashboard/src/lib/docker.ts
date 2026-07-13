@@ -13,9 +13,20 @@ import type { Duplex } from "node:stream";
 const socketPath = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
 const docker = new Docker({ socketPath });
 
-/** Resolve a Dokploy appName to its running container id (most recent). */
-export async function findContainerId(appName: string): Promise<string | null> {
+/**
+ * Resolve a Dokploy appName to its running container id (most recent).
+ *
+ * When `allowed` is provided, the appName must be one of the caller's known
+ * Dokploy-managed services — a defense-in-depth guard (the logs/metrics routes
+ * also reject unknown apps up front) so an authed user can't tail arbitrary
+ * host containers by name.
+ */
+export async function findContainerId(
+  appName: string,
+  allowed?: Set<string>,
+): Promise<string | null> {
   if (!appName) return null;
+  if (allowed && !allowed.has(appName)) return null;
   const containers = await docker.listContainers({
     all: false,
     filters: { name: [appName] },
@@ -39,9 +50,10 @@ export interface LogLine {
  */
 export async function followLogs(
   appName: string,
-  tail = 200
+  tail = 200,
+  allowed?: Set<string>
 ): Promise<{ stream: NodeJS.ReadableStream; close: () => void } | null> {
-  const id = await findContainerId(appName);
+  const id = await findContainerId(appName, allowed);
   if (!id) return null;
   const container = docker.getContainer(id);
   const raw = (await container.logs({
@@ -96,9 +108,10 @@ function toSample(s: Docker.ContainerStats): Sample {
 
 /** Stream resource samples for a container. */
 export async function followStats(
-  appName: string
+  appName: string,
+  allowed?: Set<string>
 ): Promise<{ stream: NodeJS.ReadableStream; close: () => void; toSample: typeof toSample } | null> {
-  const id = await findContainerId(appName);
+  const id = await findContainerId(appName, allowed);
   if (!id) return null;
   const container = docker.getContainer(id);
   const raw = (await container.stats({ stream: true })) as unknown as NodeJS.ReadableStream;

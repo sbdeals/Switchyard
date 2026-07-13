@@ -11,7 +11,7 @@ import {
   ensureSwitchyard,
   waitSwitchyardHealthy,
 } from "../core/switchyard-container.js";
-import { generatePassword, isValidEmail } from "../core/util.js";
+import { generatePassword, isValidEmail, randomSecret } from "../core/util.js";
 import { isRoot } from "../platform/linux.js";
 import { platformFor } from "../platform/index.js";
 import { CLI_VERSION } from "../version.js";
@@ -48,9 +48,15 @@ export async function upCommand(flags: UpFlags): Promise<void> {
   const cfg = loaded.config;
   overlayFlags(cfg, flags);
 
-  // The dashboard has no auth of its own; exposing it is a real decision.
+  // Seed the dashboard's session-signing secret once (CSPRNG). Persisted so the
+  // config-hash stays stable across re-runs — regenerating it would log users
+  // out and force a container recreate on every `up`.
+  if (!cfg.sessionSecret) cfg.sessionSecret = randomSecret();
+
+  // The dashboard now requires a Dokploy login, but exposing it is still a real
+  // decision — a login gate is not TLS, and it fronts full Dokploy admin.
   if (cfg.expose) {
-    warn("--expose publishes the dashboard on ALL interfaces. Switchyard has NO login — anyone who reaches the port has full admin over Dokploy.");
+    warn("--expose publishes the dashboard on ALL interfaces. It requires a Dokploy login, but there's no TLS and a valid login grants full Dokploy admin — only expose it on a trusted network or behind an HTTPS proxy.");
     if (interactive && !flags.yes) {
       if (!(await askConfirm({ message: "Expose the dashboard anyway?", initialValue: false }))) {
         cfg.expose = false;
@@ -222,8 +228,8 @@ export async function upCommand(flags: UpFlags): Promise<void> {
   );
   p.outro(
     cfg.expose
-      ? pc.yellow("The dashboard is exposed on all interfaces WITHOUT auth — anyone who reaches it has full admin.")
-      : `Dashboard bound to 127.0.0.1 (no auth yet). Remote access: ssh -L ${cfg.dashboardPort}:127.0.0.1:${cfg.dashboardPort} <user>@<server>`,
+      ? pc.yellow(`The dashboard is exposed on all interfaces. Sign in at /login with your Dokploy account — ${cfg.adminEmail} works. There's no TLS; put an HTTPS proxy in front for untrusted networks.`)
+      : `Dashboard bound to 127.0.0.1. Sign in at /login with your Dokploy account (${cfg.adminEmail}). Remote access: ssh -L ${cfg.dashboardPort}:127.0.0.1:${cfg.dashboardPort} <user>@<server>`,
   );
 }
 
