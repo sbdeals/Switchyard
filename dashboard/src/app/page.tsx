@@ -1,10 +1,15 @@
 import { loadWorkspace, inferEdges } from "@/lib/dokploy";
+import { ensureCollector } from "@/lib/collector";
 import { Workspace } from "@/components/Workspace";
 
 // Always fetch fresh state from Dokploy.
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
+  // Start the background metrics/logs collector on first workspace load. Lazy
+  // singleton — safe to call on every request (see lib/collector.ts).
+  ensureCollector();
+
   let result: Awaited<ReturnType<typeof loadWorkspace>> | null = null;
   let message: string | null = null;
   try {

@@ -11,7 +11,7 @@ import {
   ensureSwitchyard,
   waitSwitchyardHealthy,
 } from "../core/switchyard-container.js";
-import { generatePassword, isValidEmail } from "../core/util.js";
+import { generatePassword, isValidEmail, randomSecret } from "../core/util.js";
 import { isRoot } from "../platform/linux.js";
 import { platformFor } from "../platform/index.js";
 import { CLI_VERSION } from "../version.js";
@@ -150,6 +150,14 @@ export async function upCommand(flags: UpFlags): Promise<void> {
       }
     }
     // interactive + existing install: prompt after Dokploy is reachable.
+  }
+
+  // Metrics store: generate a durable CSPRNG password once (persisted like the
+  // admin password). Its value feeds SWITCHYARD_STORE_URL on the container and
+  // is folded into the config-hash, so a stable password keeps `up` idempotent.
+  if (cfg.store && !cfg.storePassword) {
+    cfg.storePassword = randomSecret();
+    info("Generated a metrics-store password (stored in the config file).");
   }
 
   saveConfig(cfg, loaded.path);

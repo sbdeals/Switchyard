@@ -690,3 +690,147 @@ export async function loadWorkspace(): Promise<{
   );
   return { services, projects: projectsFromTree(tree) };
 }
+
+// ============================================================================
+// Notifications (added for observability alerts — see lib/collector.ts).
+//
+// Switchyard does not stand up its own notification infra: it reuses whatever
+// channel the operator already configured in Dokploy. `notification.all`
+// returns each channel with its nested provider config (webhook URL / token),
+// and we deliver an alert by POSTing to that same webhook. The `test*`
+// procedures only send a fixed "Hi, From Dokploy" message, so they can't carry
+// a crash-loop payload — hence the direct webhook post.
+// (Confirmed against Dokploy's notification router: `notification.all` includes
+//  { slack, telegram, discord, custom, mattermost, lark, teams, ... }.)
+// ============================================================================
+
+interface SlackConfig { webhookUrl: string; channel?: string | null }
+interface DiscordConfig { webhookUrl: string }
+interface TelegramConfig { botToken: string; chatId: string; messageThreadId?: string | null }
+interface WebhookConfig { webhookUrl: string; channel?: string | null; username?: string | null }
+interface CustomConfig { endpoint: string; headers?: unknown }
+
+export interface DokployNotification {
+  notificationId: string;
+  name: string;
+  notificationType?: string;
+  slack?: SlackConfig | null;
+  discord?: DiscordConfig | null;
+  telegram?: TelegramConfig | null;
+  mattermost?: WebhookConfig | null;
+  lark?: WebhookConfig | null;
+  teams?: WebhookConfig | null;
+  custom?: CustomConfig | null;
+}
+
+/** All notification channels configured in Dokploy for the active org. */
+export async function listNotifications(): Promise<DokployNotification[]> {
+  return request<DokployNotification[]>("notification.all");
+}
+
+/** Parse Dokploy custom-webhook headers (stored as JSON string, array, or map). */
+function customHeaders(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = { "Content-Type": "application/json" };
+  let val = raw;
+  if (typeof val === "string") {
+    try {
+      val = JSON.parse(val);
+    } catch {
+      return out;
+    }
+  }
+  if (Array.isArray(val)) {
+    for (const h of val as { name?: string; value?: string }[]) {
+      if (h?.name) out[h.name] = String(h.value ?? "");
+    }
+  } else if (val && typeof val === "object") {
+    for (const [k, v] of Object.entries(val as Record<string, unknown>)) out[k] = String(v);
+  }
+  return out;
+}
+
+async function postJson(url: string, body: unknown, headers?: Record<string, string>): Promise<void> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: headers ?? { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`webhook ${res.status}: ${(await res.text()).slice(0, 200)}`);
+}
+
+/** Deliver `text` to one configured channel. Returns the channel type used. */
+async function deliver(n: DokployNotification, text: string): Promise<string> {
+  if (n.slack?.webhookUrl) {
+    await postJson(n.slack.webhookUrl, { text, channel: n.slack.channel ?? undefined });
+    return "slack";
+  }
+  if (n.discord?.webhookUrl) {
+    await postJson(n.discord.webhookUrl, { content: text });
+    return "discord";
+  }
+  if (n.telegram?.botToken && n.telegram.chatId) {
+    await postJson(`https://api.telegram.org/bot${n.telegram.botToken}/sendMessage`, {
+      chat_id: n.telegram.chatId,
+      text,
+      message_thread_id: n.telegram.messageThreadId ?? undefined,
+    });
+    return "telegram";
+  }
+  if (n.mattermost?.webhookUrl) {
+    await postJson(n.mattermost.webhookUrl, {
+      text,
+      channel: n.mattermost.channel ?? undefined,
+      username: n.mattermost.username ?? undefined,
+    });
+    return "mattermost";
+  }
+  if (n.lark?.webhookUrl) {
+    await postJson(n.lark.webhookUrl, { msg_type: "text", content: { text } });
+    return "lark";
+  }
+  if (n.teams?.webhookUrl) {
+    await postJson(n.teams.webhookUrl, { text });
+    return "teams";
+  }
+  if (n.custom?.endpoint) {
+    await postJson(n.custom.endpoint, { title: "Switchyard alert", message: text, text }, customHeaders(n.custom.headers));
+    return "custom";
+  }
+  throw new Error(`notification "${n.name}" has no webhook-deliverable channel`);
+}
+
+export type NotifyResult =
+  | { sent: true; channel: string; name: string }
+  | { sent: false; reason: string };
+
+/**
+ * Send `text` through a Dokploy-configured channel. `selector` (name or id)
+ * picks a specific channel; otherwise the first webhook-deliverable one is used.
+ */
+export async function notifyThroughDokploy(text: string, selector?: string): Promise<NotifyResult> {
+  let all: DokployNotification[];
+  try {
+    all = await listNotifications();
+  } catch (e) {
+    return { sent: false, reason: `could not list Dokploy notifications: ${e instanceof Error ? e.message : e}` };
+  }
+  if (all.length === 0) return { sent: false, reason: "no Dokploy notification channels configured" };
+
+  const wanted = selector?.trim().toLowerCase();
+  const ordered = wanted
+    ? all.filter((n) => n.name.toLowerCase() === wanted || n.notificationId === selector)
+    : all;
+  if (ordered.length === 0) return { sent: false, reason: `no Dokploy channel matches "${selector}"` };
+
+  let lastErr = "";
+  for (const n of ordered) {
+    try {
+      const channel = await deliver(n, text);
+      return { sent: true, channel, name: n.name };
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : String(e);
+    }
+  }
+  return { sent: false, reason: lastErr || "delivery failed" };
+}

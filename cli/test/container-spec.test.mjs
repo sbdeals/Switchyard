@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { defaultConfig, renderContainer } from "../dist/lib.js";
+import { defaultConfig, metricsStoreUrl, renderContainer } from "../dist/lib.js";
 
 test("hash is stable for identical config", () => {
   const a = renderContainer(defaultConfig("linux"), "1.0.0");
@@ -43,4 +43,25 @@ test("run args carry the BFF env and labels", () => {
   assert.ok(plan.runArgs.includes("DOKPLOY_URL=http://dokploy:3000"));
   assert.ok(plan.runArgs.includes(`switchyard.config-hash=${plan.hash}`));
   assert.equal(plan.runArgs.at(-1), plan.image);
+});
+
+test("metrics store URL is wired into the container env and the hash", () => {
+  const cfg = defaultConfig("linux");
+  // No password yet → empty URL, and the env var is present-but-empty.
+  assert.equal(metricsStoreUrl(cfg), "");
+  const noStore = renderContainer(cfg, "1.0.0");
+  assert.ok(noStore.runArgs.includes("SWITCHYARD_STORE_URL="));
+
+  // With a password, the URL points at the store service by DNS and is hashed.
+  const withPw = { ...cfg, storePassword: "s3cret" };
+  const url = metricsStoreUrl(withPw);
+  assert.match(url, /^postgresql:\/\/switchyard:s3cret@switchyard-metrics:5432\/switchyard$/);
+  const plan = renderContainer(withPw, "1.0.0");
+  assert.ok(plan.runArgs.includes(`SWITCHYARD_STORE_URL=${url}`));
+  assert.notEqual(noStore.hash, plan.hash);
+});
+
+test("disabling the store blanks the URL", () => {
+  const cfg = { ...defaultConfig("linux"), store: false, storePassword: "s3cret" };
+  assert.equal(metricsStoreUrl(cfg), "");
 });

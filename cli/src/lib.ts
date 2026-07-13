@@ -9,7 +9,9 @@ export {
   defaultConfig,
   detectPlatform,
   loadConfig,
+  metricsStoreUrl,
   saveConfig,
+  STORE_SERVICE,
   type ConfigKey,
   type SwitchyardConfig,
 } from "./core/config.js";

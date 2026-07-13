@@ -1,4 +1,5 @@
 import type { SwitchyardConfig } from "./config.js";
+import { metricsStoreUrl } from "./config.js";
 import { docker, dockerInherit, dockerOk } from "./docker.js";
 import { UserError } from "./errors.js";
 import { sha256, sleep } from "./util.js";
@@ -32,6 +33,10 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
     DOKPLOY_ORIGIN: `http://localhost:${cfg.dokployPort}`,
     DOKPLOY_EMAIL: cfg.adminEmail,
     DOKPLOY_PASSWORD: cfg.adminPassword,
+    // Durable observability store (persist metrics/logs, threshold alerts).
+    // Empty when disabled → the dashboard runs persistence-off. Part of `env`,
+    // so it is folded into the config-hash and keeps `up` idempotent.
+    SWITCHYARD_STORE_URL: metricsStoreUrl(cfg),
   };
   const spec = {
     image,

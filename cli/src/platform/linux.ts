@@ -99,6 +99,15 @@ export const linuxPlatform: PlatformModule = {
       // short-circuit inside dokploy-up.sh and never recreate it.
       await docker(["rm", "-f", "dokploy-traefik"]);
     }
+
+    // Observability persistence: provision the switchyard-metrics Postgres.
+    // Infra lives in the bash script (dnsrr, dokploy-network); idempotent.
+    if (cfg.store && cfg.storePassword) {
+      const storeScript = join(bundledScriptsDir(), "switchyard-store-up.sh");
+      log(`Provisioning the metrics store via ${storeScript} ...`);
+      const code = await runScript(storeScript, [`SWITCHYARD_METRICS_PASSWORD=${cfg.storePassword}`]);
+      if (code !== 0) throw new UserError("switchyard-store-up.sh failed (see output above).");
+    }
   },
 
   async downDokploy(opts, log) {
