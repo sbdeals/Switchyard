@@ -1,17 +1,28 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
+import {
+  Globe,
+  ExternalLink,
+  Plus,
+  Loader2,
+  GitBranch,
+  Webhook,
+  RotateCcw,
+} from "lucide-react";
 import type { Application } from "@/lib/dokploy";
 import {
   appLifecycleAction,
   updateApplicationAction,
   createDomainAction,
+  updateGitDeployAction,
+  rollbackDeploymentAction,
 } from "@/app/actions";
 import {
   inputCls,
   Field,
   Info,
+  CopyButton,
   LifecycleButtons,
   SaveRow,
   DangerZone,
@@ -141,6 +152,132 @@ export function DomainsTab({ app }: { app: Application }) {
 }
 
 export function DeploymentsTab({ app }: { app: Application }) {
+  return (
+    <div className="space-y-6">
+      {app.sourceType === "git" && <AutoDeployPanel app={app} />}
+      <DeploymentHistory app={app} />
+    </div>
+  );
+}
+
+/**
+ * Push-to-deploy config for a custom-git app: the copyable Dokploy deploy
+ * webhook to wire into a Git host, plus branch / watch-paths / auto-deploy.
+ */
+function AutoDeployPanel({ app }: { app: Application }) {
+  const [branch, setBranch] = useState(app.branch ?? "main");
+  const [autoDeploy, setAutoDeploy] = useState(app.autoDeploy);
+  const [watch, setWatch] = useState(app.watchPaths.join("\n"));
+  const [saving, start] = useTransition();
+  const [saved, flashSaved] = useSavedFlash();
+  const [error, setError] = useState<string | null>(null);
+
+  const watchList = watch.split("\n").map((s) => s.trim()).filter(Boolean);
+  const dirty =
+    branch !== (app.branch ?? "main") ||
+    autoDeploy !== app.autoDeploy ||
+    watchList.join("\n") !== app.watchPaths.join("\n");
+
+  function save() {
+    setError(null);
+    start(async () => {
+      const res = await updateGitDeployAction(app.id, {
+        gitUrl: app.gitUrl,
+        branch,
+        buildPath: app.buildPath ?? "/",
+        watchPaths: watchList,
+        autoDeploy,
+      });
+      if (res.ok) flashSaved();
+      else setError(res.error);
+    });
+  }
+
+  return (
+    <div className="space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+      <div className="flex items-center gap-2">
+        <Webhook className="size-4 text-[var(--color-brand)]" />
+        <h3 className="text-sm font-semibold">Push to deploy</h3>
+      </div>
+
+      <Field label="Deploy webhook URL" hint="add to your Git host">
+        {app.webhookUrl ? (
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
+            <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
+              {app.webhookUrl}
+            </code>
+            <CopyButton text={app.webhookUrl} />
+          </div>
+        ) : (
+          <p className="text-xs text-[var(--color-fg-subtle)]">
+            No webhook token yet — deploy the app once to generate one.
+          </p>
+        )}
+      </Field>
+      <p className="text-[11px] leading-relaxed text-[var(--color-fg-subtle)]">
+        Add this as a push webhook in your Git host (GitHub: Settings → Webhooks,
+        content type <span className="font-mono">application/json</span>). If Dokploy
+        is reachable at a public domain, replace the host with that address. A push
+        to <span className="font-mono">{branch || "main"}</span> then redeploys this
+        app while auto-deploy is on.
+      </p>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Branch">
+          <div className="relative">
+            <GitBranch className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-fg-subtle)]" />
+            <input
+              value={branch}
+              onChange={(e) => setBranch(e.target.value)}
+              placeholder="main"
+              className={`${inputCls} pl-8`}
+            />
+          </div>
+        </Field>
+        <Field label="Auto-deploy" hint="webhook on/off">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoDeploy}
+            onClick={() => setAutoDeploy((v) => !v)}
+            className={`inline-flex h-9 w-full items-center justify-between rounded-lg border px-3 text-xs font-medium transition-colors ${
+              autoDeploy
+                ? "border-[var(--color-brand)] text-[var(--color-fg)]"
+                : "border-[var(--color-border-strong)] text-[var(--color-fg-muted)]"
+            }`}
+          >
+            {autoDeploy ? "Enabled" : "Disabled"}
+            <span
+              className={`relative h-4 w-7 rounded-full transition-colors ${
+                autoDeploy ? "bg-[var(--color-brand-strong)]" : "bg-[var(--color-idle)]"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${
+                  autoDeploy ? "left-3.5" : "left-0.5"
+                }`}
+              />
+            </span>
+          </button>
+        </Field>
+      </div>
+
+      <Field label="Watch paths" hint="one per line · blank = any change">
+        <textarea
+          value={watch}
+          onChange={(e) => setWatch(e.target.value)}
+          placeholder="src/&#10;package.json"
+          rows={2}
+          className={`${inputCls} resize-y font-mono`}
+        />
+      </Field>
+
+      <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
+    </div>
+  );
+}
+
+function DeploymentHistory({ app }: { app: Application }) {
   const deployments = [...app.deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const color = (s: string) =>
     s === "done" ? "var(--color-ok)" : s === "error" ? "var(--color-danger)" : s === "running" ? "var(--color-warn)" : "var(--color-idle)";
@@ -162,10 +299,42 @@ export function DeploymentsTab({ app }: { app: Application }) {
                 {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
               </div>
             </div>
-            <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
+            {d.rollbackId ? (
+              <RollbackButton rollbackId={d.rollbackId} title={d.title} />
+            ) : (
+              <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
+            )}
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+/** Restore a past deployment's image snapshot (Dokploy image-based rollback). */
+function RollbackButton({ rollbackId, title }: { rollbackId: string; title: string }) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  function rollback() {
+    if (!confirm(`Roll back to "${title}"? This redeploys the recorded image.`)) return;
+    setError(null);
+    start(async () => {
+      const res = await rollbackDeploymentAction(rollbackId);
+      if (!res.ok) setError(res.error);
+    });
+  }
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        onClick={rollback}
+        disabled={pending}
+        title="Roll back to this deployment"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)] disabled:opacity-40"
+      >
+        {pending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+        Roll back
+      </button>
+      {error && <span className="text-[11px] text-[var(--color-danger)]">{error}</span>}
     </div>
   );
 }

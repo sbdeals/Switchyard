@@ -17,6 +17,8 @@ import {
   createApplication,
   setAppDockerSource,
   setAppGitSource,
+  setAppAutoDeploy,
+  rollbackToDeployment,
   applicationAction,
   updateApplication,
   saveApplicationEnvironment,
@@ -227,6 +229,50 @@ export async function createDomainAction(
   port: number
 ): Promise<ActionResult> {
   return wrap(() => createDomain(applicationId, host.trim(), port));
+}
+
+// --- push-to-deploy + rollback ----------------------------------------------
+// (Deploys-tab actions. Kept in their own section so the application actions
+//  above stay untouched.)
+
+/**
+ * Update a custom-git app's push-to-deploy config: branch, watch paths, and the
+ * auto-deploy toggle that gates Dokploy's deploy webhook. `gitUrl`/`buildPath`
+ * are re-sent because Dokploy's `saveGitProvider` replaces the whole git config;
+ * the client passes the app's current values back. When `gitUrl` is absent the
+ * git config is left untouched and only auto-deploy is changed.
+ */
+export async function updateGitDeployAction(
+  applicationId: string,
+  config: {
+    gitUrl?: string | null;
+    branch?: string;
+    buildPath?: string;
+    watchPaths?: string[];
+    autoDeploy: boolean;
+  }
+): Promise<ActionResult> {
+  return wrap(async () => {
+    if (config.gitUrl) {
+      await setAppGitSource(
+        applicationId,
+        config.gitUrl,
+        config.branch?.trim() || "main",
+        config.buildPath?.trim() || "/",
+        (config.watchPaths ?? []).map((p) => p.trim()).filter(Boolean)
+      );
+    }
+    await setAppAutoDeploy(applicationId, config.autoDeploy);
+  });
+}
+
+/**
+ * Roll an application back to a past deployment's image snapshot. `rollbackId`
+ * comes from a deployment history row (non-null only when that deploy recorded
+ * a registry image); see `rollbackToDeployment`.
+ */
+export async function rollbackDeploymentAction(rollbackId: string): Promise<ActionResult> {
+  return wrap(() => rollbackToDeployment(rollbackId));
 }
 
 // --- compose ----------------------------------------------------------------
