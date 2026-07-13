@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "switchyard": {
+      "command": "node",
+      "args": ["mcp/dist/index.js"],
+      "env": {
+        "DOKPLOY_URL": "${DOKPLOY_URL:-http://localhost:3000}",
+        "DOKPLOY_ORIGIN": "${DOKPLOY_ORIGIN:-}",
+        "DOKPLOY_EMAIL": "${DOKPLOY_EMAIL}",
+        "DOKPLOY_PASSWORD": "${DOKPLOY_PASSWORD}",
+        "DOCKER_SOCKET": "${DOCKER_SOCKET:-/var/run/docker.sock}"
+      }
+    }
+  }
+}

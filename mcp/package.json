@@ -1,0 +1,32 @@
+{
+  "name": "switchyard-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Model Context Protocol server exposing Dokploy operations so Claude Code can drive Switchyard without dashboard clicks",
+  "type": "module",
+  "bin": {
+    "switchyard-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "test": "npm run build && node --test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "dockerode": "^5.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^4.0.1",
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.0"
+  }
+}
