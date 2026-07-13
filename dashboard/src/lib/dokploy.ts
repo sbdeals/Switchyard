@@ -68,6 +68,17 @@ export interface Database extends ServiceBase {
 
 export type AppSource = "github" | "gitlab" | "bitbucket" | "gitea" | "git" | "docker";
 
+/** Build strategies Dokploy supports (the `buildType` pgEnum). */
+export const BUILD_TYPES = [
+  "nixpacks",
+  "dockerfile",
+  "railpack",
+  "static",
+  "heroku_buildpacks",
+  "paketo_buildpacks",
+] as const;
+export type BuildType = (typeof BUILD_TYPES)[number];
+
 export interface AppDomain {
   domainId: string;
   host: string;
@@ -86,10 +97,18 @@ export interface AppDeployment {
 export interface Application extends ServiceBase {
   kind: "application";
   sourceType: AppSource | null;
-  buildType: string | null;
+  buildType: BuildType | null;
   description: string | null;
   /** Source repo/image reference for display (git URL or owner/repo). */
   repository: string | null;
+  // Build configuration (used to prefill the Build settings tab).
+  dockerfile: string | null;
+  dockerContextPath: string | null;
+  dockerBuildStage: string | null;
+  /** Custom start/run command appended to the container's entrypoint. */
+  command: string | null;
+  /** Registry host for docker-image apps (credentials are never read back). */
+  registryUrl: string | null;
   domains: AppDomain[];
   deployments: AppDeployment[];
 }
@@ -448,12 +467,17 @@ interface RawApplicationDetail {
   appName?: string;
   applicationStatus?: ServiceStatus;
   sourceType?: AppSource | null;
-  buildType?: string | null;
+  buildType?: BuildType | null;
   description?: string | null;
   customGitUrl?: string | null;
   owner?: string | null;
   repository?: string | null;
   dockerImage?: string | null;
+  dockerfile?: string | null;
+  dockerContextPath?: string | null;
+  dockerBuildStage?: string | null;
+  command?: string | null;
+  registryUrl?: string | null;
   env?: string | null;
   createdAt?: string | null;
   cpuLimit?: string | null;
@@ -490,6 +514,11 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
         repository:
           d.customGitUrl ?? (d.owner && d.repository ? `${d.owner}/${d.repository}` : null),
         dockerImage: d.dockerImage ?? null,
+        dockerfile: d.dockerfile ?? null,
+        dockerContextPath: d.dockerContextPath ?? null,
+        dockerBuildStage: d.dockerBuildStage ?? null,
+        command: d.command ?? null,
+        registryUrl: d.registryUrl ?? null,
         env: d.env ?? null,
         createdAt: d.createdAt ?? null,
         cpuLimit: d.cpuLimit ?? null,
@@ -572,6 +601,42 @@ export interface ApplicationPatch {
 
 export async function updateApplication(id: string, patch: ApplicationPatch): Promise<void> {
   await request("application.update", { method: "POST", body: { applicationId: id, ...patch } });
+}
+
+/** Build-strategy settings applied by `application.saveBuildType`. */
+export interface BuildTypePatch {
+  buildType: BuildType;
+  /** Dockerfile-build fields (ignored by other strategies). */
+  dockerfile?: string;
+  dockerContextPath?: string | null;
+  dockerBuildStage?: string | null;
+  railpackVersion?: string;
+  herokuVersion?: string;
+  publishDirectory?: string | null;
+  isStaticSpa?: boolean;
+}
+
+/**
+ * Set an application's build strategy (Nixpacks / Dockerfile / Railpack / …).
+ * `application.saveBuildType` requires the Dockerfile and version fields on every
+ * call (apiSaveBuildType marks them required), so we fill Dokploy's own defaults
+ * for whatever the caller omits. Takes effect on the next deploy.
+ */
+export async function saveAppBuildType(id: string, patch: BuildTypePatch): Promise<void> {
+  const body: Record<string, unknown> = {
+    applicationId: id,
+    buildType: patch.buildType,
+    dockerfile: patch.dockerfile?.trim() || "Dockerfile",
+    dockerContextPath: patch.dockerContextPath ?? null,
+    dockerBuildStage: patch.dockerBuildStage ?? null,
+    herokuVersion: patch.herokuVersion ?? "24",
+    railpackVersion: patch.railpackVersion ?? "0.15.4",
+  };
+  // publishDirectory/isStaticSpa are optional strings/booleans — omit when unset
+  // (null would fail their non-nullable zod schema).
+  if (patch.publishDirectory != null) body.publishDirectory = patch.publishDirectory;
+  if (patch.isStaticSpa !== undefined) body.isStaticSpa = patch.isStaticSpa;
+  await request("application.saveBuildType", { method: "POST", body });
 }
 
 export async function saveApplicationEnvironment(id: string, env: string): Promise<void> {
