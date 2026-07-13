@@ -187,6 +187,29 @@ export async function signInToDokploy(email: string, password: string): Promise<
 }
 
 /**
+ * Register a Dokploy account (better-auth sign-up) — the same call the CLI's
+ * terminal-guided registration makes (cli/src/core/dokploy-api.ts). On a fresh
+ * install the first sign-up becomes the admin; Dokploy rejects the call once
+ * registration is closed.
+ */
+export async function signUpToDokploy(
+  name: string,
+  email: string,
+  password: string
+): Promise<void> {
+  const res = await fetch(`${BASE}/api/auth/sign-up/email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: ORIGIN },
+    body: JSON.stringify({ name, email, password }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Dokploy sign-up failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+}
+
+/**
  * The CURRENT user's Dokploy cookie, read from the sealed Switchyard session.
  * The proxy blocks anonymous requests up front, so reaching here without a
  * valid session means the cookie is forged/expired -> send them to /login.
