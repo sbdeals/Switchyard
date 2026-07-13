@@ -24,10 +24,18 @@ import {
   createCompose,
   composeAction,
   updateComposeFile,
+  listSchedules,
+  createSchedule,
+  updateSchedule,
+  deleteSchedule,
+  runSchedule,
   type Action,
   type DatabasePatch,
   type ApplicationPatch,
   type Engine,
+  type Schedule,
+  type CreateScheduleInput,
+  type UpdateScheduleInput,
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
@@ -227,6 +235,40 @@ export async function createDomainAction(
   port: number
 ): Promise<ActionResult> {
   return wrap(() => createDomain(applicationId, host.trim(), port));
+}
+
+// --- schedules --------------------------------------------------------------
+
+export type SchedulesResult =
+  | { ok: true; schedules: Schedule[] }
+  | { ok: false; error: string };
+
+/** Load an application's cron schedules (called on demand by the drawer tab). */
+export async function listSchedulesAction(applicationId: string): Promise<SchedulesResult> {
+  try {
+    return { ok: true, schedules: await listSchedules(applicationId) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function createScheduleAction(input: CreateScheduleInput): Promise<ActionResult> {
+  return wrap(() => createSchedule(input));
+}
+
+export async function updateScheduleAction(
+  scheduleId: string,
+  input: UpdateScheduleInput
+): Promise<ActionResult> {
+  return wrap(() => updateSchedule(scheduleId, input));
+}
+
+export async function deleteScheduleAction(scheduleId: string): Promise<ActionResult> {
+  return wrap(() => deleteSchedule(scheduleId));
+}
+
+export async function runScheduleAction(scheduleId: string): Promise<ActionResult> {
+  return wrap(() => runSchedule(scheduleId));
 }
 
 // --- compose ----------------------------------------------------------------

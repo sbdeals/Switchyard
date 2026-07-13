@@ -17,6 +17,7 @@ import {
   Globe,
   Layers,
   FileCode,
+  Clock,
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -32,6 +33,7 @@ import {
   AppSettingsTab,
   DomainsTab,
   DeploymentsTab,
+  SchedulesTab,
 } from "@/components/service/AppTabs";
 import {
   ComposeOverviewTab,
@@ -56,6 +58,7 @@ type TabId =
   | "variables"
   | "domains"
   | "deployments"
+  | "schedules"
   | "editor"
   | "metrics"
   | "logs"
@@ -65,6 +68,7 @@ const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   variables: { label: "Variables", icon: <KeyRound className="size-4" /> },
   domains: { label: "Domains", icon: <Globe className="size-4" /> },
   deployments: { label: "Deploys", icon: <Rocket className="size-4" /> },
+  schedules: { label: "Schedules", icon: <Clock className="size-4" /> },
   editor: { label: "Compose", icon: <FileCode className="size-4" /> },
   metrics: { label: "Metrics", icon: <Cpu className="size-4" /> },
   logs: { label: "Logs", icon: <ScrollText className="size-4" /> },
@@ -76,6 +80,7 @@ const APP_TABS: TabId[] = [
   "variables",
   "domains",
   "deployments",
+  "schedules",
   "metrics",
   "logs",
   "settings",
@@ -150,6 +155,9 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               {tab === "domains" && service.kind === "application" && <DomainsTab app={service} />}
               {tab === "deployments" && service.kind === "application" && (
                 <DeploymentsTab app={service} />
+              )}
+              {tab === "schedules" && service.kind === "application" && (
+                <SchedulesTab app={service} />
               )}
               {tab === "editor" && service.kind === "compose" && (
                 <ComposeEditorTab compose={service} />
