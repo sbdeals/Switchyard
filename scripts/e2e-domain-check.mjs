@@ -11,6 +11,8 @@
 // Usage: node scripts/e2e-domain-check.mjs
 // Env: DOKPLOY_URL (default http://localhost:3000)
 
+import http from "node:http";
+
 const BASE = process.env.DOKPLOY_URL ?? "http://localhost:3000";
 // Fresh CI install: these register the first admin. Against an existing install
 // (local), pass the real DOKPLOY_EMAIL/DOKPLOY_PASSWORD and we sign in instead.
@@ -21,6 +23,34 @@ const IMAGE = "traefik/whoami:latest";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(`[e2e ${new Date().toISOString().slice(11, 19)}]`, ...a);
+
+/**
+ * GET http://127.0.0.1:80/ with an explicit Host header, via node:http.
+ *
+ * NOTE: fetch()/undici CANNOT be used here. `Host` is a forbidden request
+ * header in the Fetch spec, so undici silently drops an override and sends
+ * `Host: 127.0.0.1` — which matches no Traefik router and always 404s. The
+ * node:http client honors the Host header, so it actually exercises host-based
+ * routing without needing DNS for the sslip.io name.
+ */
+function routeGet(host) {
+  return new Promise((resolve) => {
+    const req = http.request(
+      { host: "127.0.0.1", port: 80, path: "/", method: "GET", headers: { Host: host } },
+      (res) => {
+        let body = "";
+        res.on("data", (c) => (body += c));
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+      }
+    );
+    req.on("error", (e) => resolve({ status: 0, body: e instanceof Error ? e.message : String(e) }));
+    req.setTimeout(8000, () => {
+      req.destroy();
+      resolve({ status: 0, body: "request timed out" });
+    });
+    req.end();
+  });
+}
 
 let cookie = "";
 
@@ -141,22 +171,14 @@ async function main() {
   let lastErr = "";
   const attempts = 90;
   for (let i = 0; i < attempts; i++) {
-    try {
-      const r = await fetch(`http://127.0.0.1:80/`, {
-        headers: { Host: HOST },
-        redirect: "manual",
-      });
-      const body = await r.text();
-      // whoami echoes request info including a "Hostname:" line.
-      if (r.ok && /Hostname:/i.test(body)) {
-        log("SUCCESS — custom domain routed to whoami through Traefik:");
-        console.log(body.split("\n").slice(0, 6).join("\n"));
-        return;
-      }
-      lastErr = `status ${r.status}, body ${JSON.stringify(body.slice(0, 120))}`;
-    } catch (e) {
-      lastErr = e instanceof Error ? e.message : String(e);
+    const r = await routeGet(HOST);
+    // whoami echoes request info including a "Hostname:" line.
+    if (r.status === 200 && /Hostname:/i.test(r.body)) {
+      log("SUCCESS — custom domain routed to whoami through Traefik:");
+      console.log(r.body.split("\n").slice(0, 6).join("\n"));
+      return;
     }
+    lastErr = `status ${r.status}, body ${JSON.stringify(r.body.slice(0, 120))}`;
     if (i % 10 === 9) log(`  still waiting for the route (${i + 1}/${attempts}) — last: ${lastErr}`);
     await sleep(4000);
   }

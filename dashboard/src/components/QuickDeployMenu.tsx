@@ -270,11 +270,8 @@ export function QuickDeployMenu({
                           <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[var(--color-surface)]">
                             {busy === `tpl:${t.id}` ? (
                               <Loader2 className="size-4 animate-spin" />
-                            ) : t.logo ? (
-                              // eslint-disable-next-line @next/next/no-img-element -- remote template logos from arbitrary hosts; next/image would need per-host remotePatterns
-                              <img src={t.logo} alt="" className="size-5 object-contain" />
                             ) : (
-                              <LayoutTemplate className="size-4 text-[var(--color-fg-subtle)]" />
+                              <TemplateLogo logo={t.logo} />
                             )}
                           </span>
                           <span className="min-w-0 flex-1">
@@ -334,6 +331,23 @@ export function QuickDeployMenu({
         onDeployed={onDeployed}
       />
     </div>
+  );
+}
+
+/**
+ * A template's logo, falling back to a generic icon. Template logos are remote
+ * CDN assets and many are missing — the CDN soft-404s to an HTML page, which a
+ * plain <img> renders as a broken-image glyph. onError swaps in the icon so a
+ * missing logo shows a clean placeholder instead of a broken image.
+ */
+function TemplateLogo({ logo }: { logo: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!logo || failed) {
+    return <LayoutTemplate className="size-4 text-[var(--color-fg-subtle)]" />;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- remote template logos from arbitrary hosts; next/image would need per-host remotePatterns
+    <img src={logo} alt="" className="size-5 object-contain" onError={() => setFailed(true)} />
   );
 }
 
