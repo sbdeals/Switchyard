@@ -859,6 +859,317 @@ export async function composeAction(id: string, action: Action): Promise<void> {
   await request(`compose.${proc}`, { method: "POST", body: { composeId: id } });
 }
 
+// --- backups (S3 destinations + scheduled database backups) -----------------
+//
+// Dokploy models offsite backups in two layers:
+//   1. S3 "destinations" — org-wide bucket credentials (`destination.*`).
+//   2. per-database "backups" — a cron schedule + prefix pointed at a
+//      destination, plus a manual "run now" and a restore.
+//
+// Everything here rides the same OpenAPI REST layer (`/api/<procedure>`,
+// plain JSON) as the rest of this file — EXCEPT restore. Dokploy exposes
+// restore ONLY as a tRPC *subscription* (`backup.restoreBackupWithLogs`, with
+// its OpenAPI mapping explicitly disabled); see restoreBackup() below.
+//
+// Backups apply to the four dumpable engines only — Dokploy's `databaseType`
+// enum has no `redis` (Redis is not backed up this way).
+
+export type BackupEngine = Exclude<Engine, "redis">;
+
+/** Dokploy's per-engine "manual backup" procedure names (note the casing). */
+const MANUAL_BACKUP_PROC: Record<BackupEngine, string> = {
+  postgres: "manualBackupPostgres",
+  mysql: "manualBackupMySql",
+  mariadb: "manualBackupMariadb",
+  mongo: "manualBackupMongo",
+};
+
+export interface S3Destination {
+  destinationId: string;
+  name: string;
+  provider: string | null;
+  bucket: string;
+  region: string;
+  endpoint: string;
+}
+
+interface RawDestination {
+  destinationId: string;
+  name: string;
+  provider?: string | null;
+  bucket?: string;
+  region?: string;
+  endpoint?: string;
+}
+
+/** List the org's configured S3 destinations (credentials omitted). */
+export async function listDestinations(): Promise<S3Destination[]> {
+  const raw = await request<RawDestination[]>("destination.all");
+  return (raw ?? []).map((d) => ({
+    destinationId: d.destinationId,
+    name: d.name,
+    provider: d.provider ?? null,
+    bucket: d.bucket ?? "",
+    region: d.region ?? "",
+    endpoint: d.endpoint ?? "",
+  }));
+}
+
+export interface CreateDestinationInput {
+  name: string;
+  /** S3 access key id. Entered by the operator; passed straight to Dokploy. */
+  accessKey: string;
+  /** S3 secret access key. Never logged or returned to the client. */
+  secretAccessKey: string;
+  bucket: string;
+  region: string;
+  endpoint: string;
+  provider?: string;
+}
+
+function destinationBody(input: CreateDestinationInput): Record<string, unknown> {
+  return {
+    name: input.name,
+    provider: input.provider ?? "",
+    accessKey: input.accessKey,
+    secretAccessKey: input.secretAccessKey,
+    bucket: input.bucket,
+    region: input.region,
+    endpoint: input.endpoint,
+    additionalFlags: [],
+  };
+}
+
+/** Dry-run a destination's credentials without persisting it. */
+export async function testDestination(input: CreateDestinationInput): Promise<void> {
+  await request("destination.testConnection", { method: "POST", body: destinationBody(input) });
+}
+
+/** Persist a new S3 destination for the org. */
+export async function createDestination(input: CreateDestinationInput): Promise<void> {
+  await request("destination.create", { method: "POST", body: destinationBody(input) });
+}
+
+export async function removeDestination(destinationId: string): Promise<void> {
+  await request("destination.remove", { method: "POST", body: { destinationId } });
+}
+
+export interface DatabaseBackup {
+  backupId: string;
+  schedule: string;
+  enabled: boolean;
+  /** The database name this backup dumps. */
+  database: string;
+  /** S3 key prefix the dumps are written under. */
+  prefix: string;
+  keepLatestCount: number | null;
+  destinationId: string;
+  destinationName: string | null;
+}
+
+interface RawBackup {
+  backupId: string;
+  schedule: string;
+  enabled?: boolean | null;
+  database: string;
+  prefix: string;
+  keepLatestCount?: number | null;
+  destinationId: string;
+  destination?: { name?: string } | null;
+}
+interface RawDbWithBackups {
+  backups?: RawBackup[];
+}
+
+/** List a database's configured backups (read from its `<engine>.one` detail). */
+export async function listDatabaseBackups(
+  engine: BackupEngine,
+  id: string
+): Promise<DatabaseBackup[]> {
+  const detail = await request<RawDbWithBackups>(
+    `${engine}.one?${idKey(engine)}=${encodeURIComponent(id)}`
+  );
+  return (detail.backups ?? []).map((b) => ({
+    backupId: b.backupId,
+    schedule: b.schedule,
+    enabled: b.enabled ?? false,
+    database: b.database,
+    prefix: b.prefix,
+    keepLatestCount: b.keepLatestCount ?? null,
+    destinationId: b.destinationId,
+    destinationName: b.destination?.name ?? null,
+  }));
+}
+
+export interface CreateBackupInput {
+  engine: BackupEngine;
+  databaseId: string;
+  destinationId: string;
+  /** Database name to dump. */
+  database: string;
+  /** Cron expression. */
+  schedule: string;
+  /** S3 key prefix. */
+  prefix: string;
+  enabled: boolean;
+  keepLatestCount?: number | null;
+}
+
+/** Create a scheduled backup for a database. */
+export async function createDatabaseBackup(input: CreateBackupInput): Promise<void> {
+  await request("backup.create", {
+    method: "POST",
+    body: {
+      [idKey(input.engine)]: input.databaseId,
+      // For these four engines the `databaseType` enum equals the engine name.
+      databaseType: input.engine,
+      backupType: "database",
+      destinationId: input.destinationId,
+      database: input.database,
+      schedule: input.schedule,
+      prefix: input.prefix,
+      enabled: input.enabled,
+      keepLatestCount: input.keepLatestCount ?? undefined,
+    },
+  });
+}
+
+export interface UpdateBackupInput {
+  backupId: string;
+  engine: BackupEngine;
+  destinationId: string;
+  database: string;
+  schedule: string;
+  prefix: string;
+  enabled: boolean;
+  keepLatestCount?: number | null;
+}
+
+/** Update an existing backup (used e.g. to toggle `enabled` or change schedule). */
+export async function updateDatabaseBackup(input: UpdateBackupInput): Promise<void> {
+  // `apiUpdateBackup` marks every picked field required, including the nullable
+  // `serviceName`/`metadata` (compose-only) — send explicit nulls for those.
+  await request("backup.update", {
+    method: "POST",
+    body: {
+      backupId: input.backupId,
+      databaseType: input.engine,
+      destinationId: input.destinationId,
+      database: input.database,
+      schedule: input.schedule,
+      prefix: input.prefix,
+      enabled: input.enabled,
+      keepLatestCount: input.keepLatestCount ?? 0,
+      serviceName: null,
+      metadata: null,
+    },
+  });
+}
+
+export async function removeDatabaseBackup(backupId: string): Promise<void> {
+  await request("backup.remove", { method: "POST", body: { backupId } });
+}
+
+/** Trigger an immediate ("back up now") run of a configured backup. */
+export async function runDatabaseBackup(engine: BackupEngine, backupId: string): Promise<void> {
+  await request(`backup.${MANUAL_BACKUP_PROC[engine]}`, {
+    method: "POST",
+    body: { backupId },
+  });
+}
+
+export interface BackupFile {
+  path: string;
+  name: string;
+  size: number;
+  isDir: boolean;
+}
+
+interface RawRcloneFile {
+  Path: string;
+  Name: string;
+  Size: number;
+  IsDir: boolean;
+}
+
+/** List objects in a destination's bucket (for picking a file to restore). */
+export async function listBackupFiles(
+  destinationId: string,
+  search = ""
+): Promise<BackupFile[]> {
+  const raw = await request<RawRcloneFile[]>(
+    `backup.listBackupFiles?destinationId=${encodeURIComponent(destinationId)}&search=${encodeURIComponent(search)}`
+  );
+  return (raw ?? []).map((f) => ({
+    path: f.Path,
+    name: f.Name,
+    size: f.Size,
+    isDir: f.IsDir,
+  }));
+}
+
+export interface RestoreBackupInput {
+  engine: BackupEngine;
+  /** Id of the database to restore INTO. */
+  databaseId: string;
+  /** Target database name to restore into. */
+  databaseName: string;
+  /** S3 object path (from listBackupFiles) to restore from. */
+  backupFile: string;
+  destinationId: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Restore a backup into a database.
+ *
+ * IMPORTANT: Dokploy exposes restore ONLY as a tRPC *subscription*
+ * (`backup.restoreBackupWithLogs`) whose OpenAPI/REST mapping is explicitly
+ * disabled — there is no plain REST mutation. Dokploy's own UI drives it over a
+ * WebSocket (`/drawer-logs`, superjson-encoded). To avoid adding a WebSocket
+ * client, we consume the SAME procedure over tRPC v11's SSE transport on the
+ * standard `/api/trpc` handler, reusing this BFF's cookie auth, and read the
+ * stream to completion (the restore executes server-side as we drain it). The
+ * subscription generator prepends `Error: ...` to the log stream on failure,
+ * which we surface. This path is unverified against a live Dokploy; if the SSE
+ * transport is rejected, a `ws` client against `/drawer-logs` is the fallback.
+ */
+export async function restoreBackup(input: RestoreBackupInput): Promise<void> {
+  const payload = {
+    databaseId: input.databaseId,
+    databaseType: input.engine,
+    backupType: "database",
+    databaseName: input.databaseName,
+    backupFile: input.backupFile,
+    destinationId: input.destinationId,
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+  };
+  // tRPC applies superjson to subscription inputs; for this all-plain payload
+  // the superjson envelope is simply `{ json: payload }` (no `meta`).
+  const inputParam = encodeURIComponent(JSON.stringify({ json: payload }));
+  const url = `${BASE}/api/trpc/backup.restoreBackupWithLogs?input=${inputParam}`;
+  const run = (cookie: string) =>
+    fetch(url, {
+      method: "GET",
+      headers: { Accept: "text/event-stream", Origin: ORIGIN, Cookie: cookie },
+      cache: "no-store",
+    });
+
+  let res = await run(await getCookie());
+  if (res.status === 401) {
+    cookieCache = null;
+    res = await run(await getCookie());
+  }
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Dokploy restore failed (${res.status}): ${body.slice(0, 300)}`);
+  }
+  // Drain the stream to EOF — the subscription closes when the restore finishes.
+  const text = await res.text();
+  const err = text.match(/Error:\s*([^"\\\n]+)/);
+  if (err) throw new Error(err[1].trim().slice(0, 300));
+}
+
 // --- unified service listing ------------------------------------------------
 
 /**

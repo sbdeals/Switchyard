@@ -32,6 +32,29 @@ import {
   type ApplicationPatch,
   type Engine,
 } from "@/lib/dokploy";
+// Backups: S3 destinations + scheduled database backups (see the "backups"
+// section below). Kept as a separate import to reduce merge churn.
+import {
+  listDestinations,
+  createDestination,
+  testDestination,
+  removeDestination,
+  listDatabaseBackups,
+  createDatabaseBackup,
+  updateDatabaseBackup,
+  removeDatabaseBackup,
+  runDatabaseBackup,
+  listBackupFiles,
+  restoreBackup,
+  type BackupEngine,
+  type S3Destination,
+  type DatabaseBackup,
+  type BackupFile,
+  type CreateDestinationInput,
+  type CreateBackupInput,
+  type UpdateBackupInput,
+  type RestoreBackupInput,
+} from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
 
@@ -316,4 +339,96 @@ export async function saveComposeFileAction(
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");
   });
+}
+
+// --- backups ----------------------------------------------------------------
+//
+// Wraps Dokploy's S3 destinations + per-database scheduled backups. Mutations
+// use the shared `wrap()`; the list/read actions return data, so they carry
+// their own result shapes (mirroring `wrap`'s error normalization via `fail`).
+
+export type DestinationsResult =
+  | { ok: true; destinations: S3Destination[] }
+  | { ok: false; error: string };
+export type BackupsResult =
+  | { ok: true; backups: DatabaseBackup[] }
+  | { ok: false; error: string };
+export type BackupFilesResult =
+  | { ok: true; files: BackupFile[] }
+  | { ok: false; error: string };
+
+export async function listDestinationsAction(): Promise<DestinationsResult> {
+  try {
+    return { ok: true, destinations: await listDestinations() };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function testDestinationAction(
+  input: CreateDestinationInput
+): Promise<ActionResult> {
+  // testConnection is a read-only probe; no revalidation needed but harmless.
+  return wrap(() => testDestination(input));
+}
+
+export async function createDestinationAction(
+  input: CreateDestinationInput
+): Promise<ActionResult> {
+  return wrap(() => createDestination(input));
+}
+
+export async function removeDestinationAction(destinationId: string): Promise<ActionResult> {
+  return wrap(() => removeDestination(destinationId));
+}
+
+export async function listDatabaseBackupsAction(
+  engine: BackupEngine,
+  id: string
+): Promise<BackupsResult> {
+  try {
+    return { ok: true, backups: await listDatabaseBackups(engine, id) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function createDatabaseBackupAction(
+  input: CreateBackupInput
+): Promise<ActionResult> {
+  return wrap(() => createDatabaseBackup(input));
+}
+
+export async function updateDatabaseBackupAction(
+  input: UpdateBackupInput
+): Promise<ActionResult> {
+  return wrap(() => updateDatabaseBackup(input));
+}
+
+export async function removeDatabaseBackupAction(backupId: string): Promise<ActionResult> {
+  return wrap(() => removeDatabaseBackup(backupId));
+}
+
+/** Trigger an immediate "back up now" run. */
+export async function runDatabaseBackupAction(
+  engine: BackupEngine,
+  backupId: string
+): Promise<ActionResult> {
+  return wrap(() => runDatabaseBackup(engine, backupId));
+}
+
+export async function listBackupFilesAction(
+  destinationId: string,
+  search = ""
+): Promise<BackupFilesResult> {
+  try {
+    return { ok: true, files: await listBackupFiles(destinationId, search) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Restore a backup (destructive — the UI confirms before calling this). */
+export async function restoreBackupAction(input: RestoreBackupInput): Promise<ActionResult> {
+  return wrap(() => restoreBackup(input));
 }

@@ -17,6 +17,7 @@ import {
   Globe,
   Layers,
   FileCode,
+  Archive,
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -25,6 +26,7 @@ import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
+import { BackupsTab } from "@/components/service/BackupsTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import {
@@ -59,6 +61,7 @@ type TabId =
   | "editor"
   | "metrics"
   | "logs"
+  | "backups"
   | "settings";
 const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
@@ -68,9 +71,10 @@ const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   editor: { label: "Compose", icon: <FileCode className="size-4" /> },
   metrics: { label: "Metrics", icon: <Cpu className="size-4" /> },
   logs: { label: "Logs", icon: <ScrollText className="size-4" /> },
+  backups: { label: "Backups", icon: <Archive className="size-4" /> },
   settings: { label: "Settings", icon: <Settings2 className="size-4" /> },
 };
-const DB_TABS: TabId[] = ["overview", "variables", "metrics", "logs", "settings"];
+const DB_TABS: TabId[] = ["overview", "variables", "metrics", "logs", "backups", "settings"];
 const APP_TABS: TabId[] = [
   "overview",
   "variables",
@@ -156,6 +160,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               )}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
               {tab === "logs" && <LogsTab key={service.appName} appName={service.appName} active />}
+              {tab === "backups" && service.kind === "database" && <BackupsTab db={service} />}
               {tab === "settings" &&
                 (service.kind === "database" ? (
                   <SettingsTab db={service} onClose={onClose} />
