@@ -35,6 +35,16 @@ test("expose switches the publish binding (and the hash)", () => {
   assert.notEqual(closed.hash, open.hash);
 });
 
+test("hostIp adds SWITCHYARD_HOST_IP and changes the hash; empty is a no-op", () => {
+  const cfg = defaultConfig("linux");
+  const base = renderContainer(cfg, "1.0.0");
+  // Empty hostIp (the default) must not add the env or perturb the hash.
+  assert.ok(!base.runArgs.some((a) => a.startsWith("SWITCHYARD_HOST_IP=")));
+  const withIp = renderContainer({ ...cfg, hostIp: "203.0.113.10" }, "1.0.0");
+  assert.ok(withIp.runArgs.includes("SWITCHYARD_HOST_IP=203.0.113.10"));
+  assert.notEqual(base.hash, withIp.hash);
+});
+
 test("run args carry the BFF env and labels", () => {
   const cfg = { ...defaultConfig("linux"), adminEmail: "a@b.co", adminPassword: "pw" };
   const plan = renderContainer(cfg, "1.0.0");

@@ -24,7 +24,7 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
   const tag = cfg.imageTag || cliVersion;
   const image = `${cfg.image}:${tag}`;
   const bindHost = cfg.expose ? "0.0.0.0" : "127.0.0.1";
-  const env = {
+  const env: Record<string, string> = {
     DOKPLOY_URL: cfg.dokployUrlInContainer,
     // better-auth only trusts Dokploy's host-facing origins; the service-DNS
     // URL the container connects through is not one of them (403
@@ -33,6 +33,11 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
     DOKPLOY_EMAIL: cfg.adminEmail,
     DOKPLOY_PASSWORD: cfg.adminPassword,
   };
+  // Host IP for auto-URL on app deploys. Only set on Linux (Traefik managed);
+  // its presence is the dashboard's signal that auto-URL is safe. Added only
+  // when non-empty so an unset value leaves the hash (and Docker Desktop
+  // containers) unchanged; a changed IP recreates the container.
+  if (cfg.hostIp) env.SWITCHYARD_HOST_IP = cfg.hostIp;
   const spec = {
     image,
     network: NETWORK_NAME,

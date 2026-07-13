@@ -24,7 +24,9 @@ const useAppLifecycle = (app: Application) =>
 
 export function AppOverviewTab({ app }: { app: Application }) {
   const { pending, error, run } = useAppLifecycle(app);
-  const primary = app.domains[0];
+  // Elect the Public URL: prefer an https domain (the auto-URL minted on deploy
+  // is created with HTTPS) so it wins over any plain-HTTP entry; else the first.
+  const primary = app.domains.find((d) => d.https) ?? app.domains[0];
 
   return (
     <div className="space-y-5">

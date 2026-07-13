@@ -12,7 +12,7 @@ import {
   waitSwitchyardHealthy,
 } from "../core/switchyard-container.js";
 import { generatePassword, isValidEmail } from "../core/util.js";
-import { isRoot } from "../platform/linux.js";
+import { detectHostIp, isRoot } from "../platform/linux.js";
 import { platformFor } from "../platform/index.js";
 import { CLI_VERSION } from "../version.js";
 
@@ -171,6 +171,20 @@ export async function upCommand(flags: UpFlags): Promise<void> {
 
   // ---- admin account -----------------------------------------------------
   await ensureAdmin(cfg, base, interactive);
+
+  // ---- auto-URL: detect the host IP so app deploys get a public URL --------
+  // Linux only (Traefik is managed there); Docker Desktop leaves hostIp unset,
+  // which makes auto-URL a no-op in the dashboard. Detect only when unset so
+  // re-runs stay idempotent and a manual `config set hostIp` override sticks.
+  if (cfg.platform === "linux" && !cfg.hostIp) {
+    const ip = await detectHostIp();
+    if (ip) {
+      cfg.hostIp = ip;
+      info(`Auto-URL enabled — app deploys get a URL on ${ip} (Dokploy *.traefik.me / *.${ip}.sslip.io).`);
+    } else {
+      warn("Could not detect a host IP — app deploys won't get an automatic URL. Set one with `switchyard config set hostIp <ip>`.");
+    }
+  }
   saveConfig(cfg, loaded.path);
 
   // ---- Switchyard container ----------------------------------------------

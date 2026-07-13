@@ -176,6 +176,8 @@ Two prerequisites, both outside Switchyard:
 
 Attached domains appear as clickable rows above the form, and the first one becomes the Public URL on the Overview tab.
 
+**Auto-URL.** On the Linux path you usually don't add anything here: deploying an app mints a public URL automatically (a Dokploy `*.traefik.me` host, or `<app-name>.<server-ip>.sslip.io` — both resolve to the server with no DNS to configure) and it shows up as the Public URL on the Overview tab. It routes to container port `3000` by default; if your app listens on a different port, add a domain here with the right port. Auto-URL is **off on Docker Desktop and in dev mode** — there the Dokploy Traefik proxy isn't managed, so nothing would route, and you add domains by hand as above.
+
 ### Deployment history
 
 The **Deploys** tab (applications only) lists every deployment, newest first. Each row shows a status dot (green done, red error, amber in progress), the deployment title, its timestamp, and the status as text — so after a few redeploys you can see at a glance when the app last shipped cleanly and whether anything failed. A never-deployed app shows "No deployments yet."

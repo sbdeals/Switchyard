@@ -594,6 +594,105 @@ export async function createDomain(applicationId: string, host: string, port = 8
   });
 }
 
+// --- auto-URL: mint a reachable public URL on deploy ------------------------
+//
+// On the Linux path Dokploy runs Traefik on 80/443 and can route a wildcard
+// host that resolves to the host IP with no DNS setup. We prefer Dokploy's
+// built-in `domain.generateDomain`, which returns a `*.traefik.me` host
+// (`<appName>-<rand>.<hostIP>.traefik.me`). traefik.me domains are served over
+// a shared cert, so they are created with certificateType "none" (a Let's
+// Encrypt request for traefik.me just hits rate limits and fails). When Dokploy
+// can't produce a usable host (e.g. it couldn't detect the server IP) we fall
+// back to `<appName>.<SWITCHYARD_HOST_IP>.sslip.io` — the CLI hands us the
+// host's advertise IP — and request a real Let's Encrypt cert for it.
+//
+// The whole feature is gated on SWITCHYARD_HOST_IP, which the CLI sets only on
+// the Linux platform (where Traefik is managed). On Docker Desktop and in dev
+// mode it is unset, so auto-URL is a no-op and a deploy simply leaves the app
+// without a domain.
+
+/** Container port auto-domains route to (Nixpacks/Node apps default here). */
+const AUTO_DOMAIN_PORT = 3000;
+
+/** True for hosts we mint automatically (traefik.me / sslip.io wildcards). */
+export function isAutoDomainHost(host: string): boolean {
+  return /\.traefik\.me$|\.sslip\.io$/i.test(host.trim());
+}
+
+/** A generated host is usable only if it carries a real, routable IP. */
+function usableGeneratedHost(host: string): boolean {
+  const h = host.trim();
+  if (!h || !h.includes(".") || h.includes("..")) return false;
+  // Reject a loopback/empty IP segment — Dokploy failed to detect the server IP.
+  return !/\.(127\.0\.0\.1|0\.0\.0\.0|localhost)\./i.test(h);
+}
+
+/**
+ * Ask Dokploy for a generated `*.traefik.me` host for `appName`. Returns the
+ * bare hostname, or null when the procedure is unavailable / returns nothing
+ * usable. `domain.generateDomain` only computes a host string — it does not
+ * persist a domain, so the caller still creates one.
+ */
+async function generateTraefikMeHost(appName: string): Promise<string | null> {
+  try {
+    const res = await request<unknown>("domain.generateDomain", {
+      method: "POST",
+      body: { appName },
+    });
+    const host =
+      typeof res === "string"
+        ? res
+        : ((res as { domain?: string; host?: string } | null)?.domain ??
+          (res as { host?: string } | null)?.host ??
+          null);
+    return host && usableGeneratedHost(host) ? host.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Create a domain with an explicit cert type (used by the auto-URL variants). */
+async function createDomainRecord(
+  applicationId: string,
+  host: string,
+  certificateType: "none" | "letsencrypt"
+): Promise<void> {
+  await request("domain.create", {
+    method: "POST",
+    body: { applicationId, host, port: AUTO_DOMAIN_PORT, https: true, certificateType },
+  });
+}
+
+/**
+ * Mint a public URL for a freshly-deployed application and return its host, or
+ * null when auto-URL isn't available (no SWITCHYARD_HOST_IP → Docker Desktop /
+ * dev). Idempotent: if the app already carries an auto-domain the existing host
+ * is returned without creating a second one.
+ */
+export async function ensureAutoDomain(applicationId: string): Promise<string | null> {
+  const hostIp = process.env.SWITCHYARD_HOST_IP?.trim();
+  if (!hostIp) return null; // Docker Desktop / dev: Traefik unmanaged, no-op.
+
+  // One call gives us both the appName (for the generator / sslip.io host) and
+  // the current domains (so redeploys don't stack duplicate auto-domains).
+  const detail = await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(applicationId)}`
+  );
+  const appName = detail.appName ?? "";
+  if (!appName) return null;
+  const existing = (detail.domains ?? []).find((d) => isAutoDomainHost(d.host));
+  if (existing) return existing.host;
+
+  const generated = await generateTraefikMeHost(appName);
+  if (generated) {
+    await createDomainRecord(applicationId, generated, "none");
+    return generated;
+  }
+  const host = `${appName}.${hostIp}.sslip.io`;
+  await createDomainRecord(applicationId, host, "letsencrypt");
+  return host;
+}
+
 // --- compose ----------------------------------------------------------------
 
 interface RawComposeDetail {

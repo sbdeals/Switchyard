@@ -122,6 +122,7 @@ dashboard container gets its credentials without hand-edited env files).
 | `image` | `ghcr.io/sbdeals/switchyard` | Dashboard image repo |
 | `imageTag` | `""` (= CLI version) | Pin a dashboard image tag |
 | `dokployUrlInContainer` | `http://dokploy:3000` | How the container reaches Dokploy (service DNS) |
+| `hostIp` | `""` (auto-detected on Linux) | Host public/advertise IP handed to the dashboard as `SWITCHYARD_HOST_IP` so app deploys mint an auto-URL (traefik.me / sslip.io) with no DNS. `""` disables auto-URL (Docker Desktop / dev). Override with `config set hostIp <ip>` |
 
 Change a setting and apply it in one step — `set` recreates the container
 when the value affects it:

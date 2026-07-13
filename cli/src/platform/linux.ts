@@ -2,13 +2,24 @@ import { chmodSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { docker, runInherit } from "../core/docker.js";
+import { docker, run, runInherit } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { servicePublishedPort } from "../core/swarm.js";
 import type { PlatformModule } from "./types.js";
 
 export function isRoot(): boolean {
   return typeof process.getuid === "function" && process.getuid() === 0;
+}
+
+/**
+ * The host's advertise IP, via the shared bash detection (keeps IP logic in
+ * scripts/*.sh, per the Linux-behavior-in-scripts rule). Returns "" when it
+ * can't be determined. No root needed — host-ip.sh only reads.
+ */
+export async function detectHostIp(): Promise<string> {
+  const script = join(bundledScriptsDir(), "host-ip.sh");
+  const res = await run("bash", [script]);
+  return res.code === 0 ? res.stdout.trim() : "";
 }
 
 /**

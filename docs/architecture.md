@@ -78,10 +78,19 @@ The action surface, one line each:
 | Lifecycle | `lifecycleAction` / `appLifecycleAction` / `composeLifecycleAction` — `deploy`, `start`, `stop`, `remove` (compose maps `remove` to Dokploy's `compose.delete`) |
 | Settings | `updateDatabaseAction` (reloads the container when image/resources/port change), `updateApplicationAction` (optional redeploy), `saveComposeFileAction` |
 | Env vars | `saveEnvironmentAction` (databases), `saveApplicationEnvAction` |
-| Domains | `createDomainAction` — `domain.create` with `https: true` and Let's Encrypt |
+| Domains | `createDomainAction` — `domain.create` with `https: true` and Let's Encrypt; app quick-deploys additionally call `ensureAutoDomain` to mint a public URL automatically (see below) |
 | Projects | create/rename/remove project and environment |
 
 Quick deploys route through `resolveTargetEnv()`: if no environment is picked and none exists, it creates a default "My Project" (Dokploy auto-creates its default environment) and deploys there.
+
+### Auto-URL: a public URL on app deploy
+
+`quickDeployRepoAction` / `quickDeployImageAction` mint a reachable URL right after kicking off the deploy, so an app has a Public URL with no manual DNS. `ensureAutoDomain()` (in `dokploy.ts`) is gated on the `SWITCHYARD_HOST_IP` env var — set only on the Linux path where Dokploy's Traefik owns 80/443. Its logic:
+
+1. Prefer Dokploy's built-in `domain.generateDomain`, which returns a `*.traefik.me` host (`<appName>-<rand>.<hostIP>.traefik.me`) that resolves to the host IP with no DNS. traefik.me is served over a shared cert, so the domain is created with `certificateType: "none"`.
+2. Fall back to `<appName>.<SWITCHYARD_HOST_IP>.sslip.io` (sslip.io resolves any embedded IP) with a real Let's Encrypt cert, when Dokploy can't produce a usable host.
+
+It is idempotent — if the app already carries a `*.traefik.me`/`*.sslip.io` domain it returns that host instead of creating a second one — and best-effort: a failure to mint the URL never fails the deploy (the app is just left domain-less). The minted domain is created with HTTPS, so the Overview tab elects it as the Public URL. On **Docker Desktop and in dev mode `SWITCHYARD_HOST_IP` is unset**, so auto-URL is a documented no-op (Traefik is unmanaged there and domains wouldn't route); add a domain by hand in the Domains tab if needed.
 
 ## Live logs and metrics over SSE
 
@@ -165,5 +174,6 @@ const nextConfig: NextConfig = {
 | `DOKPLOY_EMAIL` | — | Dokploy admin email (BFF sign-in) |
 | `DOKPLOY_PASSWORD` | — | Dokploy admin password |
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker Engine socket; `//./pipe/docker_engine` on Windows |
+| `SWITCHYARD_HOST_IP` | — | Host public/advertise IP. When set, app deploys mint an auto-URL (traefik.me / sslip.io) with no DNS. Unset = auto-URL disabled (dev / Docker Desktop). The CLI sets it on Linux. |
 
 Set them in `dashboard/.env.local` (template: `dashboard/.env.example`). The dev and prod servers both bind port **3001** (`next dev -p 3001` / `next start -p 3001`), since Dokploy owns `:3000`.

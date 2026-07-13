@@ -21,6 +21,7 @@ import {
   updateApplication,
   saveApplicationEnvironment,
   createDomain,
+  ensureAutoDomain,
   createCompose,
   composeAction,
   updateComposeFile,
@@ -177,6 +178,7 @@ export async function quickDeployImageAction(
     );
     await setAppDockerSource(id, trimmed);
     await applicationAction(id, "deploy");
+    await mintAutoDomain(id);
     return id;
   });
 }
@@ -198,8 +200,22 @@ export async function quickDeployRepoAction(
     );
     await setAppGitSource(id, url, branch?.trim() || "main");
     await applicationAction(id, "deploy");
+    await mintAutoDomain(id);
     return id;
   });
+}
+
+/**
+ * Best-effort: give a freshly-deployed app a public URL (no-op off the
+ * Linux/Traefik path — see `ensureAutoDomain`). Never fails the deploy over
+ * domain creation; the user can always add one in the Domains tab.
+ */
+async function mintAutoDomain(applicationId: string): Promise<void> {
+  try {
+    await ensureAutoDomain(applicationId);
+  } catch {
+    /* leave the app domain-less rather than failing the deploy */
+  }
 }
 
 export async function appLifecycleAction(id: string, action: Action): Promise<ActionResult> {
