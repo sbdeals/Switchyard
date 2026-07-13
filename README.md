@@ -62,12 +62,16 @@ reference: [docs/cli.md](docs/cli.md).
 - **Databases** — Postgres, MySQL, MariaDB, MongoDB, Redis: one-click deploy,
   connection strings, env editor, resource/version/port settings, and
   **backups** (S3 destinations, cron schedules, back-up-now, restore).
-- **Applications** — deploy from a Docker image or a public Git repo (Nixpacks
-  build); an **auto-minted public URL** on deploy (traefik.me / sslip.io — no
-  DNS setup on the Linux path); domains with auto-SSL; variables; deployment
-  history with **rollback** (registry snapshots) and a per-app
-  **push-to-deploy webhook** you can wire into your Git host.
+- **Applications** — deploy from a Docker image, a public Git repo, or a
+  **private repo via the GitHub App** (installation → repo → branch); browse and
+  one-click deploy Dokploy's **template catalog**; configurable **builds**
+  (Nixpacks / Dockerfile / Railpack / Static / buildpacks, start command, private
+  registry); an **auto-minted public URL** on deploy (traefik.me / sslip.io — no
+  DNS setup on the Linux path); **custom domains** with edit/delete + auto-SSL;
+  variables; **cron schedules**; deployment history with **rollback** (registry
+  snapshots) and a per-app **push-to-deploy webhook** for your Git host.
 - **Compose** — docker-compose stacks with an in-app YAML editor.
+- **Volumes** — persistent volume / bind / file mounts on any service.
 - **Live logs & metrics** — streamed straight from the Docker Engine API over
   SSE, plus **persisted metric history** (range queries that survive tab close)
   and **crash-loop alerts** through Dokploy's notification channels.
@@ -139,6 +143,13 @@ can't route service VIPs). Details and symptoms live in
 - [x] Observability persistence (switchyard-metrics Postgres) + crash-loop
       alerts via Dokploy notifications
 - [x] MCP server so Claude Code drives Dokploy directly (`mcp/`, `.mcp.json`)
+- [x] Private-repo deploys via the Dokploy **GitHub App** (installation → repo →
+      branch, push auto-deploy)
+- [x] Dokploy **template catalog** in the New-service menu
+- [x] **Build config** (Dockerfile / build type / start command / private
+      registry), **cron schedules**, and **volume mounts** surfaced per service
+- [x] **Custom-domain management** (edit/delete/cert-type) + opt-in local-ingress
+      demo (`switchyard local-ingress`, HTTP-only) for Docker Desktop
 - [ ] Per-deployment build logs in the dashboard
 - [ ] TLS for the dashboard itself (today: localhost default / HTTPS proxy for
-      exposure)
+      exposure); real Let's Encrypt custom domains need a Linux host on 80/443
