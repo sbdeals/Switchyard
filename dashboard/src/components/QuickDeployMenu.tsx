@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Database as DatabaseIcon, Box, Layers, GitBranch, Loader2, AlertCircle } from "lucide-react";
+import { Plus, Database as DatabaseIcon, Box, Layers, GitBranch, GitFork, Loader2, AlertCircle } from "lucide-react";
 import type { Engine, ProjectNode } from "@/lib/dokploy";
 import { ENGINE_LIST } from "@/lib/engines";
 import {
@@ -11,6 +11,7 @@ import {
   quickDeployRepoAction,
   createComposeAction,
 } from "@/app/actions";
+import { GithubDeployModal } from "@/components/GithubDeployModal";
 
 /**
  * One-click provisioning: pick a database engine (auto name/password/version) or
@@ -25,6 +26,7 @@ export function QuickDeployMenu({
   onDeployed: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [image, setImage] = useState("");
@@ -136,6 +138,19 @@ export function QuickDeployMenu({
                 </button>
               </div>
               <button
+                onClick={() => {
+                  setOpen(false);
+                  setGithubOpen(true);
+                }}
+                className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)]"
+              >
+                <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-surface)] text-[var(--color-fg)]">
+                  <GitFork className="size-4" />
+                </span>
+                <span className="flex-1">From GitHub</span>
+                <span className="text-[11px] text-[var(--color-fg-subtle)]">private repos</span>
+              </button>
+              <button
                 onClick={createComposeStack}
                 disabled={busy !== null}
                 className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)] disabled:opacity-50"
@@ -186,6 +201,13 @@ export function QuickDeployMenu({
           </>
         )}
       </AnimatePresence>
+
+      <GithubDeployModal
+        open={githubOpen}
+        onClose={() => setGithubOpen(false)}
+        environmentId={targetEnv}
+        onDeployed={onDeployed}
+      />
     </div>
   );
 }
