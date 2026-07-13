@@ -17,6 +17,7 @@ import {
   Globe,
   Layers,
   FileCode,
+  HardDrive,
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -25,6 +26,7 @@ import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
+import { VolumesTab } from "@/components/service/VolumesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import {
@@ -57,6 +59,7 @@ type TabId =
   | "domains"
   | "deployments"
   | "editor"
+  | "volumes"
   | "metrics"
   | "logs"
   | "settings";
@@ -66,21 +69,23 @@ const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   domains: { label: "Domains", icon: <Globe className="size-4" /> },
   deployments: { label: "Deploys", icon: <Rocket className="size-4" /> },
   editor: { label: "Compose", icon: <FileCode className="size-4" /> },
+  volumes: { label: "Volumes", icon: <HardDrive className="size-4" /> },
   metrics: { label: "Metrics", icon: <Cpu className="size-4" /> },
   logs: { label: "Logs", icon: <ScrollText className="size-4" /> },
   settings: { label: "Settings", icon: <Settings2 className="size-4" /> },
 };
-const DB_TABS: TabId[] = ["overview", "variables", "metrics", "logs", "settings"];
+const DB_TABS: TabId[] = ["overview", "variables", "volumes", "metrics", "logs", "settings"];
 const APP_TABS: TabId[] = [
   "overview",
   "variables",
   "domains",
   "deployments",
+  "volumes",
   "metrics",
   "logs",
   "settings",
 ];
-const COMPOSE_TABS: TabId[] = ["overview", "editor", "logs", "settings"];
+const COMPOSE_TABS: TabId[] = ["overview", "editor", "volumes", "logs", "settings"];
 
 export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
@@ -154,6 +159,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               {tab === "editor" && service.kind === "compose" && (
                 <ComposeEditorTab compose={service} />
               )}
+              {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
               {tab === "logs" && <LogsTab key={service.appName} appName={service.appName} active />}
               {tab === "settings" &&

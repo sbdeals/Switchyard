@@ -24,10 +24,18 @@ import {
   createCompose,
   composeAction,
   updateComposeFile,
+  listMounts,
+  createMount,
+  updateMount,
+  removeMount,
   type Action,
   type DatabasePatch,
   type ApplicationPatch,
   type Engine,
+  type Mount,
+  type MountServiceType,
+  type CreateMountInput,
+  type MountPatch,
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
@@ -254,4 +262,35 @@ export async function saveComposeFileAction(
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");
   });
+}
+
+// --- mounts (persistent volumes) --------------------------------------------
+
+export type MountsResult = { ok: true; mounts: Mount[] } | { ok: false; error: string };
+
+/** Read-only: the mounts attached to a service (fetched when the tab opens). */
+export async function listMountsAction(
+  serviceType: MountServiceType,
+  serviceId: string
+): Promise<MountsResult> {
+  try {
+    return { ok: true, mounts: await listMounts(serviceType, serviceId) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function createMountAction(input: CreateMountInput): Promise<ActionResult> {
+  return wrap(() => createMount(input));
+}
+
+export async function updateMountAction(
+  mountId: string,
+  patch: MountPatch
+): Promise<ActionResult> {
+  return wrap(() => updateMount(mountId, patch));
+}
+
+export async function removeMountAction(mountId: string): Promise<ActionResult> {
+  return wrap(() => removeMount(mountId));
 }
