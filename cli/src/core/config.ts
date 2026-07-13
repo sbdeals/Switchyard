@@ -40,6 +40,28 @@ export interface SwitchyardConfig {
    * default, where Traefik isn't managed).
    */
   hostIp: string;
+  /** Provision the switchyard-metrics Postgres for observability persistence. */
+  store: boolean;
+  /** CSPRNG password for the metrics store (generated once; 0600 with the file). */
+  storePassword: string;
+}
+
+// The Switchyard-owned metrics store: a dedicated Postgres provisioned on
+// dokploy-network, reached from the dashboard container by service DNS.
+export const STORE_SERVICE = "switchyard-metrics";
+export const STORE_VOLUME = "switchyard-metrics";
+const STORE_USER = "switchyard";
+const STORE_DB = "switchyard";
+const STORE_PORT = 5432;
+
+/**
+ * The connection string handed to the dashboard as SWITCHYARD_STORE_URL. Empty
+ * when the store is disabled or not yet provisioned — the dashboard treats an
+ * empty value as "persistence off" (dev-mode behaviour).
+ */
+export function metricsStoreUrl(cfg: SwitchyardConfig): string {
+  if (!cfg.store || !cfg.storePassword) return "";
+  return `postgresql://${STORE_USER}:${encodeURIComponent(cfg.storePassword)}@${STORE_SERVICE}:${STORE_PORT}/${STORE_DB}`;
 }
 
 export function detectPlatform(): Platform {
@@ -62,6 +84,8 @@ export function defaultConfig(platform: Platform = detectPlatform()): Switchyard
     imageTag: "",
     dokployUrlInContainer: "http://dokploy:3000",
     hostIp: "",
+    store: true,
+    storePassword: "",
   };
 }
 
@@ -79,6 +103,8 @@ export const CONFIG_KEY_TYPES = {
   imageTag: "string",
   dokployUrlInContainer: "string",
   hostIp: "string",
+  store: "boolean",
+  storePassword: "string",
 } as const satisfies Partial<Record<keyof SwitchyardConfig, "number" | "boolean" | "string">>;
 
 export type ConfigKey = keyof typeof CONFIG_KEY_TYPES;

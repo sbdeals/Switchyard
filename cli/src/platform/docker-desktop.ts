@@ -1,3 +1,4 @@
+import { STORE_SERVICE, STORE_VOLUME } from "../core/config.js";
 import { docker, dockerInherit, dockerOk } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { serviceExists, waitServicesConverged } from "../core/swarm.js";
@@ -115,6 +116,27 @@ async function createServices(dokployPort: number, log: (m: string) => void): Pr
   }
 }
 
+/**
+ * Provision the Switchyard-owned metrics Postgres. On Docker Desktop the WSL2
+ * kernel ships IPVS, so default VIP routing works — no dnsrr needed (unlike the
+ * Linux script). Idempotent: skips when the service already exists.
+ */
+async function ensureMetricsStore(storePassword: string, log: (m: string) => void): Promise<void> {
+  if (await serviceExists(STORE_SERVICE)) return;
+  log(`Creating service ${STORE_SERVICE} (metrics store) ...`);
+  const code = await dockerInherit([
+    "service", "create", "--detach", "--name", STORE_SERVICE,
+    "--constraint", "node.role==manager",
+    "--network", "dokploy-network",
+    "--env", "POSTGRES_USER=switchyard",
+    "--env", "POSTGRES_DB=switchyard",
+    "--env", `POSTGRES_PASSWORD=${storePassword}`,
+    "--mount", `type=volume,source=${STORE_VOLUME},target=/var/lib/postgresql/data`,
+    "postgres:16",
+  ]);
+  if (code !== 0) throw new UserError(`Creating ${STORE_SERVICE} failed.`);
+}
+
 export const dockerDesktopPlatform: PlatformModule = {
   name: "docker-desktop",
 
@@ -155,6 +177,14 @@ export const dockerDesktopPlatform: PlatformModule = {
       log("Note: Traefik is not managed on Docker Desktop — domains will not route. (skipTraefik=false is ignored here.)");
     }
     log("Auto-URL is off on Docker Desktop (Traefik is unmanaged) — app deploys won't get a public URL; add a domain manually if you need one.");
+
+    if (cfg.store && cfg.storePassword) {
+      await ensureMetricsStore(cfg.storePassword, log);
+      const ok = await waitServicesConverged([STORE_SERVICE], 300_000, (pending) =>
+        log(`  still converging: ${pending.join(", ")}`),
+      );
+      if (!ok) throw new UserError(`${STORE_SERVICE} did not converge in time.`);
+    }
   },
 
   async downDokploy(opts, log) {
@@ -162,6 +192,8 @@ export const dockerDesktopPlatform: PlatformModule = {
       log(`Removing service ${svc} ...`);
       await docker(["service", "rm", svc]); // tolerate absence
     }
+    log(`Removing service ${STORE_SERVICE} (metrics store) ...`);
+    await docker(["service", "rm", STORE_SERVICE]); // tolerate absence
     await docker(["rm", "-f", "dokploy-traefik"]);
     if (opts.purge) {
       log("Purging network, secrets, and volumes ...");
@@ -178,14 +210,15 @@ export const dockerDesktopPlatform: PlatformModule = {
           "--format",
           "{{.Label \"com.docker.swarm.service.name\"}}",
         ]);
-        const busy = ps.stdout.split(/\r?\n/).some((n) => (SERVICES as readonly string[]).includes(n.trim()));
+        const draining = [...SERVICES, STORE_SERVICE];
+        const busy = ps.stdout.split(/\r?\n/).some((n) => draining.includes(n.trim()));
         if (!busy || Date.now() > deadline) break;
         await sleep(2000);
       }
       const removals: string[][] = [
         ["network", "rm", "dokploy-network"],
         ...SECRETS.map((s) => ["secret", "rm", s]),
-        ...["dokploy", "dokploy-postgres", "dokploy-redis"].map((v) => ["volume", "rm", v]),
+        ...["dokploy", "dokploy-postgres", "dokploy-redis", STORE_VOLUME].map((v) => ["volume", "rm", v]),
       ];
       for (const args of removals) {
         let res = await docker(args);

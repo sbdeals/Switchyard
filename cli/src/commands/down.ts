@@ -42,6 +42,9 @@ export async function downCommand(flags: DownFlags): Promise<void> {
     // send the next `up` down the wrong path.
     cfg.adminEmail = "";
     cfg.adminPassword = "";
+    // The metrics-store volume is gone too; drop its password so the next `up`
+    // regenerates one that matches a fresh store.
+    cfg.storePassword = "";
     saveConfig(cfg, path);
     p.log.info("Cleared the stored admin credentials (the account was deleted with the data).");
   }

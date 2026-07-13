@@ -129,3 +129,78 @@ export async function followStats(
 }
 
 export { toSample };
+
+// --- one-shot reads for the server-side collector ---------------------------
+// The streaming helpers above power the live SSE tabs. The collector samples
+// periodically for every known service (tab open or not), so it needs a single
+// read rather than a long-lived stream.
+
+/** Take one resource sample, or null if the container isn't running. */
+export async function sampleStatsOnce(appName: string): Promise<Sample | null> {
+  const id = await findContainerId(appName);
+  if (!id) return null;
+  const container = docker.getContainer(id);
+  // stream:false returns one stats object with precpu_stats populated, so the
+  // CPU delta in toSample() is meaningful.
+  const stats = (await container.stats({ stream: false })) as unknown as Docker.ContainerStats;
+  return toSample(stats);
+}
+
+export interface ContainerHealth {
+  /** A container matching the appName is running. */
+  running: boolean;
+  /** Docker state: running | restarting | exited | dead | created | paused | null. */
+  state: string | null;
+  /** Docker RestartCount, or null when no container exists. */
+  restartCount: number | null;
+}
+
+/** Inspect the current task container for crash-loop signals. */
+export async function containerHealth(appName: string): Promise<ContainerHealth> {
+  const id = await findContainerId(appName);
+  if (!id) return { running: false, state: null, restartCount: null };
+  try {
+    const info = await docker.getContainer(id).inspect();
+    return {
+      running: info.State?.Running ?? false,
+      state: info.State?.Status ?? null,
+      restartCount: info.RestartCount ?? null,
+    };
+  } catch {
+    return { running: false, state: null, restartCount: null };
+  }
+}
+
+/** Read the last `tail` log lines (non-following), demuxed and timestamp-split. */
+export async function readRecentLogs(appName: string, tail = 200): Promise<LogLine[]> {
+  const id = await findContainerId(appName);
+  if (!id) return [];
+  const container = docker.getContainer(id);
+  const buf = (await container.logs({
+    follow: false,
+    stdout: true,
+    stderr: true,
+    tail,
+    timestamps: true,
+  })) as unknown as Buffer;
+
+  const { PassThrough, Readable } = await import("node:stream");
+  const out = new PassThrough();
+  const chunks: Buffer[] = [];
+  out.on("data", (c: Buffer) => chunks.push(c));
+  const done = new Promise<void>((resolve) => out.on("end", () => resolve()));
+  container.modem.demuxStream(Readable.from(buf), out, out);
+  out.end();
+  await done;
+
+  return Buffer.concat(chunks)
+    .toString("utf8")
+    .split("\n")
+    .filter((l) => l.trim().length > 0)
+    .map((line) => {
+      const m = line.match(/^(\S+)\s([\s\S]*)$/);
+      const parsed = m ? Date.parse(m[1]) : NaN;
+      const ts = Number.isNaN(parsed) ? Date.now() : parsed;
+      return { ts, text: m ? m[2] : line };
+    });
+}

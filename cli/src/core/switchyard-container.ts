@@ -1,4 +1,5 @@
 import type { SwitchyardConfig } from "./config.js";
+import { metricsStoreUrl } from "./config.js";
 import { docker, dockerInherit, dockerOk } from "./docker.js";
 import { UserError } from "./errors.js";
 import { sha256, sleep } from "./util.js";
@@ -35,6 +36,10 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
     // Signs the dashboard's session cookie. Part of the spec, so it folds into
     // the config-hash: rotating it recreates the container (and logs users out).
     SWITCHYARD_SESSION_SECRET: cfg.sessionSecret,
+    // Durable observability store (persist metrics/logs, threshold alerts).
+    // Empty when disabled → the dashboard runs persistence-off. Part of `env`,
+    // so it is folded into the config-hash and keeps `up` idempotent.
+    SWITCHYARD_STORE_URL: metricsStoreUrl(cfg),
   };
   // Host IP for auto-URL on app deploys. Only set on Linux (Traefik managed);
   // its presence is the dashboard's signal that auto-URL is safe. Added only

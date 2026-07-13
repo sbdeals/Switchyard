@@ -112,6 +112,36 @@ Both routes export `runtime = "nodejs"` (dockerode needs Node APIs) and `dynamic
 DOCKER_SOCKET=//./pipe/docker_engine
 ```
 
+## Observability persistence and alerts
+
+Live SSE (above) evaporates when a tab closes. For durable history and
+crash-loop alerting Switchyard persists to a dedicated **`switchyard-metrics`
+Postgres**, provisioned by the CLI on `dokploy-network` (`--endpoint-mode dnsrr`
+on Linux, via [`scripts/switchyard-store-up.sh`](../scripts/switchyard-store-up.sh)).
+The dashboard reaches it by service DNS through `SWITCHYARD_STORE_URL`, whose
+password is generated once (CSPRNG) into the CLI config and folded into the
+container config-hash so `up` stays idempotent. When the URL is unset (dev
+mode), persistence is simply off and live behaviour is unchanged.
+
+- **Store** ([`src/lib/store.ts`](../dashboard/src/lib/store.ts), `pg`): creates
+  its tables on first use (`metric_samples`, `log_lines`) and exposes
+  write/time-range-query/prune functions. Store errors are logged once and
+  swallowed, never surfaced to the render path.
+- **Collector** ([`src/lib/collector.ts`](../dashboard/src/lib/collector.ts)): a
+  lazy singleton started on first workspace render (`ensureCollector()` in
+  `page.tsx`). Every interval it samples stats and tails logs for *all* known
+  services — tab open or not — writes rollups, and feeds a crash-loop detector.
+- **History API** ([`/api/services/metrics/history`](../dashboard/src/app/api/services/metrics/history/route.ts)):
+  queries rollups over a time range; `MetricsTab` seeds from it (so history
+  survives a closed drawer) and offers a range selector, falling back to
+  live-only when the store is off.
+- **Alerts**: the crash-loop detector ([`src/lib/crash-loop.ts`](../dashboard/src/lib/crash-loop.ts))
+  fires when a service Dokploy expects up is missing/restarting/dead (or its
+  Docker RestartCount climbs) for N consecutive samples. Delivery reuses
+  Dokploy's **existing** notification channels: `notification.all` yields the
+  configured webhook (Slack/Discord/Telegram/Mattermost/Lark/Teams/custom) and
+  the alert is POSTed there — no new notification infra.
+
 ## Canvas: edge inference and layout persistence
 
 The Railway-style canvas ([`src/components/canvas/FlowCanvas.tsx`](../dashboard/src/components/canvas/FlowCanvas.tsx), built on React Flow / `@xyflow/react`) renders one node per service and draws arrows between related services.
@@ -175,5 +205,10 @@ const nextConfig: NextConfig = {
 | `DOKPLOY_PASSWORD` | — | Dokploy admin password |
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker Engine socket; `//./pipe/docker_engine` on Windows |
 | `SWITCHYARD_HOST_IP` | — | Host public/advertise IP. When set, app deploys mint an auto-URL (traefik.me / sslip.io) with no DNS. Unset = auto-URL disabled (dev / Docker Desktop). The CLI sets it on Linux. |
+| `SWITCHYARD_STORE_URL` | — | Postgres URL for durable metrics/logs. Unset = persistence off (dev). Set by the CLI to the `switchyard-metrics` service. |
+| `SWITCHYARD_ALERTS` | on | Crash-loop alerting; `0`/`false`/`off` disables it. |
+| `SWITCHYARD_ALERT_NOTIFICATION` | first | Which Dokploy notification channel to alert through (name or id). |
+| `SWITCHYARD_ALERT_RESTART_THRESHOLD` | `3` | Consecutive unhealthy samples before a crash-loop alert fires. |
+| `SWITCHYARD_COLLECT_INTERVAL_MS` | `20000` | Server-side collector sampling interval. |
 
 Set them in `dashboard/.env.local` (template: `dashboard/.env.example`). The dev and prod servers both bind port **3001** (`next dev -p 3001` / `next start -p 3001`), since Dokploy owns `:3000`.
