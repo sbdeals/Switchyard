@@ -3,7 +3,7 @@
 An open-source, Railway-style PaaS built on top of [Dokploy](https://dokploy.com)
 and driven by [Claude Code](https://claude.com/claude-code).
 
-Two pieces live here:
+Four pieces live here:
 
 - **Launch tooling** (`Makefile` + `scripts/`) — one-command, idempotent install
   of the Dokploy stack (Swarm services + Traefik) on a Linux host, including the
@@ -11,7 +11,13 @@ Two pieces live here:
   limits).
 - **Switchyard** (`dashboard/`) — a Railway-style dashboard over the Dokploy
   API: one canvas for every service, one-click databases, app deploys from a
-  Docker image or Git repo, compose stacks, live logs and metrics.
+  Docker image or Git repo with auto-minted public URLs, compose stacks,
+  backups, live + persisted logs/metrics — behind a per-user Dokploy login.
+- **The CLI** (`cli/`, npm `switchyard-cli`) — the one-command installer that
+  converges the whole stack.
+- **The MCP server** (`mcp/`) — Dokploy operations as Model Context Protocol
+  tools, so Claude Code can deploy apps, provision databases, and read logs
+  without dashboard clicks.
 
 ![Switchyard canvas with connected services](docs/images/canvas-overview.png)
 
@@ -54,17 +60,30 @@ reference: [docs/cli.md](docs/cli.md).
   nodes (React Flow), with connection arrows inferred from env vars, a minimap,
   and a per-browser persisted layout. Grid and per-project views included.
 - **Databases** — Postgres, MySQL, MariaDB, MongoDB, Redis: one-click deploy,
-  connection strings, env editor, resource/version/port settings.
+  connection strings, env editor, resource/version/port settings, and
+  **backups** (S3 destinations, cron schedules, back-up-now, restore).
 - **Applications** — deploy from a Docker image or a public Git repo (Nixpacks
-  build); domains with auto-SSL, variables, deployment history.
+  build); an **auto-minted public URL** on deploy (traefik.me / sslip.io — no
+  DNS setup on the Linux path); domains with auto-SSL; variables; deployment
+  history with **rollback** (registry snapshots) and a per-app
+  **push-to-deploy webhook** you can wire into your Git host.
 - **Compose** — docker-compose stacks with an in-app YAML editor.
 - **Live logs & metrics** — streamed straight from the Docker Engine API over
-  SSE; no polling, no Dokploy WebSocket reverse-engineering.
+  SSE, plus **persisted metric history** (range queries that survive tab close)
+  and **crash-loop alerts** through Dokploy's notification channels.
 - **Projects & environments** — create, rename, delete from the dashboard.
+- **Login required** — users sign in at `/login` with their Dokploy account;
+  every route, Server Action, and log/metric stream is gated.
+- **MCP server** (`mcp/`) — Claude Code can drive the platform directly: deploy
+  images/repos/compose, provision databases, manage env/domains, read
+  logs/metrics. Registered in `.mcp.json`, so `make claude` picks it up.
 
-> **Security note:** Switchyard has no login of its own — anyone who can reach
-> its port has full admin over Dokploy. Keep it on localhost or gate it before
-> exposing it. (Dashboard auth is on the roadmap.)
+> **Security note:** the dashboard now requires a Dokploy login, but a login
+> gate is not TLS — and a valid login still grants full Dokploy admin. Keep it
+> on localhost (the default) or put an HTTPS proxy in front before `--expose`.
+
+*(Screenshots below predate the login gate and the new Deploys/Backups tabs —
+refreshing them is a TODO.)*
 
 ## Documentation
 
@@ -91,6 +110,7 @@ scripts/               # bash launch tooling (Linux hosts; also bundled inside t
   claude-up.sh         #   launch Claude Code in this repo
   doctor.sh            #   prerequisite / environment check
 dashboard/             # Switchyard (Next.js 16 + TypeScript + Tailwind v4) + its Dockerfile
+mcp/                   # MCP server: Dokploy ops as tools for Claude Code (.mcp.json registers it)
 docs/                  # documentation (see table above) + screenshots
 ```
 
@@ -112,5 +132,13 @@ can't route service VIPs). Details and symptoms live in
 - [x] One-command install for the whole stack (`curl … | bash` /
       `npx switchyard-cli up`): terminal-guided admin setup, dashboard as a
       managed container, post-setup `switchyard config`
-- [ ] Backups (S3 destinations) and deploy-log history
-- [ ] Dashboard auth (gate Switchyard before it binds beyond localhost)
+- [x] Dashboard auth — per-user Dokploy login gating every route and stream
+- [x] Auto-minted public URLs on app deploy (traefik.me / sslip.io)
+- [x] Push-to-deploy webhooks and image-snapshot rollback in the Deploys tab
+- [x] Backups: S3 destinations, schedules, manual runs, restore
+- [x] Observability persistence (switchyard-metrics Postgres) + crash-loop
+      alerts via Dokploy notifications
+- [x] MCP server so Claude Code drives Dokploy directly (`mcp/`, `.mcp.json`)
+- [ ] Per-deployment build logs in the dashboard
+- [ ] TLS for the dashboard itself (today: localhost default / HTTPS proxy for
+      exposure)

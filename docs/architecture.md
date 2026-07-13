@@ -34,8 +34,9 @@ One subtlety in container mode: Dokploy's auth layer (better-auth) validates the
 
 The BFF exists so that credentials never reach the browser. [`src/lib/dokploy.ts`](../dashboard/src/lib/dokploy.ts) is server-only:
 
-- **Session sign-in.** The server signs into Dokploy with admin credentials from env (`DOKPLOY_EMAIL` / `DOKPLOY_PASSWORD`) by POSTing to `/api/auth/sign-in/email`, then extracts the `set-cookie` header down to its `name=value` pairs and keeps it in a module-level `cookieCache`. Both the credentials and the session cookie live only in the server process.
-- **Request wrapper with retry.** Every call goes through `request()`, which sends JSON with the cached cookie (`cache: "no-store"`, so Next never caches Dokploy responses). On a `401` it clears the cache, signs in once more, and retries — so an expired Dokploy session heals transparently.
+- **Per-user session sign-in.** The user's `/login` POST goes to Dokploy's `/api/auth/sign-in/email`; the returned Dokploy cookie is trimmed to its `name=value` pairs and sealed inside the encrypted Switchyard session cookie (see the security model below). The raw Dokploy cookie and the user's credentials never reach the browser.
+- **Request wrapper.** Every call goes through `request()`, which reads the current user's Dokploy cookie from the request context (`next/headers`) and sends JSON with `cache: "no-store"`, so Next never caches Dokploy responses. On a `401` the user's Dokploy session has expired and they are redirected to `/login` — there is deliberately no silent fallback to an admin session.
+- **System probe.** The env admin credentials (`DOKPLOY_EMAIL` / `DOKPLOY_PASSWORD`) power only `ping()` behind `/api/health?deep=1`, so the installer can verify the container → Dokploy path before anyone has logged in.
 - **Upgrade path.** Dokploy also supports an `x-api-key` token, gated behind the member `canAccessToAPI` permission. Switching to it means changing only `request()`; no caller is touched.
 
 ## Data model and service listing
@@ -178,11 +179,13 @@ Clicking a node (or a card in the grid view) opens the service drawer.
 
 Metrics and Logs tabs are keyed by `appName` and mount their `EventSource` only while active.
 
-## Security model — Switchyard has no auth of its own
+## Security model — per-user Dokploy login
 
-> **Warning:** Switchyard has **no login**. Anyone who can reach its port (`:3001` by default) talks to a BFF that holds an **admin** Dokploy session — they can create and destroy services, read database passwords (the drawer displays them), edit env vars, and stream container logs. This is the documented status in the [dashboard README](../dashboard/README.md) ("anyone who can reach :3001 gets full admin over Dokploy"). Run it bound to localhost, or put an authenticating reverse proxy in front of it, before exposing it to any network you don't fully trust.
+Every route, Server Action, and SSE stream is gated by [`src/proxy.ts`](../dashboard/src/proxy.ts) (Next 16's successor to the `middleware` file convention). The allowlist is `/login`, `/api/health` (the installer's probe), and static assets; everything else requires a valid Switchyard session — pages get a 302 to `/login`, API routes and Server Actions get a 401.
 
-The BFF design concentrates all privilege server-side — which is exactly why the *front door* must be gated. Dashboard auth is on the roadmap; until then treat the Switchyard port with the same care as the Dokploy admin login. See [Troubleshooting](troubleshooting.md) for network/exposure issues.
+Sessions work like this: the user signs in at `/login` with their **own Dokploy account**; the BFF forwards the credentials to Dokploy's `/api/auth/sign-in/email` and seals the returned Dokploy session cookie inside an AES-256-GCM-encrypted, HttpOnly, SameSite=Lax Switchyard cookie (key: `SWITCHYARD_SESSION_SECRET`, seeded by the CLI). Each request THAT user makes rides their own Dokploy session (`request()` → `userCookie()`); on a Dokploy 401 the user is bounced to `/login`. The env admin credentials serve exactly one purpose — the `/api/health?deep=1` installer probe — and never serve user requests. The logs/metrics routes additionally validate `?app=` against the set of Dokploy-managed `appName`s before touching the Docker socket, so a signed-in user cannot tail arbitrary host containers.
+
+> **Warning — a login gate is not TLS.** The dashboard speaks plain HTTP, and any signed-in Dokploy user holds full admin (the drawer shows database passwords). Keep it bound to localhost (the default), or put an HTTPS reverse proxy in front before exposing it to any network you don't fully trust. See [Troubleshooting](troubleshooting.md) for network/exposure issues.
 
 ## Bundling note: `serverExternalPackages`
 

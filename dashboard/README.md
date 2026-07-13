@@ -15,10 +15,12 @@ browser ──> Switchyard (Next.js server) ──> Dokploy API (:3000)
             never exposes it to the client     postgres|mysql|… resources
 ```
 
-- **Auth**: the server signs into Dokploy with admin credentials from
-  `.env.local` and reuses the session cookie. Credentials never reach the
-  browser. (Dokploy also has an `x-api-key` token gated behind the
-  `canAccessToAPI` member permission — a drop-in upgrade later.)
+- **Auth**: users sign in at `/login` with their **own Dokploy account**. The
+  BFF holds each user's Dokploy session cookie inside a sealed (AES-256-GCM)
+  Switchyard session cookie; a proxy gate (`src/proxy.ts`) blocks every other
+  route until it's present. The admin credentials in `.env.local` serve one
+  purpose only: the `/api/health?deep=1` installer probe. Credentials never
+  reach the browser.
 - **Data model**: Dokploy nests a database under `project → environment`.
   `project.all` returns the tree (trimmed to IDs), so each database is enriched
   via `<engine>.one`. See `src/lib/dokploy.ts`.
@@ -38,8 +40,13 @@ npm run dev                  # http://localhost:3001  (Dokploy owns :3000)
 | Env var | Meaning |
 |---|---|
 | `DOKPLOY_URL` | Dokploy base URL (default `http://localhost:3000`) |
-| `DOKPLOY_EMAIL` | admin account email |
-| `DOKPLOY_PASSWORD` | admin account password |
+| `DOKPLOY_EMAIL` | admin email — used only by the `/api/health?deep=1` probe |
+| `DOKPLOY_PASSWORD` | admin password — same single purpose |
+| `SWITCHYARD_SESSION_SECRET` | signs/encrypts the session cookie (required) |
+
+See `.env.example` for the optional auto-URL (`SWITCHYARD_HOST_IP`) and
+observability persistence/alerting (`SWITCHYARD_STORE_URL`, `SWITCHYARD_ALERT_*`)
+variables.
 
 ## Layout
 
@@ -85,8 +92,18 @@ deployable on one canvas. See `src/lib/dokploy.ts` (`listServices`).
       colour), persisted layout, env-inferred connection arrows, minimap;
       live-syncs on data change
 - [x] Live **Logs** + **Metrics** straight from the Docker API (SSE)
-- [ ] Backups (S3 destinations), deploy-log history (next)
-- [ ] **Dashboard auth** — Switchyard itself has no login: anyone who can reach
-      :3001 gets full admin over Dokploy (and can read database passwords and
-      container logs). Fine on localhost; gate it before binding to a public
-      interface.
+- [x] **Dashboard auth** — per-user Dokploy login at `/login`; every route and
+      Server Action is gated by `src/proxy.ts`, and log/metric streams only
+      attach to Dokploy-managed containers
+- [x] **Auto-URL** — deploying an app mints a public URL by default
+      (`*.traefik.me` via Dokploy's generate-domain, or `<app>.<ip>.sslip.io`)
+      on the Linux path
+- [x] **Push-to-deploy & rollback** — per-app webhook URL + branch/auto-deploy
+      controls in the Deploys tab; history rows with a registry snapshot can be
+      rolled back
+- [x] **Backups** — S3 destinations, scheduled backups (cron), back-up-now, and
+      restore, per database
+- [x] **Metrics history & alerts** — samples persist to the `switchyard-metrics`
+      Postgres (survive tab close, range queries); crash-loops alert through
+      Dokploy's notification channels
+- [ ] Per-deployment build logs (next)

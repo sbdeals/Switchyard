@@ -367,10 +367,10 @@ Notes:
   3000). If 3001 is taken, run `npx next dev -p 3002` and open that port.
 - Restart `npm run dev` after changing `.env.local`.
 
-> **Security note:** Switchyard has no login of its own. Anyone who can reach
-> port 3001 gets full admin over Dokploy, including database passwords and
-> container logs. Keep it on localhost, or put auth in front before exposing
-> it.
+> **Security note:** Switchyard requires signing in with a Dokploy account at
+> `/login`. That login gate is not TLS, and a signed-in user holds full Dokploy
+> admin (database passwords, container logs, service lifecycle) — keep it on
+> localhost, or put an HTTPS proxy in front before exposing it.
 
 ## Verification checklist
 

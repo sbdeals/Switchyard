@@ -85,7 +85,7 @@ version → the container is recreated (that's also the upgrade path:
 |---|---|
 | `--dokploy-port <n>` | Host port for Dokploy (default 3000; ignored when an existing install is adopted) |
 | `--dashboard-port <n>` | Host port for the dashboard (default 3001) |
-| `--expose` | Publish the dashboard on all interfaces — **it has no auth**; requires confirmation (`--yes` in scripts) |
+| `--expose` | Publish the dashboard on all interfaces — a Dokploy login is required but there's **no TLS**; requires confirmation (`--yes` in scripts) |
 | `--skip-traefik` | Don't run the Traefik proxy (domains won't route); default on Docker Desktop |
 | `--tag <tag>` | Dashboard image tag (default: the CLI's own version; `latest` works too) |
 | `--email` / `--password` / `--admin-name` | Dokploy admin identity (otherwise prompted or generated) |
@@ -145,10 +145,12 @@ instead:
 switchyard config set dokployUrlInContainer http://host.docker.internal:3000
 ```
 
-## Security: the dashboard has no login
+## Security: login required, but no TLS
 
-Anyone who can reach the dashboard port has **full admin over Dokploy**,
-including database passwords and container logs. Because of that:
+The dashboard requires signing in with a **Dokploy account** at `/login` (the
+first admin the CLI registers works). A signed-in user holds full Dokploy admin
+— database passwords, container logs, service lifecycle — and the dashboard
+itself speaks plain HTTP. Because of that:
 
 - The container binds **127.0.0.1** by default. On a server, reach it with an
   SSH tunnel:
@@ -159,8 +161,9 @@ including database passwords and container logs. Because of that:
   ```
 
 - `--expose` (or `config set expose true`) binds 0.0.0.0 and makes the CLI
-  shout at you first. Don't do this on an internet-reachable machine unless
-  something in front of it enforces auth. Dashboard auth is on the roadmap.
+  shout at you first. On an internet-reachable machine, put an HTTPS reverse
+  proxy in front — credentials and session cookies should not cross networks
+  in the clear.
 
 ## Migrating an existing install
 
