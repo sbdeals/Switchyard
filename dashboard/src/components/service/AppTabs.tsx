@@ -9,11 +9,16 @@ import {
   GitBranch,
   Webhook,
   RotateCcw,
+  Eye,
+  EyeOff,
 } from "lucide-react";
-import type { Application } from "@/lib/dokploy";
+import type { Application, BuildType, BuildTypePatch } from "@/lib/dokploy";
+import { BUILD_TYPES } from "@/lib/dokploy";
 import {
   appLifecycleAction,
   updateApplicationAction,
+  saveAppBuildTypeAction,
+  setAppDockerSourceAction,
   createDomainAction,
   updateGitDeployAction,
   rollbackDeploymentAction,
@@ -29,6 +34,16 @@ import {
   useLifecycle,
   useSavedFlash,
 } from "@/components/service/primitives";
+
+/** Human labels for Dokploy's build strategies. */
+const BUILD_TYPE_LABELS: Record<BuildType, string> = {
+  nixpacks: "Nixpacks (auto-detect)",
+  dockerfile: "Dockerfile",
+  railpack: "Railpack",
+  static: "Static site",
+  heroku_buildpacks: "Heroku buildpacks",
+  paketo_buildpacks: "Paketo buildpacks",
+};
 
 const useAppLifecycle = (app: Application) =>
   useLifecycle((action) => appLifecycleAction(app.id, action));
@@ -337,6 +352,269 @@ function RollbackButton({ rollbackId, title }: { rollbackId: string; title: stri
         Roll back
       </button>
       {error && <span className="text-[11px] text-[var(--color-danger)]">{error}</span>}
+    </div>
+  );
+}
+
+/** Small "redeploy after saving" checkbox shared by the build sub-forms. */
+function RedeployToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="accent-[var(--color-brand)]"
+      />
+      Redeploy now to apply
+    </label>
+  );
+}
+
+/**
+ * Build configuration: the build strategy (Nixpacks / Dockerfile / Railpack /
+ * …) and Dockerfile options for source-built apps, private registry
+ * credentials for docker-image apps, and the custom start command for either.
+ * Build-strategy and image changes only take effect on the next deploy, so each
+ * sub-form offers an optional redeploy.
+ */
+export function AppBuildTab({ app }: { app: Application }) {
+  const isDocker = app.sourceType === "docker";
+  return (
+    <div className="space-y-6">
+      {isDocker ? <DockerSourceForm app={app} /> : <BuildStrategyForm app={app} />}
+      <StartCommandForm app={app} />
+    </div>
+  );
+}
+
+function BuildStrategyForm({ app }: { app: Application }) {
+  const [buildType, setBuildType] = useState<BuildType>(app.buildType ?? "nixpacks");
+  const [dockerfile, setDockerfile] = useState(app.dockerfile ?? "Dockerfile");
+  const [contextPath, setContextPath] = useState(app.dockerContextPath ?? "");
+  const [buildStage, setBuildStage] = useState(app.dockerBuildStage ?? "");
+  const [redeploy, setRedeploy] = useState(false);
+  const [saving, startSave] = useTransition();
+  const [saved, flashSaved] = useSavedFlash();
+  const [error, setError] = useState<string | null>(null);
+
+  const dirty =
+    buildType !== (app.buildType ?? "nixpacks") ||
+    (buildType === "dockerfile" &&
+      (dockerfile !== (app.dockerfile ?? "Dockerfile") ||
+        contextPath !== (app.dockerContextPath ?? "") ||
+        buildStage !== (app.dockerBuildStage ?? "")));
+
+  function save() {
+    setError(null);
+    const patch: BuildTypePatch = { buildType };
+    if (buildType === "dockerfile") {
+      patch.dockerfile = dockerfile.trim() || "Dockerfile";
+      patch.dockerContextPath = contextPath.trim() || null;
+      patch.dockerBuildStage = buildStage.trim() || null;
+    }
+    startSave(async () => {
+      const res = await saveAppBuildTypeAction(app.id, patch, redeploy);
+      if (res.ok) flashSaved();
+      else setError(res.error);
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-[var(--color-fg)]">Build strategy</h3>
+      <Field label="Build type" hint="applies on next deploy">
+        <select
+          value={buildType}
+          onChange={(e) => setBuildType(e.target.value as BuildType)}
+          className={inputCls}
+        >
+          {BUILD_TYPES.map((bt) => (
+            <option key={bt} value={bt}>
+              {BUILD_TYPE_LABELS[bt]}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      {buildType === "dockerfile" && (
+        <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+          <Field label="Dockerfile path" hint="relative to the repo root">
+            <input
+              value={dockerfile}
+              onChange={(e) => setDockerfile(e.target.value)}
+              placeholder="Dockerfile"
+              className={inputCls}
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Build context" hint="optional">
+              <input
+                value={contextPath}
+                onChange={(e) => setContextPath(e.target.value)}
+                placeholder="."
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Build stage" hint="optional target">
+              <input
+                value={buildStage}
+                onChange={(e) => setBuildStage(e.target.value)}
+                placeholder="—"
+                className={inputCls}
+              />
+            </Field>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
+        <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
+      </div>
+    </div>
+  );
+}
+
+function DockerSourceForm({ app }: { app: Application }) {
+  const [image, setImage] = useState(app.dockerImage ?? "");
+  const [registryUrl, setRegistryUrl] = useState(app.registryUrl ?? "");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [redeploy, setRedeploy] = useState(false);
+  const [saving, startSave] = useTransition();
+  const [saved, flashSaved] = useSavedFlash();
+  const [error, setError] = useState<string | null>(null);
+
+  // Credentials are never read back from Dokploy, so treat any input here (or an
+  // image/registry change) as a reason to resubmit the whole docker source.
+  const dirty =
+    image.trim() !== (app.dockerImage ?? "") ||
+    registryUrl.trim() !== (app.registryUrl ?? "") ||
+    username !== "" ||
+    password !== "";
+
+  function save() {
+    setError(null);
+    startSave(async () => {
+      const res = await setAppDockerSourceAction(
+        app.id,
+        image,
+        { username: username.trim(), password, registryUrl: registryUrl.trim() },
+        redeploy
+      );
+      if (res.ok) {
+        setUsername("");
+        setPassword("");
+        flashSaved();
+      } else setError(res.error);
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-[var(--color-fg)]">Image &amp; registry</h3>
+      <Field label="Image" hint="repo:tag">
+        <input
+          value={image}
+          onChange={(e) => setImage(e.target.value)}
+          placeholder="registry.example.com/app:latest"
+          className={inputCls}
+        />
+      </Field>
+      <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+        <p className="text-[11px] text-[var(--color-fg-subtle)]">
+          Private registry credentials (leave blank for public images).
+        </p>
+        <Field label="Registry URL" hint="optional">
+          <input
+            value={registryUrl}
+            onChange={(e) => setRegistryUrl(e.target.value)}
+            placeholder="registry.example.com"
+            className={inputCls}
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Username">
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="off"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Password">
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="off"
+                className={inputCls}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="absolute inset-y-0 right-2 flex items-center text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+              >
+                {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+              </button>
+            </div>
+          </Field>
+        </div>
+      </div>
+      <div className="flex items-center justify-between">
+        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
+        <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
+      </div>
+    </div>
+  );
+}
+
+function StartCommandForm({ app }: { app: Application }) {
+  const [command, setCommand] = useState(app.command ?? "");
+  const [redeploy, setRedeploy] = useState(false);
+  const [saving, startSave] = useTransition();
+  const [saved, flashSaved] = useSavedFlash();
+  const [error, setError] = useState<string | null>(null);
+
+  const dirty = command !== (app.command ?? "");
+
+  function save() {
+    setError(null);
+    startSave(async () => {
+      const res = await updateApplicationAction(
+        app.id,
+        { command: command.trim() || null },
+        redeploy
+      );
+      if (res.ok) flashSaved();
+      else setError(res.error);
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-[var(--color-fg)]">Start command</h3>
+      <Field label="Custom run command" hint="blank = image/build default">
+        <input
+          value={command}
+          onChange={(e) => setCommand(e.target.value)}
+          placeholder="e.g. node dist/server.js"
+          className={`${inputCls} font-mono`}
+        />
+      </Field>
+      <div className="flex items-center justify-between">
+        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
+        <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
+      </div>
     </div>
   );
 }

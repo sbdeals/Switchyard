@@ -22,6 +22,7 @@ import {
   rollbackToDeployment,
   applicationAction,
   updateApplication,
+  saveAppBuildType,
   saveApplicationEnvironment,
   createDomain,
   ensureAutoDomain,
@@ -33,6 +34,7 @@ import {
   type Action,
   type DatabasePatch,
   type ApplicationPatch,
+  type BuildTypePatch,
   type Engine,
   type DokployTemplate,
 } from "@/lib/dokploy";
@@ -266,6 +268,37 @@ export async function updateApplicationAction(
 
 export async function saveApplicationEnvAction(id: string, env: string): Promise<ActionResult> {
   return wrap(() => saveApplicationEnvironment(id, env));
+}
+
+/** Set an application's build strategy (Nixpacks / Dockerfile / Railpack / …). */
+export async function saveAppBuildTypeAction(
+  id: string,
+  patch: BuildTypePatch,
+  redeploy = false
+): Promise<ActionResult> {
+  return wrap(async () => {
+    await saveAppBuildType(id, patch);
+    if (redeploy) await applicationAction(id, "deploy");
+  });
+}
+
+/**
+ * Point a docker-image application at an image, optionally with private
+ * registry credentials. Empty credentials mean a public image.
+ */
+export async function setAppDockerSourceAction(
+  id: string,
+  dockerImage: string,
+  registry?: { username: string; password: string; registryUrl: string },
+  redeploy = false
+): Promise<ActionResult> {
+  return wrap(async () => {
+    const image = dockerImage.trim();
+    if (!image) throw new Error("Image is required.");
+    const hasCreds = registry && (registry.username || registry.password || registry.registryUrl);
+    await setAppDockerSource(id, image, hasCreds ? registry : undefined);
+    if (redeploy) await applicationAction(id, "deploy");
+  });
 }
 
 export async function createDomainAction(
