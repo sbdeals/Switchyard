@@ -31,12 +31,20 @@ import {
   updateComposeFile,
   listTemplates,
   deployTemplate,
+  listSchedules,
+  createSchedule,
+  updateSchedule,
+  deleteSchedule,
+  runSchedule,
   type Action,
   type DatabasePatch,
   type ApplicationPatch,
   type BuildTypePatch,
   type Engine,
   type DokployTemplate,
+  type Schedule,
+  type CreateScheduleInput,
+  type UpdateScheduleInput,
 } from "@/lib/dokploy";
 // Backups: S3 destinations + scheduled database backups (see the "backups"
 // section below). Kept as a separate import to reduce merge churn.
@@ -351,6 +359,40 @@ export async function updateGitDeployAction(
  */
 export async function rollbackDeploymentAction(rollbackId: string): Promise<ActionResult> {
   return wrap(() => rollbackToDeployment(rollbackId));
+}
+
+// --- schedules --------------------------------------------------------------
+
+export type SchedulesResult =
+  | { ok: true; schedules: Schedule[] }
+  | { ok: false; error: string };
+
+/** Load an application's cron schedules (called on demand by the drawer tab). */
+export async function listSchedulesAction(applicationId: string): Promise<SchedulesResult> {
+  try {
+    return { ok: true, schedules: await listSchedules(applicationId) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function createScheduleAction(input: CreateScheduleInput): Promise<ActionResult> {
+  return wrap(() => createSchedule(input));
+}
+
+export async function updateScheduleAction(
+  scheduleId: string,
+  input: UpdateScheduleInput
+): Promise<ActionResult> {
+  return wrap(() => updateSchedule(scheduleId, input));
+}
+
+export async function deleteScheduleAction(scheduleId: string): Promise<ActionResult> {
+  return wrap(() => deleteSchedule(scheduleId));
+}
+
+export async function runScheduleAction(scheduleId: string): Promise<ActionResult> {
+  return wrap(() => runSchedule(scheduleId));
 }
 
 // --- compose ----------------------------------------------------------------

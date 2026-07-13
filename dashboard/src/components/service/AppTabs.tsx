@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import {
   Globe,
   ExternalLink,
@@ -11,8 +11,13 @@ import {
   RotateCcw,
   Eye,
   EyeOff,
+  Play,
+  Trash2,
+  Pencil,
+  Power,
+  Clock,
 } from "lucide-react";
-import type { Application, BuildType, BuildTypePatch } from "@/lib/dokploy";
+import type { Application, BuildType, BuildTypePatch, Schedule } from "@/lib/dokploy";
 import {
   appLifecycleAction,
   updateApplicationAction,
@@ -21,6 +26,11 @@ import {
   createDomainAction,
   updateGitDeployAction,
   rollbackDeploymentAction,
+  listSchedulesAction,
+  createScheduleAction,
+  updateScheduleAction,
+  deleteScheduleAction,
+  runScheduleAction,
 } from "@/app/actions";
 import {
   inputCls,
@@ -33,6 +43,7 @@ import {
   useLifecycle,
   useSavedFlash,
 } from "@/components/service/primitives";
+import { cn } from "@/lib/utils";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -677,5 +688,327 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
         onDestroy={() => run("remove", onClose)}
       />
     </div>
+  );
+}
+
+// --- schedules --------------------------------------------------------------
+
+export function SchedulesTab({ app }: { app: Application }) {
+  const [schedules, setSchedules] = useState<Schedule[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, startLoad] = useTransition();
+
+  const reload = useCallback(() => {
+    startLoad(async () => {
+      const res = await listSchedulesAction(app.id);
+      if (res.ok) {
+        setSchedules(res.schedules);
+        setLoadError(null);
+      } else {
+        setLoadError(res.error);
+      }
+    });
+  }, [app.id]);
+
+  useEffect(() => reload(), [reload]);
+
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-[var(--color-fg-muted)]">
+        Cron jobs run a command inside this app&apos;s container on a schedule (times are UTC). The
+        container must be running when the job fires.
+      </p>
+
+      <CreateScheduleForm applicationId={app.id} onCreated={reload} />
+
+      <div className="space-y-2">
+        {schedules === null ? (
+          <div className="flex items-center gap-2 text-xs text-[var(--color-fg-subtle)]">
+            <Loader2 className="size-4 animate-spin" /> loading schedules…
+          </div>
+        ) : loadError ? (
+          <p className="text-xs text-[var(--color-danger)]">{loadError}</p>
+        ) : schedules.length === 0 ? (
+          <p className="text-xs text-[var(--color-fg-subtle)]">No schedules yet.</p>
+        ) : (
+          schedules.map((s) => <ScheduleRow key={s.scheduleId} schedule={s} onChanged={reload} />)
+        )}
+      </div>
+      {loading && schedules !== null && (
+        <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-fg-subtle)]">
+          <Loader2 className="size-3 animate-spin" /> refreshing…
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CRON_PLACEHOLDER = "0 3 * * *";
+
+function CreateScheduleForm({
+  applicationId,
+  onCreated,
+}: {
+  applicationId: string;
+  onCreated: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [cron, setCron] = useState("");
+  const [command, setCommand] = useState("");
+  const [shell, setShell] = useState<"bash" | "sh">("bash");
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const valid = name.trim() && cron.trim() && command.trim();
+
+  function create() {
+    if (!valid) return;
+    setError(null);
+    start(async () => {
+      const res = await createScheduleAction({
+        applicationId,
+        name: name.trim(),
+        cronExpression: cron.trim(),
+        command: command.trim(),
+        shellType: shell,
+      });
+      if (res.ok) {
+        setName("");
+        setCron("");
+        setCommand("");
+        setShell("bash");
+        onCreated();
+      } else {
+        setError(res.error);
+      }
+    });
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-fg-muted)]">
+        <Plus className="size-3.5" /> New schedule
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Name">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="nightly-backup"
+            className={inputCls}
+          />
+        </Field>
+        <Field label="Cron expression" hint="min hour dom mon dow">
+          <input
+            value={cron}
+            onChange={(e) => setCron(e.target.value)}
+            placeholder={CRON_PLACEHOLDER}
+            className={cn(inputCls, "font-mono")}
+          />
+        </Field>
+      </div>
+      <Field label="Command">
+        <input
+          value={command}
+          onChange={(e) => setCommand(e.target.value)}
+          placeholder="node scripts/cleanup.js"
+          className={cn(inputCls, "font-mono")}
+        />
+      </Field>
+      <div className="flex items-end justify-between gap-3">
+        <div className="w-28">
+          <Field label="Shell">
+            <select
+              value={shell}
+              onChange={(e) => setShell(e.target.value as "bash" | "sh")}
+              className={inputCls}
+            >
+              <option value="bash">bash</option>
+              <option value="sh">sh</option>
+            </select>
+          </Field>
+        </div>
+        <button
+          onClick={create}
+          disabled={pending || !valid}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+        >
+          {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+          Create
+        </button>
+      </div>
+      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+    </div>
+  );
+}
+
+function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [busy, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  // Draft fields, initialized from the schedule; reset when the row collapses.
+  const [name, setName] = useState(schedule.name);
+  const [cron, setCron] = useState(schedule.cronExpression);
+  const [command, setCommand] = useState(schedule.command);
+  const [shell, setShell] = useState(schedule.shellType);
+
+  function openEdit() {
+    setName(schedule.name);
+    setCron(schedule.cronExpression);
+    setCommand(schedule.command);
+    setShell(schedule.shellType);
+    setError(null);
+    setEditing(true);
+  }
+
+  // update reuses Dokploy's create schema, so every field is resent each time.
+  function runUpdate(patch: { enabled?: boolean }, after?: () => void) {
+    setError(null);
+    start(async () => {
+      const res = await updateScheduleAction(schedule.scheduleId, {
+        name: name.trim() || schedule.name,
+        cronExpression: cron.trim() || schedule.cronExpression,
+        command: command.trim() || schedule.command,
+        shellType: shell,
+        enabled: patch.enabled ?? schedule.enabled,
+      });
+      if (res.ok) after?.();
+      else setError(res.error);
+    });
+  }
+
+  function act(fn: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+    setError(null);
+    start(async () => {
+      const res = await fn();
+      if (res.ok) onChanged();
+      else setError(res.error);
+    });
+  }
+
+  return (
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5">
+      <div className="flex items-center gap-2.5">
+        <Clock
+          className={cn(
+            "size-3.5 shrink-0",
+            schedule.enabled ? "text-[var(--color-brand)]" : "text-[var(--color-idle)]"
+          )}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm">{schedule.name}</span>
+            <code className="shrink-0 rounded bg-[var(--color-bg-elevated)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-fg-muted)]">
+              {schedule.cronExpression}
+            </code>
+            {!schedule.enabled && (
+              <span className="shrink-0 text-[10px] text-[var(--color-fg-subtle)]">disabled</span>
+            )}
+          </div>
+          <code className="mt-0.5 block truncate font-mono text-[11px] text-[var(--color-fg-subtle)]">
+            {schedule.shellType} -c {schedule.command}
+          </code>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <IconBtn title="Run now" onClick={() => act(() => runScheduleAction(schedule.scheduleId))} disabled={busy}>
+            <Play className="size-3.5" />
+          </IconBtn>
+          <IconBtn
+            title={schedule.enabled ? "Disable" : "Enable"}
+            onClick={() => runUpdate({ enabled: !schedule.enabled }, onChanged)}
+            disabled={busy}
+          >
+            <Power className={cn("size-3.5", schedule.enabled && "text-[var(--color-ok)]")} />
+          </IconBtn>
+          <IconBtn title="Edit" onClick={() => (editing ? setEditing(false) : openEdit())} disabled={busy}>
+            <Pencil className="size-3.5" />
+          </IconBtn>
+          <IconBtn
+            title="Delete"
+            onClick={() => {
+              if (confirm(`Delete schedule "${schedule.name}"?`))
+                act(() => deleteScheduleAction(schedule.scheduleId));
+            }}
+            disabled={busy}
+          >
+            <Trash2 className="size-3.5 text-[var(--color-danger)]" />
+          </IconBtn>
+        </div>
+      </div>
+
+      {editing && (
+        <div className="mt-3 space-y-3 border-t border-[var(--color-border)] pt-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Name">
+              <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Cron expression">
+              <input
+                value={cron}
+                onChange={(e) => setCron(e.target.value)}
+                className={cn(inputCls, "font-mono")}
+              />
+            </Field>
+          </div>
+          <Field label="Command">
+            <input
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+              className={cn(inputCls, "font-mono")}
+            />
+          </Field>
+          <div className="flex items-end justify-between gap-3">
+            <div className="w-28">
+              <Field label="Shell">
+                <select
+                  value={shell}
+                  onChange={(e) => setShell(e.target.value as "bash" | "sh")}
+                  className={inputCls}
+                >
+                  <option value="bash">bash</option>
+                  <option value="sh">sh</option>
+                </select>
+              </Field>
+            </div>
+            <SaveRow
+              saving={busy}
+              saved={false}
+              error={null}
+              disabled={!name.trim() || !cron.trim() || !command.trim()}
+              onSave={() => runUpdate({}, () => {
+                setEditing(false);
+                onChanged();
+              })}
+            />
+          </div>
+        </div>
+      )}
+
+      {error && <p className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
+    </div>
+  );
+}
+
+function IconBtn({
+  children,
+  title,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  title: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-md p-1.5 text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)] disabled:opacity-40"
+    >
+      {children}
+    </button>
   );
 }

@@ -918,6 +918,113 @@ export async function ensureAutoDomain(applicationId: string): Promise<string | 
   return host;
 }
 
+// --- schedules --------------------------------------------------------------
+
+/** Which shell Dokploy runs the scheduled command with (docker exec <shell> -c). */
+export type ShellType = "bash" | "sh";
+
+/**
+ * A cron job attached to an application. Dokploy runs `command` inside the
+ * app's running container on `cronExpression`. (Dokploy also supports compose/
+ * server schedules; we only surface application schedules.)
+ */
+export interface Schedule {
+  scheduleId: string;
+  name: string;
+  cronExpression: string;
+  command: string;
+  shellType: ShellType;
+  enabled: boolean;
+  timezone: string | null;
+  createdAt: string | null;
+}
+
+interface RawSchedule {
+  scheduleId: string;
+  name?: string;
+  cronExpression?: string;
+  command?: string;
+  shellType?: ShellType;
+  enabled?: boolean;
+  timezone?: string | null;
+  createdAt?: string | null;
+}
+
+function toSchedule(r: RawSchedule): Schedule {
+  return {
+    scheduleId: r.scheduleId,
+    name: r.name ?? "",
+    cronExpression: r.cronExpression ?? "",
+    command: r.command ?? "",
+    shellType: r.shellType ?? "bash",
+    enabled: r.enabled ?? true,
+    timezone: r.timezone ?? null,
+    createdAt: r.createdAt ?? null,
+  };
+}
+
+/** List an application's schedules (oldest first, as Dokploy returns them). */
+export async function listSchedules(applicationId: string): Promise<Schedule[]> {
+  const raw = await request<RawSchedule[]>(
+    `schedule.list?id=${encodeURIComponent(applicationId)}&scheduleType=application`
+  );
+  return (raw ?? []).map(toSchedule);
+}
+
+export interface CreateScheduleInput {
+  applicationId: string;
+  name: string;
+  cronExpression: string;
+  command: string;
+  shellType?: ShellType;
+  enabled?: boolean;
+}
+
+/** Create a cron job that runs a command inside an application's container. */
+export async function createSchedule(input: CreateScheduleInput): Promise<void> {
+  await request("schedule.create", {
+    method: "POST",
+    body: {
+      scheduleType: "application",
+      applicationId: input.applicationId,
+      name: input.name,
+      cronExpression: input.cronExpression,
+      command: input.command,
+      shellType: input.shellType ?? "bash",
+      enabled: input.enabled ?? true,
+    },
+  });
+}
+
+/**
+ * Full editable field set for an update. Dokploy's `schedule.update` reuses the
+ * create schema, so name/cronExpression/command are required on every call —
+ * even an enable/disable toggle must resend them.
+ */
+export interface UpdateScheduleInput {
+  name: string;
+  cronExpression: string;
+  command: string;
+  shellType: ShellType;
+  enabled: boolean;
+}
+
+export async function updateSchedule(
+  scheduleId: string,
+  input: UpdateScheduleInput
+): Promise<void> {
+  await request("schedule.update", { method: "POST", body: { scheduleId, ...input } });
+}
+
+export async function deleteSchedule(scheduleId: string): Promise<void> {
+  await request("schedule.delete", { method: "POST", body: { scheduleId } });
+}
+
+/** Trigger a schedule immediately (run-now); the container must be running. */
+export async function runSchedule(scheduleId: string): Promise<void> {
+  await request("schedule.runManually", { method: "POST", body: { scheduleId } });
+}
+
 // --- compose ----------------------------------------------------------------
 
 interface RawComposeDetail {
