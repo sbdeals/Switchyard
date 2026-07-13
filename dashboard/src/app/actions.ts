@@ -24,10 +24,13 @@ import {
   createCompose,
   composeAction,
   updateComposeFile,
+  listTemplates,
+  deployTemplate,
   type Action,
   type DatabasePatch,
   type ApplicationPatch,
   type Engine,
+  type DokployTemplate,
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
@@ -253,5 +256,38 @@ export async function saveComposeFileAction(
   return wrap(async () => {
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");
+  });
+}
+
+// --- templates (one-click catalog) ------------------------------------------
+
+export type TemplateListResult =
+  | { ok: true; templates: DokployTemplate[] }
+  | { ok: false; error: string };
+
+/** Fetch Dokploy's one-click template catalog for the New-service menu. */
+export async function listTemplatesAction(): Promise<TemplateListResult> {
+  try {
+    return { ok: true, templates: await listTemplates() };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * One-click: provision a catalog template into an environment (Dokploy creates
+ * the compose stack from the template) and deploy it, matching the other quick
+ * deploys. Returns the new compose service id so the UI can open its drawer.
+ */
+export async function quickDeployTemplateAction(
+  templateId: string,
+  environmentId?: string
+): Promise<QuickDeployResult> {
+  return wrapId(async () => {
+    const id = templateId.trim();
+    if (!id) throw new Error("Template is required.");
+    const composeId = await deployTemplate(id, await resolveTargetEnv(environmentId));
+    await composeAction(composeId, "deploy");
+    return composeId;
   });
 }

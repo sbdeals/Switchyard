@@ -668,6 +668,51 @@ export async function composeAction(id: string, action: Action): Promise<void> {
   await request(`compose.${proc}`, { method: "POST", body: { composeId: id } });
 }
 
+// --- templates (one-click catalog) ------------------------------------------
+
+/**
+ * A catalog entry from Dokploy's open-source template library (Plausible, n8n,
+ * Postgres+app bundles, ...). Each template is a bundled docker-compose stack.
+ * Shape mirrors Dokploy's `compose.templates` result (its template meta.json).
+ */
+export interface DokployTemplate {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  logo: string;
+  tags: string[];
+  links: { github: string; website?: string; docs?: string };
+}
+
+/**
+ * List the available one-click templates via Dokploy's `compose.templates`.
+ * Dokploy fetches this list from its templates repo (templates.dokploy.com) at
+ * request time, so this needs outbound internet from the Dokploy host; Dokploy
+ * returns an empty array when that upstream fetch fails.
+ */
+export async function listTemplates(): Promise<DokployTemplate[]> {
+  return request<DokployTemplate[]>("compose.templates");
+}
+
+/**
+ * Provision a catalog template into an environment. Dokploy's
+ * `compose.deployTemplate` creates a compose stack from the template's bundled
+ * docker-compose + generated env (and any mounts/domains) but does not start
+ * it, so callers deploy the returned compose id separately. Returns the new
+ * compose service id.
+ */
+export async function deployTemplate(
+  templateId: string,
+  environmentId: string
+): Promise<string> {
+  const created = await request<{ composeId: string }>("compose.deployTemplate", {
+    method: "POST",
+    body: { id: templateId, environmentId },
+  });
+  return created.composeId;
+}
+
 // --- unified service listing ------------------------------------------------
 
 /**
