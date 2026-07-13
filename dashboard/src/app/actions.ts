@@ -34,6 +34,8 @@ import {
   saveApplicationEnvironment,
   createDomain,
   ensureAutoDomain,
+  updateDomain,
+  deleteDomain,
   createCompose,
   composeAction,
   updateComposeFile,
@@ -52,6 +54,7 @@ import {
   type DatabasePatch,
   type ApplicationPatch,
   type BuildTypePatch,
+  type DomainInput,
   type Engine,
   type DokployTemplate,
   type Schedule,
@@ -395,10 +398,20 @@ export async function setAppDockerSourceAction(
 
 export async function createDomainAction(
   applicationId: string,
-  host: string,
-  port: number
+  input: DomainInput
 ): Promise<ActionResult> {
-  return wrap(() => createDomain(applicationId, host.trim(), port));
+  return wrap(() => createDomain(applicationId, { ...input, host: input.host.trim() }));
+}
+
+export async function updateDomainAction(
+  domainId: string,
+  input: DomainInput
+): Promise<ActionResult> {
+  return wrap(() => updateDomain(domainId, { ...input, host: input.host.trim() }));
+}
+
+export async function deleteDomainAction(domainId: string): Promise<ActionResult> {
+  return wrap(() => deleteDomain(domainId));
 }
 
 // --- push-to-deploy + rollback ----------------------------------------------

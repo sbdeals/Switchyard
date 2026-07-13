@@ -1,6 +1,7 @@
 import { STORE_SERVICE, STORE_VOLUME } from "../core/config.js";
 import { docker, dockerInherit, dockerOk } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
+import { ensureLocalIngress, removeLocalIngress } from "../core/local-ingress.js";
 import { serviceExists, waitServicesConverged } from "../core/swarm.js";
 import { randomSecret, sleep } from "../core/util.js";
 import type { PlatformModule } from "./types.js";
@@ -184,6 +185,15 @@ export const dockerDesktopPlatform: PlatformModule = {
         log(`  still converging: ${pending.join(", ")}`),
       );
       if (!ok) throw new UserError(`${STORE_SERVICE} did not converge in time.`);
+    }
+  },
+
+  async localIngress(action, cfg, log) {
+    if (action === "up") {
+      const result = await ensureLocalIngress(cfg, log);
+      if (result === "unchanged") log("Local ingress already running (unchanged).");
+    } else {
+      await removeLocalIngress(log);
     }
   },
 

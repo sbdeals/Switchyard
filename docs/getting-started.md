@@ -300,6 +300,19 @@ For local Switchyard testing you can skip it — everything else in this guide
 works without it — but **domains will not route**: attaching a domain to an
 application has no effect until a Traefik proxy is running.
 
+If ports 80/443 are already taken (common on Windows), you can still *demo*
+domain routing locally over plain HTTP with the opt-in local-ingress proxy,
+which runs a second Traefik on alternate ports (default 8080/8443):
+
+```bash
+switchyard local-ingress up      # http://<host>:8080 ; down to stop
+```
+
+This is **HTTP only — not real TLS**: attach the domain with certificate
+"None" and HTTPS off, and point it at `127.0.0.1` in your hosts file. Real
+public HTTPS domains (Let's Encrypt on 80/443) are a Linux/VPS feature — see
+[cli.md](cli.md#local-ingress-demo-domain-routing) for the full rundown.
+
 ### 6. Create the admin
 
 Open **http://localhost:3300/register** and create the admin account (first
