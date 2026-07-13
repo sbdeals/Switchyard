@@ -23,6 +23,13 @@ const ORIGIN = process.env.DOKPLOY_ORIGIN ?? BASE;
 const EMAIL = process.env.DOKPLOY_EMAIL ?? "";
 const PASSWORD = process.env.DOKPLOY_PASSWORD ?? "";
 
+// Host-facing base for Dokploy's own deploy webhook (`/api/deploy/<token>`).
+// The BFF reaches Dokploy over service DNS (DOKPLOY_URL), which a Git host
+// cannot resolve, so prefer the host-facing origin. Even so, if Dokploy sits
+// behind a public domain the user must swap this host — surfaced as a note in
+// the Deploys tab. Trailing slashes trimmed so URL joins stay clean.
+const WEBHOOK_BASE = (process.env.DOKPLOY_ORIGIN ?? BASE).replace(/\/+$/, "");
+
 export const ENGINES = ["postgres", "mysql", "mariadb", "mongo", "redis"] as const;
 export type Engine = (typeof ENGINES)[number];
 
@@ -81,6 +88,12 @@ export interface AppDeployment {
   status: string;
   title: string;
   createdAt: string;
+  /**
+   * Non-null when this deployment produced a restorable image snapshot
+   * (Dokploy only records these when the app deploys to a registry). Feeds
+   * the Deploys-tab rollback control; see `rollbackToDeployment`.
+   */
+  rollbackId: string | null;
 }
 
 export interface Application extends ServiceBase {
@@ -92,6 +105,23 @@ export interface Application extends ServiceBase {
   repository: string | null;
   domains: AppDomain[];
   deployments: AppDeployment[];
+  // --- push-to-deploy config (custom-git source); see setAppGitSource ---------
+  /** When true, hitting the deploy webhook redeploys the app. */
+  autoDeploy: boolean;
+  /** Branch the webhook must match to trigger a deploy (customGitBranch). */
+  branch: string | null;
+  /** Build path within the repo (customGitBuildPath). */
+  buildPath: string | null;
+  /** Raw clone URL for a custom-git source (customGitUrl), else null. */
+  gitUrl: string | null;
+  /** Sub-paths that gate a webhook deploy; empty means "any change". */
+  watchPaths: string[];
+  /**
+   * Dokploy's own per-app deploy webhook to wire into a Git host, or null if
+   * the app has no refresh token. This is a Dokploy route, not a Switchyard
+   * one, so it is reachable independently of any dashboard auth.
+   */
+  webhookUrl: string | null;
 }
 
 export interface ComposeService extends ServiceBase {
@@ -451,6 +481,11 @@ interface RawApplicationDetail {
   buildType?: string | null;
   description?: string | null;
   customGitUrl?: string | null;
+  customGitBranch?: string | null;
+  customGitBuildPath?: string | null;
+  watchPaths?: string[] | null;
+  autoDeploy?: boolean | null;
+  refreshToken?: string | null;
   owner?: string | null;
   repository?: string | null;
   dockerImage?: string | null;
@@ -466,7 +501,13 @@ interface RawApplicationDetail {
     port?: number | null;
     path?: string | null;
   }[];
-  deployments?: { deploymentId: string; status?: string; title?: string; createdAt?: string }[];
+  deployments?: {
+    deploymentId: string;
+    status?: string;
+    title?: string;
+    createdAt?: string;
+    rollbackId?: string | null;
+  }[];
 }
 
 /** List every application in the tree, enriched with detail. */
@@ -507,7 +548,16 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
           status: dp.status ?? "idle",
           title: dp.title ?? "Deployment",
           createdAt: dp.createdAt ?? "",
+          rollbackId: dp.rollbackId ?? null,
         })),
+        autoDeploy: d.autoDeploy ?? false,
+        branch: d.customGitBranch ?? null,
+        buildPath: d.customGitBuildPath ?? null,
+        gitUrl: d.customGitUrl ?? null,
+        watchPaths: d.watchPaths ?? [],
+        webhookUrl: d.refreshToken
+          ? `${WEBHOOK_BASE}/api/deploy/${d.refreshToken}`
+          : null,
       } satisfies Application;
     })
   );
@@ -543,12 +593,17 @@ export async function setAppDockerSource(
 /**
  * Point an application at a public Git repository (built with Nixpacks, the
  * default build type). No OAuth needed — uses a plain clone URL.
+ *
+ * `watchPaths` is additive/defaulted so existing call sites are unaffected: an
+ * empty list means the deploy webhook fires on any change; a non-empty list
+ * restricts it to matching sub-paths (Dokploy's `watchPaths` semantics).
  */
 export async function setAppGitSource(
   applicationId: string,
   url: string,
   branch = "main",
-  buildPath = "/"
+  buildPath = "/",
+  watchPaths: string[] = []
 ): Promise<void> {
   await request("application.saveGitProvider", {
     method: "POST",
@@ -557,8 +612,45 @@ export async function setAppGitSource(
       customGitUrl: url,
       customGitBranch: branch,
       customGitBuildPath: buildPath,
-      watchPaths: [],
+      watchPaths,
     },
+  });
+}
+
+// --- push-to-deploy + rollback ----------------------------------------------
+// (Added for the Deploys tab. Kept in their own section so the existing
+//  application exports above stay untouched.)
+
+/**
+ * Enable/disable auto-deploy for an application. When enabled, Dokploy's deploy
+ * webhook (`webhookUrl`) triggers a redeploy on push; when disabled the webhook
+ * returns 400. `autoDeploy` rides on `application.update` (verified accepted by
+ * the `apiUpdateApplication` schema).
+ */
+export async function setAppAutoDeploy(
+  applicationId: string,
+  autoDeploy: boolean
+): Promise<void> {
+  await request("application.update", {
+    method: "POST",
+    body: { applicationId, autoDeploy },
+  });
+}
+
+/**
+ * Roll an application back to a previous deployment's image snapshot.
+ *
+ * Dokploy rollbacks are image-based: a deployment only has a `rollbackId` when
+ * it was pushed to a registry (rollbacks must be enabled with a registry on the
+ * app). This calls Dokploy's `rollback.rollback`, which restores the recorded
+ * image for that snapshot. There is no git/commit-level rollback in Dokploy —
+ * for Nixpacks apps without a registry, `rollbackId` is null and nothing is
+ * rollbackable.
+ */
+export async function rollbackToDeployment(rollbackId: string): Promise<void> {
+  await request("rollback.rollback", {
+    method: "POST",
+    body: { rollbackId },
   });
 }
 
