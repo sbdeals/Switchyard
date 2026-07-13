@@ -106,6 +106,8 @@ export interface AppDomain {
   port: number | null;
   path: string | null;
   certificateType: CertificateType;
+  /** For compose domains: the compose service the domain routes to. Null for apps. */
+  serviceName: string | null;
 }
 
 export interface AppDeployment {
@@ -119,6 +121,60 @@ export interface AppDeployment {
    * the Deploys-tab rollback control; see `rollbackToDeployment`.
    */
   rollbackId: string | null;
+}
+
+/**
+ * Docker Swarm HealthConfig, verified against Dokploy's `healthCheckSwarm`
+ * column (`.strict()` zod, nullable). Interval/Timeout/StartPeriod are in
+ * **nanoseconds** (Docker's int64 duration); Retries is a plain count. `Test`
+ * is Docker's health-check array, e.g. ["CMD-SHELL", "curl -f http://.../ok"].
+ */
+export interface HealthCheckSwarm {
+  Test?: string[];
+  Interval?: number;
+  Timeout?: number;
+  StartPeriod?: number;
+  Retries?: number;
+}
+
+export type RestartCondition = "none" | "on-failure" | "any";
+
+/**
+ * Docker Swarm RestartPolicy, verified against Dokploy's `restartPolicySwarm`
+ * column (`.strict()` zod, nullable). Delay/Window are in **nanoseconds**;
+ * MaxAttempts is a plain count; Condition is one of none|on-failure|any.
+ */
+export interface RestartPolicySwarm {
+  Condition?: RestartCondition;
+  Delay?: number;
+  MaxAttempts?: number;
+  Window?: number;
+}
+
+/** A path-rewrite rule applied at the proxy (Dokploy `redirects`). */
+export interface AppRedirect {
+  redirectId: string;
+  regex: string;
+  replacement: string;
+  permanent: boolean;
+}
+
+/** A published port mapping, publishedPort -> targetPort (Dokploy `ports`). */
+export interface AppPort {
+  portId: string;
+  publishedPort: number;
+  targetPort: number;
+  protocol: "tcp" | "udp";
+  publishMode: "host" | "ingress";
+}
+
+/**
+ * An HTTP basic-auth credential guarding the app (Dokploy `security`). We
+ * surface only the username — the stored password is a secret we never echo.
+ */
+export interface AppSecurity {
+  securityId: string;
+  username: string;
 }
 
 export interface Application extends ServiceBase {
@@ -137,7 +193,16 @@ export interface Application extends ServiceBase {
   /** Registry host for docker-image apps (credentials are never read back). */
   registryUrl: string | null;
   domains: AppDomain[];
+  redirects: AppRedirect[];
+  ports: AppPort[];
+  security: AppSecurity[];
   deployments: AppDeployment[];
+  // Docker Swarm soft resource reservations (Docker-format strings, like the limits).
+  cpuReservation: string | null;
+  memoryReservation: string | null;
+  // Swarm deploy config (applied on next deploy). null = unset.
+  healthCheckSwarm: HealthCheckSwarm | null;
+  restartPolicySwarm: RestartPolicySwarm | null;
   // --- push-to-deploy config (custom-git source); see setAppGitSource ---------
   /** When true, hitting the deploy webhook redeploys the app. */
   autoDeploy: boolean;
@@ -161,6 +226,10 @@ export interface ComposeService extends ServiceBase {
   kind: "compose";
   composeFile: string | null;
   composeType: string | null;
+  /** Public domains routed to the stack's services (Dokploy `domains`). */
+  domains: AppDomain[];
+  /** Deploy history for the stack (Dokploy `deployments`). */
+  deployments: AppDeployment[];
 }
 
 /** Any deployable service rendered in the dashboard. */
@@ -590,22 +659,71 @@ interface RawApplicationDetail {
   createdAt?: string | null;
   cpuLimit?: string | null;
   memoryLimit?: string | null;
+  cpuReservation?: string | null;
+  memoryReservation?: string | null;
   replicas?: number | null;
-  domains?: {
-    domainId: string;
-    host: string;
-    https?: boolean;
-    port?: number | null;
-    path?: string | null;
-    certificateType?: CertificateType | null;
+  healthCheckSwarm?: HealthCheckSwarm | null;
+  restartPolicySwarm?: RestartPolicySwarm | null;
+  domains?: RawDomain[];
+  redirects?: {
+    redirectId: string;
+    regex?: string;
+    replacement?: string;
+    permanent?: boolean;
   }[];
-  deployments?: {
-    deploymentId: string;
-    status?: string;
-    title?: string;
-    createdAt?: string;
-    rollbackId?: string | null;
+  ports?: {
+    portId: string;
+    publishedPort?: number;
+    targetPort?: number;
+    protocol?: string;
+    publishMode?: string;
   }[];
+  security?: { securityId: string; username?: string }[];
+  deployments?: RawDeployment[];
+}
+
+/** Domain shape returned nested under `application.one` / `compose.one`. */
+interface RawDomain {
+  domainId: string;
+  host: string;
+  https?: boolean;
+  port?: number | null;
+  path?: string | null;
+  certificateType?: CertificateType | null;
+  serviceName?: string | null;
+}
+
+/** Deployment shape returned nested under `application.one` / `compose.one`. */
+interface RawDeployment {
+  deploymentId: string;
+  status?: string;
+  title?: string;
+  createdAt?: string;
+  rollbackId?: string | null;
+}
+
+/** Normalize a nested domains array (shared by applications and compose). */
+function mapDomains(domains: RawDomain[] | undefined): AppDomain[] {
+  return (domains ?? []).map((dm) => ({
+    domainId: dm.domainId,
+    host: dm.host,
+    https: dm.https ?? false,
+    port: dm.port ?? null,
+    path: dm.path ?? null,
+    certificateType: dm.certificateType ?? "none",
+    serviceName: dm.serviceName ?? null,
+  }));
+}
+
+/** Normalize a nested deployments array (shared by applications and compose). */
+function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment[] {
+  return (deployments ?? []).map((dp) => ({
+    deploymentId: dp.deploymentId,
+    status: dp.status ?? "idle",
+    title: dp.title ?? "Deployment",
+    createdAt: dp.createdAt ?? "",
+    rollbackId: dp.rollbackId ?? null,
+  }));
 }
 
 /** List every application in the tree, enriched with detail. */
@@ -638,22 +756,30 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
         createdAt: d.createdAt ?? null,
         cpuLimit: d.cpuLimit ?? null,
         memoryLimit: d.memoryLimit ?? null,
+        cpuReservation: d.cpuReservation ?? null,
+        memoryReservation: d.memoryReservation ?? null,
         replicas: d.replicas ?? null,
-        domains: (d.domains ?? []).map((dm) => ({
-          domainId: dm.domainId,
-          host: dm.host,
-          https: dm.https ?? false,
-          port: dm.port ?? null,
-          path: dm.path ?? null,
-          certificateType: dm.certificateType ?? "none",
+        healthCheckSwarm: d.healthCheckSwarm ?? null,
+        restartPolicySwarm: d.restartPolicySwarm ?? null,
+        domains: mapDomains(d.domains),
+        redirects: (d.redirects ?? []).map((r) => ({
+          redirectId: r.redirectId,
+          regex: r.regex ?? "",
+          replacement: r.replacement ?? "",
+          permanent: r.permanent ?? false,
         })),
-        deployments: (d.deployments ?? []).map((dp) => ({
-          deploymentId: dp.deploymentId,
-          status: dp.status ?? "idle",
-          title: dp.title ?? "Deployment",
-          createdAt: dp.createdAt ?? "",
-          rollbackId: dp.rollbackId ?? null,
+        ports: (d.ports ?? []).map((p) => ({
+          portId: p.portId,
+          publishedPort: p.publishedPort ?? 0,
+          targetPort: p.targetPort ?? 0,
+          protocol: p.protocol === "udp" ? "udp" : "tcp",
+          publishMode: p.publishMode === "ingress" ? "ingress" : "host",
         })),
+        security: (d.security ?? []).map((s) => ({
+          securityId: s.securityId,
+          username: s.username ?? "",
+        })),
+        deployments: mapDeployments(d.deployments),
         autoDeploy: d.autoDeploy ?? false,
         branch: d.branch ?? d.customGitBranch ?? null,
         buildPath: d.customGitBuildPath ?? null,
@@ -897,7 +1023,15 @@ export interface ApplicationPatch {
   description?: string;
   cpuLimit?: string | null;
   memoryLimit?: string | null;
+  cpuReservation?: string | null;
+  memoryReservation?: string | null;
   command?: string | null;
+  // Swarm deploy settings. All accepted top-level by `application.update`
+  // (createSchema.partial()). The swarm objects are `.strict()` — only send
+  // their known keys; pass null to clear the whole object.
+  replicas?: number;
+  healthCheckSwarm?: HealthCheckSwarm | null;
+  restartPolicySwarm?: RestartPolicySwarm | null;
 }
 
 export async function updateApplication(id: string, patch: ApplicationPatch): Promise<void> {
@@ -1003,6 +1137,77 @@ export async function updateDomain(domainId: string, input: DomainInput): Promis
 /** Remove a domain. `domain.delete` (apiFindDomain) takes just the domainId. */
 export async function deleteDomain(domainId: string): Promise<void> {
   await request("domain.delete", { method: "POST", body: { domainId } });
+}
+
+/**
+ * Create a domain (public URL) for a service inside a compose stack. Unlike an
+ * application domain, Dokploy routes on the compose id plus the name of the
+ * compose service to target (`serviceName`, e.g. "kong" in Supabase) and needs
+ * an explicit `domainType: "compose"` (the create procedure branches on it).
+ */
+export async function createComposeDomain(
+  composeId: string,
+  serviceName: string,
+  host: string,
+  port = 80
+): Promise<void> {
+  await request("domain.create", {
+    method: "POST",
+    body: {
+      composeId,
+      serviceName,
+      host,
+      port,
+      https: true,
+      certificateType: "letsencrypt",
+      domainType: "compose",
+    },
+  });
+}
+
+// Redirects / ports / security: routing config that applies on next deploy.
+// Payload shapes verified against Dokploy v0.29.x (redirects/port/security
+// routers). All three arrays ride along on `application.one`.
+
+/** Add a proxy path-rewrite redirect to an application. */
+export async function createRedirect(
+  applicationId: string,
+  input: { regex: string; replacement: string; permanent: boolean }
+): Promise<void> {
+  await request("redirects.create", { method: "POST", body: { applicationId, ...input } });
+}
+
+export async function deleteRedirect(redirectId: string): Promise<void> {
+  await request("redirects.delete", { method: "POST", body: { redirectId } });
+}
+
+/** Publish a container port (publishedPort -> targetPort) for an application. */
+export async function createPort(
+  applicationId: string,
+  input: {
+    publishedPort: number;
+    targetPort: number;
+    protocol: "tcp" | "udp";
+    publishMode: "host" | "ingress";
+  }
+): Promise<void> {
+  await request("port.create", { method: "POST", body: { applicationId, ...input } });
+}
+
+export async function deletePort(portId: string): Promise<void> {
+  await request("port.delete", { method: "POST", body: { portId } });
+}
+
+/** Add an HTTP basic-auth credential guarding an application. */
+export async function createSecurity(
+  applicationId: string,
+  input: { username: string; password: string }
+): Promise<void> {
+  await request("security.create", { method: "POST", body: { applicationId, ...input } });
+}
+
+export async function deleteSecurity(securityId: string): Promise<void> {
+  await request("security.delete", { method: "POST", body: { securityId } });
 }
 
 // --- auto-URL: mint a reachable public URL on deploy ------------------------
@@ -1306,6 +1511,8 @@ interface RawComposeDetail {
   composeFile?: string | null;
   env?: string | null;
   createdAt?: string | null;
+  domains?: RawDomain[];
+  deployments?: RawDeployment[];
 }
 
 export const STARTER_COMPOSE = `services:
@@ -1338,6 +1545,8 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         replicas: null,
         composeFile: d.composeFile ?? null,
         composeType: d.composeType ?? null,
+        domains: mapDomains(d.domains),
+        deployments: mapDeployments(d.deployments),
       } satisfies ComposeService;
     })
   );
@@ -1362,6 +1571,18 @@ export async function createCompose(
 
 export async function updateComposeFile(id: string, composeFile: string): Promise<void> {
   await request("compose.update", { method: "POST", body: { composeId: id, composeFile } });
+}
+
+/**
+ * Replace a compose stack's environment variables (raw "KEY=value" block).
+ * `env` is not part of `compose.update`'s input schema — it has a dedicated
+ * `compose.saveEnvironment` procedure (mirrors application/database env saves).
+ */
+export async function saveComposeEnvironment(id: string, env: string): Promise<void> {
+  await request("compose.saveEnvironment", {
+    method: "POST",
+    body: { composeId: id, env },
+  });
 }
 
 export async function composeAction(id: string, action: Action): Promise<void> {

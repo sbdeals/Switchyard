@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react";
 import type { Service } from "@/lib/dokploy";
-import { saveEnvironmentAction, saveApplicationEnvAction } from "@/app/actions";
+import {
+  saveEnvironmentAction,
+  saveApplicationEnvAction,
+  saveComposeEnvAction,
+} from "@/app/actions";
 import { SaveRow, useSavedFlash } from "@/components/service/primitives";
 
 export function VariablesTab({ service }: { service: Service }) {
@@ -20,7 +24,9 @@ export function VariablesTab({ service }: { service: Service }) {
       const res =
         service.kind === "database"
           ? await saveEnvironmentAction(service.engine, service.id, value)
-          : await saveApplicationEnvAction(service.id, value);
+          : service.kind === "compose"
+            ? await saveComposeEnvAction(service.id, value)
+            : await saveApplicationEnvAction(service.id, value);
       if (res.ok) flashSaved();
       else setError(res.error);
     });

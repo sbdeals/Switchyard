@@ -33,12 +33,20 @@ import {
   saveAppBuildType,
   saveApplicationEnvironment,
   createDomain,
+  createComposeDomain,
   ensureAutoDomain,
   updateDomain,
   deleteDomain,
+  createRedirect,
+  deleteRedirect,
+  createPort,
+  deletePort,
+  createSecurity,
+  deleteSecurity,
   createCompose,
   composeAction,
   updateComposeFile,
+  saveComposeEnvironment,
   listTemplates,
   deployTemplate,
   listSchedules,
@@ -414,6 +422,63 @@ export async function deleteDomainAction(domainId: string): Promise<ActionResult
   return wrap(() => deleteDomain(domainId));
 }
 
+/** Attach a domain to a compose service. `serviceName` is the compose service to route to. */
+export async function createComposeDomainAction(
+  composeId: string,
+  serviceName: string,
+  host: string,
+  port: number
+): Promise<ActionResult> {
+  return wrap(() => createComposeDomain(composeId, serviceName.trim(), host.trim(), port));
+}
+
+// Networking config (applies on next deploy) — verified Dokploy v0.29.x shapes.
+
+export async function createRedirectAction(
+  applicationId: string,
+  regex: string,
+  replacement: string,
+  permanent: boolean
+): Promise<ActionResult> {
+  return wrap(() =>
+    createRedirect(applicationId, {
+      regex: regex.trim(),
+      replacement: replacement.trim(),
+      permanent,
+    })
+  );
+}
+
+export async function deleteRedirectAction(redirectId: string): Promise<ActionResult> {
+  return wrap(() => deleteRedirect(redirectId));
+}
+
+export async function createPortAction(
+  applicationId: string,
+  publishedPort: number,
+  targetPort: number,
+  protocol: "tcp" | "udp",
+  publishMode: "host" | "ingress"
+): Promise<ActionResult> {
+  return wrap(() => createPort(applicationId, { publishedPort, targetPort, protocol, publishMode }));
+}
+
+export async function deletePortAction(portId: string): Promise<ActionResult> {
+  return wrap(() => deletePort(portId));
+}
+
+export async function createSecurityAction(
+  applicationId: string,
+  username: string,
+  password: string
+): Promise<ActionResult> {
+  return wrap(() => createSecurity(applicationId, { username: username.trim(), password }));
+}
+
+export async function deleteSecurityAction(securityId: string): Promise<ActionResult> {
+  return wrap(() => deleteSecurity(securityId));
+}
+
 // --- push-to-deploy + rollback ----------------------------------------------
 // (Deploys-tab actions. Kept in their own section so the application actions
 //  above stay untouched.)
@@ -517,6 +582,10 @@ export async function saveComposeFileAction(
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");
   });
+}
+
+export async function saveComposeEnvAction(id: string, env: string): Promise<ActionResult> {
+  return wrap(() => saveComposeEnvironment(id, env));
 }
 
 // --- backups ----------------------------------------------------------------

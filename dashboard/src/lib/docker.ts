@@ -128,6 +128,97 @@ export async function followStats(
   };
 }
 
+export interface ExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  truncated: boolean;
+}
+
+/**
+ * Run a single command inside a container (non-interactive) and return its
+ * captured output. We use `sh -c` — the most universal shell — so pipes and
+ * builtins work; images without even `sh` surface Docker's "exec failed" error,
+ * which the caller relays. `Tty:false` keeps stdout/stderr on Docker's
+ * multiplexed frame format so we can demux them apart. Output is capped and the
+ * exec is abandoned after `timeoutMs` to bound a runaway command.
+ *
+ * Returns null when the appName resolves to no running container. Callers are
+ * responsible for the security check (only exec into Dokploy-managed services);
+ * this helper trusts its inputs.
+ */
+export async function runExec(
+  appName: string,
+  command: string,
+  opts: { timeoutMs?: number; maxBytes?: number } = {}
+): Promise<ExecResult | null> {
+  const id = await findContainerId(appName);
+  if (!id) return null;
+  const { timeoutMs = 15_000, maxBytes = 1_000_000 } = opts;
+  const container = docker.getContainer(id);
+
+  const exec = await container.exec({
+    Cmd: ["sh", "-c", command],
+    AttachStdin: false,
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: false,
+  });
+  const stream: Duplex = await exec.start({ hijack: true, stdin: false });
+
+  const { PassThrough } = await import("node:stream");
+  const outS = new PassThrough();
+  const errS = new PassThrough();
+  container.modem.demuxStream(stream, outS, errS);
+
+  let stdout = "";
+  let stderr = "";
+  let total = 0;
+  let truncated = false;
+  const collect = (s: NodeJS.ReadableStream, append: (t: string) => void) =>
+    s.on("data", (c: Buffer) => {
+      if (total >= maxBytes) {
+        truncated = true;
+        return;
+      }
+      total += c.length;
+      append(c.toString("utf8"));
+    });
+  collect(outS, (t) => (stdout += t));
+  collect(errS, (t) => (stderr += t));
+
+  await new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      truncated = true;
+      try {
+        stream.destroy();
+      } catch {
+        /* ignore */
+      }
+      finish();
+    }, timeoutMs);
+    stream.on("end", finish);
+    stream.on("close", finish);
+    stream.on("error", finish);
+  });
+
+  let exitCode: number | null = null;
+  try {
+    exitCode = (await exec.inspect()).ExitCode ?? null;
+  } catch {
+    /* exec/container already gone */
+  }
+
+  return { stdout, stderr, exitCode, truncated };
+}
+
 export { toSample };
 
 // --- one-shot reads for the server-side collector ---------------------------

@@ -21,6 +21,8 @@ import {
   Hammer,
   Clock,
   HardDrive,
+  Server,
+  TerminalSquare,
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -33,17 +35,21 @@ import { BackupsTab } from "@/components/service/BackupsTab";
 import { VolumesTab } from "@/components/service/VolumesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
+import { ConsoleTab } from "@/components/service/ConsoleTab";
 import {
   AppOverviewTab,
   AppBuildTab,
+  AppDeployTab,
   AppSettingsTab,
-  DomainsTab,
   DeploymentsTab,
+  DeploymentHistory,
   SchedulesTab,
 } from "@/components/service/AppTabs";
+import { NetworkingTab } from "@/components/service/networking";
 import {
   ComposeOverviewTab,
   ComposeEditorTab,
+  ComposeDomainsTab,
   ComposeSettingsTab,
 } from "@/components/service/ComposeTabs";
 import {
@@ -62,6 +68,7 @@ import { cn } from "@/lib/utils";
 type TabId =
   | "overview"
   | "variables"
+  | "deploy"
   | "build"
   | "domains"
   | "deployments"
@@ -70,19 +77,22 @@ type TabId =
   | "volumes"
   | "metrics"
   | "logs"
+  | "console"
   | "backups"
   | "settings";
 const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
   variables: { label: "Variables", icon: <KeyRound className="size-4" /> },
+  deploy: { label: "Deploy", icon: <Server className="size-4" /> },
   build: { label: "Build", icon: <Hammer className="size-4" /> },
-  domains: { label: "Domains", icon: <Globe className="size-4" /> },
+  domains: { label: "Networking", icon: <Globe className="size-4" /> },
   deployments: { label: "Deploys", icon: <Rocket className="size-4" /> },
   schedules: { label: "Schedules", icon: <Clock className="size-4" /> },
   editor: { label: "Compose", icon: <FileCode className="size-4" /> },
   volumes: { label: "Volumes", icon: <HardDrive className="size-4" /> },
   metrics: { label: "Metrics", icon: <Cpu className="size-4" /> },
   logs: { label: "Logs", icon: <ScrollText className="size-4" /> },
+  console: { label: "Console", icon: <TerminalSquare className="size-4" /> },
   backups: { label: "Backups", icon: <Archive className="size-4" /> },
   settings: { label: "Settings", icon: <Settings2 className="size-4" /> },
 };
@@ -92,12 +102,14 @@ const DB_TABS: TabId[] = [
   "volumes",
   "metrics",
   "logs",
+  "console",
   "backups",
   "settings",
 ];
 const APP_TABS: TabId[] = [
   "overview",
   "variables",
+  "deploy",
   "build",
   "domains",
   "deployments",
@@ -105,9 +117,20 @@ const APP_TABS: TabId[] = [
   "volumes",
   "metrics",
   "logs",
+  "console",
   "settings",
 ];
-const COMPOSE_TABS: TabId[] = ["overview", "editor", "volumes", "logs", "settings"];
+const COMPOSE_TABS: TabId[] = [
+  "overview",
+  "variables",
+  "domains",
+  "deployments",
+  "editor",
+  "volumes",
+  "logs",
+  "console",
+  "settings",
+];
 
 export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
@@ -171,13 +194,20 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && service.kind !== "compose" && (
-                <VariablesTab service={service} />
-              )}
+              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
               {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
-              {tab === "domains" && service.kind === "application" && <DomainsTab app={service} />}
+              {tab === "domains" && service.kind === "application" && (
+                <NetworkingTab app={service} />
+              )}
+              {tab === "domains" && service.kind === "compose" && (
+                <ComposeDomainsTab compose={service} />
+              )}
               {tab === "deployments" && service.kind === "application" && (
                 <DeploymentsTab app={service} />
+              )}
+              {tab === "deployments" && service.kind === "compose" && (
+                <DeploymentHistory deployments={service.deployments} />
               )}
               {tab === "schedules" && service.kind === "application" && (
                 <SchedulesTab app={service} />
@@ -188,6 +218,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
               {tab === "logs" && <LogsTab key={service.appName} appName={service.appName} active />}
+              {tab === "console" && <ConsoleTab key={service.appName} appName={service.appName} />}
               {tab === "backups" && service.kind === "database" && <BackupsTab db={service} />}
               {tab === "settings" &&
                 (service.kind === "database" ? (

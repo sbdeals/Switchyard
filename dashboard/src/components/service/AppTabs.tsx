@@ -21,10 +21,15 @@ import {
 import type {
   Application,
   AppDomain,
+  AppDeployment,
+  ApplicationPatch,
   BuildType,
   BuildTypePatch,
   CertificateType,
   DomainInput,
+  HealthCheckSwarm,
+  RestartCondition,
+  RestartPolicySwarm,
   Schedule,
 } from "@/lib/dokploy";
 import {
@@ -51,6 +56,8 @@ import {
   LifecycleButtons,
   SaveRow,
   DangerZone,
+  PublicUrlBar,
+  PrivateNetwork,
   useLifecycle,
   useSavedFlash,
 } from "@/components/service/primitives";
@@ -77,31 +84,14 @@ const useAppLifecycle = (app: Application) =>
 
 export function AppOverviewTab({ app }: { app: Application }) {
   const { pending, error, run } = useAppLifecycle(app);
-  // Elect the Public URL: prefer an https domain (the auto-URL minted on deploy
-  // is created with HTTPS) so it wins over any plain-HTTP entry; else the first.
-  const primary = app.domains.find((d) => d.https) ?? app.domains[0];
 
   return (
     <div className="space-y-5">
+      <PublicUrlBar domains={app.domains} status={app.status} />
+
       <LifecycleButtons status={app.status} pending={pending} error={error} run={run} />
 
-      <Field label="Public URL">
-        {primary ? (
-          <a
-            href={`${primary.https ? "https" : "http"}://${primary.host}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-sm text-[var(--color-brand)] hover:underline"
-          >
-            <Globe className="size-3.5" /> {primary.host}
-            <ExternalLink className="size-3" />
-          </a>
-        ) : (
-          <p className="text-xs text-[var(--color-fg-subtle)]">
-            No domain yet — add one in the Domains tab.
-          </p>
-        )}
-      </Field>
+      <PrivateNetwork host={app.appName} />
 
       <div className="grid grid-cols-2 gap-3">
         <Info label="Source" value={app.sourceType ?? "—"} />
@@ -353,7 +343,7 @@ export function DeploymentsTab({ app }: { app: Application }) {
   return (
     <div className="space-y-6">
       {app.sourceType === "git" && <AutoDeployPanel app={app} />}
-      <DeploymentHistory app={app} />
+      <DeploymentHistory deployments={app.deployments} />
     </div>
   );
 }
@@ -475,8 +465,8 @@ function AutoDeployPanel({ app }: { app: Application }) {
   );
 }
 
-function DeploymentHistory({ app }: { app: Application }) {
-  const deployments = [...app.deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+export function DeploymentHistory({ deployments: history }: { deployments: AppDeployment[] }) {
+  const deployments = [...history].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const color = (s: string) =>
     s === "done" ? "var(--color-ok)" : s === "error" ? "var(--color-danger)" : s === "running" ? "var(--color-warn)" : "var(--color-idle)";
   return (
@@ -800,16 +790,291 @@ function StartCommandForm({ app }: { app: Application }) {
   );
 }
 
+// --- Deploy tab (Swarm runtime settings) ------------------------------------
+
+// Docker Swarm expresses HealthConfig/RestartPolicy durations in nanoseconds.
+// We show friendly seconds in the UI and convert at the boundary.
+const NS_PER_SEC = 1_000_000_000;
+const secToNs = (s: string) => Math.round(Number(s) * NS_PER_SEC);
+const nsToSec = (ns?: number) =>
+  ns == null ? "" : String(Number((ns / NS_PER_SEC).toFixed(3)));
+
+/** Render Docker's health-check Test array back into a plain command string. */
+function decodeTest(test?: string[]): string {
+  if (!test || test.length === 0) return "";
+  if (test[0] === "CMD-SHELL" || test[0] === "CMD") return test.slice(1).join(" ");
+  if (test[0] === "NONE") return "";
+  return test.join(" ");
+}
+
+function DeploySection({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+      <div>
+        <h3 className="text-sm font-semibold text-[var(--color-fg)]">{title}</h3>
+        {hint && <p className="mt-0.5 text-xs text-[var(--color-fg-subtle)]">{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Shared save state for a Deploy sub-form, with an opt-in redeploy toggle. */
+function useDeploySave(app: Application) {
+  const [redeploy, setRedeploy] = useState(false);
+  const [saving, startSave] = useTransition();
+  const [saved, flashSaved] = useSavedFlash();
+  const [error, setError] = useState<string | null>(null);
+  const save = (patch: ApplicationPatch) => {
+    setError(null);
+    startSave(async () => {
+      const res = await updateApplicationAction(app.id, patch, redeploy);
+      if (res.ok) flashSaved();
+      else setError(res.error);
+    });
+  };
+  return { redeploy, setRedeploy, saving, saved, error, save };
+}
+
+function ReplicasForm({ app }: { app: Application }) {
+  const current = String(app.replicas ?? 1);
+  const [replicas, setReplicas] = useState(current);
+  const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
+  const dirty = replicas !== "" && replicas !== current;
+
+  return (
+    <DeploySection
+      title="Replicas"
+      hint="Number of container instances Swarm keeps running. 0 stops all tasks without deleting the service."
+    >
+      <div className="w-32">
+        <Field label="Instances">
+          <input
+            value={replicas}
+            onChange={(e) => setReplicas(e.target.value.replace(/[^0-9]/g, ""))}
+            inputMode="numeric"
+            placeholder="1"
+            className={inputCls}
+          />
+        </Field>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
+        <SaveRow
+          saving={saving}
+          saved={saved}
+          error={error}
+          disabled={!dirty}
+          onSave={() => save({ replicas: Number(replicas) })}
+        />
+      </div>
+    </DeploySection>
+  );
+}
+
+function RestartPolicyForm({ app }: { app: Application }) {
+  const curCond = app.restartPolicySwarm?.Condition ?? "";
+  const curMax =
+    app.restartPolicySwarm?.MaxAttempts != null
+      ? String(app.restartPolicySwarm.MaxAttempts)
+      : "";
+  const [condition, setCondition] = useState<string>(curCond);
+  const [maxAttempts, setMaxAttempts] = useState(curMax);
+  const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
+  const dirty = condition !== curCond || maxAttempts !== curMax;
+
+  function onSave() {
+    // Merge over any existing policy so Delay/Window set via Dokploy's advanced
+    // UI survive. The schema is `.strict()`, so only known keys may be sent.
+    const base: RestartPolicySwarm = { ...(app.restartPolicySwarm ?? {}) };
+    if (condition) base.Condition = condition as RestartCondition;
+    else delete base.Condition;
+    if (maxAttempts !== "") base.MaxAttempts = Number(maxAttempts);
+    else delete base.MaxAttempts;
+    save({ restartPolicySwarm: Object.keys(base).length > 0 ? base : null });
+  }
+
+  return (
+    <DeploySection
+      title="Restart policy"
+      hint="How Swarm reacts when a task exits. Applied on the next deploy."
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Condition">
+          <select
+            value={condition}
+            onChange={(e) => setCondition(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">Default (any)</option>
+            <option value="none">None</option>
+            <option value="on-failure">On failure</option>
+            <option value="any">Any</option>
+          </select>
+        </Field>
+        <Field label="Max attempts" hint="0 = unlimited">
+          <input
+            value={maxAttempts}
+            onChange={(e) => setMaxAttempts(e.target.value.replace(/[^0-9]/g, ""))}
+            inputMode="numeric"
+            placeholder="unset"
+            className={inputCls}
+          />
+        </Field>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
+        <SaveRow
+          saving={saving}
+          saved={saved}
+          error={error}
+          disabled={!dirty}
+          onSave={onSave}
+        />
+      </div>
+    </DeploySection>
+  );
+}
+
+function HealthCheckForm({ app }: { app: Application }) {
+  const hc = app.healthCheckSwarm;
+  const curCmd = decodeTest(hc?.Test);
+  const curInterval = nsToSec(hc?.Interval);
+  const curTimeout = nsToSec(hc?.Timeout);
+  const curStart = nsToSec(hc?.StartPeriod);
+  const curRetries = hc?.Retries != null ? String(hc.Retries) : "";
+  const [cmd, setCmd] = useState(curCmd);
+  const [intervalSec, setIntervalSec] = useState(curInterval);
+  const [timeoutSec, setTimeoutSec] = useState(curTimeout);
+  const [startSec, setStartSec] = useState(curStart);
+  const [retries, setRetries] = useState(curRetries);
+  const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
+  const dirty =
+    cmd !== curCmd ||
+    intervalSec !== curInterval ||
+    timeoutSec !== curTimeout ||
+    startSec !== curStart ||
+    retries !== curRetries;
+
+  const decimal = (v: string) => v.replace(/[^0-9.]/g, "");
+
+  function onSave() {
+    const next: HealthCheckSwarm = {};
+    const c = cmd.trim();
+    if (c) next.Test = ["CMD-SHELL", c];
+    if (intervalSec !== "") next.Interval = secToNs(intervalSec);
+    if (timeoutSec !== "") next.Timeout = secToNs(timeoutSec);
+    if (startSec !== "") next.StartPeriod = secToNs(startSec);
+    if (retries !== "") next.Retries = Number(retries);
+    save({ healthCheckSwarm: Object.keys(next).length > 0 ? next : null });
+  }
+
+  return (
+    <DeploySection
+      title="Healthcheck"
+      hint="Swarm runs this inside the container to gate traffic and rolling deploys. Applied on the next deploy."
+    >
+      <Field label="Test command" hint="wrapped as CMD-SHELL">
+        <input
+          value={cmd}
+          onChange={(e) => setCmd(e.target.value)}
+          placeholder="curl -f http://localhost:3000/health"
+          className={inputCls}
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Interval (s)">
+          <input
+            value={intervalSec}
+            onChange={(e) => setIntervalSec(decimal(e.target.value))}
+            inputMode="decimal"
+            placeholder="unset"
+            className={inputCls}
+          />
+        </Field>
+        <Field label="Timeout (s)">
+          <input
+            value={timeoutSec}
+            onChange={(e) => setTimeoutSec(decimal(e.target.value))}
+            inputMode="decimal"
+            placeholder="unset"
+            className={inputCls}
+          />
+        </Field>
+        <Field label="Start period (s)">
+          <input
+            value={startSec}
+            onChange={(e) => setStartSec(decimal(e.target.value))}
+            inputMode="decimal"
+            placeholder="unset"
+            className={inputCls}
+          />
+        </Field>
+        <Field label="Retries">
+          <input
+            value={retries}
+            onChange={(e) => setRetries(e.target.value.replace(/[^0-9]/g, ""))}
+            inputMode="numeric"
+            placeholder="unset"
+            className={inputCls}
+          />
+        </Field>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
+        <SaveRow
+          saving={saving}
+          saved={saved}
+          error={error}
+          disabled={!dirty}
+          onSave={onSave}
+        />
+      </div>
+    </DeploySection>
+  );
+}
+
+export function AppDeployTab({ app }: { app: Application }) {
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-[var(--color-fg-muted)]">
+        Runtime settings for the Docker Swarm service. Each card saves
+        independently; toggle{" "}
+        <span className="font-medium">Redeploy now</span> to apply immediately,
+        otherwise changes take effect on the next deploy.
+      </p>
+      <ReplicasForm app={app} />
+      <RestartPolicyForm app={app} />
+      <HealthCheckForm app={app} />
+    </div>
+  );
+}
+
 export function AppSettingsTab({ app, onClose }: { app: Application; onClose: () => void }) {
   const { pending: lifePending, error: lifeError, run } = useAppLifecycle(app);
   const [name, setName] = useState(app.name);
   const [cpu, setCpu] = useState(app.cpuLimit ?? "");
   const [mem, setMem] = useState(app.memoryLimit ?? "");
+  const [cpuRes, setCpuRes] = useState(app.cpuReservation ?? "");
+  const [memRes, setMemRes] = useState(app.memoryReservation ?? "");
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const dirty = name !== app.name || cpu !== (app.cpuLimit ?? "") || mem !== (app.memoryLimit ?? "");
+  const resourcesDirty =
+    cpu !== (app.cpuLimit ?? "") ||
+    mem !== (app.memoryLimit ?? "") ||
+    cpuRes !== (app.cpuReservation ?? "") ||
+    memRes !== (app.memoryReservation ?? "");
+  const dirty = name !== app.name || resourcesDirty;
 
   function save() {
     setSaveError(null);
@@ -820,8 +1085,11 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
           name: name.trim(),
           cpuLimit: cpu || null,
           memoryLimit: mem || null,
+          cpuReservation: cpuRes || null,
+          memoryReservation: memRes || null,
         },
-        cpu !== (app.cpuLimit ?? "") || mem !== (app.memoryLimit ?? "")
+        // Resource changes only bind on redeploy.
+        resourcesDirty
       );
       if (res.ok) flashSaved();
       else setSaveError(res.error);
@@ -835,11 +1103,17 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="CPU limit">
+          <Field label="CPU limit" hint='e.g. "0.5"'>
             <input value={cpu} onChange={(e) => setCpu(e.target.value)} placeholder="unlimited" className={inputCls} />
           </Field>
-          <Field label="Memory limit">
+          <Field label="Memory limit" hint='e.g. "256m"'>
             <input value={mem} onChange={(e) => setMem(e.target.value)} placeholder="unlimited" className={inputCls} />
+          </Field>
+          <Field label="CPU reservation" hint="soft floor">
+            <input value={cpuRes} onChange={(e) => setCpuRes(e.target.value)} placeholder="none" className={inputCls} />
+          </Field>
+          <Field label="Memory reservation" hint="soft floor">
+            <input value={memRes} onChange={(e) => setMemRes(e.target.value)} placeholder="none" className={inputCls} />
           </Field>
         </div>
         <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
