@@ -22,6 +22,14 @@ export interface SwitchyardConfig {
   expose: boolean;
   /** Skip the Traefik proxy (defaults true on Docker Desktop, false on Linux). */
   skipTraefik: boolean;
+  /**
+   * Opt-in local ingress: run a demo Traefik on alternate host ports (Docker
+   * Desktop, where skipTraefik is on). HTTP-only routing — NOT real TLS.
+   * `switchyard local-ingress up/down` drives it; off by default.
+   */
+  localIngress: boolean;
+  localIngressHttpPort: number;
+  localIngressHttpsPort: number;
   adminName: string;
   adminEmail: string;
   adminPassword: string;
@@ -45,6 +53,9 @@ export function defaultConfig(platform: Platform = detectPlatform()): Switchyard
     dashboardPort: 3001,
     expose: false,
     skipTraefik: platform !== "linux",
+    localIngress: false,
+    localIngressHttpPort: 8080,
+    localIngressHttpsPort: 8443,
     adminName: "Admin",
     adminEmail: "",
     adminPassword: "",
@@ -60,6 +71,9 @@ export const CONFIG_KEY_TYPES = {
   dashboardPort: "number",
   expose: "boolean",
   skipTraefik: "boolean",
+  localIngress: "boolean",
+  localIngressHttpPort: "number",
+  localIngressHttpsPort: "number",
   adminName: "string",
   adminEmail: "string",
   adminPassword: "string",

@@ -21,12 +21,15 @@ import {
   updateApplication,
   saveApplicationEnvironment,
   createDomain,
+  updateDomain,
+  deleteDomain,
   createCompose,
   composeAction,
   updateComposeFile,
   type Action,
   type DatabasePatch,
   type ApplicationPatch,
+  type DomainInput,
   type Engine,
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -223,10 +226,20 @@ export async function saveApplicationEnvAction(id: string, env: string): Promise
 
 export async function createDomainAction(
   applicationId: string,
-  host: string,
-  port: number
+  input: DomainInput
 ): Promise<ActionResult> {
-  return wrap(() => createDomain(applicationId, host.trim(), port));
+  return wrap(() => createDomain(applicationId, { ...input, host: input.host.trim() }));
+}
+
+export async function updateDomainAction(
+  domainId: string,
+  input: DomainInput
+): Promise<ActionResult> {
+  return wrap(() => updateDomain(domainId, { ...input, host: input.host.trim() }));
+}
+
+export async function deleteDomainAction(domainId: string): Promise<ActionResult> {
+  return wrap(() => deleteDomain(domainId));
 }
 
 // --- compose ----------------------------------------------------------------

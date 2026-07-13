@@ -68,12 +68,16 @@ export interface Database extends ServiceBase {
 
 export type AppSource = "github" | "gitlab" | "bitbucket" | "gitea" | "git" | "docker";
 
+/** Dokploy's certificate strategy for a domain (schema enum in shared.ts). */
+export type CertificateType = "none" | "letsencrypt" | "custom";
+
 export interface AppDomain {
   domainId: string;
   host: string;
   https: boolean;
   port: number | null;
   path: string | null;
+  certificateType: CertificateType;
 }
 
 export interface AppDeployment {
@@ -465,6 +469,7 @@ interface RawApplicationDetail {
     https?: boolean;
     port?: number | null;
     path?: string | null;
+    certificateType?: CertificateType | null;
   }[];
   deployments?: { deploymentId: string; status?: string; title?: string; createdAt?: string }[];
 }
@@ -501,6 +506,7 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
           https: dm.https ?? false,
           port: dm.port ?? null,
           path: dm.path ?? null,
+          certificateType: dm.certificateType ?? "none",
         })),
         deployments: (d.deployments ?? []).map((dp) => ({
           deploymentId: dp.deploymentId,
@@ -586,12 +592,58 @@ export async function applicationAction(id: string, action: Action): Promise<voi
   await request(`application.${action}`, { method: "POST", body: { applicationId: id } });
 }
 
-/** Create a domain (public URL) for an application. */
-export async function createDomain(applicationId: string, host: string, port = 80): Promise<void> {
+/** Editable fields on a domain (subset of Dokploy's apiUpdateDomain schema). */
+export interface DomainInput {
+  host: string;
+  port: number;
+  https: boolean;
+  certificateType: CertificateType;
+  path?: string;
+}
+
+/**
+ * Create a domain (public URL) for an application. HTTPS + certificateType are
+ * caller-controlled: Let's Encrypt needs the host to answer on 80/443, so a
+ * local/no-ingress setup should pass https:false + certificateType:"none".
+ */
+export async function createDomain(
+  applicationId: string,
+  input: DomainInput,
+): Promise<void> {
   await request("domain.create", {
     method: "POST",
-    body: { applicationId, host, port, https: true, certificateType: "letsencrypt" },
+    body: {
+      applicationId,
+      host: input.host,
+      port: input.port,
+      https: input.https,
+      certificateType: input.certificateType,
+      path: input.path ?? "/",
+    },
   });
+}
+
+/**
+ * Update an existing domain. `domain.update` (apiUpdateDomain) takes the same
+ * fields as create plus the required domainId.
+ */
+export async function updateDomain(domainId: string, input: DomainInput): Promise<void> {
+  await request("domain.update", {
+    method: "POST",
+    body: {
+      domainId,
+      host: input.host,
+      port: input.port,
+      https: input.https,
+      certificateType: input.certificateType,
+      path: input.path ?? "/",
+    },
+  });
+}
+
+/** Remove a domain. `domain.delete` (apiFindDomain) takes just the domainId. */
+export async function deleteDomain(domainId: string): Promise<void> {
+  await request("domain.delete", { method: "POST", body: { domainId } });
 }
 
 // --- compose ----------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { docker, dockerInherit, dockerOk } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
+import { ensureLocalIngress, removeLocalIngress } from "../core/local-ingress.js";
 import { serviceExists, waitServicesConverged } from "../core/swarm.js";
 import { randomSecret, sleep } from "../core/util.js";
 import type { PlatformModule } from "./types.js";
@@ -153,6 +154,15 @@ export const dockerDesktopPlatform: PlatformModule = {
 
     if (!cfg.skipTraefik) {
       log("Note: Traefik is not managed on Docker Desktop — domains will not route. (skipTraefik=false is ignored here.)");
+    }
+  },
+
+  async localIngress(action, cfg, log) {
+    if (action === "up") {
+      const result = await ensureLocalIngress(cfg, log);
+      if (result === "unchanged") log("Local ingress already running (unchanged).");
+    } else {
+      await removeLocalIngress(log);
     }
   },
 

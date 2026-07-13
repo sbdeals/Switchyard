@@ -15,6 +15,7 @@ export {
 } from "./core/config.js";
 export { parseJsonLines } from "./core/docker.js";
 export { UserError } from "./core/errors.js";
+export { LOCAL_INGRESS_CONTAINER, renderLocalIngress } from "./core/local-ingress.js";
 export { nextFreePort, portFree } from "./core/ports.js";
 export { renderContainer } from "./core/switchyard-container.js";
 export { generatePassword, isValidEmail, parsePort, randomSecret, sha256 } from "./core/util.js";

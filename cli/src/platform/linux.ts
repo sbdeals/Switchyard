@@ -101,6 +101,27 @@ export const linuxPlatform: PlatformModule = {
     }
   },
 
+  async localIngress(action, cfg, log) {
+    const script = join(bundledScriptsDir(), "local-ingress.sh");
+    if (action === "up") {
+      // Honor the exposure model: 127.0.0.1 by default, all interfaces only
+      // when the stack is explicitly exposed. TRAEFIK_IMAGE passes through.
+      const envPairs = [`BIND_ADDR=${cfg.expose ? "0.0.0.0" : "127.0.0.1"}`];
+      if (process.env.TRAEFIK_IMAGE) envPairs.push(`TRAEFIK_IMAGE=${process.env.TRAEFIK_IMAGE}`);
+      log(`Starting local ingress via ${script} ...`);
+      const code = await runScript(script, envPairs, [
+        "up",
+        String(cfg.localIngressHttpPort),
+        String(cfg.localIngressHttpsPort),
+      ]);
+      if (code !== 0) throw new UserError("local-ingress.sh up failed (see output above).");
+    } else {
+      log(`Stopping local ingress via ${script} ...`);
+      const code = await runScript(script, [], ["down"]);
+      if (code !== 0) throw new UserError("local-ingress.sh down failed (see output above).");
+    }
+  },
+
   async downDokploy(opts, log) {
     const script = join(bundledScriptsDir(), "dokploy-down.sh");
     log(`Stopping the Dokploy stack via ${script} ...`);

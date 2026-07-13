@@ -74,6 +74,9 @@ export async function configCommand(
       if (k === "dokployPort") {
         p.log.info("Changing the Dokploy port also needs the service re-published — run `switchyard up` to converge.");
       }
+      if (k === "localIngress" && coerced === true) {
+        p.log.info("Start the demo proxy with `switchyard local-ingress up` (or it converges on the next `switchyard up`).");
+      }
 
       if (flags.restart === false) {
         p.log.info("Skipped container restart (--no-restart). Apply later with `switchyard up`.");

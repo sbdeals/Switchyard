@@ -200,6 +200,21 @@ export async function upCommand(flags: UpFlags): Promise<void> {
     throw new UserError(`Dashboard is running but can't talk to Dokploy (${err}).\n${remedy}`);
   }
 
+  // ---- local ingress (opt-in, best-effort) --------------------------------
+  // Converge only when the user opted in (default false = no-op, so `up`'s
+  // default behavior is unchanged). Never fatal: a broken demo proxy must not
+  // fail the install.
+  if (cfg.localIngress) {
+    try {
+      await platform.localIngress("up", cfg, log);
+      info(
+        `Local ingress on http://${cfg.expose ? "<this-machine's-ip>" : "127.0.0.1"}:${cfg.localIngressHttpPort} (HTTP only — NOT real TLS).`,
+      );
+    } catch (e) {
+      warn(`Local ingress not started (opt-in): ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   // ---- Claude Code (optional) ---------------------------------------------
   if (interactive && flags.claude !== false) {
     await claudeStep();
