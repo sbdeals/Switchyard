@@ -75,7 +75,14 @@ Deploy an application in Dokploy first (that makes Dokploy generate the config),
 then re-run this command."
   fi
 
-  local spec="$TRAEFIK_IMAGE|$BIND_ADDR|$http|$https"
+  # Prometheus metrics for the dashboard's HTTP panels: ensure the (Dokploy-
+  # owned) traefik.yml exposes them, and publish Traefik's internal :8080.
+  local metrics="${METRICS_PORT:-8081}"
+  docker run --rm -v "$TRAEFIK_DIR:/mnt" alpine sh -c \
+    'grep -q "^metrics:" /mnt/traefik.yml || printf "metrics:\n  prometheus:\n    addEntryPointsLabels: true\n    addServicesLabels: true\n" >> /mnt/traefik.yml' \
+    >/dev/null 2>&1 || warn "could not ensure metrics block in traefik.yml"
+
+  local spec="$TRAEFIK_IMAGE|$BIND_ADDR|$http|$https|metrics:$metrics"
   local hash
   hash="$(fingerprint "$spec")"
 
@@ -96,6 +103,7 @@ then re-run this command."
     --network "$NETWORK" \
     -p "$BIND_ADDR:$http:80" \
     -p "$BIND_ADDR:$https:443" \
+    -p "$BIND_ADDR:$metrics:8080" \
     -v /var/run/docker.sock:/var/run/docker.sock:ro \
     -v "$TRAEFIK_DIR:$TRAEFIK_DIR" \
     -l "switchyard.managed=true" \

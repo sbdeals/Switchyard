@@ -10,6 +10,7 @@ import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
+import { AgentPanel } from "@/components/agent/AgentPanel";
 import { cn } from "@/lib/utils";
 
 type View = "canvas" | "grid";
@@ -92,6 +93,7 @@ export function Workspace({
 
       <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
+      <AgentPanel />
     </div>
   );
 }

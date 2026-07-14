@@ -321,8 +321,12 @@ type ReqInit = { method?: "GET" | "POST"; body?: unknown };
  * the call signature stays `request(path, init)` for every existing caller. On
  * a Dokploy 401 the user's session has expired -> redirect to /login (we do NOT
  * silently fall back to the admin session).
+ *
+ * Exported so the embedded agent module (`lib/agent/`) can reach Dokploy
+ * procedures this file does not yet wrap without duplicating the per-user auth
+ * logic. Prefer the typed helpers where they exist.
  */
-async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
+export async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
   const res = await fetch(`${BASE}/api/${path}`, {
     method: init.method ?? "GET",
     headers: {
@@ -2002,9 +2006,20 @@ export async function loadWorkspace(): Promise<{
  * attaching to a container, so an authed user can't tail arbitrary host
  * containers by name. Uses the per-user session (via `request()`).
  */
+// Briefly cached so metrics-style routes that poll every ~20s don't re-walk
+// the whole Dokploy tree on each request.
+let appNamesCache: { at: number; names: Set<string> } | null = null;
+const APP_NAMES_TTL_MS = 30_000;
+
 export async function knownAppNames(): Promise<Set<string>> {
+  const now = Date.now();
+  if (appNamesCache && now - appNamesCache.at < APP_NAMES_TTL_MS) {
+    return appNamesCache.names;
+  }
   const { services } = await loadWorkspace();
-  return new Set(services.map((s) => s.appName).filter((n): n is string => Boolean(n)));
+  const names = new Set(services.map((s) => s.appName).filter((n): n is string => Boolean(n)));
+  appNamesCache = { at: now, names };
+  return names;
 }
 
 // ============================================================================

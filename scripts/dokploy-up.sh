@@ -21,6 +21,8 @@ ensure_docker
 
 if service_exists dokploy; then
   ok "Dokploy is already deployed."
+  # Converge the Traefik metrics config so existing installs pick it up too.
+  converge_traefik_metrics
   # Via bash, not direct exec: the npm-bundled copy of these scripts has no
   # execute bit (packed on Windows, where the bit doesn't exist).
   exec bash "$SCRIPT_DIR/dokploy-status.sh"
@@ -77,5 +79,9 @@ if wait_dokploy_healthy 80 && wait_dokploy_http 40; then
 else
   warn "Dokploy is not serving HTTP yet; check 'scripts/dokploy-status.sh' and the service logs."
 fi
+
+# Turn on Traefik Prometheus metrics for the dashboard's HTTP panels (safe
+# no-op until Dokploy has generated traefik.yml).
+converge_traefik_metrics
 
 exec bash "$SCRIPT_DIR/dokploy-status.sh"

@@ -32,11 +32,19 @@ const HASH_LABEL = "switchyard.config-hash";
  */
 const DEFAULT_TRAEFIK_IMAGE = "traefik:v3.6.7";
 
+/**
+ * Host port for Traefik's internal :8080 (dashboard API + Prometheus
+ * /metrics). The Switchyard dashboard's HTTP panels scrape it via
+ * TRAEFIK_METRICS_URL (default http://127.0.0.1:8081/metrics).
+ */
+const METRICS_PORT = 8081;
+
 export interface LocalIngressPlan {
   image: string;
   bindHost: string;
   httpPort: number;
   httpsPort: number;
+  metricsPort: number;
   runArgs: string[];
   /** Fingerprint of everything that affects the running container. */
   hash: string;
@@ -54,7 +62,16 @@ export function renderLocalIngress(cfg: SwitchyardConfig): LocalIngressPlan {
   const bindHost = cfg.expose ? "0.0.0.0" : "127.0.0.1";
   const httpPort = cfg.localIngressHttpPort;
   const httpsPort = cfg.localIngressHttpsPort;
-  const spec = { image, bindHost, httpPort, httpsPort, network: NETWORK_NAME, dir: TRAEFIK_DIR };
+  const metricsPort = METRICS_PORT;
+  const spec = {
+    image,
+    bindHost,
+    httpPort,
+    httpsPort,
+    metricsPort,
+    network: NETWORK_NAME,
+    dir: TRAEFIK_DIR,
+  };
   const hash = sha256(JSON.stringify(spec));
   const runArgs = [
     "run",
@@ -69,6 +86,8 @@ export function renderLocalIngress(cfg: SwitchyardConfig): LocalIngressPlan {
     `${bindHost}:${httpPort}:80`,
     "-p",
     `${bindHost}:${httpsPort}:443`,
+    "-p",
+    `${bindHost}:${metricsPort}:8080`,
     "-v",
     "/var/run/docker.sock:/var/run/docker.sock:ro",
     "-v",
@@ -80,7 +99,7 @@ export function renderLocalIngress(cfg: SwitchyardConfig): LocalIngressPlan {
     image,
     `--configFile=${TRAEFIK_DIR}/traefik.yml`,
   ];
-  return { image, bindHost, httpPort, httpsPort, runArgs, hash };
+  return { image, bindHost, httpPort, httpsPort, metricsPort, runArgs, hash };
 }
 
 export type EnsureResult = "unchanged" | "created" | "recreated";
@@ -116,6 +135,14 @@ export async function ensureLocalIngress(
         "Deploy an application in Dokploy first (that makes Dokploy generate the config), then retry.",
     );
   }
+
+  // Ensure the (Dokploy-owned) traefik.yml exposes Prometheus metrics — the
+  // dashboard's HTTP panels scrape them via the published metrics port.
+  // Idempotent: appends only when no metrics block exists.
+  await docker([
+    "run", "--rm", "-v", `${TRAEFIK_DIR}:/mnt`, "alpine", "sh", "-c",
+    'grep -q "^metrics:" /mnt/traefik.yml || printf "metrics:\\n  prometheus:\\n    addEntryPointsLabels: true\\n    addServicesLabels: true\\n" >> /mnt/traefik.yml',
+  ]);
 
   const existing = await docker([
     "inspect",
