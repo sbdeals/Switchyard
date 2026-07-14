@@ -2,7 +2,7 @@
 # Switchyard bootstrap — one command from a fresh Linux host to a running
 # Dokploy + Switchyard stack:
 #
-#   curl -fsSL https://raw.githubusercontent.com/sbdeals/dokploy-claudecode/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/sbdeals/switchyard/main/install.sh | bash
 #
 # Installs Docker and Node.js if missing, then hands off to the switchyard
 # CLI (npm: switchyard-cli), which does the real work. Extra flags go to

@@ -31,7 +31,7 @@ Prerequisites: a 64-bit distro and `curl`. Docker and Node.js are installed
 automatically if missing:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sbdeals/dokploy-claudecode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sbdeals/switchyard/main/install.sh | bash
 ```
 
 Already have Node 20+ and Docker? Skip the bootstrap:

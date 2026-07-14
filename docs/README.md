@@ -1,6 +1,6 @@
 # Documentation
 
-Docs for **Switchyard** — an open-source, Railway-style PaaS built on [Dokploy](https://dokploy.com) and driven by Claude Code: the dashboard, the `switchyard-cli` installer, the launch tooling, and the MCP server. (Repo slug: `sbdeals/dokploy-claudecode`.)
+Docs for **Switchyard** — an open-source, Railway-style PaaS built on [Dokploy](https://dokploy.com) and driven by Claude Code: the dashboard, the `switchyard-cli` installer, the launch tooling, and the MCP server. (Repo slug: `sbdeals/switchyard`.)
 
 | Doc | Read it when you want to… |
 |---|---|

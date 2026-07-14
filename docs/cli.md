@@ -13,7 +13,7 @@ it installs is called `switchyard`.
 Fresh Linux server (installs Docker and Node.js if missing, then runs `up`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sbdeals/dokploy-claudecode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sbdeals/switchyard/main/install.sh | bash
 ```
 
 Anywhere with Node 20+ and Docker (including Windows 11 with Docker Desktop

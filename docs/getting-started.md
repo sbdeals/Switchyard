@@ -25,7 +25,7 @@ dive into the `make` targets and scripts, see
 **Linux** (fresh server or VPS — installs Docker and Node.js if missing):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sbdeals/dokploy-claudecode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sbdeals/switchyard/main/install.sh | bash
 ```
 
 **Windows 11 / macOS** (Docker Desktop running, Node 20+ installed):
