@@ -1,11 +1,12 @@
 # Project context for Claude Code
 
-Goal: an open-source, Railway-style PaaS built on top of **Dokploy**, driven by
-**Claude Code**. Four parts live here: the bash launch tooling (`scripts/`),
-the Switchyard dashboard (`dashboard/`), the `switchyard` CLI (`cli/`,
-npm package **`switchyard-cli`**) that turns everything into a one-command
-install, and the MCP server (`mcp/`, registered in `.mcp.json`) that exposes
-Dokploy operations as tools to Claude Code.
+This project is **Switchyard** (its official name): an open-source,
+Railway-style PaaS built on top of **Dokploy**, driven by **Claude Code**.
+Four parts live here: the bash launch tooling (`scripts/`), the Switchyard
+dashboard (`dashboard/`), the `switchyard` CLI (`cli/`, npm package
+**`switchyard-cli`**) that turns everything into a one-command install, and
+the MCP server (`mcp/`, registered in `.mcp.json`) that exposes Dokploy
+operations as tools to Claude Code.
 
 ## Launching things
 
