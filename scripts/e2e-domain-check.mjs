@@ -117,7 +117,8 @@ async function main() {
       const one = await api(`application.one?applicationId=${encodeURIComponent(id)}`);
       if (one?.name === "whoami") {
         log(`removing a prior whoami app (${id}) ...`);
-        await api("application.remove", { applicationId: id });
+        // NB: the procedure is application.delete — application.remove 404s.
+        await api("application.delete", { applicationId: id });
       }
     } catch {
       /* ignore — best-effort cleanup */

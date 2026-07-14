@@ -1083,7 +1083,10 @@ export async function saveApplicationEnvironment(id: string, env: string): Promi
 }
 
 export async function applicationAction(id: string, action: Action): Promise<void> {
-  await request(`application.${action}`, { method: "POST", body: { applicationId: id } });
+  // Like compose, applications use delete instead of remove (application.remove
+  // does not exist — it 404s, which used to break the Destroy button).
+  const proc = action === "remove" ? "delete" : action;
+  await request(`application.${proc}`, { method: "POST", body: { applicationId: id } });
 }
 
 export interface DomainInput {
