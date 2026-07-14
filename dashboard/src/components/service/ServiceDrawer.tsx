@@ -127,6 +127,7 @@ const COMPOSE_TABS: TabId[] = [
   "deployments",
   "editor",
   "volumes",
+  "metrics",
   "logs",
   "console",
   "settings",
