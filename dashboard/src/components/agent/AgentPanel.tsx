@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
@@ -287,9 +287,7 @@ export function AgentPanel() {
               </button>
             </header>
 
-            <ProviderBar config={config} onChanged={refreshConfig} />
-            <KeyBar config={config} onChanged={refreshConfig} />
-            <ModelBar config={config} onChanged={refreshConfig} />
+            <ConnectionBar config={config} onChanged={refreshConfig} />
 
             {configured === false ? (
               <SetupCard />
@@ -383,19 +381,182 @@ function ToolPill({ chip }: { chip: ToolChip }) {
   );
 }
 
-/** Provider toggle: Anthropic (Messages API) vs any OpenAI-compatible endpoint. */
-function ProviderBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
-  const [saving, setSaving] = useState(false);
-  const provider = config?.provider ?? "anthropic";
+// --- connection bar ----------------------------------------------------------
+// One compact block for the whole copilot credential: Provider, API key, Model.
+// The OpenAI-compatible base URL is folded INTO the provider choice (pick
+// "Moonshot (Kimi)" and the endpoint is set for you); only "Custom" reveals a
+// raw URL field. The model list is a real dropdown, populated live from
+// /api/agent/models — the Anthropic catalog, or the chosen endpoint's own
+// /v1/models — so it's always current.
 
-  const pick = async (p: "anthropic" | "openai") => {
-    if (p === provider || saving) return;
+const selectCls =
+  "min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 text-[11px] outline-none focus:border-[var(--color-brand)] disabled:opacity-50";
+const inputCls =
+  "min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 font-mono text-[11px] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]";
+
+/** A labelled control row: fixed-width icon+label on the left, control(s) right. */
+function Field({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex w-[4.25rem] shrink-0 items-center gap-1.5 text-[11px] text-[var(--color-fg-muted)]">
+        <span className="text-[var(--color-fg-subtle)]">{icon}</span>
+        {label}
+      </span>
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+/** The OpenAI-compatible preset whose base URL matches the active endpoint, if any. */
+function activePreset(config: AgentConfig | null): ProviderPreset | undefined {
+  return config?.presets?.find((p) => p.baseUrl && p.baseUrl === config?.baseUrl);
+}
+
+function ConnectionBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
+  const presets = config?.presets ?? [];
+  const provider = config?.provider ?? "anthropic";
+  const [busy, setBusy] = useState(false);
+
+  // Which provider-dropdown entry is active: "anthropic", a preset id, or "custom".
+  const providerValue = provider === "anthropic" ? "anthropic" : activePreset(config)?.id ?? "custom";
+
+  // Base-URL draft for the "custom" case (render-time resync, per this codebase's
+  // convention — no setState-in-effect).
+  const [urlDraft, setUrlDraft] = useState(config?.baseUrl ?? "");
+  const [prevBase, setPrevBase] = useState(config?.baseUrl);
+  if (config?.baseUrl !== prevBase) {
+    setPrevBase(config?.baseUrl);
+    setUrlDraft(config?.baseUrl ?? "");
+  }
+
+  const post = async (body: Record<string, unknown>) => {
+    setBusy(true);
+    try {
+      await fetch("/api/agent/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pickProvider = async (value: string) => {
+    if (value === providerValue) return;
+    if (value === "anthropic") {
+      await post({ provider: "anthropic" });
+      return;
+    }
+    // OpenAI-compatible: switch the provider first.
+    await post({ provider: "openai" });
+    if (value === "custom") {
+      // Clear the endpoint so providerValue derives to "custom" (it's read from
+      // baseUrl) and the Endpoint field appears for the user to fill in.
+      await post({ baseUrl: "" });
+      return;
+    }
+    const preset = presets.find((p) => p.id === value);
+    if (preset?.baseUrl) await post({ baseUrl: preset.baseUrl });
+    // Default to the endpoint's first suggested model so a model left over from
+    // the previous endpoint isn't sent to this one (it would 404). The user can
+    // pick another from the now-repopulated dropdown.
+    if (preset?.models?.[0]) await post({ model: preset.models[0] });
+  };
+
+  const providerOptions = [
+    { id: "anthropic", label: "Anthropic" },
+    ...presets.filter((p) => p.id !== "custom").map((p) => ({ id: p.id, label: p.label })),
+    { id: "custom", label: "Custom (OpenAI-compatible)" },
+  ];
+
+  const commitUrl = () => {
+    const u = urlDraft.trim();
+    if (u && u !== config?.baseUrl) post({ baseUrl: u });
+  };
+
+  return (
+    <div className="space-y-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
+      <Field icon={<Server className="size-3.5" />} label="Provider">
+        <select
+          value={providerValue}
+          onChange={(e) => pickProvider(e.target.value)}
+          disabled={busy}
+          className={selectCls}
+        >
+          {providerOptions.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        {busy && <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--color-fg-subtle)]" />}
+      </Field>
+
+      {provider === "openai" && providerValue === "custom" && (
+        <Field icon={<span className="inline-block size-3.5" />} label="Endpoint">
+          <input
+            value={urlDraft}
+            onChange={(e) => setUrlDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && commitUrl()}
+            onBlur={commitUrl}
+            placeholder="https://your-endpoint/v1"
+            autoComplete="off"
+            className={inputCls}
+          />
+        </Field>
+      )}
+
+      <KeyField config={config} onChanged={onChanged} />
+      <ModelField config={config} onChanged={onChanged} />
+    </div>
+  );
+}
+
+/** API key row: masked tail + Replace/Remove when set, else an input + Save. */
+function KeyField({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const provider = config?.provider ?? "anthropic";
+  const open = editing || config?.configured === false;
+  const keyHint =
+    provider === "openai" ? activePreset(config)?.keyHint || "provider API key" : "sk-ant-api…";
+
+  const save = async () => {
+    const key = value.trim();
+    if (!key || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/agent/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => null)) as { error?: string } | null;
+        setError(d?.error ?? "Request failed.");
+        return;
+      }
+      setValue("");
+      setEditing(false);
+      onChanged();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const clear = async () => {
     setSaving(true);
     try {
       await fetch("/api/agent/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: p }),
+        body: JSON.stringify({ clear: true }),
       });
       onChanged();
     } finally {
@@ -403,51 +564,126 @@ function ProviderBar({ config, onChanged }: { config: AgentConfig | null; onChan
     }
   };
 
-  const seg = (p: "anthropic" | "openai", label: string) => (
-    <button
-      onClick={() => pick(p)}
-      disabled={saving}
-      className={`px-2.5 py-1 text-[11px] font-medium transition-colors ${
-        provider === p
-          ? "bg-[var(--color-brand)] text-white"
-          : "text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
-      }`}
-    >
-      {label}
-    </button>
-  );
-
   return (
-    <div className="flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
-      <Server className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
-      <span className="text-[11px] text-[var(--color-fg-muted)]">Provider</span>
-      <div className="flex overflow-hidden rounded-lg border border-[var(--color-border-strong)]">
-        {seg("anthropic", "Anthropic")}
-        {seg("openai", "OpenAI-compatible")}
-      </div>
-      {saving && <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--color-fg-subtle)]" />}
+    <div className="space-y-1">
+      <Field icon={<KeyRound className="size-3.5" />} label="API key">
+        {config?.configured && !open ? (
+          <>
+            <code className="truncate font-mono text-[11px] text-[var(--color-fg-muted)]">{config.masked}</code>
+            {config.loginActive && (
+              <span className="shrink-0 rounded border border-[var(--color-border)] px-1 py-0.5 text-[9px] uppercase tracking-wide text-[var(--color-fg-subtle)]">
+                subscription
+              </span>
+            )}
+            <span className="flex-1" />
+            <button
+              onClick={() => setEditing(true)}
+              className="shrink-0 text-[11px] font-medium text-[var(--color-brand)] hover:underline"
+            >
+              Replace
+            </button>
+            {config.source === "ui" && (
+              <button
+                onClick={clear}
+                disabled={saving}
+                className="shrink-0 text-[11px] text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
+              >
+                {config.loginActive ? "Sign out" : "Remove"}
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <input
+              type="password"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && save()}
+              placeholder={keyHint}
+              autoComplete="off"
+              className={inputCls}
+            />
+            <button
+              onClick={save}
+              disabled={saving || !value.trim()}
+              className="shrink-0 rounded-lg bg-[var(--color-brand-strong)] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+            >
+              {saving ? <Loader2 className="size-3.5 animate-spin" /> : "Save"}
+            </button>
+            {config?.configured && editing && (
+              <button
+                onClick={() => {
+                  setEditing(false);
+                  setValue("");
+                  setError(null);
+                }}
+                className="shrink-0 text-[11px] text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+              >
+                Cancel
+              </button>
+            )}
+          </>
+        )}
+      </Field>
+      {error && <p className="pl-[5.25rem] text-[11px] text-[var(--color-danger)]">{error}</p>}
     </div>
   );
 }
 
 /**
- * Model row. For Anthropic it's a dropdown of the catalog; for the
- * OpenAI-compatible provider it's a free-text id (any model the endpoint
- * serves) with suggestions from the chosen preset.
+ * Model row: a real dropdown for both providers. Anthropic options come straight
+ * from the catalog already in the config payload (config.models) — no fetch, so
+ * the picker works even if the network blips. For OpenAI-compatible endpoints the
+ * list is fetched live from /api/agent/models (the endpoint's own /v1/models),
+ * the preset's curated ids seed a "Suggested" group, and a "Custom id…" option
+ * always allows a hand-typed model.
  */
-function ModelBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
+function ModelField({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
+  const CUSTOM = "__custom__";
   const provider = config?.provider ?? "anthropic";
-  const models = config?.models ?? [];
+  const [dynModels, setDynModels] = useState<{ id: string; label: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [draft, setDraft] = useState(config?.model ?? "");
-  const [prevModel, setPrevModel] = useState(config?.model);
+  const [customMode, setCustomMode] = useState(false);
+  const [customDraft, setCustomDraft] = useState("");
 
-  // Resync the free-text draft when the server-side model changes — render-time
-  // adjustment, the endorsed alternative to a setState-in-effect.
-  if (config?.model !== prevModel) {
-    setPrevModel(config?.model);
-    setDraft(config?.model ?? "");
-  }
+  const baseUrl = config?.baseUrl ?? "";
+  const masked = config?.masked ?? "";
+  const configured = config?.configured ?? false;
+
+  // (Re)load the endpoint's model list when the OpenAI-compatible provider /
+  // endpoint / key changes. Anthropic uses config.models directly, so it never
+  // fetches. The fetch + its setState live in an async helper (not the effect
+  // body) so this doesn't trip react-hooks/set-state-in-effect.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (provider !== "openai") {
+        // Anthropic list comes from config.models — clear any leftover fetch state.
+        setLoading(false);
+        setNote(null);
+        return;
+      }
+      setLoading(true);
+      setNote(null);
+      try {
+        const res = await fetch("/api/agent/models", { cache: "no-store" });
+        const d = (await res.json()) as { models?: { id: string; label: string }[]; error?: string };
+        if (cancelled) return;
+        setDynModels(d.models ?? []);
+        setNote(d.error ?? null);
+      } catch {
+        if (!cancelled) setNote("Couldn't reach the model list.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, baseUrl, masked, configured]);
 
   const post = async (model: string) => {
     setSaving(true);
@@ -463,58 +699,113 @@ function ModelBar({ config, onChanged }: { config: AgentConfig | null; onChanged
     }
   };
 
-  const commitDraft = () => {
-    const m = draft.trim();
-    if (m && m !== config?.model) post(m);
+  // Curated suggestions for the active OpenAI-compatible preset.
+  const suggested = provider === "openai" ? activePreset(config)?.models ?? [] : [];
+
+  const current = config?.model ?? "";
+  const seen = new Set<string>();
+  const suggestedOpts: { id: string; label: string }[] = [];
+  const endpointOpts: { id: string; label: string }[] = [];
+  const add = (arr: typeof suggestedOpts, id: string, label?: string) => {
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      arr.push({ id, label: label ?? id });
+    }
+  };
+  if (provider === "anthropic") {
+    // Always available in the config payload — no network dependency.
+    (config?.models ?? []).forEach((m) => add(endpointOpts, m.id, m.label));
+  } else {
+    suggested.forEach((id) => add(suggestedOpts, id));
+    dynModels.forEach((m) => add(endpointOpts, m.id));
+  }
+  // Always keep the currently-selected model visible/selectable.
+  if (current && !seen.has(current)) add(provider === "anthropic" ? endpointOpts : suggestedOpts, current);
+
+  const onSelect = (v: string) => {
+    if (v === CUSTOM) {
+      setCustomDraft("");
+      setCustomMode(true);
+      return;
+    }
+    setCustomMode(false);
+    if (v && v !== config?.model) post(v);
+  };
+  const commitCustom = () => {
+    const m = customDraft.trim();
+    if (m) {
+      setCustomMode(false);
+      post(m);
+    }
   };
 
-  const suggestions =
-    config?.presets?.find((p) => p.baseUrl && p.baseUrl === config?.baseUrl)?.models ?? [];
-  const anthropicHint = models.find((m) => m.id === config?.model)?.hint;
+  const disabled = saving || (provider === "openai" && !configured);
 
   return (
-    <div className="flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
-      <Cpu className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
-      <span className="text-[11px] text-[var(--color-fg-muted)]">Model</span>
-      {provider === "anthropic" ? (
-        <>
-          <select
-            value={config?.model ?? ""}
-            onChange={(e) => e.target.value !== config?.model && post(e.target.value)}
-            disabled={saving || models.length === 0}
-            className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 text-[11px] outline-none focus:border-[var(--color-brand)] disabled:opacity-50"
-          >
-            {models.length === 0 && config?.model && <option value={config.model}>{config.model}</option>}
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
+    <div className="space-y-1">
+      <Field icon={<Cpu className="size-3.5" />} label="Model">
+        {customMode ? (
+          <>
+            <input
+              autoFocus
+              value={customDraft}
+              onChange={(e) => setCustomDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && commitCustom()}
+              onBlur={commitCustom}
+              placeholder="model id, e.g. deepseek/deepseek-chat"
+              autoComplete="off"
+              className={inputCls}
+            />
+            <button
+              onClick={() => setCustomMode(false)}
+              className="shrink-0 text-[11px] text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <select value={current} onChange={(e) => onSelect(e.target.value)} disabled={disabled} className={selectCls}>
+            {!current && (
+              <option value="" disabled>
+                {loading ? "Loading models…" : provider === "openai" && !configured ? "Add a key first" : "Select a model"}
               </option>
-            ))}
+            )}
+            {provider === "openai" && suggestedOpts.length > 0 ? (
+              <>
+                <optgroup label="Suggested">
+                  {suggestedOpts.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </optgroup>
+                {endpointOpts.length > 0 && (
+                  <optgroup label="Available at endpoint">
+                    {endpointOpts.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </>
+            ) : (
+              [...suggestedOpts, ...endpointOpts].map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))
+            )}
+            {provider === "openai" && <option value={CUSTOM}>✎ Custom model id…</option>}
           </select>
-          {anthropicHint && (
-            <span className="hidden shrink-0 text-[10px] text-[var(--color-fg-subtle)] sm:inline">{anthropicHint}</span>
-          )}
-        </>
-      ) : (
-        <>
-          <input
-            list="switchyard-model-suggestions"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && commitDraft()}
-            onBlur={commitDraft}
-            placeholder="model id, e.g. nousresearch/hermes-4-405b"
-            autoComplete="off"
-            className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 font-mono text-[11px] outline-none focus:border-[var(--color-brand)] disabled:opacity-50"
-          />
-          <datalist id="switchyard-model-suggestions">
-            {suggestions.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        </>
+        )}
+        {loading && !customMode && <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--color-fg-subtle)]" />}
+      </Field>
+      {note && provider === "openai" && configured && (
+        <p className="pl-[5.25rem] text-[10px] text-[var(--color-fg-subtle)]">
+          Live model list unavailable — showing suggestions. Use “Custom id…” for any other model.
+        </p>
       )}
-      {saving && <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--color-fg-subtle)]" />}
     </div>
   );
 }
@@ -541,215 +832,16 @@ function SetupCard() {
       </div>
       <h3 className="mt-3 text-sm font-semibold">Connect the copilot</h3>
       <p className="mt-1.5 max-w-[17rem] text-xs text-[var(--color-fg-muted)]">
-        Pick a provider above and paste a key. Use <strong>Anthropic</strong> with
-        an API key for frontier quality, or <strong>OpenAI-compatible</strong> to
-        bring a cheap key (OpenRouter, Together, Groq…) and run open models like
-        Hermes, DeepSeek, Llama, or Qwen.
+        Pick a <strong>Provider</strong> above and paste its API key. Use{" "}
+        <strong>Anthropic</strong> for frontier quality, or an{" "}
+        <strong>OpenAI-compatible</strong> endpoint (OpenRouter, Moonshot/Kimi,
+        Groq, Together…) to bring a cheap key and run open models — then pick a
+        model from the dropdown.
       </p>
       <p className="mt-1.5 max-w-[17rem] text-[11px] text-[var(--color-fg-subtle)]">
         The key stays on the server and is your own metered pool — it never shares
         a rate limit with anything else.
       </p>
-    </div>
-  );
-}
-
-/**
- * Credential box at the top of the panel. Provider-aware: for Anthropic it takes
- * an sk-ant-… API key; for the OpenAI-compatible provider it takes a base URL
- * (with preset shortcuts) plus that provider's key. The credential never
- * round-trips to the browser; only a masked tail is shown.
- */
-function KeyBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [baseDraft, setBaseDraft] = useState(config?.baseUrl ?? "");
-  const [prevBase, setPrevBase] = useState(config?.baseUrl);
-
-  const provider = config?.provider ?? "anthropic";
-  const presets = config?.presets ?? [];
-  // Not configured -> the form IS the empty state; keep it open.
-  const open = editing || config?.configured === false;
-
-  // Resync the base-URL draft when the server value changes — render-time
-  // adjustment instead of a setState-in-effect.
-  if (config?.baseUrl !== prevBase) {
-    setPrevBase(config?.baseUrl);
-    setBaseDraft(config?.baseUrl ?? "");
-  }
-
-  const postField = async (payload: Record<string, unknown>): Promise<boolean> => {
-    const res = await fetch("/api/agent/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
-      setError(data?.error ?? "Request failed.");
-      return false;
-    }
-    return true;
-  };
-
-  const save = async () => {
-    const key = value.trim();
-    if (!key || saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      if (await postField({ key })) {
-        setValue("");
-        setEditing(false);
-        onChanged();
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const clear = async () => {
-    setSaving(true);
-    try {
-      await postField({ clear: true });
-      onChanged();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const setBase = async (url: string) => {
-    if (url === (config?.baseUrl ?? "")) return;
-    setSaving(true);
-    setError(null);
-    try {
-      if (await postField({ baseUrl: url })) onChanged();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const pickPreset = (id: string) => {
-    const p = presets.find((x) => x.id === id);
-    if (!p) return;
-    setBaseDraft(p.baseUrl);
-    setBase(p.baseUrl);
-  };
-
-  const keyHint =
-    provider === "openai"
-      ? presets.find((p) => p.baseUrl && p.baseUrl === config?.baseUrl)?.keyHint || "provider API key"
-      : "sk-ant-api…";
-
-  return (
-    <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5">
-      <div className="flex items-center gap-2">
-        <KeyRound className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
-        {config?.configured ? (
-          <>
-            <code className="truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
-              {config.masked}
-            </code>
-            <span className="shrink-0 rounded border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-fg-subtle)]">
-              {config.loginActive
-                ? "Claude subscription"
-                : config.source === "ui"
-                  ? "set in UI"
-                  : "env"}
-            </span>
-            <span className="flex-1" />
-            <button
-              onClick={() => setEditing((v) => !v)}
-              className="shrink-0 text-[11px] font-medium text-[var(--color-brand)] hover:underline"
-            >
-              {editing ? "Cancel" : "Replace"}
-            </button>
-            {config.source === "ui" && (
-              <button
-                onClick={clear}
-                disabled={saving}
-                className="shrink-0 text-[11px] text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
-              >
-                {config.loginActive ? "Sign out" : "Remove"}
-              </button>
-            )}
-          </>
-        ) : (
-          <span className="text-[11px] text-[var(--color-fg-muted)]">Not connected</span>
-        )}
-      </div>
-
-      {open && (
-        <div className="mt-2 space-y-2">
-          {provider === "openai" && (
-            <div className="space-y-1.5">
-              <select
-                value={presets.find((p) => p.baseUrl && p.baseUrl === baseDraft)?.id ?? "custom"}
-                onChange={(e) => pickPreset(e.target.value)}
-                disabled={saving}
-                className="w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1.5 text-[11px] outline-none focus:border-[var(--color-brand)] disabled:opacity-50"
-              >
-                {presets.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={baseDraft}
-                onChange={(e) => setBaseDraft(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && setBase(baseDraft.trim())}
-                onBlur={() => setBase(baseDraft.trim())}
-                placeholder="https://openrouter.ai/api/v1"
-                autoComplete="off"
-                className="w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2.5 py-1.5 font-mono text-[11px] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
-              />
-            </div>
-          )}
-          <div className="flex items-center gap-1.5">
-            <input
-              type="password"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && save()}
-              placeholder={keyHint}
-              autoComplete="off"
-              className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2.5 py-1.5 font-mono text-[11px] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
-            />
-            <button
-              onClick={save}
-              disabled={saving || !value.trim()}
-              className="shrink-0 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
-            >
-              {saving ? <Loader2 className="size-3.5 animate-spin" /> : "Save"}
-            </button>
-          </div>
-          {error && <p className="text-[11px] text-[var(--color-danger)]">{error}</p>}
-          {provider === "openai" ? (
-            <p className="text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
-              Bring a key from any OpenAI-compatible provider (OpenRouter, Together,
-              Groq…) and pick a cheap model below — Hermes, DeepSeek, Llama, Qwen, GPT.
-              It&rsquo;s your own metered pool.
-            </p>
-          ) : (
-            <p className="text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
-              Paste an{" "}
-              <a
-                href="https://console.anthropic.com/settings/keys"
-                target="_blank"
-                rel="noreferrer"
-                className="text-[var(--color-brand)] hover:underline"
-              >
-                Anthropic API key ↗
-              </a>{" "}
-              (<code className="font-mono">sk-ant-api…</code>). Pay-as-you-go, no
-              rate-limit walls.
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 }

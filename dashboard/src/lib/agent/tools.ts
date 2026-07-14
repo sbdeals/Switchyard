@@ -457,14 +457,60 @@ const TOOLS: Record<string, ToolDef> = {
 /** The tool schemas passed to the Anthropic API. */
 export const toolSchemas: Anthropic.Tool[] = Object.values(TOOLS).map((t) => t.schema);
 
-/** Run a tool by name; unknown tools return an error outcome. */
+/**
+ * Hard ceiling for any single tool call. The turn driver (`run.ts` /
+ * `run-openai.ts`) awaits each tool inline, so one slow or wedged tool — a
+ * stalled Docker socket, an unresponsive Dokploy API — would otherwise stall the
+ * whole SSE turn indefinitely (the reported "hung on a tool call" symptom). On
+ * timeout we abandon the wait and hand the model an error it can react to; the
+ * underlying op may still complete in the background but no longer blocks the
+ * loop. Comfortably above the per-op Docker/Dokploy timeouts so those fire first
+ * with a more specific message. Overridable via AGENT_TOOL_TIMEOUT_MS.
+ */
+const TOOL_TIMEOUT_MS = Number(process.env.AGENT_TOOL_TIMEOUT_MS) || 60_000;
+
+function prettyName(name: string): string {
+  return name.replace(/_/g, " ");
+}
+
+/** Resolve to `p`, or to a timeout error outcome if it hasn't settled in time. */
+function withToolTimeout(p: Promise<ToolOutcome>, name: string): Promise<ToolOutcome> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      resolve({
+        content: `Error: the ${name} tool didn't finish within ${Math.round(
+          TOOL_TIMEOUT_MS / 1000,
+        )}s and was abandoned. The target service or the Docker/Dokploy backend may be unresponsive — check its status and try again.`,
+        isError: true,
+        label: prettyName(name),
+      });
+    }, TOOL_TIMEOUT_MS);
+    p.then(
+      (o) => {
+        clearTimeout(timer);
+        resolve(o);
+      },
+      (e) => {
+        clearTimeout(timer);
+        resolve({
+          content: `Error: ${e instanceof Error ? e.message : String(e)}`,
+          isError: true,
+          label: prettyName(name),
+        });
+      },
+    );
+  });
+}
+
+/**
+ * Run a tool by name; unknown tools return an error outcome. Every call is
+ * bounded by TOOL_TIMEOUT_MS and any thrown error is converted to an error
+ * outcome, so a single tool can neither hang nor crash the turn loop.
+ */
 export async function runTool(name: string, input: Input, ctx: ToolContext): Promise<ToolOutcome> {
   const def = TOOLS[name];
   if (!def) return { content: `Unknown tool "${name}".`, isError: true, label: name };
-  try {
-    return await def.run(input, ctx);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { content: `Error: ${msg}`, isError: true, label: name };
-  }
+  // Normalize a synchronous throw in a handler into a rejected promise.
+  const invoke = (async () => def.run(input, ctx))();
+  return withToolTimeout(invoke, name);
 }

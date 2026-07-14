@@ -42,6 +42,13 @@ const PROVIDER_PRESETS = [
     models: ["llama-3.3-70b-versatile", "moonshotai/kimi-k2-instruct"],
   },
   {
+    id: "moonshot",
+    label: "Moonshot (Kimi)",
+    baseUrl: "https://api.moonshot.ai/v1",
+    keyHint: "sk-…",
+    models: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k", "kimi-latest", "kimi-k2-0711-preview"],
+  },
+  {
     id: "together",
     label: "Together",
     baseUrl: "https://api.together.xyz/v1",
