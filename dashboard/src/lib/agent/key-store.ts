@@ -43,10 +43,17 @@ function isKnownModel(id: string): boolean {
   return AGENT_MODELS.some((m) => m.id === id);
 }
 
+export type AgentProvider = "anthropic" | "openai";
+
 interface KeyState {
   loaded: boolean;
   key: string | null;
   model: string | null;
+  // "anthropic" (default) drives the Anthropic Messages API. "openai" drives
+  // any OpenAI-compatible /chat/completions endpoint (OpenRouter, Together,
+  // Groq, Nous, …) via `baseUrl`, letting users bring a cheap key + open model.
+  provider: AgentProvider | null;
+  baseUrl: string | null;
   // Present only when `key` came from the "Sign in with Claude" flow: the
   // refresh token + access-token expiry that let us keep it fresh. A pasted
   // key/token has these null.
@@ -60,6 +67,8 @@ const state: KeyState = (g.__switchyardAgentKey ??= {
   loaded: false,
   key: null,
   model: null,
+  provider: null,
+  baseUrl: null,
   oauthRefresh: null,
   oauthExpiresAt: null,
 });
@@ -71,10 +80,16 @@ function loadOnce(): void {
     const raw = JSON.parse(fs.readFileSync(KEY_FILE, "utf8")) as {
       key?: unknown;
       model?: unknown;
+      provider?: unknown;
+      baseUrl?: unknown;
       oauth?: unknown;
     };
     if (typeof raw.key === "string" && raw.key.trim()) state.key = raw.key.trim();
-    if (typeof raw.model === "string" && isKnownModel(raw.model)) state.model = raw.model;
+    // Model is free-text for the openai provider, so don't gate it on the
+    // Anthropic catalog here — resolveAgentModel() does provider-aware fallback.
+    if (typeof raw.model === "string" && raw.model.trim()) state.model = raw.model.trim();
+    if (raw.provider === "anthropic" || raw.provider === "openai") state.provider = raw.provider;
+    if (typeof raw.baseUrl === "string" && raw.baseUrl.trim()) state.baseUrl = raw.baseUrl.trim();
     if (raw.oauth && typeof raw.oauth === "object") {
       const o = raw.oauth as { refresh?: unknown; expiresAt?: unknown };
       if (typeof o.refresh === "string" && o.refresh) state.oauthRefresh = o.refresh;
@@ -87,15 +102,19 @@ function loadOnce(): void {
 
 function persist(): void {
   try {
-    if (state.key || state.model || state.oauthRefresh) {
+    if (state.key || state.model || state.provider || state.baseUrl || state.oauthRefresh) {
       fs.mkdirSync(path.dirname(KEY_FILE), { recursive: true });
       const body: {
         key?: string;
         model?: string;
+        provider?: AgentProvider;
+        baseUrl?: string;
         oauth?: { refresh: string; expiresAt: number | null };
       } = {};
       if (state.key) body.key = state.key;
       if (state.model) body.model = state.model;
+      if (state.provider) body.provider = state.provider;
+      if (state.baseUrl) body.baseUrl = state.baseUrl;
       if (state.oauthRefresh) {
         body.oauth = { refresh: state.oauthRefresh, expiresAt: state.oauthExpiresAt };
       }
@@ -109,19 +128,55 @@ function persist(): void {
   }
 }
 
-/** The model the user picked, falling back to the env override, then the default. */
+/** Active provider: UI pick → env override → "anthropic". */
+export function resolveProvider(): AgentProvider {
+  loadOnce();
+  if (state.provider) return state.provider;
+  const env = process.env.SWITCHYARD_AGENT_PROVIDER?.trim();
+  return env === "openai" ? "openai" : "anthropic";
+}
+
+/** Base URL for the openai provider (OpenAI-compatible endpoint). Null otherwise. */
+export function resolveBaseUrl(): string | null {
+  loadOnce();
+  return state.baseUrl || process.env.SWITCHYARD_AGENT_BASE_URL?.trim() || null;
+}
+
+/**
+ * The model in effect. For openai it's the user's free-text id (any string the
+ * provider serves); for anthropic it's validated against AGENT_MODELS with a
+ * safe default. Returns "" only for openai with nothing chosen yet.
+ */
 export function resolveAgentModel(): string {
   loadOnce();
-  if (state.model && isKnownModel(state.model)) return state.model;
   const env = process.env.SWITCHYARD_AGENT_MODEL?.trim();
+  if (resolveProvider() === "openai") {
+    return state.model || env || "";
+  }
+  if (state.model && isKnownModel(state.model)) return state.model;
   if (env) return env; // allow any env-provided id (advanced/override)
   return DEFAULT_AGENT_MODEL;
 }
 
-/** Store (or clear, with null) the chosen model. */
+/** Store (or clear, with null) the chosen model. Free-text (validated per provider by callers). */
 export function setRuntimeModel(model: string | null): void {
   loadOnce();
-  state.model = model && isKnownModel(model) ? model : null;
+  state.model = model?.trim() || null;
+  persist();
+}
+
+/** Switch provider. Clears the model (it's provider-specific) so the UI reprompts. */
+export function setProvider(provider: AgentProvider | null): void {
+  loadOnce();
+  if (state.provider !== provider) state.model = null;
+  state.provider = provider === "openai" || provider === "anthropic" ? provider : null;
+  persist();
+}
+
+/** Store (or clear, with null) the OpenAI-compatible base URL. */
+export function setBaseUrl(url: string | null): void {
+  loadOnce();
+  state.baseUrl = url?.trim() || null;
   persist();
 }
 
@@ -193,8 +248,11 @@ export function resolveAgentKey(): ResolvedKey | null {
   return null;
 }
 
-/** Safe display form: prefix + last 4 chars ("sk-ant-…abcd"). */
+/**
+ * Safe display form: real leading chars + last 4 ("sk-or-v1…abcd"). Generic so
+ * it reads correctly for any provider's key format (sk-ant-, sk-or-, gsk_, …).
+ */
 export function maskKey(key: string): string {
-  const prefix = isOAuthToken(key) ? "sk-ant-oat…" : "sk-ant-…";
-  return `${prefix}${key.slice(-4)}`;
+  const head = key.slice(0, Math.min(8, Math.max(0, key.length - 4)));
+  return `${head}…${key.slice(-4)}`;
 }

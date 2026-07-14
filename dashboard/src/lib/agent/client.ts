@@ -11,7 +11,21 @@
  */
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import { ensureFreshOAuth, isOAuthToken, resolveAgentKey, resolveAgentModel } from "./key-store";
+import OpenAI from "openai";
+import {
+  ensureFreshOAuth,
+  isOAuthToken,
+  resolveAgentKey,
+  resolveAgentModel,
+  resolveBaseUrl,
+  resolveProvider,
+  type AgentProvider,
+} from "./key-store";
+
+/** Which API dialect the copilot speaks right now. */
+export function activeProvider(): AgentProvider {
+  return resolveProvider();
+}
 
 /** The model in effect right now (UI pick → env override → default Opus 4.8). */
 export function agentModel(): string {
@@ -77,4 +91,35 @@ export function getAnthropic(): Anthropic {
     };
   }
   return cached.client;
+}
+
+let cachedOpenAI: { key: string; baseUrl: string | null; client: OpenAI } | null = null;
+
+/**
+ * Lazily construct an OpenAI-compatible client for the openai provider. `baseURL`
+ * points it at whichever endpoint the user chose (OpenRouter, Together, Groq,
+ * Nous, or OpenAI itself when unset). Throws if no key is set.
+ */
+export function getOpenAI(): OpenAI {
+  const resolved = resolveAgentKey();
+  if (!resolved) {
+    throw new Error("No API key configured — add one in the Agent panel.");
+  }
+  const baseUrl = resolveBaseUrl();
+  if (cachedOpenAI?.key !== resolved.key || cachedOpenAI?.baseUrl !== baseUrl) {
+    cachedOpenAI = {
+      key: resolved.key,
+      baseUrl,
+      client: new OpenAI({
+        apiKey: resolved.key,
+        baseURL: baseUrl ?? undefined,
+        // OpenRouter uses these for app attribution/rankings; harmless elsewhere.
+        defaultHeaders: {
+          "HTTP-Referer": "https://github.com/sbdeals/switchyard",
+          "X-Title": "Switchyard",
+        },
+      }),
+    };
+  }
+  return cachedOpenAI.client;
 }

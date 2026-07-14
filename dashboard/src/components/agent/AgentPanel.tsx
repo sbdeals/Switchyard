@@ -13,8 +13,7 @@ import {
   Wrench,
   KeyRound,
   Cpu,
-  LogIn,
-  ExternalLink,
+  Server,
 } from "lucide-react";
 import { ChangesBar, type StagedChangeView, type ApplyResult } from "./ChangesBar";
 
@@ -36,14 +35,24 @@ interface AgentModel {
   label: string;
   hint: string;
 }
+interface ProviderPreset {
+  id: string;
+  label: string;
+  baseUrl: string;
+  keyHint: string;
+  models: string[];
+}
 interface AgentConfig {
   configured: boolean;
   source: "ui" | "env" | null;
   masked: string | null;
   /** True when the credential came from "Sign in with Claude" (subscription). */
   loginActive?: boolean;
+  provider: "anthropic" | "openai";
+  baseUrl: string | null;
   model: string;
   models: AgentModel[];
+  presets: ProviderPreset[];
 }
 
 const STORAGE_KEY = "switchyard.agent.expanded";
@@ -278,6 +287,7 @@ export function AgentPanel() {
               </button>
             </header>
 
+            <ProviderBar config={config} onChanged={refreshConfig} />
             <KeyBar config={config} onChanged={refreshConfig} />
             <ModelBar config={config} onChanged={refreshConfig} />
 
@@ -373,13 +383,73 @@ function ToolPill({ chip }: { chip: ToolChip }) {
   );
 }
 
-/** Model picker row — shows and switches the copilot's model on the fly. */
-function ModelBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
+/** Provider toggle: Anthropic (Messages API) vs any OpenAI-compatible endpoint. */
+function ProviderBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
   const [saving, setSaving] = useState(false);
-  const models = config?.models ?? [];
+  const provider = config?.provider ?? "anthropic";
 
-  const pick = async (model: string) => {
-    if (model === config?.model) return;
+  const pick = async (p: "anthropic" | "openai") => {
+    if (p === provider || saving) return;
+    setSaving(true);
+    try {
+      await fetch("/api/agent/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: p }),
+      });
+      onChanged();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const seg = (p: "anthropic" | "openai", label: string) => (
+    <button
+      onClick={() => pick(p)}
+      disabled={saving}
+      className={`px-2.5 py-1 text-[11px] font-medium transition-colors ${
+        provider === p
+          ? "bg-[var(--color-brand)] text-white"
+          : "text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
+      <Server className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
+      <span className="text-[11px] text-[var(--color-fg-muted)]">Provider</span>
+      <div className="flex overflow-hidden rounded-lg border border-[var(--color-border-strong)]">
+        {seg("anthropic", "Anthropic")}
+        {seg("openai", "OpenAI-compatible")}
+      </div>
+      {saving && <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--color-fg-subtle)]" />}
+    </div>
+  );
+}
+
+/**
+ * Model row. For Anthropic it's a dropdown of the catalog; for the
+ * OpenAI-compatible provider it's a free-text id (any model the endpoint
+ * serves) with suggestions from the chosen preset.
+ */
+function ModelBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
+  const provider = config?.provider ?? "anthropic";
+  const models = config?.models ?? [];
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState(config?.model ?? "");
+  const [prevModel, setPrevModel] = useState(config?.model);
+
+  // Resync the free-text draft when the server-side model changes — render-time
+  // adjustment, the endorsed alternative to a setState-in-effect.
+  if (config?.model !== prevModel) {
+    setPrevModel(config?.model);
+    setDraft(config?.model ?? "");
+  }
+
+  const post = async (model: string) => {
     setSaving(true);
     try {
       await fetch("/api/agent/config", {
@@ -393,27 +463,58 @@ function ModelBar({ config, onChanged }: { config: AgentConfig | null; onChanged
     }
   };
 
-  const hint = models.find((m) => m.id === config?.model)?.hint;
+  const commitDraft = () => {
+    const m = draft.trim();
+    if (m && m !== config?.model) post(m);
+  };
+
+  const suggestions =
+    config?.presets?.find((p) => p.baseUrl && p.baseUrl === config?.baseUrl)?.models ?? [];
+  const anthropicHint = models.find((m) => m.id === config?.model)?.hint;
 
   return (
     <div className="flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
       <Cpu className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
       <span className="text-[11px] text-[var(--color-fg-muted)]">Model</span>
-      <select
-        value={config?.model ?? ""}
-        onChange={(e) => pick(e.target.value)}
-        disabled={saving || models.length === 0}
-        className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 text-[11px] outline-none focus:border-[var(--color-brand)] disabled:opacity-50"
-      >
-        {models.length === 0 && config?.model && <option value={config.model}>{config.model}</option>}
-        {models.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.label}
-          </option>
-        ))}
-      </select>
+      {provider === "anthropic" ? (
+        <>
+          <select
+            value={config?.model ?? ""}
+            onChange={(e) => e.target.value !== config?.model && post(e.target.value)}
+            disabled={saving || models.length === 0}
+            className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 text-[11px] outline-none focus:border-[var(--color-brand)] disabled:opacity-50"
+          >
+            {models.length === 0 && config?.model && <option value={config.model}>{config.model}</option>}
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          {anthropicHint && (
+            <span className="hidden shrink-0 text-[10px] text-[var(--color-fg-subtle)] sm:inline">{anthropicHint}</span>
+          )}
+        </>
+      ) : (
+        <>
+          <input
+            list="switchyard-model-suggestions"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && commitDraft()}
+            onBlur={commitDraft}
+            placeholder="model id, e.g. nousresearch/hermes-4-405b"
+            autoComplete="off"
+            className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 font-mono text-[11px] outline-none focus:border-[var(--color-brand)] disabled:opacity-50"
+          />
+          <datalist id="switchyard-model-suggestions">
+            {suggestions.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </>
+      )}
       {saving && <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--color-fg-subtle)]" />}
-      {hint && <span className="hidden shrink-0 text-[10px] text-[var(--color-fg-subtle)] sm:inline">{hint}</span>}
     </div>
   );
 }
@@ -440,39 +541,58 @@ function SetupCard() {
       </div>
       <h3 className="mt-3 text-sm font-semibold">Connect the copilot</h3>
       <p className="mt-1.5 max-w-[17rem] text-xs text-[var(--color-fg-muted)]">
-        Use the box above to <strong>sign in with your Claude subscription</strong>
-        {" "}— the same sign-in Claude Code uses — and run the copilot on your
-        Pro/Max plan. No key to manage.
+        Pick a provider above and paste a key. Use <strong>Anthropic</strong> with
+        an API key for frontier quality, or <strong>OpenAI-compatible</strong> to
+        bring a cheap key (OpenRouter, Together, Groq…) and run open models like
+        Hermes, DeepSeek, Llama, or Qwen.
       </p>
       <p className="mt-1.5 max-w-[17rem] text-[11px] text-[var(--color-fg-subtle)]">
-        Prefer separate, metered billing? Paste an Anthropic API key
-        (<code className="font-mono">sk-ant-api…</code>) instead — it never
-        shares a rate limit with your Claude Code usage.
+        The key stays on the server and is your own metered pool — it never shares
+        a rate limit with anything else.
       </p>
     </div>
   );
 }
 
 /**
- * Always-visible credential box at the top of the panel. Two ways to connect:
- *  - "Sign in with Claude" — the OAuth flow Claude Code uses; drives the copilot
- *    on the user's Claude Pro/Max subscription. No key to manage.
- *  - Paste an API key (or a subscription token) directly.
- * The credential never round-trips to the browser; only a masked tail is shown.
+ * Credential box at the top of the panel. Provider-aware: for Anthropic it takes
+ * an sk-ant-… API key; for the OpenAI-compatible provider it takes a base URL
+ * (with preset shortcuts) plus that provider's key. The credential never
+ * round-trips to the browser; only a masked tail is shown.
  */
 function KeyBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Subscription sign-in flow.
-  const [loginUrl, setLoginUrl] = useState<string | null>(null);
-  const [code, setCode] = useState("");
-  const [oauthBusy, setOauthBusy] = useState(false);
-  const [oauthError, setOauthError] = useState<string | null>(null);
+  const [baseDraft, setBaseDraft] = useState(config?.baseUrl ?? "");
+  const [prevBase, setPrevBase] = useState(config?.baseUrl);
 
+  const provider = config?.provider ?? "anthropic";
+  const presets = config?.presets ?? [];
   // Not configured -> the form IS the empty state; keep it open.
   const open = editing || config?.configured === false;
+
+  // Resync the base-URL draft when the server value changes — render-time
+  // adjustment instead of a setState-in-effect.
+  if (config?.baseUrl !== prevBase) {
+    setPrevBase(config?.baseUrl);
+    setBaseDraft(config?.baseUrl ?? "");
+  }
+
+  const postField = async (payload: Record<string, unknown>): Promise<boolean> => {
+    const res = await fetch("/api/agent/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      setError(data?.error ?? "Request failed.");
+      return false;
+    }
+    return true;
+  };
 
   const save = async () => {
     const key = value.trim();
@@ -480,19 +600,11 @@ function KeyBar({ config, onChanged }: { config: AgentConfig | null; onChanged: 
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch("/api/agent/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key }),
-      });
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) {
-        setError(data?.error ?? "Could not save the key.");
-        return;
+      if (await postField({ key })) {
+        setValue("");
+        setEditing(false);
+        onChanged();
       }
-      setValue("");
-      setEditing(false);
-      onChanged();
     } finally {
       setSaving(false);
     }
@@ -501,63 +613,35 @@ function KeyBar({ config, onChanged }: { config: AgentConfig | null; onChanged: 
   const clear = async () => {
     setSaving(true);
     try {
-      await fetch("/api/agent/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clear: true }),
-      });
+      await postField({ clear: true });
       onChanged();
     } finally {
       setSaving(false);
     }
   };
 
-  const startOauth = async () => {
-    setOauthBusy(true);
-    setOauthError(null);
+  const setBase = async (url: string) => {
+    if (url === (config?.baseUrl ?? "")) return;
+    setSaving(true);
+    setError(null);
     try {
-      const res = await fetch("/api/agent/oauth/start", { method: "POST" });
-      const data = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
-      if (!res.ok || !data?.url) {
-        setOauthError(data?.error ?? "Could not start sign-in.");
-        return;
-      }
-      setLoginUrl(data.url);
-      // Best-effort auto-open; the visible link below is the reliable path.
-      try {
-        window.open(data.url, "_blank", "noopener,noreferrer");
-      } catch {
-        /* popup blocked — user clicks the link instead */
-      }
+      if (await postField({ baseUrl: url })) onChanged();
     } finally {
-      setOauthBusy(false);
+      setSaving(false);
     }
   };
 
-  const completeOauth = async () => {
-    const c = code.trim();
-    if (!c || oauthBusy) return;
-    setOauthBusy(true);
-    setOauthError(null);
-    try {
-      const res = await fetch("/api/agent/oauth/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: c }),
-      });
-      const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
-      if (!res.ok || !data?.ok) {
-        setOauthError(data?.error ?? "Sign-in failed.");
-        return;
-      }
-      setCode("");
-      setLoginUrl(null);
-      setEditing(false);
-      onChanged();
-    } finally {
-      setOauthBusy(false);
-    }
+  const pickPreset = (id: string) => {
+    const p = presets.find((x) => x.id === id);
+    if (!p) return;
+    setBaseDraft(p.baseUrl);
+    setBase(p.baseUrl);
   };
+
+  const keyHint =
+    provider === "openai"
+      ? presets.find((p) => p.baseUrl && p.baseUrl === config?.baseUrl)?.keyHint || "provider API key"
+      : "sk-ant-api…";
 
   return (
     <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5">
@@ -598,97 +682,72 @@ function KeyBar({ config, onChanged }: { config: AgentConfig | null; onChanged: 
       </div>
 
       {open && (
-        <div className="mt-2.5 space-y-2.5">
-          {/* Subscription sign-in */}
-          {loginUrl ? (
-            <div className="space-y-1.5 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2.5">
-              <a
-                href={loginUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--color-brand)] hover:underline"
+        <div className="mt-2 space-y-2">
+          {provider === "openai" && (
+            <div className="space-y-1.5">
+              <select
+                value={presets.find((p) => p.baseUrl && p.baseUrl === baseDraft)?.id ?? "custom"}
+                onChange={(e) => pickPreset(e.target.value)}
+                disabled={saving}
+                className="w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1.5 text-[11px] outline-none focus:border-[var(--color-brand)] disabled:opacity-50"
               >
-                <ExternalLink className="size-3.5" />
-                Open the Claude sign-in page
-              </a>
-              <p className="text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
-                Approve access in that tab, then paste the code Claude gives you:
-              </p>
-              <p className="text-[10px] leading-relaxed text-[var(--color-warn)]">
-                Open it in a normal desktop browser (Chrome, Safari…). Claude&rsquo;s
-                sign-in runs a bot check that rejects embedded / in-app browsers
-                with &ldquo;Invalid request format.&rdquo;
-              </p>
-              <div className="flex items-center gap-1.5">
-                <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && completeOauth()}
-                  placeholder="Paste code here"
-                  autoComplete="off"
-                  className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-1.5 font-mono text-[11px] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
-                />
-                <button
-                  onClick={completeOauth}
-                  disabled={oauthBusy || !code.trim()}
-                  className="shrink-0 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
-                >
-                  {oauthBusy ? <Loader2 className="size-3.5 animate-spin" /> : "Finish"}
-                </button>
-              </div>
+                {presets.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={baseDraft}
+                onChange={(e) => setBaseDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && setBase(baseDraft.trim())}
+                onBlur={() => setBase(baseDraft.trim())}
+                placeholder="https://openrouter.ai/api/v1"
+                autoComplete="off"
+                className="w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2.5 py-1.5 font-mono text-[11px] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
+              />
             </div>
-          ) : (
-            <button
-              onClick={startOauth}
-              disabled={oauthBusy}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-brand)] px-3 py-2 text-[12px] font-semibold text-white hover:bg-[var(--color-brand-strong)] disabled:opacity-50"
-            >
-              {oauthBusy ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
-              Sign in with your Claude subscription
-            </button>
           )}
-          {oauthError && <p className="text-[11px] text-[var(--color-danger)]">{oauthError}</p>}
-
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-[var(--color-fg-subtle)]">
-            <span className="h-px flex-1 bg-[var(--color-border)]" />
-            or paste a key
-            <span className="h-px flex-1 bg-[var(--color-border)]" />
-          </div>
-
-          {/* Paste an API key or token */}
           <div className="flex items-center gap-1.5">
             <input
               type="password"
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && save()}
-              placeholder="sk-ant-api…  or  sk-ant-oat…"
+              placeholder={keyHint}
               autoComplete="off"
               className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2.5 py-1.5 font-mono text-[11px] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
             />
             <button
               onClick={save}
               disabled={saving || !value.trim()}
-              className="shrink-0 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-strong)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--color-fg)] hover:border-[var(--color-brand)] disabled:opacity-40"
+              className="shrink-0 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
             >
               {saving ? <Loader2 className="size-3.5 animate-spin" /> : "Save"}
             </button>
           </div>
           {error && <p className="text-[11px] text-[var(--color-danger)]">{error}</p>}
-          <p className="text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
-            Sign in to run the copilot on your Claude Pro/Max plan (this is Claude
-            Code&rsquo;s own sign-in). Or paste an{" "}
-            <a
-              href="https://console.anthropic.com/settings/keys"
-              target="_blank"
-              rel="noreferrer"
-              className="text-[var(--color-brand)] hover:underline"
-            >
-              API key ↗
-            </a>{" "}
-            for a separate pay-as-you-go pool that never shares a rate limit with
-            Claude Code.
-          </p>
+          {provider === "openai" ? (
+            <p className="text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
+              Bring a key from any OpenAI-compatible provider (OpenRouter, Together,
+              Groq…) and pick a cheap model below — Hermes, DeepSeek, Llama, Qwen, GPT.
+              It&rsquo;s your own metered pool.
+            </p>
+          ) : (
+            <p className="text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
+              Paste an{" "}
+              <a
+                href="https://console.anthropic.com/settings/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[var(--color-brand)] hover:underline"
+              >
+                Anthropic API key ↗
+              </a>{" "}
+              (<code className="font-mono">sk-ant-api…</code>). Pay-as-you-go, no
+              rate-limit walls.
+            </p>
+          )}
         </div>
       )}
     </div>
