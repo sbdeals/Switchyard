@@ -1961,6 +1961,15 @@ export async function deployTemplate(
     method: "POST",
     body: { id: templateId, environmentId },
   });
+  // Templates default to isolatedDeployment:true, which puts every service on a
+  // per-stack network only — never dokploy-network, where Traefik lives. Any
+  // domain attached to the stack then 404s (correct labels, unreachable
+  // backend). Verified live: flipping this before the first deploy joins the
+  // stack to dokploy-network and label routing works.
+  await request("compose.update", {
+    method: "POST",
+    body: { composeId: created.composeId, isolatedDeployment: false },
+  });
   return created.composeId;
 }
 

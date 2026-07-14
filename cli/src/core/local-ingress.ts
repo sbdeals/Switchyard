@@ -24,8 +24,13 @@ export const NETWORK_NAME = "dokploy-network";
 /** Dokploy writes its Traefik static+dynamic config here (inside the VM on Desktop). */
 export const TRAEFIK_DIR = "/etc/dokploy/traefik";
 const HASH_LABEL = "switchyard.config-hash";
-/** Any Traefik v3 works — Dokploy's dynamic config is standard v3. Matches scripts/local-ingress.sh. */
-const DEFAULT_TRAEFIK_IMAGE = "traefik:v3.1.2";
+/**
+ * Matches scripts/local-ingress.sh. Do NOT pin v3.1.x: its docker/swarm
+ * providers speak Docker API 1.24, which engines >= 29 reject (MinAPIVersion
+ * 1.40) — providers loop on 'Error response from daemon: ""' and label-based
+ * routes never load.
+ */
+const DEFAULT_TRAEFIK_IMAGE = "traefik:v3.6.7";
 
 export interface LocalIngressPlan {
   image: string;

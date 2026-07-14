@@ -20,8 +20,11 @@
 #   bash scripts/local-ingress.sh down
 #
 # Env:
-#   TRAEFIK_IMAGE  traefik image to run (default traefik:v3.1.2 — any v3 works,
-#                  Dokploy's dynamic config is standard Traefik v3)
+#   TRAEFIK_IMAGE  traefik image to run (default traefik:v3.6.7). Do NOT pin
+#                  v3.1.x: its docker/swarm providers speak Docker API 1.24,
+#                  which engines >= 29 reject (MinAPIVersion 1.40) — providers
+#                  fail with 'Error response from daemon: ""' and no
+#                  label-based route ever loads.
 #   BIND_ADDR      host address to publish on (default 127.0.0.1; keeps this
 #                  login-less demo off the network, matching the CLI's model)
 
@@ -31,7 +34,7 @@ CONTAINER="switchyard-traefik"
 NETWORK="dokploy-network"
 TRAEFIK_DIR="/etc/dokploy/traefik"          # lives inside the Docker VM on Desktop
 HASH_LABEL="switchyard.config-hash"
-TRAEFIK_IMAGE="${TRAEFIK_IMAGE:-traefik:v3.1.2}"
+TRAEFIK_IMAGE="${TRAEFIK_IMAGE:-traefik:v3.6.7}"
 BIND_ADDR="${BIND_ADDR:-127.0.0.1}"
 
 log()  { printf '\033[0;34m[ingress]\033[0m %s\n' "$*"; }
