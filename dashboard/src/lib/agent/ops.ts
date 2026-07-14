@@ -26,7 +26,7 @@ import {
   type Service,
   type Engine,
 } from "@/lib/dokploy";
-import { readRecentLogs } from "@/lib/docker";
+import { readRecentLogs, runExec, sampleStatsOnce, type Sample } from "@/lib/docker";
 import { randomServiceName, randomPassword } from "@/lib/names";
 import { ENGINE_META } from "@/lib/engines";
 import type { StagedChange } from "./store";
@@ -242,6 +242,27 @@ export async function lifecycle(
 
 export async function recentLogs(svc: Service, tail = 100) {
   return readRecentLogs(svc.appName, Math.min(tail, 300));
+}
+
+/**
+ * Run one command inside a service's running container and return its captured
+ * output — the diagnostic power behind "why is this deployment broken?". Same
+ * mechanism (and 15s/1MB caps) as the dashboard's Console tab; the container is
+ * resolved by the service's own appName, so the agent can only reach services
+ * it can already see. For a compose stack this hits the first matching
+ * container; target a specific one by passing its full container name as the
+ * service (it resolves by name prefix).
+ */
+export async function execInService(
+  svc: Service,
+  command: string
+): Promise<{ stdout: string; stderr: string; exitCode: number | null; truncated: boolean } | null> {
+  return runExec(svc.appName, command);
+}
+
+/** One CPU/memory sample for a running service (null if it isn't running). */
+export async function serviceMetrics(svc: Service): Promise<Sample | null> {
+  return sampleStatsOnce(svc.appName);
 }
 
 export async function updateApplicationOp(

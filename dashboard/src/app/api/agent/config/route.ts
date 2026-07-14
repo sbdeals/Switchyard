@@ -1,9 +1,11 @@
-import { AGENT_MODEL } from "@/lib/agent/client";
+import { agentModel } from "@/lib/agent/client";
 import {
+  AGENT_MODELS,
   looksLikeAnthropicKey,
   maskKey,
   resolveAgentKey,
   setRuntimeKey,
+  setRuntimeModel,
 } from "@/lib/agent/key-store";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,11 +26,12 @@ function status() {
     configured: resolved !== null,
     source: resolved?.source ?? null,
     masked: resolved ? maskKey(resolved.key) : null,
-    model: AGENT_MODEL,
+    model: agentModel(),
+    models: AGENT_MODELS,
   };
 }
 
-/** GET -> { configured, source: "ui"|"env"|null, masked, model }. Never the key itself. */
+/** GET -> { configured, source, masked, model, models }. Never the key itself. */
 export async function GET(req: Request) {
   const denied = assertSession(req);
   if (denied) return denied;
@@ -37,14 +40,15 @@ export async function GET(req: Request) {
 
 /**
  * POST { key } -> store a pasted credential (API key or sk-ant-oat… OAuth
- * token); takes effect immediately, no restart. POST { clear: true } -> drop
- * the UI-set credential (falls back to the env var if present).
+ * token). POST { model } -> switch the copilot's model. POST { clear: true } ->
+ * drop the UI-set credential (falls back to the env var if present). All take
+ * effect immediately, no restart.
  */
 export async function POST(req: Request) {
   const denied = assertSession(req);
   if (denied) return denied;
 
-  let body: { key?: unknown; clear?: unknown };
+  let body: { key?: unknown; model?: unknown; clear?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -53,6 +57,14 @@ export async function POST(req: Request) {
 
   if (body.clear === true) {
     setRuntimeKey(null);
+    return Response.json(status());
+  }
+
+  if (typeof body.model === "string") {
+    if (!AGENT_MODELS.some((m) => m.id === body.model)) {
+      return Response.json({ error: "Unknown model." }, { status: 400 });
+    }
+    setRuntimeModel(body.model);
     return Response.json(status());
   }
 

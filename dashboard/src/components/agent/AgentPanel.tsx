@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Wrench,
   KeyRound,
+  Cpu,
 } from "lucide-react";
 import { ChangesBar, type StagedChangeView, type ApplyResult } from "./ChangesBar";
 
@@ -28,11 +29,17 @@ interface ChatMsg {
 }
 
 /** Credential status from /api/agent/config — never contains the key itself. */
+interface AgentModel {
+  id: string;
+  label: string;
+  hint: string;
+}
 interface AgentConfig {
   configured: boolean;
   source: "ui" | "env" | null;
   masked: string | null;
   model: string;
+  models: AgentModel[];
 }
 
 const STORAGE_KEY = "switchyard.agent.expanded";
@@ -268,6 +275,7 @@ export function AgentPanel() {
             </header>
 
             <KeyBar config={config} onChanged={refreshConfig} />
+            <ModelBar config={config} onChanged={refreshConfig} />
 
             {configured === false ? (
               <SetupCard />
@@ -358,6 +366,51 @@ function ToolPill({ chip }: { chip: ToolChip }) {
       {icon}
       {chip.label}
     </span>
+  );
+}
+
+/** Model picker row — shows and switches the copilot's model on the fly. */
+function ModelBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const models = config?.models ?? [];
+
+  const pick = async (model: string) => {
+    if (model === config?.model) return;
+    setSaving(true);
+    try {
+      await fetch("/api/agent/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model }),
+      });
+      onChanged();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hint = models.find((m) => m.id === config?.model)?.hint;
+
+  return (
+    <div className="flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
+      <Cpu className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
+      <span className="text-[11px] text-[var(--color-fg-muted)]">Model</span>
+      <select
+        value={config?.model ?? ""}
+        onChange={(e) => pick(e.target.value)}
+        disabled={saving || models.length === 0}
+        className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 text-[11px] outline-none focus:border-[var(--color-brand)] disabled:opacity-50"
+      >
+        {models.length === 0 && config?.model && <option value={config.model}>{config.model}</option>}
+        {models.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.label}
+          </option>
+        ))}
+      </select>
+      {saving && <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--color-fg-subtle)]" />}
+      {hint && <span className="hidden shrink-0 text-[10px] text-[var(--color-fg-subtle)] sm:inline">{hint}</span>}
+    </div>
   );
 }
 

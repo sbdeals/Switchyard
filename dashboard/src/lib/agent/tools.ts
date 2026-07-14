@@ -283,6 +283,56 @@ const TOOLS: Record<string, ToolDef> = {
     },
   },
 
+  exec_in_service: {
+    schema: {
+      name: "exec_in_service",
+      description:
+        "Run a shell command (via `sh -c`) INSIDE a service's running container and get its stdout/stderr/exit code back. This is your window into a deployment for diagnosis — inspect files and processes, check config, curl an internal endpoint, or query a database (e.g. `psql -U postgres -c 'select 1'`, `env`, `cat /app/config.json`, `ls -la`, `ps aux`). Output is capped (~1MB, 15s). Prefer read-only/diagnostic commands; state changes to Dokploy objects still go through the dedicated tools.",
+      input_schema: {
+        type: "object",
+        properties: {
+          service: { type: "string", description: "Service id, name, or appName (or a full container name to target one compose container)." },
+          command: { type: "string", description: "Shell command to run inside the container." },
+        },
+        required: ["service", "command"],
+      },
+    },
+    run: async (input) => {
+      const svc = await resolveOrThrow(input);
+      const command = reqStr(input, "command");
+      const r = await ops.execInService(svc, command);
+      if (!r) return { content: `Container for "${svc.name}" is not running — cannot exec.`, isError: true, label: `Exec in ${svc.name}` };
+      const parts = [
+        r.stdout && `stdout:\n${r.stdout}`,
+        r.stderr && `stderr:\n${r.stderr}`,
+        `exit code: ${r.exitCode ?? "unknown"}${r.truncated ? " (output truncated)" : ""}`,
+      ].filter(Boolean);
+      return { content: parts.join("\n\n").slice(0, 12000), label: `Exec in ${svc.name}` };
+    },
+  },
+
+  get_metrics: {
+    schema: {
+      name: "get_metrics",
+      description: "Sample a running service's current CPU (%) and memory (used / limit) usage.",
+      input_schema: {
+        type: "object",
+        properties: { service: { type: "string", description: "Service id, name, or appName." } },
+        required: ["service"],
+      },
+    },
+    run: async (input) => {
+      const svc = await resolveOrThrow(input);
+      const s = await ops.serviceMetrics(svc);
+      if (!s) return { content: `"${svc.name}" is not running — no metrics.`, label: `Metrics for ${svc.name}` };
+      const mb = (b: number) => `${Math.round(b / 1024 / 1024)} MB`;
+      return {
+        content: JSON.stringify({ cpuPercent: Number(s.cpu.toFixed(1)), memoryUsed: mb(s.memUsed), memoryLimit: s.memLimit ? mb(s.memLimit) : "unlimited" }),
+        label: `Metrics for ${svc.name}`,
+      };
+    },
+  },
+
   update_application: {
     schema: {
       name: "update_application",

@@ -11,9 +11,26 @@
  */
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import { isOAuthToken, resolveAgentKey } from "./key-store";
+import { isOAuthToken, resolveAgentKey, resolveAgentModel } from "./key-store";
 
-export const AGENT_MODEL = process.env.SWITCHYARD_AGENT_MODEL?.trim() || "claude-fable-5";
+/** The model in effect right now (UI pick → env override → default Opus 4.8). */
+export function agentModel(): string {
+  return resolveAgentModel();
+}
+
+/**
+ * Fable 5 runs safety classifiers that can decline a request. Adding a
+ * server-side fallback re-serves a declined turn on Opus 4.8 in the same call.
+ * (This does NOT rescue 429s — those are model capacity/limit errors; the fix
+ * for those is choosing a more available model in the picker.)
+ */
+export function fallbackConfig(model: string):
+  | { betas: string[]; fallbacks: { model: string }[] }
+  | null {
+  return model === "claude-fable-5"
+    ? { betas: ["server-side-fallback-2026-06-01"], fallbacks: [{ model: "claude-opus-4-8" }] }
+    : null;
+}
 
 /** Whether the agent is usable at all (i.e. a credential is configured). */
 export function isAgentConfigured(): boolean {
@@ -21,6 +38,12 @@ export function isAgentConfigured(): boolean {
 }
 
 let cached: { key: string; client: Anthropic } | null = null;
+
+/** True when the active credential is a Claude-subscription OAuth token. */
+export function activeKeyIsOAuth(): boolean {
+  const resolved = resolveAgentKey();
+  return resolved ? isOAuthToken(resolved.key) : false;
+}
 
 /** Lazily construct the Anthropic client. Throws if no credential is set. */
 export function getAnthropic(): Anthropic {
@@ -31,8 +54,15 @@ export function getAnthropic(): Anthropic {
   if (cached?.key !== resolved.key) {
     cached = {
       key: resolved.key,
+      // OAuth tokens (sk-ant-oat…) authenticate as a Bearer token AND require
+      // the oauth beta header on /v1/messages; without it the endpoint rejects
+      // them. API keys use x-api-key and need neither.
       client: isOAuthToken(resolved.key)
-        ? new Anthropic({ authToken: resolved.key, apiKey: null })
+        ? new Anthropic({
+            authToken: resolved.key,
+            apiKey: null,
+            defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
+          })
         : new Anthropic({ apiKey: resolved.key }),
     };
   }
