@@ -14,6 +14,87 @@ const socketPath = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
 const docker = new Docker({ socketPath });
 
 /**
+ * Default ceiling for a one-shot Docker API call (list/logs/stats/inspect/exec
+ * setup). These are single request/response round-trips over the socket; if the
+ * daemon is wedged (mid-restart, socket stalled, host under load) they can
+ * otherwise never settle and hang whatever awaits them — e.g. the agent's tool
+ * loop, which awaits each tool inline. Overridable via DOCKER_OP_TIMEOUT_MS.
+ */
+const DOCKER_OP_TIMEOUT_MS = Number(process.env.DOCKER_OP_TIMEOUT_MS) || 12_000;
+
+/** Thrown when a bounded Docker call exceeds its deadline. */
+export class DockerTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DockerTimeoutError";
+  }
+}
+
+/**
+ * Reject with a DockerTimeoutError if `p` hasn't settled within `ms`. The
+ * underlying Docker call isn't truly cancellable, but the caller stops waiting,
+ * which is what unblocks the tool loop. A settled promise clears the timer so we
+ * don't hold the event loop open.
+ */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new DockerTimeoutError(`${label} timed out after ${ms}ms`)),
+      ms,
+    );
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
+/**
+ * Demultiplex Docker's log/exec stream format from a fully-buffered response,
+ * synchronously. The stream is a sequence of frames:
+ *   byte 0     : stream type (0 stdin, 1 stdout, 2 stderr)
+ *   bytes 1..3 : zero padding
+ *   bytes 4..7 : big-endian uint32 payload length, then <length> payload bytes
+ * TTY-enabled containers emit a raw, unframed stream instead; a non-frame header
+ * is detected and the whole buffer is returned as raw text. Payload bytes are
+ * concatenated and decoded once, so a multi-byte UTF-8 character split across
+ * two frames survives.
+ *
+ * This replaces the previous stream-based demux, which called `out.end()` before
+ * the async `modem.demuxStream` had written into `out` — a write-after-end that
+ * both threw an unhandled stream error AND left the "end" promise unresolved, so
+ * `readRecentLogs` never returned and the caller hung forever.
+ */
+export function demuxDockerFrames(buf: Buffer): string {
+  const parts: Buffer[] = [];
+  let off = 0;
+  let framed = false;
+  while (off + 8 <= buf.length) {
+    const type = buf[off];
+    if (type > 2 || buf[off + 1] !== 0 || buf[off + 2] !== 0 || buf[off + 3] !== 0) {
+      // Not a valid frame header: raw TTY stream (if nothing parsed yet) or
+      // trailing garbage after the last good frame.
+      if (!framed) return buf.toString("utf8");
+      break;
+    }
+    const len = buf.readUInt32BE(off + 4);
+    const start = off + 8;
+    const end = Math.min(start + len, buf.length);
+    parts.push(buf.subarray(start, end));
+    framed = true;
+    off = start + len;
+  }
+  if (!framed) return buf.toString("utf8");
+  return Buffer.concat(parts).toString("utf8");
+}
+
+/**
  * Resolve a Dokploy appName to its running container id (most recent).
  *
  * When `allowed` is provided, the appName must be one of the caller's known
@@ -27,10 +108,11 @@ export async function findContainerId(
 ): Promise<string | null> {
   if (!appName) return null;
   if (allowed && !allowed.has(appName)) return null;
-  const containers = await docker.listContainers({
-    all: false,
-    filters: { name: [appName] },
-  });
+  const containers = await withTimeout(
+    docker.listContainers({ all: false, filters: { name: [appName] } }),
+    DOCKER_OP_TIMEOUT_MS,
+    `Listing containers for ${appName}`,
+  );
   if (containers.length === 0) return null;
   // Prefer an exact task match; otherwise the first running one.
   const match =
@@ -157,14 +239,22 @@ export async function runExec(
   const { timeoutMs = 15_000, maxBytes = 1_000_000 } = opts;
   const container = docker.getContainer(id);
 
-  const exec = await container.exec({
-    Cmd: ["sh", "-c", command],
-    AttachStdin: false,
-    AttachStdout: true,
-    AttachStderr: true,
-    Tty: false,
-  });
-  const stream: Duplex = await exec.start({ hijack: true, stdin: false });
+  const exec = await withTimeout(
+    container.exec({
+      Cmd: ["sh", "-c", command],
+      AttachStdin: false,
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
+    }),
+    DOCKER_OP_TIMEOUT_MS,
+    `Creating exec in ${appName}`,
+  );
+  const stream: Duplex = await withTimeout(
+    exec.start({ hijack: true, stdin: false }),
+    DOCKER_OP_TIMEOUT_MS,
+    `Starting exec in ${appName}`,
+  );
 
   const { PassThrough } = await import("node:stream");
   const outS = new PassThrough();
@@ -211,9 +301,9 @@ export async function runExec(
 
   let exitCode: number | null = null;
   try {
-    exitCode = (await exec.inspect()).ExitCode ?? null;
+    exitCode = (await withTimeout(exec.inspect(), DOCKER_OP_TIMEOUT_MS, `Inspecting exec in ${appName}`)).ExitCode ?? null;
   } catch {
-    /* exec/container already gone */
+    /* exec/container already gone, or inspect timed out */
   }
 
   return { stdout, stderr, exitCode, truncated };
@@ -232,8 +322,13 @@ export async function sampleStatsOnce(appName: string): Promise<Sample | null> {
   if (!id) return null;
   const container = docker.getContainer(id);
   // stream:false returns one stats object with precpu_stats populated, so the
-  // CPU delta in toSample() is meaningful.
-  const stats = (await container.stats({ stream: false })) as unknown as Docker.ContainerStats;
+  // CPU delta in toSample() is meaningful. Bounded so a stalled daemon can't
+  // hang a get_metrics tool call (or the background collector).
+  const stats = (await withTimeout(
+    container.stats({ stream: false }),
+    DOCKER_OP_TIMEOUT_MS,
+    `Sampling stats for ${appName}`,
+  )) as unknown as Docker.ContainerStats;
   return toSample(stats);
 }
 
@@ -251,7 +346,11 @@ export async function containerHealth(appName: string): Promise<ContainerHealth>
   const id = await findContainerId(appName);
   if (!id) return { running: false, state: null, restartCount: null };
   try {
-    const info = await docker.getContainer(id).inspect();
+    const info = await withTimeout(
+      docker.getContainer(id).inspect(),
+      DOCKER_OP_TIMEOUT_MS,
+      `Inspecting ${appName}`,
+    );
     return {
       running: info.State?.Running ?? false,
       state: info.State?.Status ?? null,
@@ -267,25 +366,22 @@ export async function readRecentLogs(appName: string, tail = 200): Promise<LogLi
   const id = await findContainerId(appName);
   if (!id) return [];
   const container = docker.getContainer(id);
-  const buf = (await container.logs({
-    follow: false,
-    stdout: true,
-    stderr: true,
-    tail,
-    timestamps: true,
-  })) as unknown as Buffer;
+  // follow:false returns the whole log slice as one Buffer, so we demux it
+  // synchronously (see demuxDockerFrames) rather than through a stream. The
+  // daemon call is bounded so a wedged container can't hang the caller.
+  const buf = (await withTimeout(
+    container.logs({
+      follow: false,
+      stdout: true,
+      stderr: true,
+      tail,
+      timestamps: true,
+    }),
+    DOCKER_OP_TIMEOUT_MS,
+    `Reading logs for ${appName}`,
+  )) as unknown as Buffer;
 
-  const { PassThrough, Readable } = await import("node:stream");
-  const out = new PassThrough();
-  const chunks: Buffer[] = [];
-  out.on("data", (c: Buffer) => chunks.push(c));
-  const done = new Promise<void>((resolve) => out.on("end", () => resolve()));
-  container.modem.demuxStream(Readable.from(buf), out, out);
-  out.end();
-  await done;
-
-  return Buffer.concat(chunks)
-    .toString("utf8")
+  return demuxDockerFrames(Buffer.isBuffer(buf) ? buf : Buffer.from(buf))
     .split("\n")
     .filter((l) => l.trim().length > 0)
     .map((line) => {

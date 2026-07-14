@@ -33,6 +33,11 @@ const ORIGIN = process.env.DOKPLOY_ORIGIN ?? BASE;
 const EMAIL = process.env.DOKPLOY_EMAIL ?? "";
 const PASSWORD = process.env.DOKPLOY_PASSWORD ?? "";
 
+// Ceiling for a single Dokploy API request. These calls enqueue async work and
+// return quickly, so a generous bound never trips normal use but stops an
+// unresponsive backend from hanging the caller forever. Override via env.
+const DOKPLOY_TIMEOUT_MS = Number(process.env.DOKPLOY_TIMEOUT_MS) || 30_000;
+
 // Host-facing base for Dokploy's own deploy webhook (`/api/deploy/<token>`).
 // The BFF reaches Dokploy over service DNS (DOKPLOY_URL), which a Git host
 // cannot resolve, so prefer the host-facing origin. Even so, if Dokploy sits
@@ -327,16 +332,28 @@ type ReqInit = { method?: "GET" | "POST"; body?: unknown };
  * logic. Prefer the typed helpers where they exist.
  */
 export async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}/api/${path}`, {
-    method: init.method ?? "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Origin: ORIGIN,
-      Cookie: await userCookie(),
-    },
-    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-    cache: "no-store",
-  });
+  const cookie = await userCookie();
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/${path}`, {
+      method: init.method ?? "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: ORIGIN,
+        Cookie: cookie,
+      },
+      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      cache: "no-store",
+      // Bound the call so an unresponsive Dokploy backend can't hang the caller
+      // indefinitely (e.g. the agent's tool loop, which awaits each tool inline).
+      signal: AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
+    });
+  } catch (e) {
+    if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
+      throw new Error(`Dokploy ${path} timed out after ${DOKPLOY_TIMEOUT_MS}ms.`);
+    }
+    throw e;
+  }
   if (res.status === 401) redirect("/login");
   if (!res.ok) {
     const body = await res.text();
