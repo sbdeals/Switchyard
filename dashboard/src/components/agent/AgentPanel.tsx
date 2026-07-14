@@ -614,6 +614,11 @@ function KeyBar({ config, onChanged }: { config: AgentConfig | null; onChanged: 
               <p className="text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
                 Approve access in that tab, then paste the code Claude gives you:
               </p>
+              <p className="text-[10px] leading-relaxed text-[var(--color-warn)]">
+                Open it in a normal desktop browser (Chrome, Safari…). Claude&rsquo;s
+                sign-in runs a bot check that rejects embedded / in-app browsers
+                with &ldquo;Invalid request format.&rdquo;
+              </p>
               <div className="flex items-center gap-1.5">
                 <input
                   value={code}

@@ -47,16 +47,23 @@ export function startLogin(): { url: string } {
   const state = base64url(crypto.randomBytes(16));
   g.__switchyardOAuthPending = { verifier, state, createdAt: Date.now() };
 
-  const url = new URL(AUTHORIZE_URL);
-  url.searchParams.set("code", "true");
-  url.searchParams.set("client_id", CLIENT_ID);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("redirect_uri", REDIRECT_URI);
-  url.searchParams.set("scope", SCOPES);
-  url.searchParams.set("code_challenge", challenge);
-  url.searchParams.set("code_challenge_method", "S256");
-  url.searchParams.set("state", state);
-  return { url: url.toString() };
+  // Build the query manually with encodeURIComponent. URLSearchParams encodes
+  // the spaces in `scope` as "+", which claude.ai's authorize endpoint rejects
+  // at grant time with "Authorization failed — Invalid request format".
+  // encodeURIComponent uses "%20", the form it accepts (verified end-to-end).
+  const query = Object.entries({
+    code: "true",
+    client_id: CLIENT_ID,
+    response_type: "code",
+    redirect_uri: REDIRECT_URI,
+    scope: SCOPES,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    state,
+  })
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join("&");
+  return { url: `${AUTHORIZE_URL}?${query}` };
 }
 
 export interface OAuthTokens {
