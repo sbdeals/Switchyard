@@ -27,12 +27,21 @@ interface ChatMsg {
   tools: ToolChip[];
 }
 
+/** Credential status from /api/agent/config — never contains the key itself. */
+interface AgentConfig {
+  configured: boolean;
+  source: "ui" | "env" | null;
+  masked: string | null;
+  model: string;
+}
+
 const STORAGE_KEY = "switchyard.agent.expanded";
 
 export function AgentPanel() {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [config, setConfig] = useState<AgentConfig | null>(null);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -65,6 +74,18 @@ export function AgentPanel() {
     }
   }, []);
 
+  const refreshConfig = useCallback(async () => {
+    try {
+      const res = await fetch("/api/agent/config", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as AgentConfig;
+      setConfig(data);
+      setConfigured(data.configured);
+    } catch {
+      /* ignore transient errors */
+    }
+  }, []);
+
   // Restore expand state, load changes, and poll every 10s (even while collapsed).
   useEffect(() => {
     try {
@@ -73,9 +94,10 @@ export function AgentPanel() {
       /* ignore */
     }
     refreshChanges();
+    refreshConfig();
     const t = setInterval(refreshChanges, 10_000);
     return () => clearInterval(t);
-  }, [refreshChanges]);
+  }, [refreshChanges, refreshConfig]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -211,7 +233,7 @@ export function AgentPanel() {
       {!expanded && (
         <button
           onClick={toggle}
-          className="fixed right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-xl border border-r-0 border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-3 text-[var(--color-fg-muted)] shadow-[0_10px_30px_-12px_#000] hover:text-[var(--color-fg)]"
+          className="fixed right-0 top-1/2 z-[60] flex -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-xl border border-r-0 border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-3 text-[var(--color-fg-muted)] shadow-[0_10px_30px_-12px_#000] hover:text-[var(--color-fg)]"
           aria-label="Open agent"
         >
           <Sparkles className="size-4 text-[var(--color-brand)]" />
@@ -219,7 +241,8 @@ export function AgentPanel() {
         </button>
       )}
 
-      {/* Expanded panel */}
+      {/* Expanded panel. z-[60] keeps it (and its close button) above the
+          fixed Sign-out button (z-50), which used to cover the header. */}
       <AnimatePresence>
         {expanded && (
           <motion.aside
@@ -227,7 +250,7 @@ export function AgentPanel() {
             animate={{ x: 0 }}
             exit={{ x: 400 }}
             transition={{ type: "spring", stiffness: 380, damping: 38 }}
-            className="fixed right-0 top-0 z-30 flex h-full w-[380px] max-w-[92vw] flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]"
+            className="fixed right-0 top-0 z-[60] flex h-full w-[380px] max-w-[92vw] flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]"
           >
             <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
               <div className="flex items-center gap-2">
@@ -243,6 +266,8 @@ export function AgentPanel() {
                 <X className="size-4" />
               </button>
             </header>
+
+            <KeyBar config={config} onChanged={refreshConfig} />
 
             {configured === false ? (
               <SetupCard />
@@ -356,10 +381,139 @@ function SetupCard() {
       <div className="flex size-11 items-center justify-center rounded-xl bg-[var(--color-warn-soft)] text-[var(--color-warn)]">
         <KeyRound className="size-5" />
       </div>
-      <h3 className="mt-3 text-sm font-semibold">Agent not configured</h3>
-      <p className="mt-1.5 text-xs text-[var(--color-fg-muted)]">
-        Set <code className="font-mono text-[var(--color-fg)]">ANTHROPIC_API_KEY</code> in the dashboard environment and restart to enable the copilot.
+      <h3 className="mt-3 text-sm font-semibold">Connect the copilot</h3>
+      <p className="mt-1.5 max-w-[17rem] text-xs text-[var(--color-fg-muted)]">
+        Paste an Anthropic key in the box above — it takes effect immediately,
+        no files, no restart. Both API keys and Claude-subscription tokens
+        (<code className="font-mono">sk-ant-oat…</code>) work.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Always-visible credential box at the top of the panel: shows the active key
+ * (masked) and where it came from, and lets the user paste a replacement on
+ * the fly — API keys and Claude-subscription OAuth tokens both accepted. The
+ * key never round-trips to the browser; only the masked tail is shown.
+ */
+function KeyBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Not configured -> the form IS the empty state; keep it open.
+  const open = editing || config?.configured === false;
+
+  const save = async () => {
+    const key = value.trim();
+    if (!key || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/agent/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setError(data?.error ?? "Could not save the key.");
+        return;
+      }
+      setValue("");
+      setEditing(false);
+      onChanged();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const clear = async () => {
+    setSaving(true);
+    try {
+      await fetch("/api/agent/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clear: true }),
+      });
+      onChanged();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5">
+      <div className="flex items-center gap-2">
+        <KeyRound className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
+        {config?.configured ? (
+          <>
+            <code className="truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
+              {config.masked}
+            </code>
+            <span className="shrink-0 rounded border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-fg-subtle)]">
+              {config.source === "ui" ? "set in UI" : "env"}
+            </span>
+            <span className="flex-1" />
+            <button
+              onClick={() => setEditing((v) => !v)}
+              className="shrink-0 text-[11px] font-medium text-[var(--color-brand)] hover:underline"
+            >
+              {editing ? "Cancel" : "Replace"}
+            </button>
+            {config.source === "ui" && (
+              <button
+                onClick={clear}
+                disabled={saving}
+                className="shrink-0 text-[11px] text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
+              >
+                Remove
+              </button>
+            )}
+          </>
+        ) : (
+          <span className="text-[11px] text-[var(--color-fg-muted)]">No key configured</span>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-2 space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <input
+              type="password"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && save()}
+              placeholder="sk-ant-…  (API key or setup-token)"
+              autoComplete="off"
+              className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2.5 py-1.5 font-mono text-[11px] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
+            />
+            <button
+              onClick={save}
+              disabled={saving || !value.trim()}
+              className="shrink-0 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+            >
+              {saving ? <Loader2 className="size-3.5 animate-spin" /> : "Save"}
+            </button>
+          </div>
+          {error && <p className="text-[11px] text-[var(--color-danger)]">{error}</p>}
+          <p className="text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
+            <a
+              href="https://console.anthropic.com/settings/keys"
+              target="_blank"
+              rel="noreferrer"
+              className="text-[var(--color-brand)] hover:underline"
+            >
+              Create an API key ↗
+            </a>{" "}
+            — or, on a Claude Pro/Max plan, run{" "}
+            <code className="font-mono">claude setup-token</code> and paste the{" "}
+            <code className="font-mono">sk-ant-oat…</code> token.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

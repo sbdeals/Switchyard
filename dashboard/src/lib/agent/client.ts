@@ -1,27 +1,40 @@
 /**
  * Anthropic client wiring for the embedded deployment copilot.
  *
- * The API key lives only on the server (env `ANTHROPIC_API_KEY`) and is never
- * sent to the browser. The model is configurable via `SWITCHYARD_AGENT_MODEL`
- * and defaults to Anthropic's most capable model, Claude Fable 5.
+ * The credential lives only on the server — either pasted in the Agent panel
+ * (runtime key store) or the ANTHROPIC_API_KEY env var — and is never sent to
+ * the browser. Both regular API keys (sk-ant-api…) and Claude-subscription
+ * OAuth tokens (sk-ant-oat…, e.g. from `claude setup-token`) work: OAuth
+ * tokens are sent as a Bearer token, API keys as x-api-key. The model is
+ * configurable via `SWITCHYARD_AGENT_MODEL` and defaults to Anthropic's most
+ * capable model, Claude Fable 5.
  */
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import { isOAuthToken, resolveAgentKey } from "./key-store";
 
 export const AGENT_MODEL = process.env.SWITCHYARD_AGENT_MODEL?.trim() || "claude-fable-5";
 
-/** Whether the agent is usable at all (i.e. an API key is configured). */
+/** Whether the agent is usable at all (i.e. a credential is configured). */
 export function isAgentConfigured(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+  return resolveAgentKey() !== null;
 }
 
-let cached: Anthropic | null = null;
+let cached: { key: string; client: Anthropic } | null = null;
 
-/** Lazily construct the Anthropic client. Throws if the key is missing. */
+/** Lazily construct the Anthropic client. Throws if no credential is set. */
 export function getAnthropic(): Anthropic {
-  if (!isAgentConfigured()) {
-    throw new Error("ANTHROPIC_API_KEY is not set");
+  const resolved = resolveAgentKey();
+  if (!resolved) {
+    throw new Error("No Anthropic API key configured — add one in the Agent panel.");
   }
-  cached ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return cached;
+  if (cached?.key !== resolved.key) {
+    cached = {
+      key: resolved.key,
+      client: isOAuthToken(resolved.key)
+        ? new Anthropic({ authToken: resolved.key, apiKey: null })
+        : new Anthropic({ apiKey: resolved.key }),
+    };
+  }
+  return cached.client;
 }

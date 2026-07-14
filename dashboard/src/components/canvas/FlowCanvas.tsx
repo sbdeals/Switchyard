@@ -9,7 +9,6 @@ import {
   MiniMap,
   type Node,
   type Edge,
-  type NodeProps,
   useNodesState,
   useEdgesState,
   type NodeChange,
@@ -17,6 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import type { Service, ServiceEdge } from "@/lib/dokploy";
 import { serviceAccent } from "@/lib/service-meta";
+import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
 
 // v2: key bumped when the default layout became a grid — pre-grid saves froze
@@ -53,15 +53,7 @@ function savePositions(p: Positions) {
   }
 }
 
-function GroupLabel({ data }: NodeProps & { data: { label: string } }) {
-  return (
-    <div className="select-none text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-subtle)]">
-      {data.label}
-    </div>
-  );
-}
-
-const nodeTypes = { service: ServiceNode, label: GroupLabel };
+const nodeTypes = { service: ServiceNode };
 
 export function FlowCanvas({
   services,
@@ -72,10 +64,15 @@ export function FlowCanvas({
   edges: ServiceEdge[];
   onSelect: (service: Service) => void;
 }) {
+  // Catalog logos for Railway-style node icons (null while the catalog loads).
+  const logos = useTemplateLogos();
+
   const buildNodes = useCallback(
     (overrides?: Positions): Node[] => {
       const saved = { ...loadPositions(), ...(overrides ?? {}) };
-      // Group by project / environment for a tidy default layout.
+      // Group by project / environment for a tidy default layout. The group
+      // name renders inside each card (nodes are draggable — a label pinned to
+      // the background would stay behind when its services move).
       const groups = new Map<string, Service[]>();
       for (const svc of services) {
         const key = `${svc.projectName} / ${svc.environmentName}`;
@@ -90,27 +87,19 @@ export function FlowCanvas({
       let col = 0;
       let rowY = 0;
       let rowMaxServices = 0;
-      for (const [label, svcs] of ordered) {
+      for (const [, svcs] of ordered) {
         if (col === GRID_COLS) {
           rowY += rowMaxServices * ROW_H + ROW_GAP;
           col = 0;
           rowMaxServices = 0;
         }
         const x = col * COL_W;
-        nodes.push({
-          id: `label:${label}`,
-          type: "label",
-          position: { x, y: rowY - 40 },
-          data: { label },
-          draggable: false,
-          selectable: false,
-        });
         svcs.forEach((service, row) => {
           nodes.push({
             id: service.id,
             type: "service",
             position: saved[service.id] ?? { x, y: rowY + row * ROW_H },
-            data: { service, onSelect } as ServiceNodeData,
+            data: { service, logo: resolveServiceLogo(service, logos), onSelect } as ServiceNodeData,
           });
         });
         rowMaxServices = Math.max(rowMaxServices, svcs.length);
@@ -118,7 +107,7 @@ export function FlowCanvas({
       }
       return nodes;
     },
-    [services, onSelect]
+    [services, onSelect, logos]
   );
 
   const buildEdges = useCallback(
@@ -195,7 +184,7 @@ export function FlowCanvas({
         minZoom={0.3}
         maxZoom={1.5}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#26263a" />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#ffffff2b" />
         <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
         <MiniMap
           pannable

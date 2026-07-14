@@ -30,7 +30,7 @@ function toMessages(raw: unknown): Anthropic.MessageParam[] {
 export async function POST(req: Request) {
   if (!isAgentConfigured()) {
     return Response.json(
-      { error: "ANTHROPIC_API_KEY is not set on the dashboard server." },
+      { error: "No Anthropic API key configured — add one at the top of the Agent panel." },
       { status: 503 }
     );
   }
