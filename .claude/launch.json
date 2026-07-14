@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "switchyard-dashboard",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev"],
+      "cwd": "dashboard",
+      "port": 3101,
+      "autoPort": true
+    }
+  ]
+}

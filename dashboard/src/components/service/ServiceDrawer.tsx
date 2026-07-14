@@ -17,6 +17,12 @@ import {
   Globe,
   Layers,
   FileCode,
+  Archive,
+  Hammer,
+  Clock,
+  HardDrive,
+  Server,
+  TerminalSquare,
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -25,17 +31,25 @@ import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
+import { BackupsTab } from "@/components/service/BackupsTab";
+import { VolumesTab } from "@/components/service/VolumesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
+import { ConsoleTab } from "@/components/service/ConsoleTab";
 import {
   AppOverviewTab,
+  AppBuildTab,
+  AppDeployTab,
   AppSettingsTab,
-  DomainsTab,
   DeploymentsTab,
+  DeploymentHistory,
+  SchedulesTab,
 } from "@/components/service/AppTabs";
+import { NetworkingTab } from "@/components/service/networking";
 import {
   ComposeOverviewTab,
   ComposeEditorTab,
+  ComposeDomainsTab,
   ComposeSettingsTab,
 } from "@/components/service/ComposeTabs";
 import {
@@ -54,33 +68,70 @@ import { cn } from "@/lib/utils";
 type TabId =
   | "overview"
   | "variables"
+  | "deploy"
+  | "build"
   | "domains"
   | "deployments"
+  | "schedules"
   | "editor"
+  | "volumes"
   | "metrics"
   | "logs"
+  | "console"
+  | "backups"
   | "settings";
 const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
   variables: { label: "Variables", icon: <KeyRound className="size-4" /> },
-  domains: { label: "Domains", icon: <Globe className="size-4" /> },
+  deploy: { label: "Deploy", icon: <Server className="size-4" /> },
+  build: { label: "Build", icon: <Hammer className="size-4" /> },
+  domains: { label: "Networking", icon: <Globe className="size-4" /> },
   deployments: { label: "Deploys", icon: <Rocket className="size-4" /> },
+  schedules: { label: "Schedules", icon: <Clock className="size-4" /> },
   editor: { label: "Compose", icon: <FileCode className="size-4" /> },
+  volumes: { label: "Volumes", icon: <HardDrive className="size-4" /> },
   metrics: { label: "Metrics", icon: <Cpu className="size-4" /> },
   logs: { label: "Logs", icon: <ScrollText className="size-4" /> },
+  console: { label: "Console", icon: <TerminalSquare className="size-4" /> },
+  backups: { label: "Backups", icon: <Archive className="size-4" /> },
   settings: { label: "Settings", icon: <Settings2 className="size-4" /> },
 };
-const DB_TABS: TabId[] = ["overview", "variables", "metrics", "logs", "settings"];
+const DB_TABS: TabId[] = [
+  "overview",
+  "variables",
+  "volumes",
+  "metrics",
+  "logs",
+  "console",
+  "backups",
+  "settings",
+];
 const APP_TABS: TabId[] = [
+  "overview",
+  "variables",
+  "deploy",
+  "build",
+  "domains",
+  "deployments",
+  "schedules",
+  "volumes",
+  "metrics",
+  "logs",
+  "console",
+  "settings",
+];
+const COMPOSE_TABS: TabId[] = [
   "overview",
   "variables",
   "domains",
   "deployments",
+  "editor",
+  "volumes",
   "metrics",
   "logs",
+  "console",
   "settings",
 ];
-const COMPOSE_TABS: TabId[] = ["overview", "editor", "logs", "settings"];
 
 export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
@@ -117,13 +168,13 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
           >
             <Header service={service} onClose={onClose} />
-            <nav className="flex gap-1 border-b border-[var(--color-border)] px-4">
+            <nav className="flex gap-1 overflow-x-auto border-b border-[var(--color-border)] px-4 [scrollbar-width:thin]">
               {tabs.map((id) => (
                 <button
                   key={id}
                   onClick={() => setTab(id)}
                   className={cn(
-                    "flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
+                    "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
                     tab === id
                       ? "border-[var(--color-brand)] text-[var(--color-fg)]"
                       : "border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
@@ -144,18 +195,32 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && service.kind !== "compose" && (
-                <VariablesTab service={service} />
+              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
+              {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
+              {tab === "domains" && service.kind === "application" && (
+                <NetworkingTab app={service} />
               )}
-              {tab === "domains" && service.kind === "application" && <DomainsTab app={service} />}
+              {tab === "domains" && service.kind === "compose" && (
+                <ComposeDomainsTab compose={service} />
+              )}
               {tab === "deployments" && service.kind === "application" && (
                 <DeploymentsTab app={service} />
+              )}
+              {tab === "deployments" && service.kind === "compose" && (
+                <DeploymentHistory deployments={service.deployments} />
+              )}
+              {tab === "schedules" && service.kind === "application" && (
+                <SchedulesTab app={service} />
               )}
               {tab === "editor" && service.kind === "compose" && (
                 <ComposeEditorTab compose={service} />
               )}
+              {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
               {tab === "logs" && <LogsTab key={service.appName} appName={service.appName} active />}
+              {tab === "console" && <ConsoleTab key={service.appName} appName={service.appName} />}
+              {tab === "backups" && service.kind === "database" && <BackupsTab db={service} />}
               {tab === "settings" &&
                 (service.kind === "database" ? (
                   <SettingsTab db={service} onClose={onClose} />

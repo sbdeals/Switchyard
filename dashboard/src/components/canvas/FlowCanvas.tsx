@@ -9,7 +9,6 @@ import {
   MiniMap,
   type Node,
   type Edge,
-  type NodeProps,
   useNodesState,
   useEdgesState,
   type NodeChange,
@@ -17,11 +16,24 @@ import {
 import "@xyflow/react/dist/style.css";
 import type { Service, ServiceEdge } from "@/lib/dokploy";
 import { serviceAccent } from "@/lib/service-meta";
+import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
 
-const POS_KEY = "switchyard:positions";
-const COL_W = 320;
+// v2: key bumped when the default layout became a grid — pre-grid saves froze
+// every auto-position (not just drags), which would pin the old horizontal
+// layout forever.
+const POS_KEY = "switchyard:positions:v2";
+const COL_W = 300;
 const ROW_H = 104;
+/**
+ * Group-columns per grid row. With one column per project, an unbounded row
+ * turns a dozen projects into a horizontal strip; wrapping at 4 keeps the
+ * default view roughly viewport-shaped without letting tall groups (many
+ * services) dominate the fold.
+ */
+const GRID_COLS = 4;
+/** Vertical padding between grid rows — room for the next row's group label. */
+const ROW_GAP = 72;
 
 type Positions = Record<string, { x: number; y: number }>;
 
@@ -41,15 +53,7 @@ function savePositions(p: Positions) {
   }
 }
 
-function GroupLabel({ data }: NodeProps & { data: { label: string } }) {
-  return (
-    <div className="select-none text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-subtle)]">
-      {data.label}
-    </div>
-  );
-}
-
-const nodeTypes = { service: ServiceNode, label: GroupLabel };
+const nodeTypes = { service: ServiceNode };
 
 export function FlowCanvas({
   services,
@@ -60,40 +64,50 @@ export function FlowCanvas({
   edges: ServiceEdge[];
   onSelect: (service: Service) => void;
 }) {
+  // Catalog logos for Railway-style node icons (null while the catalog loads).
+  const logos = useTemplateLogos();
+
   const buildNodes = useCallback(
     (overrides?: Positions): Node[] => {
       const saved = { ...loadPositions(), ...(overrides ?? {}) };
-      // Group by project / environment for a tidy default layout.
+      // Group by project / environment for a tidy default layout. The group
+      // name renders inside each card (nodes are draggable — a label pinned to
+      // the background would stay behind when its services move).
       const groups = new Map<string, Service[]>();
       for (const svc of services) {
         const key = `${svc.projectName} / ${svc.environmentName}`;
         (groups.get(key) ?? groups.set(key, []).get(key)!).push(svc);
       }
       const nodes: Node[] = [];
+      // Grid default layout: groups wrap after GRID_COLS columns instead of
+      // stretching into one endless horizontal row. Each grid row starts below
+      // the tallest group of the previous row. Sorted so the grid is stable
+      // across reloads (Map order follows the fetch, which can vary).
+      const ordered = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
       let col = 0;
-      for (const [label, svcs] of groups) {
+      let rowY = 0;
+      let rowMaxServices = 0;
+      for (const [, svcs] of ordered) {
+        if (col === GRID_COLS) {
+          rowY += rowMaxServices * ROW_H + ROW_GAP;
+          col = 0;
+          rowMaxServices = 0;
+        }
         const x = col * COL_W;
-        nodes.push({
-          id: `label:${label}`,
-          type: "label",
-          position: { x, y: -40 },
-          data: { label },
-          draggable: false,
-          selectable: false,
-        });
         svcs.forEach((service, row) => {
           nodes.push({
             id: service.id,
             type: "service",
-            position: saved[service.id] ?? { x, y: row * ROW_H },
-            data: { service, onSelect } as ServiceNodeData,
+            position: saved[service.id] ?? { x, y: rowY + row * ROW_H },
+            data: { service, logo: resolveServiceLogo(service, logos), onSelect } as ServiceNodeData,
           });
         });
+        rowMaxServices = Math.max(rowMaxServices, svcs.length);
         col++;
       }
       return nodes;
     },
-    [services, onSelect]
+    [services, onSelect, logos]
   );
 
   const buildEdges = useCallback(
@@ -130,13 +144,23 @@ export function FlowCanvas({
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
       onNodesChange(changes);
-      // Persist positions after a drag. Rebuilding from the current nodes (not
-      // merging into the stored map) also prunes entries for deleted services.
-      const moved = changes.some((c) => c.type === "position" && !c.dragging);
-      if (moved) {
+      // Persist positions after a drag — but only the nodes the user actually
+      // dragged. Saving every node's position (the old behavior) froze the
+      // auto-layout into localStorage, so default-layout improvements never
+      // applied to returning users. Stale entries for deleted services are
+      // pruned against the current node set.
+      const draggedIds = changes
+        .filter((c) => c.type === "position" && !c.dragging)
+        .map((c) => (c as { id: string }).id);
+      if (draggedIds.length > 0) {
         setNodes((curr) => {
-          const pos: Positions = {};
-          for (const n of curr) if (n.type === "service") pos[n.id] = n.position;
+          const pos = loadPositions();
+          for (const id of draggedIds) {
+            const n = curr.find((n) => n.id === id && n.type === "service");
+            if (n) pos[id] = n.position;
+          }
+          const live = new Set(curr.filter((n) => n.type === "service").map((n) => n.id));
+          for (const id of Object.keys(pos)) if (!live.has(id)) delete pos[id];
           savePositions(pos);
           return curr;
         });
@@ -160,7 +184,7 @@ export function FlowCanvas({
         minZoom={0.3}
         maxZoom={1.5}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#26263a" />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#ffffff2b" />
         <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
         <MiniMap
           pannable

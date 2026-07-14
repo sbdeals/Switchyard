@@ -11,8 +11,8 @@ import {
   ensureSwitchyard,
   waitSwitchyardHealthy,
 } from "../core/switchyard-container.js";
-import { generatePassword, isValidEmail } from "../core/util.js";
-import { isRoot } from "../platform/linux.js";
+import { generatePassword, isValidEmail, randomSecret } from "../core/util.js";
+import { detectHostIp, isRoot } from "../platform/linux.js";
 import { platformFor } from "../platform/index.js";
 import { CLI_VERSION } from "../version.js";
 
@@ -48,9 +48,15 @@ export async function upCommand(flags: UpFlags): Promise<void> {
   const cfg = loaded.config;
   overlayFlags(cfg, flags);
 
-  // The dashboard has no auth of its own; exposing it is a real decision.
+  // Seed the dashboard's session-signing secret once (CSPRNG). Persisted so the
+  // config-hash stays stable across re-runs — regenerating it would log users
+  // out and force a container recreate on every `up`.
+  if (!cfg.sessionSecret) cfg.sessionSecret = randomSecret();
+
+  // The dashboard now requires a Dokploy login, but exposing it is still a real
+  // decision — a login gate is not TLS, and it fronts full Dokploy admin.
   if (cfg.expose) {
-    warn("--expose publishes the dashboard on ALL interfaces. Switchyard has NO login — anyone who reaches the port has full admin over Dokploy.");
+    warn("--expose publishes the dashboard on ALL interfaces. It requires a Dokploy login, but there's no TLS and a valid login grants full Dokploy admin — only expose it on a trusted network or behind an HTTPS proxy.");
     if (interactive && !flags.yes) {
       if (!(await askConfirm({ message: "Expose the dashboard anyway?", initialValue: false }))) {
         cfg.expose = false;
@@ -152,6 +158,14 @@ export async function upCommand(flags: UpFlags): Promise<void> {
     // interactive + existing install: prompt after Dokploy is reachable.
   }
 
+  // Metrics store: generate a durable CSPRNG password once (persisted like the
+  // admin password). Its value feeds SWITCHYARD_STORE_URL on the container and
+  // is folded into the config-hash, so a stable password keeps `up` idempotent.
+  if (cfg.store && !cfg.storePassword) {
+    cfg.storePassword = randomSecret();
+    info("Generated a metrics-store password (stored in the config file).");
+  }
+
   saveConfig(cfg, loaded.path);
   info(`Config: ${loaded.path}`);
 
@@ -171,6 +185,20 @@ export async function upCommand(flags: UpFlags): Promise<void> {
 
   // ---- admin account -----------------------------------------------------
   await ensureAdmin(cfg, base, interactive);
+
+  // ---- auto-URL: detect the host IP so app deploys get a public URL --------
+  // Linux only (Traefik is managed there); Docker Desktop leaves hostIp unset,
+  // which makes auto-URL a no-op in the dashboard. Detect only when unset so
+  // re-runs stay idempotent and a manual `config set hostIp` override sticks.
+  if (cfg.platform === "linux" && !cfg.hostIp) {
+    const ip = await detectHostIp();
+    if (ip) {
+      cfg.hostIp = ip;
+      info(`Auto-URL enabled — app deploys get a URL on ${ip} (Dokploy *.traefik.me / *.${ip}.sslip.io).`);
+    } else {
+      warn("Could not detect a host IP — app deploys won't get an automatic URL. Set one with `switchyard config set hostIp <ip>`.");
+    }
+  }
   saveConfig(cfg, loaded.path);
 
   // ---- Switchyard container ----------------------------------------------
@@ -200,6 +228,21 @@ export async function upCommand(flags: UpFlags): Promise<void> {
     throw new UserError(`Dashboard is running but can't talk to Dokploy (${err}).\n${remedy}`);
   }
 
+  // ---- local ingress (opt-in, best-effort) --------------------------------
+  // Converge only when the user opted in (default false = no-op, so `up`'s
+  // default behavior is unchanged). Never fatal: a broken demo proxy must not
+  // fail the install.
+  if (cfg.localIngress) {
+    try {
+      await platform.localIngress("up", cfg, log);
+      info(
+        `Local ingress on http://${cfg.expose ? "<this-machine's-ip>" : "127.0.0.1"}:${cfg.localIngressHttpPort} (HTTP only — NOT real TLS).`,
+      );
+    } catch (e) {
+      warn(`Local ingress not started (opt-in): ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   // ---- Claude Code (optional) ---------------------------------------------
   if (interactive && flags.claude !== false) {
     await claudeStep();
@@ -222,8 +265,8 @@ export async function upCommand(flags: UpFlags): Promise<void> {
   );
   p.outro(
     cfg.expose
-      ? pc.yellow("The dashboard is exposed on all interfaces WITHOUT auth — anyone who reaches it has full admin.")
-      : `Dashboard bound to 127.0.0.1 (no auth yet). Remote access: ssh -L ${cfg.dashboardPort}:127.0.0.1:${cfg.dashboardPort} <user>@<server>`,
+      ? pc.yellow(`The dashboard is exposed on all interfaces. Sign in at /login with your Dokploy account — ${cfg.adminEmail} works. There's no TLS; put an HTTPS proxy in front for untrusted networks.`)
+      : `Dashboard bound to 127.0.0.1. Sign in at /login with your Dokploy account (${cfg.adminEmail}). Remote access: ssh -L ${cfg.dashboardPort}:127.0.0.1:${cfg.dashboardPort} <user>@<server>`,
   );
 }
 

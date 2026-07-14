@@ -1,10 +1,12 @@
 # Project context for Claude Code
 
-Goal: an open-source, Railway-style PaaS built on top of **Dokploy**, driven by
-**Claude Code**. Three parts live here: the bash launch tooling (`scripts/`),
-the Switchyard dashboard (`dashboard/`), and the `switchyard` CLI (`cli/`,
-npm package **`switchyard-cli`**) that turns everything into a one-command
-install.
+This project is **Switchyard** (its official name): an open-source,
+Railway-style PaaS built on top of **Dokploy**, driven by **Claude Code**.
+Four parts live here: the bash launch tooling (`scripts/`), the Switchyard
+dashboard (`dashboard/`), the `switchyard` CLI (`cli/`, npm package
+**`switchyard-cli`**) that turns everything into a one-command install, and
+the MCP server (`mcp/`, registered in `.mcp.json`) that exposes Dokploy
+operations as tools to Claude Code.
 
 ## Launching things
 
@@ -34,8 +36,10 @@ install.
   `dashboard/Dockerfile` (Next standalone output). Releasing: tag `vX.Y.Z`
   (must equal `cli/package.json` version) → `.github/workflows/release.yml`
   pushes the image then npm-publishes (needs the `NPM_TOKEN` repo secret).
-- The dashboard has **no auth** — the CLI binds it to 127.0.0.1 by default;
-  keep any new exposure path behind explicit `--expose`-style confirmation.
+- The dashboard requires a **per-user Dokploy login** (`/login`; gate lives in
+  `dashboard/src/proxy.ts`). A login gate is not TLS, so the CLI still binds it
+  to 127.0.0.1 by default; keep any new exposure path behind explicit
+  `--expose`-style confirmation.
 
 ## This host's quirks (already handled by the scripts — don't re-debug from scratch)
 

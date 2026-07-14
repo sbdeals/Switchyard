@@ -13,7 +13,7 @@ it installs is called `switchyard`.
 Fresh Linux server (installs Docker and Node.js if missing, then runs `up`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sbdeals/dokploy-claudecode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sbdeals/switchyard/main/install.sh | bash
 ```
 
 Anywhere with Node 20+ and Docker (including Windows 11 with Docker Desktop
@@ -74,6 +74,7 @@ version → the container is recreated (that's also the upgrade path:
 | `switchyard down` | Stop the stack; data volumes survive |
 | `switchyard down --purge` | Also delete network, secrets, and volumes (fresh slate; clears stored admin creds) |
 | `switchyard config list \| get <k> \| set <k> <v>` | Read/change persisted settings; `set` recreates the container |
+| `switchyard local-ingress up \| down` | Opt-in demo Traefik on alternate ports so domains route locally over **HTTP** (see below) |
 | `switchyard doctor` | Read-only prerequisite + health check |
 | `switchyard logs [switchyard\|dokploy] [-f]` | Tail the dashboard container or the Dokploy service logs |
 | `switchyard open` | Open the dashboard in a browser |
@@ -85,7 +86,7 @@ version → the container is recreated (that's also the upgrade path:
 |---|---|
 | `--dokploy-port <n>` | Host port for Dokploy (default 3000; ignored when an existing install is adopted) |
 | `--dashboard-port <n>` | Host port for the dashboard (default 3001) |
-| `--expose` | Publish the dashboard on all interfaces — **it has no auth**; requires confirmation (`--yes` in scripts) |
+| `--expose` | Publish the dashboard on all interfaces — a Dokploy login is required but there's **no TLS**; requires confirmation (`--yes` in scripts) |
 | `--skip-traefik` | Don't run the Traefik proxy (domains won't route); default on Docker Desktop |
 | `--tag <tag>` | Dashboard image tag (default: the CLI's own version; `latest` works too) |
 | `--email` / `--password` / `--admin-name` | Dokploy admin identity (otherwise prompted or generated) |
@@ -118,10 +119,14 @@ dashboard container gets its credentials without hand-edited env files).
 | `dashboardPort` | `3001` | Host port the dashboard publishes |
 | `expose` | `false` | `false` = bind 127.0.0.1 |
 | `skipTraefik` | `false` on Linux, `true` on Docker Desktop | Skip the reverse proxy |
+| `localIngress` | `false` | Opt-in demo Traefik (see [Local ingress](#local-ingress-demo-domain-routing)); `up` re-converges it when set |
+| `localIngressHttpPort` | `8080` | Host HTTP port for the demo proxy |
+| `localIngressHttpsPort` | `8443` | Host HTTPS port for the demo proxy |
 | `adminName` / `adminEmail` / `adminPassword` | — | The Dokploy admin the dashboard signs in with |
 | `image` | `ghcr.io/sbdeals/switchyard` | Dashboard image repo |
 | `imageTag` | `""` (= CLI version) | Pin a dashboard image tag |
 | `dokployUrlInContainer` | `http://dokploy:3000` | How the container reaches Dokploy (service DNS) |
+| `hostIp` | `""` (auto-detected on Linux) | Host public/advertise IP handed to the dashboard as `SWITCHYARD_HOST_IP` so app deploys mint an auto-URL (traefik.me / sslip.io) with no DNS. `""` disables auto-URL (Docker Desktop / dev). Override with `config set hostIp <ip>` |
 
 Change a setting and apply it in one step — `set` recreates the container
 when the value affects it:
@@ -144,10 +149,44 @@ instead:
 switchyard config set dokployUrlInContainer http://host.docker.internal:3000
 ```
 
-## Security: the dashboard has no login
+## Local ingress (demo domain routing)
 
-Anyone who can reach the dashboard port has **full admin over Dokploy**,
-including database passwords and container logs. Because of that:
+On Docker Desktop `switchyard up` sets `skipTraefik` — there is no reverse
+proxy, so attaching a domain to an app has no effect (it does not route). On a
+Linux/VPS install the stack instead runs a real Traefik on **80/443** with
+Let's Encrypt, and that is where real HTTPS custom domains belong.
+
+For a **local demo** of domain routing, `local-ingress` runs a *second* Traefik
+on alternate host ports (default **8080/8443**) that reuses the config Dokploy
+already generates:
+
+```bash
+switchyard local-ingress up      # start it (persists the choice)
+switchyard local-ingress down    # stop it
+```
+
+- **HTTP only — this is NOT real TLS.** Let's Encrypt needs a public host
+  answering on 80/443; the demo proxy cannot issue certificates. On these
+  domains choose certificate **"None"** and untick **HTTPS** in the dashboard.
+- Deploy an app first (that makes Dokploy write the Traefik config), then start
+  it. Point the domain at `127.0.0.1` (your hosts file) and open
+  `http://<host>:8080`.
+- Off by default; it does not change `skipTraefik` or any default behavior.
+  Once enabled, `switchyard up` re-converges it (so it survives a reboot), and
+  `switchyard down` removes it. It honors the same exposure model — bound to
+  127.0.0.1 unless the stack is exposed. Change the ports with
+  `config set localIngressHttpPort <n>` / `localIngressHttpsPort <n>`.
+- On Windows/macOS the demo proxy is driven with `docker` directly; on Linux it
+  runs `scripts/local-ingress.sh`. For a real public HTTPS domain, use a
+  Linux/VPS install (Traefik + Let's Encrypt on 80/443) or a tunnel such as
+  `cloudflared`.
+
+## Security: login required, but no TLS
+
+The dashboard requires signing in with a **Dokploy account** at `/login` (the
+first admin the CLI registers works). A signed-in user holds full Dokploy admin
+— database passwords, container logs, service lifecycle — and the dashboard
+itself speaks plain HTTP. Because of that:
 
 - The container binds **127.0.0.1** by default. On a server, reach it with an
   SSH tunnel:
@@ -158,8 +197,9 @@ including database passwords and container logs. Because of that:
   ```
 
 - `--expose` (or `config set expose true`) binds 0.0.0.0 and makes the CLI
-  shout at you first. Don't do this on an internet-reachable machine unless
-  something in front of it enforces auth. Dashboard auth is on the roadmap.
+  shout at you first. On an internet-reachable machine, put an HTTPS reverse
+  proxy in front — credentials and session cookies should not cross networks
+  in the clear.
 
 ## Migrating an existing install
 

@@ -1,4 +1,5 @@
 import type { SwitchyardConfig } from "./config.js";
+import { metricsStoreUrl } from "./config.js";
 import { docker, dockerInherit, dockerOk } from "./docker.js";
 import { UserError } from "./errors.js";
 import { sha256, sleep } from "./util.js";
@@ -24,7 +25,7 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
   const tag = cfg.imageTag || cliVersion;
   const image = `${cfg.image}:${tag}`;
   const bindHost = cfg.expose ? "0.0.0.0" : "127.0.0.1";
-  const env = {
+  const env: Record<string, string> = {
     DOKPLOY_URL: cfg.dokployUrlInContainer,
     // better-auth only trusts Dokploy's host-facing origins; the service-DNS
     // URL the container connects through is not one of them (403
@@ -32,7 +33,19 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
     DOKPLOY_ORIGIN: `http://localhost:${cfg.dokployPort}`,
     DOKPLOY_EMAIL: cfg.adminEmail,
     DOKPLOY_PASSWORD: cfg.adminPassword,
+    // Signs the dashboard's session cookie. Part of the spec, so it folds into
+    // the config-hash: rotating it recreates the container (and logs users out).
+    SWITCHYARD_SESSION_SECRET: cfg.sessionSecret,
+    // Durable observability store (persist metrics/logs, threshold alerts).
+    // Empty when disabled → the dashboard runs persistence-off. Part of `env`,
+    // so it is folded into the config-hash and keeps `up` idempotent.
+    SWITCHYARD_STORE_URL: metricsStoreUrl(cfg),
   };
+  // Host IP for auto-URL on app deploys. Only set on Linux (Traefik managed);
+  // its presence is the dashboard's signal that auto-URL is safe. Added only
+  // when non-empty so an unset value leaves the hash (and Docker Desktop
+  // containers) unchanged; a changed IP recreates the container.
+  if (cfg.hostIp) env.SWITCHYARD_HOST_IP = cfg.hostIp;
   const spec = {
     image,
     network: NETWORK_NAME,

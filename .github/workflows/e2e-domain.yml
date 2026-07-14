@@ -1,0 +1,63 @@
+name: e2e-domain
+
+# Proves custom domains route through Dokploy's bundled Traefik on 80/443 —
+# the thing that cannot be verified on Docker Desktop (no managed Traefik) or
+# in a sandbox with no inbound ports. A Linux runner CAN bind 80/443, and
+# Dokploy ships Traefik out of the gate, so this exercises the real path:
+# install Dokploy -> deploy an app -> attach a custom domain -> curl it.
+#
+# Uses Dokploy's official installer directly (not scripts/dokploy-up.sh), since
+# the repo scripts force the dnsrr/registry-mirror workarounds needed only on
+# the IPVS-less sandbox host; a stock Ubuntu runner has a normal kernel.
+
+on:
+  pull_request:
+    paths:
+      - "scripts/e2e-domain-check.mjs"
+      - ".github/workflows/e2e-domain.yml"
+  workflow_dispatch:
+
+jobs:
+  e2e-domain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Confirm 80/443/3000 are free
+        run: |
+          for p in 80 443 3000; do
+            if sudo ss -ltnp "( sport = :$p )" | grep -q LISTEN; then
+              echo "port $p already in use"; sudo ss -ltnp "( sport = :$p )"; exit 1
+            fi
+          done
+          echo "80/443/3000 free"
+
+      - name: Install Dokploy (bundles Traefik on 80/443)
+        run: |
+          set -euxo pipefail
+          # Dokploy's installer initializes Swarm and creates postgres/redis/
+          # dokploy plus a Traefik container published on 80/443.
+          curl -sSL https://dokploy.com/install.sh | sudo -E bash
+
+      - name: Show stack state
+        if: always()
+        run: |
+          docker service ls || true
+          docker ps || true
+
+      - name: Run the custom-domain e2e check
+        env:
+          DOKPLOY_URL: http://localhost:3000
+        run: node scripts/e2e-domain-check.mjs
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== docker service ls ==="; docker service ls || true
+          echo "=== docker ps -a ==="; docker ps -a || true
+          echo "=== traefik logs ==="; docker logs "$(docker ps -q --filter name=dokploy-traefik | head -1)" 2>&1 | tail -80 || true
+          echo "=== dokploy service logs ==="; docker service logs dokploy 2>&1 | tail -80 || true

@@ -22,15 +22,54 @@ export interface SwitchyardConfig {
   expose: boolean;
   /** Skip the Traefik proxy (defaults true on Docker Desktop, false on Linux). */
   skipTraefik: boolean;
+  /**
+   * Opt-in local ingress: run a demo Traefik on alternate host ports (Docker
+   * Desktop, where skipTraefik is on). HTTP-only routing — NOT real TLS.
+   * `switchyard local-ingress up/down` drives it; off by default.
+   */
+  localIngress: boolean;
+  localIngressHttpPort: number;
+  localIngressHttpsPort: number;
   adminName: string;
   adminEmail: string;
   adminPassword: string;
+  /** Secret that signs the dashboard's session cookie (CSPRNG, seeded at install). */
+  sessionSecret: string;
   /** Switchyard image repo (no tag). */
   image: string;
   /** Image tag; "" means "same as the CLI version". */
   imageTag: string;
   /** What the container uses to reach Dokploy (service DNS by default). */
   dokployUrlInContainer: string;
+  /**
+   * Host advertise/public IP, handed to the dashboard as SWITCHYARD_HOST_IP so
+   * app deploys can mint an auto-URL with no manual DNS. Auto-detected on Linux
+   * (from scripts/host-ip.sh); "" disables auto-URL (the Docker Desktop / dev
+   * default, where Traefik isn't managed).
+   */
+  hostIp: string;
+  /** Provision the switchyard-metrics Postgres for observability persistence. */
+  store: boolean;
+  /** CSPRNG password for the metrics store (generated once; 0600 with the file). */
+  storePassword: string;
+}
+
+// The Switchyard-owned metrics store: a dedicated Postgres provisioned on
+// dokploy-network, reached from the dashboard container by service DNS.
+export const STORE_SERVICE = "switchyard-metrics";
+export const STORE_VOLUME = "switchyard-metrics";
+const STORE_USER = "switchyard";
+const STORE_DB = "switchyard";
+const STORE_PORT = 5432;
+
+/**
+ * The connection string handed to the dashboard as SWITCHYARD_STORE_URL. Empty
+ * when the store is disabled or not yet provisioned — the dashboard treats an
+ * empty value as "persistence off" (dev-mode behaviour).
+ */
+export function metricsStoreUrl(cfg: SwitchyardConfig): string {
+  if (!cfg.store || !cfg.storePassword) return "";
+  return `postgresql://${STORE_USER}:${encodeURIComponent(cfg.storePassword)}@${STORE_SERVICE}:${STORE_PORT}/${STORE_DB}`;
 }
 
 export function detectPlatform(): Platform {
@@ -45,12 +84,19 @@ export function defaultConfig(platform: Platform = detectPlatform()): Switchyard
     dashboardPort: 3001,
     expose: false,
     skipTraefik: platform !== "linux",
+    localIngress: false,
+    localIngressHttpPort: 8080,
+    localIngressHttpsPort: 8443,
     adminName: "Admin",
     adminEmail: "",
     adminPassword: "",
+    sessionSecret: "",
     image: "ghcr.io/sbdeals/switchyard",
     imageTag: "",
     dokployUrlInContainer: "http://dokploy:3000",
+    hostIp: "",
+    store: true,
+    storePassword: "",
   };
 }
 
@@ -60,12 +106,19 @@ export const CONFIG_KEY_TYPES = {
   dashboardPort: "number",
   expose: "boolean",
   skipTraefik: "boolean",
+  localIngress: "boolean",
+  localIngressHttpPort: "number",
+  localIngressHttpsPort: "number",
   adminName: "string",
   adminEmail: "string",
   adminPassword: "string",
+  sessionSecret: "string",
   image: "string",
   imageTag: "string",
   dokployUrlInContainer: "string",
+  hostIp: "string",
+  store: "boolean",
+  storePassword: "string",
 } as const satisfies Partial<Record<keyof SwitchyardConfig, "number" | "boolean" | "string">>;
 
 export type ConfigKey = keyof typeof CONFIG_KEY_TYPES;

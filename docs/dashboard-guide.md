@@ -4,7 +4,7 @@ Switchyard is the Railway-style dashboard in [`dashboard/`](../dashboard/) that 
 
 This guide tours the features. To install the stack and connect Switchyard to it (admin credentials, `.env.local`, ports), follow [getting-started.md](getting-started.md) first; for how it all works internally, see [architecture.md](architecture.md); when something breaks, see [troubleshooting.md](troubleshooting.md).
 
-> **Full admin, no login.** Switchyard has no authentication of its own — anyone who can reach its port (`:3001` by default) can create and destroy services, read database passwords, and stream container logs. Keep it on localhost or put auth in front of it. See the [security note in getting-started](getting-started.md#set-up-switchyard-both-platforms) and the [security model in architecture.md](architecture.md#security-model--switchyard-has-no-auth-of-its-own).
+> **Login required — but a login is not TLS.** Switchyard gates every page, action, and log/metric stream behind a per-user Dokploy login (`/login`). A signed-in user still holds full Dokploy admin (create/destroy services, read database passwords, stream logs) and traffic is plain HTTP — keep it on localhost (the default) or put an HTTPS proxy in front before exposing it. See the [security note in getting-started](getting-started.md#set-up-switchyard-both-platforms) and the security model in [architecture.md](architecture.md).
 
 The screenshots come from a live local deployment with two demo services: `redis-mskd`, a Redis database created with one click, and `whoami-snim`, an application deployed from the `traefik/whoami` Docker image.
 
@@ -176,11 +176,15 @@ Two prerequisites, both outside Switchyard:
 
 Attached domains appear as clickable rows above the form, and the first one becomes the Public URL on the Overview tab.
 
+**Auto-URL.** On the Linux path you usually don't add anything here: deploying an app mints a public URL automatically (a Dokploy `*.traefik.me` host, or `<app-name>.<server-ip>.sslip.io` — both resolve to the server with no DNS to configure) and it shows up as the Public URL on the Overview tab. It routes to container port `3000` by default; if your app listens on a different port, add a domain here with the right port. Auto-URL is **off on Docker Desktop and in dev mode** — there the Dokploy Traefik proxy isn't managed, so nothing would route, and you add domains by hand as above.
+
 ### Deployment history
 
 The **Deploys** tab (applications only) lists every deployment, newest first. Each row shows a status dot (green done, red error, amber in progress), the deployment title, its timestamp, and the status as text — so after a few redeploys you can see at a glance when the app last shipped cleanly and whether anything failed. A never-deployed app shows "No deployments yet."
 
-The list is history only: per-deployment build logs aren't viewable in Switchyard yet (it's on the [dashboard roadmap](../dashboard/README.md#status)). To follow a deploy as it happens, watch the status badge and switch to Logs once the container starts.
+The tab also carries the **push-to-deploy** controls for git-sourced apps: the branch, an auto-deploy toggle, watch paths, and the app's copyable Dokploy webhook URL — add it as a push webhook on your Git host and every push to the configured branch redeploys. Rows whose deployment produced a registry image snapshot show a **Roll back** button (Dokploy records these only when the app deploys to a registry with rollbacks enabled).
+
+Per-deployment build logs aren't viewable in Switchyard yet (it's on the [dashboard roadmap](../dashboard/README.md#status)). To follow a deploy as it happens, watch the status badge and switch to Logs once the container starts.
 
 ### Live logs
 
@@ -252,4 +256,4 @@ By status: **Idle** shows Deploy; **Running** shows Stop and Redeploy; **Deployi
 - **Edges are a heuristic.** Substring matching over env vars catches the common cases and occasionally invents an arrow; treat the canvas lines as hints, not truth.
 - **Statuses don't auto-refresh.** Click **Refresh** to see a background deployment finish; only Logs and Metrics stream live.
 - **Public sources only.** The New service menu takes public Docker images and public Git URLs; there are no fields for registry credentials or deploy keys.
-- **Not there yet** (per the [dashboard roadmap](../dashboard/README.md#status)): backups (S3 destinations), per-deployment build logs, database password rotation, and dashboard auth.
+- **Not there yet** (per the [dashboard roadmap](../dashboard/README.md#status)): per-deployment build logs and database password rotation. (Backups and dashboard auth shipped — see the Backups tab and `/login`.)

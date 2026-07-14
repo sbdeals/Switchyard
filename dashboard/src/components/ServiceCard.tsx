@@ -2,10 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
-import { Database as DatabaseIcon, Box, Layers, Rocket, ChevronRight } from "lucide-react";
+import { Rocket, ChevronRight } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import { lifecycleAction, appLifecycleAction, composeLifecycleAction } from "@/app/actions";
 import { serviceAccent, serviceSubtitle } from "@/lib/service-meta";
+import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
+import { ServiceLogo } from "@/components/canvas/ServiceNode";
 import { StatusBadge } from "@/components/StatusBadge";
 
 /**
@@ -15,7 +17,7 @@ import { StatusBadge } from "@/components/StatusBadge";
  */
 export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: () => void }) {
   const accent = serviceAccent(service);
-  const Icon = service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
+  const logos = useTemplateLogos();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -48,12 +50,12 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
         style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }}
       />
       <div className="flex items-center gap-3">
-        <div
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl"
-          style={{ backgroundColor: `${accent}1a`, color: accent }}
-        >
-          <Icon className="size-5" />
-        </div>
+        <ServiceLogo
+          service={service}
+          logo={resolveServiceLogo(service, logos)}
+          accent={accent}
+          size="size-10"
+        />
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium leading-tight">{service.name}</div>
           <div className="truncate text-xs text-[var(--color-fg-muted)]">

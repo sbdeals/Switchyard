@@ -195,3 +195,48 @@ wait_dokploy_http() {
   done
   return 1
 }
+
+# Path to the Traefik static config Dokploy generates. Override with TRAEFIK_YML.
+TRAEFIK_YML_PATH="${TRAEFIK_YML:-/etc/dokploy/traefik/traefik.yml}"
+
+# Enable Traefik's Prometheus metrics in the Dokploy-owned traefik.yml so the
+# dashboard's HTTP panels (traffic / requests / error rate / response time) have
+# a data source. The dashboard scrapes TRAEFIK_METRICS_URL
+# (default http://127.0.0.1:8081/metrics); enabling the block here is what makes
+# the per-service `traefik_service_*` series appear.
+#
+# Idempotent: a no-op when the block already exists or the config hasn't been
+# generated yet (fresh install, before the first deploy). traefik.yml is
+# Dokploy-owned, so we only *append* the top-level `metrics:` key rather than
+# rewrite the file. Returns 10 when it changed the file (caller restarts
+# Traefik to apply the static config), 0 otherwise.
+ensure_traefik_metrics() {
+  local f="$TRAEFIK_YML_PATH"
+  # Missing, or the bogus-directory case handled in dokploy-up.sh — skip quietly.
+  [ -f "$f" ] || return 0
+  if grep -q '^metrics:' "$f" 2>/dev/null; then
+    return 0
+  fi
+  log "Enabling Traefik Prometheus metrics in $f (feeds the dashboard HTTP metrics)"
+  # Top-level YAML key; append at column 0 with a leading newline so we don't
+  # glue onto a file that lacks a trailing newline.
+  printf '\nmetrics:\n  prometheus:\n    addEntryPointsLabels: true\n    addServicesLabels: true\n' >> "$f" \
+    || { warn "Could not write $f; skipping metrics enablement."; return 0; }
+  return 10
+}
+
+# Ensure metrics are enabled and restart Traefik to pick up the change. Runs on
+# every `up`, so existing installs converge on the next launch. Exposing
+# Traefik's internal :8080 on 127.0.0.1:8081 — the URL the dashboard scrapes via
+# TRAEFIK_METRICS_URL (default http://127.0.0.1:8081/metrics) — is the ingress
+# layer's responsibility (the local-ingress Traefik publishes 127.0.0.1:8081:8080);
+# this step only turns the metrics ON in the static config.
+converge_traefik_metrics() {
+  local changed=0
+  ensure_traefik_metrics || changed=$?
+  if [ "$changed" = "10" ] && docker inspect dokploy-traefik >/dev/null 2>&1; then
+    log "Restarting dokploy-traefik to apply the metrics config"
+    docker restart dokploy-traefik >/dev/null 2>&1 \
+      || warn "Could not restart dokploy-traefik — restart it manually to apply metrics."
+  fi
+}

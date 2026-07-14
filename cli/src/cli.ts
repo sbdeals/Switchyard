@@ -5,6 +5,7 @@ import { claudeCommand } from "./commands/claude.js";
 import { configCommand } from "./commands/config.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { downCommand } from "./commands/down.js";
+import { localIngressCommand } from "./commands/local-ingress.js";
 import { logsCommand } from "./commands/logs.js";
 import { openCommand } from "./commands/open.js";
 import { statusCommand } from "./commands/status.js";
@@ -59,6 +60,12 @@ program
   .option("--no-restart", "save only; don't recreate the container")
   .option("--show-secrets", "print secret values in list/set output")
   .action(configCommand);
+
+program
+  .command("local-ingress")
+  .description("Opt-in demo Traefik on alternate ports (Docker Desktop; HTTP-only, NOT real TLS)")
+  .argument("<action>", "up | down")
+  .action(localIngressCommand);
 
 program.command("doctor").description("Check prerequisites and stack health (read-only)").action(doctorCommand);
 

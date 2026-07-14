@@ -2,15 +2,30 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Database as DatabaseIcon, Box, Layers, GitBranch, Loader2, AlertCircle } from "lucide-react";
-import type { Engine, ProjectNode } from "@/lib/dokploy";
+import {
+  Plus,
+  Database as DatabaseIcon,
+  Box,
+  Layers,
+  GitBranch,
+  GitFork,
+  Loader2,
+  AlertCircle,
+  LayoutTemplate,
+  Search,
+  ChevronDown,
+} from "lucide-react";
+import type { Engine, ProjectNode, DokployTemplate } from "@/lib/dokploy";
 import { ENGINE_LIST } from "@/lib/engines";
 import {
   quickDeployDatabaseAction,
   quickDeployImageAction,
   quickDeployRepoAction,
   createComposeAction,
+  listTemplatesAction,
+  quickDeployTemplateAction,
 } from "@/app/actions";
+import { GithubDeployModal } from "@/components/GithubDeployModal";
 
 /**
  * One-click provisioning: pick a database engine (auto name/password/version) or
@@ -25,11 +40,19 @@ export function QuickDeployMenu({
   onDeployed: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [image, setImage] = useState("");
   const [repo, setRepo] = useState("");
   const [, startTransition] = useTransition();
+
+  // Template catalog — lazily loaded from Dokploy the first time it's opened.
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState<DokployTemplate[] | null>(null);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [query, setQuery] = useState("");
 
   const envOptions = useMemo(
     () =>
@@ -61,6 +84,32 @@ export function QuickDeployMenu({
   const deployImage = () => run("app", () => quickDeployImageAction(image, undefined, targetEnv));
   const deployRepo = () => run("repo", () => quickDeployRepoAction(repo, undefined, targetEnv));
   const createComposeStack = () => run("compose", () => createComposeAction(undefined, targetEnv));
+  const deployTemplate = (id: string) =>
+    run(`tpl:${id}`, () => quickDeployTemplateAction(id, targetEnv));
+
+  function toggleTemplates() {
+    const next = !showTemplates;
+    setShowTemplates(next);
+    if (next && templates === null && !loadingTemplates) {
+      setLoadingTemplates(true);
+      setTemplatesError(null);
+      startTransition(async () => {
+        const res = await listTemplatesAction();
+        setLoadingTemplates(false);
+        if (res.ok) setTemplates(res.templates);
+        else setTemplatesError(res.error);
+      });
+    }
+  }
+
+  const filteredTemplates = useMemo(() => {
+    if (!templates) return [];
+    const q = query.trim().toLowerCase();
+    if (!q) return templates;
+    return templates.filter((t) =>
+      [t.name, t.description, ...t.tags].some((s) => s.toLowerCase().includes(q))
+    );
+  }, [templates, query]);
 
   return (
     <div className="relative">
@@ -136,6 +185,19 @@ export function QuickDeployMenu({
                 </button>
               </div>
               <button
+                onClick={() => {
+                  setOpen(false);
+                  setGithubOpen(true);
+                }}
+                className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)]"
+              >
+                <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-surface)] text-[var(--color-fg)]">
+                  <GitFork className="size-4" />
+                </span>
+                <span className="flex-1">From GitHub</span>
+                <span className="text-[11px] text-[var(--color-fg-subtle)]">private repos</span>
+              </button>
+              <button
                 onClick={createComposeStack}
                 disabled={busy !== null}
                 className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)] disabled:opacity-50"
@@ -149,6 +211,81 @@ export function QuickDeployMenu({
                 <span className="flex-1">Compose stack</span>
                 <span className="text-[11px] text-[var(--color-fg-subtle)]">docker-compose</span>
               </button>
+
+              <SectionLabel>Templates</SectionLabel>
+              <button
+                onClick={toggleTemplates}
+                className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)]"
+              >
+                <span
+                  className="flex size-7 items-center justify-center rounded-md"
+                  style={{ backgroundColor: "#a78bfa1a", color: "#a78bfa" }}
+                >
+                  <LayoutTemplate className="size-4" />
+                </span>
+                <span className="flex-1">App catalog</span>
+                <ChevronDown
+                  className={`size-4 text-[var(--color-fg-subtle)] transition-transform ${
+                    showTemplates ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {showTemplates && (
+                <div className="mb-1">
+                  <div className="mb-1 flex items-center gap-1.5 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 py-1.5">
+                    <Search className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
+                    <input
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search templates (n8n, plausible, ...)"
+                      className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[var(--color-fg-subtle)]"
+                    />
+                  </div>
+
+                  {loadingTemplates ? (
+                    <div className="flex items-center gap-1.5 px-2 py-3 text-xs text-[var(--color-fg-subtle)]">
+                      <Loader2 className="size-3.5 animate-spin" /> Loading catalog…
+                    </div>
+                  ) : templatesError ? (
+                    <div className="flex items-start gap-1.5 px-2 py-2 text-xs text-[var(--color-danger)]">
+                      <AlertCircle className="mt-0.5 size-3.5 shrink-0" /> {templatesError}
+                    </div>
+                  ) : templates && filteredTemplates.length === 0 ? (
+                    <div className="px-2 py-3 text-xs text-[var(--color-fg-subtle)]">
+                      {templates.length === 0
+                        ? "No templates available (Dokploy could not reach its template source)."
+                        : "No templates match your search."}
+                    </div>
+                  ) : (
+                    <div className="max-h-64 overflow-y-auto">
+                      {filteredTemplates.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => deployTemplate(t.id)}
+                          disabled={busy !== null}
+                          title={t.description}
+                          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--color-surface)] disabled:opacity-50"
+                        >
+                          <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[var(--color-surface)]">
+                            {busy === `tpl:${t.id}` ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <TemplateLogo logo={t.logo} />
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm">{t.name}</span>
+                            <span className="block truncate text-[11px] text-[var(--color-fg-subtle)]">
+                              {t.description}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <SectionLabel>Database</SectionLabel>
               <div className="grid grid-cols-1">
@@ -186,7 +323,31 @@ export function QuickDeployMenu({
           </>
         )}
       </AnimatePresence>
+
+      <GithubDeployModal
+        open={githubOpen}
+        onClose={() => setGithubOpen(false)}
+        environmentId={targetEnv}
+        onDeployed={onDeployed}
+      />
     </div>
+  );
+}
+
+/**
+ * A template's logo, falling back to a generic icon. Template logos are remote
+ * CDN assets and many are missing — the CDN soft-404s to an HTML page, which a
+ * plain <img> renders as a broken-image glyph. onError swaps in the icon so a
+ * missing logo shows a clean placeholder instead of a broken image.
+ */
+function TemplateLogo({ logo }: { logo: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!logo || failed) {
+    return <LayoutTemplate className="size-4 text-[var(--color-fg-subtle)]" />;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- remote template logos from arbitrary hosts; next/image would need per-host remotePatterns
+    <img src={logo} alt="" className="size-5 object-contain" onError={() => setFailed(true)} />
   );
 }
 

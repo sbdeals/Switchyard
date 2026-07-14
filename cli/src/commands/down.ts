@@ -1,6 +1,7 @@
 import { loadConfig, saveConfig } from "../core/config.js";
 import { docker, dockerAvailability } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
+import { LOCAL_INGRESS_CONTAINER } from "../core/local-ingress.js";
 import { askConfirm, p, pc } from "../core/prompts.js";
 import { CONTAINER_NAME } from "../core/switchyard-container.js";
 import { platformFor } from "../platform/index.js";
@@ -33,6 +34,7 @@ export async function downCommand(flags: DownFlags): Promise<void> {
 
   p.log.step("Removing the Switchyard container ...");
   await docker(["rm", "-f", CONTAINER_NAME]); // tolerate absence
+  await docker(["rm", "-f", LOCAL_INGRESS_CONTAINER]); // opt-in local ingress, if it was running
 
   const platform = platformFor(cfg.platform);
   await platform.downDokploy({ purge: !!flags.purge }, (m) => p.log.step(m));
@@ -42,6 +44,9 @@ export async function downCommand(flags: DownFlags): Promise<void> {
     // send the next `up` down the wrong path.
     cfg.adminEmail = "";
     cfg.adminPassword = "";
+    // The metrics-store volume is gone too; drop its password so the next `up`
+    // regenerates one that matches a fresh store.
+    cfg.storePassword = "";
     saveConfig(cfg, path);
     p.log.info("Cleared the stored admin credentials (the account was deleted with the data).");
   }

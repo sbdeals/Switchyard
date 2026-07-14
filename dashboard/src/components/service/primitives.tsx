@@ -16,9 +16,13 @@ import {
   Copy,
   Check,
   Loader2,
+  Globe,
+  ExternalLink,
+  Network,
 } from "lucide-react";
-import type { Action, ServiceStatus } from "@/lib/dokploy";
+import type { Action, AppDomain, ServiceStatus } from "@/lib/dokploy";
 import type { ActionResult } from "@/app/actions";
+import { StatusBadge } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
 
 export const inputCls =
@@ -124,6 +128,88 @@ export function CopyButton({ text }: { text: string }) {
     >
       {copied ? <Check className="size-3.5 text-[var(--color-ok)]" /> : <Copy className="size-3.5" />}
     </button>
+  );
+}
+
+/** Small trailing "remove" icon button for config-list rows. */
+export function RemoveBtn({ onClick, pending }: { onClick: () => void; pending: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={pending}
+      aria-label="Remove"
+      className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
+    >
+      {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+    </button>
+  );
+}
+
+// --- networking blocks ----------------------------------------------------------
+
+/**
+ * Railway-style Overview header: the primary public URL (first https domain,
+ * else first domain) as a clickable link, plus the health badge. Shared by
+ * applications and compose (both carry `domains`).
+ */
+export function PublicUrlBar({
+  domains,
+  status,
+}: {
+  domains: AppDomain[];
+  status: ServiceStatus;
+}) {
+  const primary = domains.find((d) => d.https) ?? domains[0];
+  const url = primary ? `${primary.https ? "https" : "http"}://${primary.host}` : null;
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3.5">
+      <div className="min-w-0">
+        <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--color-fg-subtle)]">
+          Public URL
+        </div>
+        {url && primary ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex max-w-full items-center gap-1.5 text-sm font-medium text-[var(--color-brand)] hover:underline"
+          >
+            <Globe className="size-3.5 shrink-0" />
+            <span className="truncate">{primary.host}</span>
+            <ExternalLink className="size-3 shrink-0" />
+          </a>
+        ) : (
+          <p className="text-xs text-[var(--color-fg-subtle)]">
+            No domain yet — add one under Networking.
+          </p>
+        )}
+      </div>
+      <div className="shrink-0">
+        <StatusBadge status={status} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Private networking: the service's internal DNS name (its `appName`). Other
+ * services on the overlay network reach it at this hostname — the analog of
+ * Railway's `*.railway.internal`.
+ */
+export function PrivateNetwork({ host }: { host: string }) {
+  return (
+    <Field label="Private networking" hint="internal DNS">
+      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
+        <Network className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
+        <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
+          {host}
+        </code>
+        <CopyButton text={host} />
+      </div>
+      <p className="mt-1 text-[10px] text-[var(--color-fg-subtle)]">
+        Reachable from other services at this hostname on the internal network.
+      </p>
+    </Field>
   );
 }
 

@@ -1,4 +1,7 @@
+import { unstable_rethrow } from "next/navigation";
+
 import { followStats } from "@/lib/docker";
+import { knownAppNames } from "@/lib/dokploy";
 import { sseFromLines, sseOnce } from "@/lib/sse";
 
 export const runtime = "nodejs";
@@ -9,7 +12,17 @@ export async function GET(request: Request) {
   const app = new URL(request.url).searchParams.get("app");
   if (!app) return new Response("missing ?app", { status: 400 });
 
-  const src = await followStats(app);
+  // Only sample containers backing this user's Dokploy services (fail closed).
+  let allowed: Set<string>;
+  try {
+    allowed = await knownAppNames();
+  } catch (e) {
+    unstable_rethrow(e);
+    return new Response("workspace unavailable", { status: 503 });
+  }
+  if (!allowed.has(app)) return new Response("unknown app", { status: 403 });
+
+  const src = await followStats(app, allowed);
   if (!src) return sseOnce(`event: idle\ndata: {}\n\n`);
 
   return sseFromLines(src, request, (line) => {

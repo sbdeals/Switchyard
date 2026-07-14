@@ -20,7 +20,7 @@ export interface ConfigFlags {
   showSecrets?: boolean;
 }
 
-const SECRET_KEYS: ConfigKey[] = ["adminPassword"];
+const SECRET_KEYS: ConfigKey[] = ["adminPassword", "sessionSecret"];
 
 function assertKey(key: string): ConfigKey {
   if (!(key in CONFIG_KEY_TYPES)) {
@@ -64,8 +64,11 @@ export async function configCommand(
       const coerced = coerceConfigValue(k, value);
       if (k === "expose" && coerced === true) {
         p.log.warn(
-          "expose=true publishes the dashboard on ALL interfaces without auth. Applied on the next container recreate.",
+          "expose=true publishes the dashboard on ALL interfaces. It requires a Dokploy login, but has no TLS — front it with an HTTPS proxy off trusted networks. Applied on the next container recreate.",
         );
+      }
+      if (k === "sessionSecret") {
+        p.log.warn("Rotating sessionSecret signs out every logged-in user on the next container recreate.");
       }
       (cfg as Record<ConfigKey, unknown>)[k] = coerced;
       saveConfig(cfg, path);
@@ -73,6 +76,9 @@ export async function configCommand(
 
       if (k === "dokployPort") {
         p.log.info("Changing the Dokploy port also needs the service re-published — run `switchyard up` to converge.");
+      }
+      if (k === "localIngress" && coerced === true) {
+        p.log.info("Start the demo proxy with `switchyard local-ingress up` (or it converges on the next `switchyard up`).");
       }
 
       if (flags.restart === false) {

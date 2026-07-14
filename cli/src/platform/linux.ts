@@ -2,13 +2,24 @@ import { chmodSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { docker, runInherit } from "../core/docker.js";
+import { docker, run, runInherit } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { servicePublishedPort } from "../core/swarm.js";
 import type { PlatformModule } from "./types.js";
 
 export function isRoot(): boolean {
   return typeof process.getuid === "function" && process.getuid() === 0;
+}
+
+/**
+ * The host's advertise IP, via the shared bash detection (keeps IP logic in
+ * scripts/*.sh, per the Linux-behavior-in-scripts rule). Returns "" when it
+ * can't be determined. No root needed — host-ip.sh only reads.
+ */
+export async function detectHostIp(): Promise<string> {
+  const script = join(bundledScriptsDir(), "host-ip.sh");
+  const res = await run("bash", [script]);
+  return res.code === 0 ? res.stdout.trim() : "";
 }
 
 /**
@@ -98,6 +109,36 @@ export const linuxPlatform: PlatformModule = {
       // Fresh installs create it; converge by removing. Idempotent re-runs
       // short-circuit inside dokploy-up.sh and never recreate it.
       await docker(["rm", "-f", "dokploy-traefik"]);
+    }
+
+    // Observability persistence: provision the switchyard-metrics Postgres.
+    // Infra lives in the bash script (dnsrr, dokploy-network); idempotent.
+    if (cfg.store && cfg.storePassword) {
+      const storeScript = join(bundledScriptsDir(), "switchyard-store-up.sh");
+      log(`Provisioning the metrics store via ${storeScript} ...`);
+      const code = await runScript(storeScript, [`SWITCHYARD_METRICS_PASSWORD=${cfg.storePassword}`]);
+      if (code !== 0) throw new UserError("switchyard-store-up.sh failed (see output above).");
+    }
+  },
+
+  async localIngress(action, cfg, log) {
+    const script = join(bundledScriptsDir(), "local-ingress.sh");
+    if (action === "up") {
+      // Honor the exposure model: 127.0.0.1 by default, all interfaces only
+      // when the stack is explicitly exposed. TRAEFIK_IMAGE passes through.
+      const envPairs = [`BIND_ADDR=${cfg.expose ? "0.0.0.0" : "127.0.0.1"}`];
+      if (process.env.TRAEFIK_IMAGE) envPairs.push(`TRAEFIK_IMAGE=${process.env.TRAEFIK_IMAGE}`);
+      log(`Starting local ingress via ${script} ...`);
+      const code = await runScript(script, envPairs, [
+        "up",
+        String(cfg.localIngressHttpPort),
+        String(cfg.localIngressHttpsPort),
+      ]);
+      if (code !== 0) throw new UserError("local-ingress.sh up failed (see output above).");
+    } else {
+      log(`Stopping local ingress via ${script} ...`);
+      const code = await runScript(script, [], ["down"]);
+      if (code !== 0) throw new UserError("local-ingress.sh down failed (see output above).");
     }
   },
 
