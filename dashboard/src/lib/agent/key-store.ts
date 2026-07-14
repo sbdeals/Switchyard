@@ -17,6 +17,7 @@ import "server-only";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { refreshLogin } from "./oauth";
 
 const KEY_FILE =
   process.env.SWITCHYARD_AGENT_KEY_FILE?.trim() ||
@@ -46,19 +47,39 @@ interface KeyState {
   loaded: boolean;
   key: string | null;
   model: string | null;
+  // Present only when `key` came from the "Sign in with Claude" flow: the
+  // refresh token + access-token expiry that let us keep it fresh. A pasted
+  // key/token has these null.
+  oauthRefresh: string | null;
+  oauthExpiresAt: number | null;
 }
 
 // Survive HMR / repeated imports: one state per process.
 const g = globalThis as unknown as { __switchyardAgentKey?: KeyState };
-const state: KeyState = (g.__switchyardAgentKey ??= { loaded: false, key: null, model: null });
+const state: KeyState = (g.__switchyardAgentKey ??= {
+  loaded: false,
+  key: null,
+  model: null,
+  oauthRefresh: null,
+  oauthExpiresAt: null,
+});
 
 function loadOnce(): void {
   if (state.loaded) return;
   state.loaded = true;
   try {
-    const raw = JSON.parse(fs.readFileSync(KEY_FILE, "utf8")) as { key?: unknown; model?: unknown };
+    const raw = JSON.parse(fs.readFileSync(KEY_FILE, "utf8")) as {
+      key?: unknown;
+      model?: unknown;
+      oauth?: unknown;
+    };
     if (typeof raw.key === "string" && raw.key.trim()) state.key = raw.key.trim();
     if (typeof raw.model === "string" && isKnownModel(raw.model)) state.model = raw.model;
+    if (raw.oauth && typeof raw.oauth === "object") {
+      const o = raw.oauth as { refresh?: unknown; expiresAt?: unknown };
+      if (typeof o.refresh === "string" && o.refresh) state.oauthRefresh = o.refresh;
+      if (typeof o.expiresAt === "number") state.oauthExpiresAt = o.expiresAt;
+    }
   } catch {
     /* no persisted settings */
   }
@@ -66,11 +87,18 @@ function loadOnce(): void {
 
 function persist(): void {
   try {
-    if (state.key || state.model) {
+    if (state.key || state.model || state.oauthRefresh) {
       fs.mkdirSync(path.dirname(KEY_FILE), { recursive: true });
-      const body: { key?: string; model?: string } = {};
+      const body: {
+        key?: string;
+        model?: string;
+        oauth?: { refresh: string; expiresAt: number | null };
+      } = {};
       if (state.key) body.key = state.key;
       if (state.model) body.model = state.model;
+      if (state.oauthRefresh) {
+        body.oauth = { refresh: state.oauthRefresh, expiresAt: state.oauthExpiresAt };
+      }
       fs.writeFileSync(KEY_FILE, JSON.stringify(body), { mode: 0o600 });
     } else {
       fs.rmSync(KEY_FILE, { force: true });
@@ -107,11 +135,48 @@ export function isOAuthToken(key: string): boolean {
   return key.startsWith("sk-ant-oat");
 }
 
-/** Store (or clear, with null) the UI-provided credential. */
+/** Store (or clear, with null) a pasted credential. Clears any subscription login. */
 export function setRuntimeKey(key: string | null): void {
   loadOnce();
   state.key = key?.trim() || null;
+  state.oauthRefresh = null;
+  state.oauthExpiresAt = null;
   persist();
+}
+
+/** Store the tokens from a "Sign in with Claude" flow (access + refresh + expiry). */
+export function setOAuthCredential(t: { access: string; refresh: string; expiresAt: number }): void {
+  loadOnce();
+  state.key = t.access;
+  state.oauthRefresh = t.refresh || null;
+  state.oauthExpiresAt = t.expiresAt;
+  persist();
+}
+
+/** True when the active credential came from the subscription sign-in (refreshable). */
+export function isLoginCredential(): boolean {
+  loadOnce();
+  return state.oauthRefresh != null;
+}
+
+/**
+ * If the active credential is a subscription login nearing expiry, refresh it in
+ * place. No-op for API keys, pasted tokens, or a token that's still fresh. Best
+ * effort — on failure we keep the current token and let any 401 surface on use.
+ */
+export async function ensureFreshOAuth(): Promise<void> {
+  loadOnce();
+  if (!state.oauthRefresh) return;
+  if (state.oauthExpiresAt && Date.now() < state.oauthExpiresAt - 120_000) return;
+  try {
+    const t = await refreshLogin(state.oauthRefresh);
+    state.key = t.access;
+    if (t.refresh) state.oauthRefresh = t.refresh; // some refreshes rotate it, some don't
+    state.oauthExpiresAt = t.expiresAt;
+    persist();
+  } catch {
+    /* keep existing token */
+  }
 }
 
 export interface ResolvedKey {

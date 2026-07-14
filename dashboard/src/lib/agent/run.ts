@@ -6,7 +6,13 @@
  */
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import { getAnthropic, agentModel, fallbackConfig, activeKeyIsOAuth } from "./client";
+import {
+  getAnthropic,
+  agentModel,
+  fallbackConfig,
+  activeKeyIsOAuth,
+  ensureAgentCredentialFresh,
+} from "./client";
 import { toolSchemas, runTool } from "./tools";
 
 export type AgentEvent =
@@ -38,9 +44,9 @@ function initialLabel(name: string): string {
 function friendlyError(e: unknown, model: string): string {
   if (e instanceof Anthropic.RateLimitError) {
     const oauth = activeKeyIsOAuth()
-      ? " Your credential is a Claude subscription token (sk-ant-oat…), which has tight rate limits for direct API use — a standard API key from console.anthropic.com is far more reliable here."
+      ? " You're signed in with a Claude subscription — its usage limit is shared across Claude Code and this dashboard and resets on a rolling window. Wait a few minutes, ease off other Claude Code usage, or paste a standard API key for a separate pay-as-you-go pool."
       : "";
-    return `The API rate-limited "${model}" (HTTP 429): the model is at capacity or your key's limit for it is exhausted.${oauth} Try a different model from the dropdown (Opus 4.8 is the most available) or wait a minute and retry.`;
+    return `The API rate-limited "${model}" (HTTP 429): the model is at capacity or your key's limit for it is exhausted.${oauth} You can also try a different model from the dropdown (Opus 4.8 is the most available) or retry in a minute.`;
   }
   if (e instanceof Anthropic.AuthenticationError) {
     return "The Anthropic key was rejected (HTTP 401). Replace it in the key bar above.";
@@ -56,6 +62,7 @@ export async function runAgentTurn(
   sessionKey: string,
   emit: (e: AgentEvent) => void
 ): Promise<void> {
+  await ensureAgentCredentialFresh();
   const client = getAnthropic();
   const model = agentModel();
   const fb = fallbackConfig(model);

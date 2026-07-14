@@ -11,7 +11,7 @@
  */
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import { isOAuthToken, resolveAgentKey, resolveAgentModel } from "./key-store";
+import { ensureFreshOAuth, isOAuthToken, resolveAgentKey, resolveAgentModel } from "./key-store";
 
 /** The model in effect right now (UI pick → env override → default Opus 4.8). */
 export function agentModel(): string {
@@ -35,6 +35,16 @@ export function fallbackConfig(model: string):
 /** Whether the agent is usable at all (i.e. a credential is configured). */
 export function isAgentConfigured(): boolean {
   return resolveAgentKey() !== null;
+}
+
+/**
+ * Refresh the credential if it's a subscription login nearing expiry. Call this
+ * before getAnthropic() on the request path; it's a no-op for API keys and
+ * still-fresh tokens. getAnthropic() re-keys its cache on the (possibly new)
+ * token, so a refresh here transparently rebuilds the client.
+ */
+export async function ensureAgentCredentialFresh(): Promise<void> {
+  await ensureFreshOAuth();
 }
 
 let cached: { key: string; client: Anthropic } | null = null;

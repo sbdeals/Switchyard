@@ -13,6 +13,8 @@ import {
   Wrench,
   KeyRound,
   Cpu,
+  LogIn,
+  ExternalLink,
 } from "lucide-react";
 import { ChangesBar, type StagedChangeView, type ApplyResult } from "./ChangesBar";
 
@@ -38,6 +40,8 @@ interface AgentConfig {
   configured: boolean;
   source: "ui" | "env" | null;
   masked: string | null;
+  /** True when the credential came from "Sign in with Claude" (subscription). */
+  loginActive?: boolean;
   model: string;
   models: AgentModel[];
 }
@@ -436,25 +440,36 @@ function SetupCard() {
       </div>
       <h3 className="mt-3 text-sm font-semibold">Connect the copilot</h3>
       <p className="mt-1.5 max-w-[17rem] text-xs text-[var(--color-fg-muted)]">
-        Paste an Anthropic key in the box above — it takes effect immediately,
-        no files, no restart. Both API keys and Claude-subscription tokens
-        (<code className="font-mono">sk-ant-oat…</code>) work.
+        Use the box above to <strong>sign in with your Claude subscription</strong>
+        {" "}— the same sign-in Claude Code uses — and run the copilot on your
+        Pro/Max plan. No key to manage.
+      </p>
+      <p className="mt-1.5 max-w-[17rem] text-[11px] text-[var(--color-fg-subtle)]">
+        Prefer separate, metered billing? Paste an Anthropic API key
+        (<code className="font-mono">sk-ant-api…</code>) instead — it never
+        shares a rate limit with your Claude Code usage.
       </p>
     </div>
   );
 }
 
 /**
- * Always-visible credential box at the top of the panel: shows the active key
- * (masked) and where it came from, and lets the user paste a replacement on
- * the fly — API keys and Claude-subscription OAuth tokens both accepted. The
- * key never round-trips to the browser; only the masked tail is shown.
+ * Always-visible credential box at the top of the panel. Two ways to connect:
+ *  - "Sign in with Claude" — the OAuth flow Claude Code uses; drives the copilot
+ *    on the user's Claude Pro/Max subscription. No key to manage.
+ *  - Paste an API key (or a subscription token) directly.
+ * The credential never round-trips to the browser; only a masked tail is shown.
  */
 function KeyBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Subscription sign-in flow.
+  const [loginUrl, setLoginUrl] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [oauthBusy, setOauthBusy] = useState(false);
+  const [oauthError, setOauthError] = useState<string | null>(null);
 
   // Not configured -> the form IS the empty state; keep it open.
   const open = editing || config?.configured === false;
@@ -497,6 +512,53 @@ function KeyBar({ config, onChanged }: { config: AgentConfig | null; onChanged: 
     }
   };
 
+  const startOauth = async () => {
+    setOauthBusy(true);
+    setOauthError(null);
+    try {
+      const res = await fetch("/api/agent/oauth/start", { method: "POST" });
+      const data = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
+      if (!res.ok || !data?.url) {
+        setOauthError(data?.error ?? "Could not start sign-in.");
+        return;
+      }
+      setLoginUrl(data.url);
+      // Best-effort auto-open; the visible link below is the reliable path.
+      try {
+        window.open(data.url, "_blank", "noopener,noreferrer");
+      } catch {
+        /* popup blocked — user clicks the link instead */
+      }
+    } finally {
+      setOauthBusy(false);
+    }
+  };
+
+  const completeOauth = async () => {
+    const c = code.trim();
+    if (!c || oauthBusy) return;
+    setOauthBusy(true);
+    setOauthError(null);
+    try {
+      const res = await fetch("/api/agent/oauth/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: c }),
+      });
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || !data?.ok) {
+        setOauthError(data?.error ?? "Sign-in failed.");
+        return;
+      }
+      setCode("");
+      setLoginUrl(null);
+      setEditing(false);
+      onChanged();
+    } finally {
+      setOauthBusy(false);
+    }
+  };
+
   return (
     <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5">
       <div className="flex items-center gap-2">
@@ -507,7 +569,11 @@ function KeyBar({ config, onChanged }: { config: AgentConfig | null; onChanged: 
               {config.masked}
             </code>
             <span className="shrink-0 rounded border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-fg-subtle)]">
-              {config.source === "ui" ? "set in UI" : "env"}
+              {config.loginActive
+                ? "Claude subscription"
+                : config.source === "ui"
+                  ? "set in UI"
+                  : "env"}
             </span>
             <span className="flex-1" />
             <button
@@ -522,48 +588,101 @@ function KeyBar({ config, onChanged }: { config: AgentConfig | null; onChanged: 
                 disabled={saving}
                 className="shrink-0 text-[11px] text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
               >
-                Remove
+                {config.loginActive ? "Sign out" : "Remove"}
               </button>
             )}
           </>
         ) : (
-          <span className="text-[11px] text-[var(--color-fg-muted)]">No key configured</span>
+          <span className="text-[11px] text-[var(--color-fg-muted)]">Not connected</span>
         )}
       </div>
 
       {open && (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2.5 space-y-2.5">
+          {/* Subscription sign-in */}
+          {loginUrl ? (
+            <div className="space-y-1.5 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2.5">
+              <a
+                href={loginUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--color-brand)] hover:underline"
+              >
+                <ExternalLink className="size-3.5" />
+                Open the Claude sign-in page
+              </a>
+              <p className="text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
+                Approve access in that tab, then paste the code Claude gives you:
+              </p>
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && completeOauth()}
+                  placeholder="Paste code here"
+                  autoComplete="off"
+                  className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-1.5 font-mono text-[11px] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
+                />
+                <button
+                  onClick={completeOauth}
+                  disabled={oauthBusy || !code.trim()}
+                  className="shrink-0 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+                >
+                  {oauthBusy ? <Loader2 className="size-3.5 animate-spin" /> : "Finish"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={startOauth}
+              disabled={oauthBusy}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-brand)] px-3 py-2 text-[12px] font-semibold text-white hover:bg-[var(--color-brand-strong)] disabled:opacity-50"
+            >
+              {oauthBusy ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
+              Sign in with your Claude subscription
+            </button>
+          )}
+          {oauthError && <p className="text-[11px] text-[var(--color-danger)]">{oauthError}</p>}
+
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-[var(--color-fg-subtle)]">
+            <span className="h-px flex-1 bg-[var(--color-border)]" />
+            or paste a key
+            <span className="h-px flex-1 bg-[var(--color-border)]" />
+          </div>
+
+          {/* Paste an API key or token */}
           <div className="flex items-center gap-1.5">
             <input
               type="password"
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && save()}
-              placeholder="sk-ant-…  (API key or setup-token)"
+              placeholder="sk-ant-api…  or  sk-ant-oat…"
               autoComplete="off"
               className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2.5 py-1.5 font-mono text-[11px] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
             />
             <button
               onClick={save}
               disabled={saving || !value.trim()}
-              className="shrink-0 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+              className="shrink-0 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-strong)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--color-fg)] hover:border-[var(--color-brand)] disabled:opacity-40"
             >
               {saving ? <Loader2 className="size-3.5 animate-spin" /> : "Save"}
             </button>
           </div>
           {error && <p className="text-[11px] text-[var(--color-danger)]">{error}</p>}
           <p className="text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
+            Sign in to run the copilot on your Claude Pro/Max plan (this is Claude
+            Code&rsquo;s own sign-in). Or paste an{" "}
             <a
               href="https://console.anthropic.com/settings/keys"
               target="_blank"
               rel="noreferrer"
               className="text-[var(--color-brand)] hover:underline"
             >
-              Create an API key ↗
+              API key ↗
             </a>{" "}
-            — or, on a Claude Pro/Max plan, run{" "}
-            <code className="font-mono">claude setup-token</code> and paste the{" "}
-            <code className="font-mono">sk-ant-oat…</code> token.
+            for a separate pay-as-you-go pool that never shares a rate limit with
+            Claude Code.
           </p>
         </div>
       )}

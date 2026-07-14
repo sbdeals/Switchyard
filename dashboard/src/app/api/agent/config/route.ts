@@ -1,6 +1,7 @@
 import { agentModel } from "@/lib/agent/client";
 import {
   AGENT_MODELS,
+  isLoginCredential,
   looksLikeAnthropicKey,
   maskKey,
   resolveAgentKey,
@@ -26,12 +27,15 @@ function status() {
     configured: resolved !== null,
     source: resolved?.source ?? null,
     masked: resolved ? maskKey(resolved.key) : null,
+    // True when the credential came from "Sign in with Claude" (a refreshable
+    // subscription login) rather than a pasted key/token.
+    loginActive: resolved !== null && isLoginCredential(),
     model: agentModel(),
     models: AGENT_MODELS,
   };
 }
 
-/** GET -> { configured, source, masked, model, models }. Never the key itself. */
+/** GET -> { configured, source, masked, loginActive, model, models }. Never the key itself. */
 export async function GET(req: Request) {
   const denied = assertSession(req);
   if (denied) return denied;
