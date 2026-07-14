@@ -167,13 +167,13 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
           >
             <Header service={service} onClose={onClose} />
-            <nav className="flex gap-1 border-b border-[var(--color-border)] px-4">
+            <nav className="flex gap-1 overflow-x-auto border-b border-[var(--color-border)] px-4 [scrollbar-width:thin]">
               {tabs.map((id) => (
                 <button
                   key={id}
                   onClick={() => setTab(id)}
                   className={cn(
-                    "flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
+                    "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
                     tab === id
                       ? "border-[var(--color-brand)] text-[var(--color-fg)]"
                       : "border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
