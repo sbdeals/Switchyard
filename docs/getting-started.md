@@ -4,8 +4,12 @@ This guide takes you from a clean machine to a working stack: **Dokploy** (the
 upstream PaaS engine) plus **Switchyard** (this repo's Railway-style dashboard
 in [`dashboard/`](../dashboard/)).
 
-**Start with the [fast path](#fast-path-one-command-all-platforms)** — one
-command on every supported platform. The manual procedures it automates are
+**On Windows or macOS, the easiest route is the [desktop app](../README.md#windows--macos--the-desktop-app-easiest-no-terminal)**
+— download, double-click, done (it installs Docker Desktop for you if needed).
+Everything below is for Linux, for terminal users, and for contributors.
+
+**Otherwise start with the [fast path](#fast-path-one-command-all-platforms)** —
+one command on every supported platform. The manual procedures it automates are
 kept below as appendices, for contributors and for when you want to see every
 step:
 

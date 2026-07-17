@@ -6,12 +6,15 @@
 compose stacks onto your own machine or server, manage them from one canvas,
 and let Claude Code operate the platform through MCP.
 
-Four pieces live here:
+Five pieces live here:
 
 - **The dashboard** (`dashboard/`) — a Railway-style UI over the Dokploy API:
   one canvas for every service, one-click databases, app deploys from a Docker
   image / Git repo / GitHub App / 476-template catalog, per-service management
   drawer, live + persisted logs/metrics — behind a per-user Dokploy login.
+- **The desktop app** (`desktop/`) — the one-click install for Windows/macOS:
+  double-click, and the window becomes your dashboard with the stack running
+  underneath. Installs Docker Desktop for you if it's missing.
 - **The CLI** (`cli/`, npm **`switchyard-cli`**) — the one-command installer
   that converges the whole stack.
 - **Launch tooling** (`Makefile` + `scripts/`) — idempotent install of the
@@ -25,22 +28,39 @@ Four pieces live here:
 
 ## Quick setup
 
-### Windows & macOS — the desktop app (easiest)
+### Windows & macOS — the desktop app (easiest, no terminal)
 
-Download **Switchyard Setup** from the
-[latest release](https://github.com/sbdeals/Switchyard-The-Open-Source-Railway-Alternative/releases/latest)
-and double-click it. That's the whole install:
+You don't need Docker, Node.js, or any command line — the app handles
+everything.
 
-- If Docker Desktop is missing, a one-time setup wizard downloads and installs
-  it for you (the only prerequisite that can't be hidden — Switchyard runs your
-  apps in containers).
-- The app starts the engine, converges the whole stack, signs you in, and the
-  window *becomes* your dashboard. No terminal, no Node.js, no browser tabs.
-- It lives in the tray: start/stop/reset the stack, auto-launch at login,
-  auto-update from GitHub releases.
+1. **Download** `Switchyard-Setup-<version>.exe` (Windows) or
+   `Switchyard-<version>.dmg` (macOS) from the
+   [latest release](https://github.com/sbdeals/Switchyard-The-Open-Source-Railway-Alternative/releases/latest).
+   (No installer on the latest release yet? It ships with the next tag — or
+   build it yourself: `cd desktop && npm install && npm run dist`.)
+2. **Run it.** The build isn't code-signed yet, so Windows SmartScreen may warn
+   you — click **More info → Run anyway** (macOS: right-click → Open).
+3. **First run only:** if Docker Desktop isn't installed, a setup wizard offers
+   to download and install it for you — click **Install Docker Desktop for
+   me**, approve the administrator prompt, and wait. (Docker is the engine
+   Switchyard runs your apps in; it's the one thing that can't be bundled. If
+   Windows asks to restart, restart and open Switchyard again — it picks up
+   where it left off.)
+4. **Wait for the progress screen** to tick through engine → services →
+   dashboard. The first run downloads container images (a few minutes on
+   ordinary broadband); every run after that takes seconds.
+5. **That's it.** The window becomes your dashboard, already signed in. Deploy
+   your first app from the canvas: one-click databases, Docker images, Git
+   repos, or the 476-template catalog.
+
+Day to day it lives in the system tray: open the dashboard, stop/start the
+stack, reset everything, launch at login (on by default, so it's always warm),
+and auto-update. Closing the window keeps everything running; "Quit" does too —
+your apps only stop if you ask for **Stop stack**.
 
 Source lives in [`desktop/`](desktop/) — it drives the exact same converge
-logic as the CLI, so `switchyard up` and the app can be used interchangeably.
+logic as the CLI below, so the app and `switchyard up` can be used
+interchangeably on the same machine.
 
 ### Linux (server or desktop)
 
@@ -77,9 +97,10 @@ home networks: many routers block DNS answers that point at 127.0.0.1.)
 
 ### What you get
 
-Either path stands up Dokploy, walks you through creating the admin account
-**in the terminal** (no browser round-trip, no env files), runs the Switchyard
-dashboard as a managed container on http://127.0.0.1:3001, and offers to set
+Every path stands up Dokploy, creates the admin account for you (the CLI asks
+in the terminal; the desktop app generates one and signs you in — no browser
+round-trip, no env files either way), and runs the Switchyard dashboard as a
+managed container on http://127.0.0.1:3001. The CLI additionally offers to set
 up Claude Code:
 
 | Piece | Where |
