@@ -1,0 +1,44 @@
+# Packaging for the Switchyard desktop app. Unsigned for now: Windows will
+# show SmartScreen on first run; macOS auto-update requires a signed build, so
+# updates there are manual until signing certs exist.
+appId: dev.switchyard.desktop
+productName: Switchyard
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - dist/**
+  - package.json
+
+# No native modules — skip the rebuild step entirely.
+npmRebuild: false
+
+win:
+  target:
+    - nsis
+  icon: build/icon.ico
+
+nsis:
+  # True one-click: double-click the installer and the app launches. Per-user
+  # install (no UAC prompt for the app itself; only Docker's installer elevates).
+  oneClick: true
+  perMachine: false
+  deleteAppDataOnUninstall: false
+  artifactName: Switchyard-Setup-${version}.${ext}
+
+mac:
+  # zip is what electron-updater consumes; dmg is what humans download.
+  target:
+    - dmg
+    - zip
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+
+publish:
+  provider: github
+  owner: sbdeals
+  repo: switchyard
+  # Publish straight to the tag's release (not a draft) so latest.yml is
+  # immediately visible to electron-updater.
+  releaseType: release

@@ -41,12 +41,17 @@ export function run(cmd: string, args: string[], opts: RunOptions = {}): Promise
   });
 }
 
-/** Spawn with the user's terminal attached (progress bars, sudo prompts). */
+/**
+ * Spawn with the user's terminal attached (progress bars, sudo prompts).
+ * windowsHide matters when the caller is a GUI process (the desktop app):
+ * without it every docker.exe spawn flashes a console window. In a terminal
+ * the child inherits the existing console, so the flag is a no-op there.
+ */
 export function runInherit(cmd: string, args: string[], opts: Omit<RunOptions, "input"> = {}): Promise<number> {
   return new Promise((resolve) => {
     const child = opts.shell
-      ? spawn(shellJoin(cmd, args), [], { stdio: "inherit", env: opts.env ?? process.env, shell: true })
-      : spawn(cmd, args, { stdio: "inherit", env: opts.env ?? process.env });
+      ? spawn(shellJoin(cmd, args), [], { stdio: "inherit", env: opts.env ?? process.env, shell: true, windowsHide: true })
+      : spawn(cmd, args, { stdio: "inherit", env: opts.env ?? process.env, windowsHide: true });
     child.on("error", () => resolve(127));
     child.on("close", (code) => resolve(code ?? 1));
   });

@@ -1,0 +1,35 @@
+{
+  "name": "switchyard-desktop",
+  "productName": "Switchyard",
+  "version": "0.1.0",
+  "description": "One-click desktop app for the Switchyard + Dokploy stack",
+  "author": "sbdeals",
+  "private": true,
+  "main": "dist/main.cjs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sbdeals/switchyard.git",
+    "directory": "desktop"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "icons": "node scripts/gen-icon.mjs",
+    "build": "npm run icons && tsup",
+    "typecheck": "tsc --noEmit",
+    "start": "npm run build && electron .",
+    "smoke": "npm run build && node scripts/smoke.mjs",
+    "dist": "npm run build && electron-builder --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.0"
+  }
+}

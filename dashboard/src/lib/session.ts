@@ -11,6 +11,10 @@
  * The proxy (src/proxy.ts) only checks for the cookie's *presence* (it mirrors
  * SESSION_COOKIE as a literal to stay crypto-free); real validation happens
  * here, on the request path that actually serves data.
+ *
+ * KEEP IN SYNC: the desktop app mints this exact cookie format for auto-login
+ * (desktop/src/main/autologin.ts) — changing the seal layout, cookie name, or
+ * payload shape breaks it.
  */
 import "server-only";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";

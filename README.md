@@ -25,6 +25,23 @@ Four pieces live here:
 
 ## Quick setup
 
+### Windows & macOS — the desktop app (easiest)
+
+Download **Switchyard Setup** from the
+[latest release](https://github.com/sbdeals/switchyard/releases/latest) and
+double-click it. That's the whole install:
+
+- If Docker Desktop is missing, a one-time setup wizard downloads and installs
+  it for you (the only prerequisite that can't be hidden — Switchyard runs your
+  apps in containers).
+- The app starts the engine, converges the whole stack, signs you in, and the
+  window *becomes* your dashboard. No terminal, no Node.js, no browser tabs.
+- It lives in the tray: start/stop/reset the stack, auto-launch at login,
+  auto-update from GitHub releases.
+
+Source lives in [`desktop/`](desktop/) — it drives the exact same converge
+logic as the CLI, so `switchyard up` and the app can be used interchangeably.
+
 ### Linux (server or desktop)
 
 Prerequisites: a 64-bit distro and `curl`. Docker and Node.js are installed
