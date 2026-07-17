@@ -28,8 +28,8 @@ Four pieces live here:
 ### Windows & macOS — the desktop app (easiest)
 
 Download **Switchyard Setup** from the
-[latest release](https://github.com/sbdeals/switchyard/releases/latest) and
-double-click it. That's the whole install:
+[latest release](https://github.com/sbdeals/Switchyard-The-Open-Source-Railway-Alternative/releases/latest)
+and double-click it. That's the whole install:
 
 - If Docker Desktop is missing, a one-time setup wizard downloads and installs
   it for you (the only prerequisite that can't be hidden — Switchyard runs your

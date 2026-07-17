@@ -38,7 +38,9 @@ mac:
 publish:
   provider: github
   owner: sbdeals
-  repo: switchyard
+  # The repo's CANONICAL name (it was renamed from plain "switchyard"; GitHub
+  # redirects old names, but the update feed shouldn't rely on that).
+  repo: Switchyard-The-Open-Source-Railway-Alternative
   # Publish straight to the tag's release (not a draft) so latest.yml is
   # immediately visible to electron-updater.
   releaseType: release
