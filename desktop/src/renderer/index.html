@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:"
+    />
+    <title>Switchyard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="brand">
+        <img src="window.png" alt="" width="52" height="52" />
+        <div>
+          <h1>Switchyard</h1>
+          <p class="tagline">Your own deploy platform, on your own machine</p>
+        </div>
+      </header>
+
+      <section id="view" class="card" aria-live="polite"></section>
+
+      <details id="logbox">
+        <summary>Activity log</summary>
+        <pre id="log"></pre>
+      </details>
+
+      <footer>
+        <span id="version"></span>
+        <button class="linklike" data-action="logs" type="button">Open log file</button>
+      </footer>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

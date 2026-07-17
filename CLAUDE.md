@@ -2,10 +2,11 @@
 
 This project is **Switchyard** (its official name): an open-source,
 Railway-style PaaS built on top of **Dokploy**, driven by **Claude Code**.
-Four parts live here: the bash launch tooling (`scripts/`), the Switchyard
+Five parts live here: the bash launch tooling (`scripts/`), the Switchyard
 dashboard (`dashboard/`), the `switchyard` CLI (`cli/`, npm package
-**`switchyard-cli`**) that turns everything into a one-command install, and
-the MCP server (`mcp/`, registered in `.mcp.json`) that exposes Dokploy
+**`switchyard-cli`**) that turns everything into a one-command install, the
+desktop app (`desktop/`, Electron) that turns it into a one-click install,
+and the MCP server (`mcp/`, registered in `.mcp.json`) that exposes Dokploy
 operations as tools to Claude Code.
 
 ## Launching things
@@ -40,6 +41,22 @@ operations as tools to Claude Code.
   `dashboard/src/proxy.ts`). A login gate is not TLS, so the CLI still binds it
   to 127.0.0.1 by default; keep any new exposure path behind explicit
   `--expose`-style confirmation.
+
+## The desktop app (`desktop/`)
+
+- Electron shell around the SAME converge logic: it imports `cli/src/core/*`
+  and `cli/src/platform/docker-desktop.ts` directly (never `platform/index.ts`
+  or `linux.ts` — they use `import.meta`, and the desktop bundle is CJS).
+  Change provisioning behavior in the cli modules, not in `desktop/`.
+- `desktop/src/main/orchestrator.ts` mirrors `cli/src/commands/up.ts` with
+  prompts replaced by wizard/credential views — keep the two flows in sync.
+- Auto-login mints the dashboard session cookie in
+  `desktop/src/main/autologin.ts`, an exact mirror of
+  `dashboard/src/lib/session.ts#sealSession` — changing that format breaks it.
+- Releases: the tag must match `desktop/package.json` too; installers +
+  electron-updater feed publish from `.github/workflows/release.yml`.
+- Verify changes with `npm run smoke` in `desktop/` (headless converge +
+  auto-login proof; exit 0 = pass).
 
 ## This host's quirks (already handled by the scripts — don't re-debug from scratch)
 

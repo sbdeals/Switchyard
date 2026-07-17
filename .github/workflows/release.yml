@@ -1,6 +1,8 @@
 # Tag-driven release: `git tag v0.1.0 && git push --tags` publishes
 #   1. ghcr.io/<owner>/switchyard:<version> + :latest   (dashboard image)
 #   2. switchyard-cli@<version> to npm                  (needs NPM_TOKEN secret)
+#   3. desktop installers (NSIS + DMG/zip) + latest.yml onto the GitHub
+#      release — electron-updater's auto-update feed
 # The image job runs first so the CLI's default tag (its own version) always
 # has a matching image by the time the package is installable.
 name: Release
@@ -19,14 +21,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Tag must match cli/package.json version
+      - name: Tag must match cli/package.json and desktop/package.json versions
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          ver=$(node -p "require('./cli/package.json').version")
-          if [ "$tag" != "$ver" ]; then
-            echo "::error::tag v$tag does not match cli/package.json version $ver"
-            exit 1
-          fi
+          for pkg in cli desktop; do
+            ver=$(node -p "require('./$pkg/package.json').version")
+            if [ "$tag" != "$ver" ]; then
+              echo "::error::tag v$tag does not match $pkg/package.json version $ver"
+              exit 1
+            fi
+          done
 
   image:
     needs: check
@@ -72,3 +76,30 @@ jobs:
         working-directory: cli
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Desktop installers. Runs after `image` so the app's first converge can pull
+  # a published dashboard image tagged with this same version. electron-builder
+  # uploads the installers AND latest.yml/latest-mac.yml (the auto-update feed)
+  # to the tag's GitHub release.
+  desktop:
+    needs: image
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: desktop
+      - run: npm run build
+        working-directory: desktop
+      - run: npx electron-builder --publish always
+        working-directory: desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
