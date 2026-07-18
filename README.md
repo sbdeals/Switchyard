@@ -38,8 +38,17 @@ everything.
    [latest release](https://github.com/sbdeals/Switchyard-The-Open-Source-Railway-Alternative/releases/latest).
    (No installer on the latest release yet? It ships with the next tag — or
    build it yourself: `cd desktop && npm install && npm run dist`.)
-2. **Run it.** The build isn't code-signed yet, so Windows SmartScreen may warn
-   you — click **More info → Run anyway** (macOS: right-click → Open).
+2. **Run it.** The build isn't code-signed yet, so both OSes will warn you the
+   first time:
+   - **Windows:** SmartScreen may warn — click **More info → Run anyway**.
+   - **macOS 15 (Sequoia) and later:** the old right-click → Open bypass no
+     longer works. Try to open the app once (it will be blocked), then go to
+     **System Settings → Privacy & Security**, scroll down, and click
+     **Open Anyway**.
+   - **macOS 14 and earlier:** right-click the app → **Open** → **Open**.
+
+   These warnings disappear once the builds are signed and notarized (planned;
+   tracked separately).
 3. **First run only:** if Docker Desktop isn't installed, a setup wizard offers
    to download and install it for you — click **Install Docker Desktop for
    me**, approve the administrator prompt, and wait. (Docker is the engine
