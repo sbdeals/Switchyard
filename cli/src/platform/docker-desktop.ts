@@ -9,10 +9,13 @@ import type { PlatformModule } from "./types.js";
 /**
  * Docker Desktop (Windows/macOS) provisioner: a check-then-create
  * transcription of docs/getting-started.md Path B, which was hand-tested on
- * a real Windows 11 machine. Two deliberate differences from Linux:
+ * a real Windows 11 machine (macOS shares this path but is not yet verified
+ * end-to-end). Two deliberate differences from Linux:
  *   - Dokploy publishes in ingress mode (host-mode ports don't reliably
  *     forward to Windows localhost).
- *   - No dnsrr: Docker Desktop's WSL2 kernel ships IPVS, default VIP works.
+ *   - No dnsrr: Docker Desktop's Linux VM kernel (WSL2 on Windows, LinuxKit
+ *     on macOS) ships IPVS, so default VIP routing works. Verified on
+ *     Windows; assumed on macOS.
  */
 
 const SECRETS = ["dokploy_postgres_password", "dokploy_auth_secret"] as const;
@@ -118,9 +121,10 @@ async function createServices(dokployPort: number, log: (m: string) => void): Pr
 }
 
 /**
- * Provision the Switchyard-owned metrics Postgres. On Docker Desktop the WSL2
- * kernel ships IPVS, so default VIP routing works — no dnsrr needed (unlike the
- * Linux script). Idempotent: skips when the service already exists.
+ * Provision the Switchyard-owned metrics Postgres. On Docker Desktop the
+ * Linux VM kernel (WSL2 on Windows, LinuxKit on macOS) ships IPVS, so default
+ * VIP routing works — no dnsrr needed (unlike the Linux script); verified on
+ * Windows, assumed on macOS. Idempotent: skips when the service already exists.
  */
 async function ensureMetricsStore(storePassword: string, log: (m: string) => void): Promise<void> {
   if (await serviceExists(STORE_SERVICE)) return;

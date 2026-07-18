@@ -17,7 +17,8 @@ step:
   path, driven by `make` and the scripts in [`scripts/`](../scripts/).
 - **[Path B: Windows 11 with Docker Desktop](#path-b-windows-11-with-docker-desktop)** —
   replaying the installer's core steps against Docker Desktop by hand. Tested
-  end-to-end on a real Windows 11 machine (2026-07-01).
+  end-to-end on a real Windows 11 machine (2026-07-01). macOS shares this
+  Docker Desktop code path but has not yet been verified end-to-end.
 
 Afterwards, run the [verification checklist](#verification-checklist). For how
 the pieces fit together, see [architecture.md](architecture.md); for a deep
@@ -194,11 +195,13 @@ The repo's native tooling does **not** run on Windows: stock Windows has no
 `make.exe`, and the scripts are bash that expects root and direct control of
 `dockerd`. What works instead — and what was tested on a real Windows 11
 machine with Docker Desktop — is replaying the installer's core steps against
-Docker Desktop's engine, as follows.
+Docker Desktop's engine, as follows. macOS uses the same Docker Desktop code
+path, but it has not yet been verified end-to-end there.
 
-> **Note:** Docker Desktop's WSL2 kernel ships IPVS, so the repo's
-> `--endpoint-mode dnsrr` workaround is *not* needed here. Default Swarm
-> networking works.
+> **Note:** Docker Desktop's Linux VM kernel (WSL2 on Windows, LinuxKit on
+> macOS) ships IPVS, so the repo's `--endpoint-mode dnsrr` workaround is *not*
+> needed here and default Swarm networking works. Verified on Windows; assumed
+> (not yet verified) on macOS.
 
 Clone the repo first (Switchyard runs from it later):
 
