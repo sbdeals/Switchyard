@@ -38,6 +38,10 @@ curl -fsSL https://raw.githubusercontent.com/sbdeals/switchyard/main/install.sh 
 npx switchyard-cli up
 ```
 
+> **macOS:** this shares Path B's Docker Desktop code path but hasn't been
+> hand-tested end-to-end yet — the verification procedure is in
+> [macos-verification.md](macos-verification.md).
+
 The CLI then does everything this guide's manual paths describe:
 
 1. Checks prerequisites and catches port conflicts up front (an existing
