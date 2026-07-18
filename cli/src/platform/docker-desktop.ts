@@ -9,7 +9,10 @@ import type { PlatformModule } from "./types.js";
 /**
  * Docker Desktop (Windows/macOS) provisioner: a check-then-create
  * transcription of docs/getting-started.md Path B, which was hand-tested on
- * a real Windows 11 machine. Two deliberate differences from Linux:
+ * a real Windows 11 machine. Despite the platform name, all it needs is a
+ * Docker socket with Swarm support — on macOS, OrbStack and Colima qualify
+ * too (both run `docker swarm init` in their VMs) and are auto-adopted by
+ * probeDocker() in core/docker.ts. Two deliberate differences from Linux:
  *   - Dokploy publishes in ingress mode (host-mode ports don't reliably
  *     forward to Windows localhost).
  *   - No dnsrr: Docker Desktop's WSL2 kernel ships IPVS, default VIP works.

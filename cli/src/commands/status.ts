@@ -1,5 +1,5 @@
 import { loadConfig } from "../core/config.js";
-import { docker, dockerAvailability } from "../core/docker.js";
+import { docker, probeDocker } from "../core/docker.js";
 import { pc } from "../core/prompts.js";
 import { CONTAINER_NAME } from "../core/switchyard-container.js";
 
@@ -11,7 +11,7 @@ export async function statusCommand(): Promise<void> {
   println(`  config: ${path}${existed ? "" : pc.dim(" (not created yet — run `switchyard up`)")}`);
   println("");
 
-  const avail = await dockerAvailability();
+  const { availability: avail } = await probeDocker();
   if (avail !== "ok") {
     println(pc.red(avail === "no-cli" ? "Docker CLI not found." : "Docker daemon not reachable."));
     println("Run `switchyard up` to bring the stack up.");

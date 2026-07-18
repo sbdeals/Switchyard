@@ -15,7 +15,13 @@ export {
   type ConfigKey,
   type SwitchyardConfig,
 } from "./core/config.js";
-export { parseJsonLines } from "./core/docker.js";
+export {
+  darwinEngineCandidates,
+  dockerHostUrl,
+  engineFallbackHint,
+  parseJsonLines,
+  type EngineCandidate,
+} from "./core/docker.js";
 export { UserError } from "./core/errors.js";
 export { LOCAL_INGRESS_CONTAINER, renderLocalIngress } from "./core/local-ingress.js";
 export { nextFreePort, portFree } from "./core/ports.js";

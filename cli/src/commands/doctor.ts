@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 
 import { configPath, loadConfig } from "../core/config.js";
-import { docker, dockerAvailability, dockerOk, run } from "../core/docker.js";
+import { docker, dockerOk, probeDocker, run } from "../core/docker.js";
 import { httpReady } from "../core/dokploy-api.js";
 import { pc } from "../core/prompts.js";
 import { serviceExists, servicePublishedPort } from "../core/swarm.js";
@@ -29,14 +29,18 @@ export async function doctorCommand(): Promise<void> {
   if (nodeMajor >= 20) print("ok", "node", `v${process.versions.node}`);
   else fail("node", `v${process.versions.node} — need 20+`);
 
-  const avail = await dockerAvailability();
+  // Swarm support is the real requirement, not Docker Desktop — probeDocker()
+  // also accepts OrbStack/Colima on macOS.
+  const probe = await probeDocker();
+  const avail = probe.availability;
+  if (probe.engine) print("ok", "docker engine", probe.engine);
   if (avail === "no-cli") {
-    fail("docker CLI", "not found on PATH");
+    fail("docker CLI", probe.hint ?? "not found on PATH");
   } else {
     const client = await docker(["version", "--format", "{{.Client.Version}}"]);
     print("ok", "docker CLI", client.stdout.trim() || "present");
     if (avail === "no-daemon") {
-      fail("docker daemon", "not reachable (start Docker / run `switchyard up`)");
+      fail("docker daemon", probe.hint ?? "not reachable (start Docker / run `switchyard up`)");
     } else {
       const server = await docker(["version", "--format", "{{.Server.Version}}"]);
       print("ok", "docker daemon", server.stdout.trim());

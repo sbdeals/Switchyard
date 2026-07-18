@@ -1,5 +1,5 @@
 import { loadConfig, saveConfig } from "../core/config.js";
-import { dockerAvailability } from "../core/docker.js";
+import { probeDocker } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { p, pc } from "../core/prompts.js";
 import { platformFor } from "../platform/index.js";
@@ -21,10 +21,12 @@ export async function localIngressCommand(action: string): Promise<void> {
 
   const { config: cfg, path } = loadConfig();
 
-  if ((await dockerAvailability()) !== "ok") {
+  if ((await probeDocker()).availability !== "ok") {
     throw new UserError(
       cfg.platform === "docker-desktop"
-        ? "Docker isn't reachable — start Docker Desktop and retry."
+        ? process.platform === "darwin"
+          ? "Docker isn't reachable — start your engine (Docker Desktop, OrbStack, or `colima start`) and retry."
+          : "Docker isn't reachable — start Docker Desktop and retry."
         : "Docker isn't reachable — start Docker and retry.",
     );
   }
