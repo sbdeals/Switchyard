@@ -1,6 +1,9 @@
-# Packaging for the Switchyard desktop app. Unsigned for now: Windows will
-# show SmartScreen on first run; macOS auto-update requires a signed build, so
-# updates there are manual until signing certs exist.
+# Packaging for the Switchyard desktop app. Windows is unsigned for now (shows
+# SmartScreen on first run). macOS is signed + notarized in CI when the
+# Developer ID secrets are present (see .github/workflows/release.yml and
+# desktop/README.md); without them electron-builder logs a warning and falls
+# back to an unsigned build, so forks and local `npm run dist` still work —
+# but macOS auto-update only functions on the signed builds.
 appId: dev.switchyard.desktop
 productName: Switchyard
 directories:
@@ -34,6 +37,16 @@ mac:
     - zip
   icon: build/icon.png
   category: public.app-category.developer-tools
+  # Signing: electron-builder picks up the Developer ID cert from
+  # CSC_LINK/CSC_KEY_PASSWORD; when they're absent it skips signing (and the
+  # settings below are inert). Notarization needs signing plus
+  # APPLE_ID/APPLE_APP_SPECIFIC_PASSWORD/APPLE_TEAM_ID — `notarize: true`
+  # degrades to a logged skip when those env vars are missing.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: true
 
 publish:
   provider: github

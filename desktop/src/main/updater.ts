@@ -1,9 +1,11 @@
 /**
  * Auto-update from GitHub Releases (electron-builder writes latest.yml next to
  * the installers; the release workflow publishes both). Windows works unsigned;
- * macOS requires a signed build for auto-update, so failures there are logged
- * and otherwise silent — the tray's manual check still tells the user a newer
- * version exists.
+ * macOS works on release builds, which are signed + notarized in CI (Squirrel.Mac
+ * rejects unsigned apps). An unsigned mac build — a local `npm run dist`, or a
+ * fork release without the signing secrets — fails the periodic check, which is
+ * logged and otherwise silent; the tray's manual check still tells the user a
+ * newer version exists.
  */
 import { app, dialog } from "electron";
 import { autoUpdater } from "electron-updater";
