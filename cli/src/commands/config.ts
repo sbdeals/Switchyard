@@ -5,7 +5,7 @@ import {
   saveConfig,
   type ConfigKey,
 } from "../core/config.js";
-import { dockerAvailability, dockerOk } from "../core/docker.js";
+import { dockerOk, probeDocker } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { p, pc } from "../core/prompts.js";
 import {
@@ -85,7 +85,7 @@ export async function configCommand(
         p.log.info("Skipped container restart (--no-restart). Apply later with `switchyard up`.");
         return;
       }
-      if ((await dockerAvailability()) !== "ok" || !(await dockerOk(["container", "inspect", CONTAINER_NAME]))) {
+      if ((await probeDocker()).availability !== "ok" || !(await dockerOk(["container", "inspect", CONTAINER_NAME]))) {
         p.log.info("No running Switchyard container to update — the setting applies on the next `switchyard up`.");
         return;
       }

@@ -1,5 +1,5 @@
 import { loadConfig, saveConfig } from "../core/config.js";
-import { docker, dockerAvailability } from "../core/docker.js";
+import { docker, probeDocker } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { LOCAL_INGRESS_CONTAINER } from "../core/local-ingress.js";
 import { askConfirm, p, pc } from "../core/prompts.js";
@@ -28,7 +28,7 @@ export async function downCommand(flags: DownFlags): Promise<void> {
     throw new UserError("--purge without a TTY requires --yes to confirm deleting all data.");
   }
 
-  if ((await dockerAvailability()) !== "ok") {
+  if ((await probeDocker()).availability !== "ok") {
     throw new UserError("Docker isn't reachable — nothing to stop (start Docker and re-run if the stack exists).");
   }
 

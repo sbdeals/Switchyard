@@ -1,6 +1,6 @@
 import type { SwitchyardConfig } from "../core/config.js";
 import { loadConfig, saveConfig } from "../core/config.js";
-import { docker, dockerAvailability, dockerOk, run, runInherit } from "../core/docker.js";
+import { docker, dockerOk, probeDocker, run, runInherit } from "../core/docker.js";
 import { signInProbe, signUp, waitHttpReady } from "../core/dokploy-api.js";
 import { UserError } from "../core/errors.js";
 import { nextFreePort, portFree } from "../core/ports.js";
@@ -70,17 +70,32 @@ export async function upCommand(flags: UpFlags): Promise<void> {
   const platform = platformFor(cfg.platform);
 
   // ---- prerequisites ---------------------------------------------------
-  const avail = await dockerAvailability();
+  // Any Docker engine with Swarm support works. On macOS that includes
+  // OrbStack and Colima, not just Docker Desktop — probeDocker() adopts
+  // whichever daemon answers (see core/docker.ts).
+  const probe = await probeDocker();
+  const avail = probe.availability;
+  if (probe.engine) info(`Using the ${probe.engine} Docker engine.`);
   if (avail === "no-cli") {
     throw new UserError(
       cfg.platform === "linux"
         ? "Docker CLI not found. Install Docker first (curl -fsSL https://get.docker.com | sh) — or use the repo's install.sh, which does it for you."
-        : "Docker CLI not found. Install Docker Desktop (https://docs.docker.com/desktop/) and re-run.",
+        : probe.hint
+          ? `Docker CLI not found.\n${probe.hint}`
+          : process.platform === "darwin"
+            ? "Docker CLI not found. Install any Swarm-capable engine — Docker Desktop (https://docs.docker.com/desktop/), OrbStack (https://orbstack.dev), or Colima (https://github.com/abiosoft/colima) — and re-run."
+            : "Docker CLI not found. Install Docker Desktop (https://docs.docker.com/desktop/) and re-run.",
     );
   }
   if (avail === "no-daemon") {
     if (cfg.platform === "docker-desktop") {
-      throw new UserError("Docker isn't running. Start Docker Desktop, wait for it to settle, and re-run `switchyard up`.");
+      throw new UserError(
+        probe.hint
+          ? `Docker isn't running.\n${probe.hint}`
+          : process.platform === "darwin"
+            ? "Docker isn't running. Start your engine (Docker Desktop, OrbStack, or `colima start`), wait for it to settle, and re-run `switchyard up`."
+            : "Docker isn't running. Start Docker Desktop, wait for it to settle, and re-run `switchyard up`.",
+      );
     }
     if (!isRoot()) {
       throw new UserError(

@@ -17,7 +17,13 @@ curl -fsSL https://raw.githubusercontent.com/sbdeals/switchyard/main/install.sh 
 ```
 
 Anywhere with Node 20+ and Docker (including Windows 11 with Docker Desktop
-and macOS):
+and macOS). The real requirement is a Docker engine with **Swarm support**,
+not Docker Desktop specifically — on macOS, [OrbStack](https://orbstack.dev)
+and [Colima](https://github.com/abiosoft/colima) both qualify and are detected
+automatically: if `docker` isn't on PATH or its daemon doesn't answer, the CLI
+probes the well-known OrbStack (`~/.orbstack/run/docker.sock`) and Colima
+(`~/.colima/default/docker.sock`) sockets and adopts whichever answers (via
+`DOCKER_HOST`, using OrbStack's bundled docker CLI if needed):
 
 ```bash
 npx switchyard-cli up
@@ -32,7 +38,8 @@ curl -fsSL .../install.sh | bash -s -- --headless --email you@example.com --pass
 ## What `up` does
 
 1. **Checks prerequisites** — Docker CLI and daemon (on Linux it can start
-   `dockerd` itself, via the repo's launch scripts).
+   `dockerd` itself, via the repo's launch scripts; on macOS any Swarm-capable
+   engine works — Docker Desktop, OrbStack, or Colima).
 2. **Detects existing installs and port conflicts** — an already-deployed
    `dokploy` service has its published port *adopted* into the config; busy
    ports get an interactive suggestion or a `--dokploy-port`/`--dashboard-port`
