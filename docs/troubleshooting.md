@@ -193,8 +193,9 @@ yourself:
 docker service create --endpoint-mode dnsrr --network dokploy-network <image> ...
 ```
 
-Docker Desktop is unaffected — its WSL2 kernel ships IPVS, so the default VIP
-mode works there.
+Docker Desktop is unaffected — its Linux VM kernel (WSL2 on Windows, LinuxKit
+on macOS) ships IPVS, so the default VIP mode works there (verified on
+Windows; assumed on macOS).
 
 ## Docker Hub pull rate limit
 

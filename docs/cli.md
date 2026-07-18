@@ -48,10 +48,12 @@ curl -fsSL .../install.sh | bash -s -- --headless --email you@example.com --pass
    - *Linux*: runs the repo's `scripts/dokploy-up.sh` under sudo — same code
      path as `make up`, including the no-systemd, registry-mirror, and dnsrr
      workarounds.
-   - *Windows/macOS (Docker Desktop)*: replays the tested manual procedure
+   - *Windows/macOS (Docker Desktop)*: replays the manual procedure
      from [getting-started.md](getting-started.md#path-b-windows-11-with-docker-desktop)
      programmatically — Swarm init, overlay network, secrets, `/etc/dokploy`
      pre-creation inside the VM, and the three services (ingress publish).
+     Tested end-to-end on Windows 11; macOS shares this code path but is not
+     yet verified end-to-end.
 4. **Creates the Dokploy admin from the terminal** — prompts for email and
    password (or generates one), registers via
    `POST /api/auth/sign-up/email`, and verifies by signing in. If the install
