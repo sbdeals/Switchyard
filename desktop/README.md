@@ -30,7 +30,9 @@ source of truth for HOW the stack is provisioned.
 
 Auto-update: `electron-updater` against GitHub Releases (`latest.yml` is
 published by the release workflow). Windows works unsigned; macOS auto-update
-requires a signed build.
+works on release builds, which are signed and notarized in CI (see
+[Releasing](#releasing) — unsigned mac builds, e.g. local `npm run dist`, are
+rejected by Squirrel.Mac and fall back to the tray's manual update check).
 
 ## Dev
 
@@ -58,3 +60,37 @@ Tag `vX.Y.Z` (must equal `cli/package.json` AND `desktop/package.json`
 versions — CI enforces both). The release workflow builds NSIS + DMG/zip on
 Windows/macOS runners and uploads them with the auto-update feed to the
 GitHub release.
+
+### macOS signing & notarization
+
+The macOS leg signs (Developer ID + hardened runtime, entitlements in
+`build/entitlements.mac.plist`) and notarizes when the repo secrets below are
+set. **All five are optional as a group**: if they're absent (forks, or before
+the certs exist), electron-builder logs a warning, skips signing and
+notarization, and still produces a working unsigned build — but macOS
+auto-update only works on signed builds.
+
+| Repo secret | What it is |
+| --- | --- |
+| `CSC_LINK` | Base64 of the Developer ID Application cert as a `.p12` |
+| `CSC_KEY_PASSWORD` | Password chosen when exporting that `.p12` |
+| `APPLE_ID` | Apple ID email of the developer account |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for that Apple ID |
+| `APPLE_TEAM_ID` | 10-character Team ID |
+
+One-time setup (needs a paid Apple Developer Program membership):
+
+1. **Certificate**: in [developer.apple.com](https://developer.apple.com) →
+   Certificates, create a **Developer ID Application** certificate (generate a
+   CSR via Keychain Access → Certificate Assistant). Download it, import it
+   into Keychain Access, then export the certificate **with its private key**
+   as a `.p12` (choose an export password → `CSC_KEY_PASSWORD`). Encode it:
+   `base64 -i cert.p12 | pbcopy` → `CSC_LINK`.
+2. **App-specific password**: at [account.apple.com](https://account.apple.com)
+   → Sign-In and Security → App-Specific Passwords, generate one
+   → `APPLE_APP_SPECIFIC_PASSWORD` (with the account email as `APPLE_ID`).
+3. **Team ID**: developer.apple.com → Membership details
+   → `APPLE_TEAM_ID`.
+4. Add all five as GitHub **repository secrets** (Settings → Secrets and
+   variables → Actions). The next `vX.Y.Z` tag produces a signed, notarized
+   DMG/zip, and mac auto-update starts working from that release onward.

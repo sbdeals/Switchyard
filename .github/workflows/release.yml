@@ -81,6 +81,12 @@ jobs:
   # a published dashboard image tagged with this same version. electron-builder
   # uploads the installers AND latest.yml/latest-mac.yml (the auto-update feed)
   # to the tag's GitHub release.
+  #
+  # macOS signing/notarization: driven entirely by the env vars below (see
+  # desktop/README.md for the one-time Apple Developer setup). When the secrets
+  # are absent — forks, or before certs exist — the vars resolve to empty
+  # strings, electron-builder skips signing/notarization with a warning, and
+  # the build still succeeds (unsigned; macOS auto-update won't work on it).
   desktop:
     needs: image
     permissions:
@@ -103,3 +109,11 @@ jobs:
         working-directory: desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Gated to the macOS leg: CSC_LINK is cross-platform in
+          # electron-builder, and the Developer ID cert must not leak into the
+          # Windows signing path.
+          CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_TEAM_ID || '' }}
