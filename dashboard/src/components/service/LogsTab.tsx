@@ -56,19 +56,24 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter logs…"
-            className="w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] py-1.5 pl-8 pr-3 text-xs outline-none focus:border-[var(--color-brand)]"
+            aria-label="Filter logs"
+            className="w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] py-1.5 pl-8 pr-3 text-xs outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
           />
         </div>
-        <span className="flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
+        <span role="status" className="flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
           <span
+            aria-hidden="true"
             className={`size-1.5 rounded-full ${connected ? "bg-[var(--color-ok)]" : "bg-[var(--color-idle)]"}`}
           />
-          {connected ? "Live" : "…"}
+          {connected ? "Live" : "Disconnected"}
         </span>
       </div>
 
       <div
         ref={scrollRef}
+        tabIndex={0}
+        role="log"
+        aria-label="Service logs"
         onScroll={(e) => {
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;

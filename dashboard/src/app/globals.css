@@ -11,12 +11,18 @@
   --color-surface-hover: #1d1d28;
   --color-border: #26263340;
   --color-border-strong: #34344a;
+  /* Form-control boundaries need >=3:1 against surface (WCAG 1.4.11). */
+  --color-border-control: #65658e;
   --color-fg: #ededf2;
   --color-fg-muted: #9a9aae;
-  --color-fg-subtle: #6b6b80;
+  /* >=4.5:1 on bg/surface/elevated — do not darken below #8888a0 (WCAG 1.4.3). */
+  --color-fg-subtle: #8888a0;
 
   --color-brand: #a06bff;
-  --color-brand-strong: #8b5cf6;
+  /* White button text needs >=4.5:1: brand-strong is the fill, brand-deep the
+   * hover. Bare --color-brand fails behind white text — never use it there. */
+  --color-brand-strong: #7c3aed;
+  --color-brand-deep: #6d28d9;
   --color-brand-soft: #a06bff1a;
 
   --color-ok: #3ecf8e;
@@ -25,8 +31,8 @@
   --color-warn-soft: #f5a6231a;
   --color-danger: #ff5c5c;
   --color-danger-soft: #ff5c5c1a;
-  --color-idle: #6b6b80;
-  --color-idle-soft: #6b6b801a;
+  --color-idle: #8888a0;
+  --color-idle-soft: #8888a01a;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;

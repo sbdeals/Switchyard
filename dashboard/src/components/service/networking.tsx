@@ -74,7 +74,7 @@ function AddBtn({
     <button
       onClick={onClick}
       disabled={pending || disabled}
-      className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+      className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
     >
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
       Add
@@ -89,7 +89,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 const rowCls =
   "flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm";
 const tagCls =
-  "shrink-0 rounded border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)]";
+  "shrink-0 rounded border border-[var(--color-border-strong)] px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)]";
 
 function RedirectsSection({ app }: { app: Application }) {
   const [regex, setRegex] = useState("");
@@ -136,6 +136,7 @@ function RedirectsSection({ app }: { app: Application }) {
               </code>
               <span className={tagCls}>{r.permanent ? "308" : "307"}</span>
               <RemoveBtn
+                label={`Remove redirect ${r.regex}`}
                 pending={pending && removingId === r.redirectId}
                 onClick={() => remove(r.redirectId)}
               />
@@ -180,7 +181,7 @@ function RedirectsSection({ app }: { app: Application }) {
           onClick={add}
         />
       </div>
-      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </section>
   );
 }
@@ -236,6 +237,7 @@ function PortsSection({ app }: { app: Application }) {
               <span className={tagCls}>{p.protocol}</span>
               <span className={tagCls}>{p.publishMode}</span>
               <RemoveBtn
+                label={`Remove port ${p.publishedPort}`}
                 pending={pending && removingId === p.portId}
                 onClick={() => remove(p.portId)}
               />
@@ -284,7 +286,7 @@ function PortsSection({ app }: { app: Application }) {
           onClick={add}
         />
       </div>
-      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </section>
   );
 }
@@ -333,6 +335,7 @@ function SecuritySection({ app }: { app: Application }) {
                 ••••••••
               </span>
               <RemoveBtn
+                label={`Remove basic-auth user ${s.username}`}
                 pending={pending && removingId === s.securityId}
                 onClick={() => remove(s.securityId)}
               />
@@ -370,7 +373,7 @@ function SecuritySection({ app }: { app: Application }) {
           onClick={add}
         />
       </div>
-      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </section>
   );
 }

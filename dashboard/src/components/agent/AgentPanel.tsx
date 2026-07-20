@@ -1,6 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
@@ -69,6 +80,10 @@ export function AgentPanel() {
   const [applying, setApplying] = useState(false);
   const [applyResults, setApplyResults] = useState<ApplyResult[] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+  const panelRef = useRef<HTMLElement>(null);
+  const openBtnRef = useRef<HTMLButtonElement>(null);
+  const firstRender = useRef(true);
 
   const toggle = () => {
     setExpanded((v) => {
@@ -119,9 +134,24 @@ export function AgentPanel() {
     return () => clearInterval(t);
   }, [refreshChanges, refreshConfig]);
 
+  // Stick to the bottom only when the user was already near it (same
+  // heuristic as LogsTab) so scrolling back isn't fought by streaming updates.
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (stick.current && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [messages]);
+
+  // Move focus into the panel on expand and back to the tab on collapse.
+  // Skip the very first render so page load doesn't steal focus.
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    if (expanded) panelRef.current?.focus();
+    else openBtnRef.current?.focus();
+  }, [expanded]);
 
   const patchLast = (fn: (m: ChatMsg) => ChatMsg) =>
     setMessages((prev) => {
@@ -218,7 +248,8 @@ export function AgentPanel() {
       const data = (await res.json().catch(() => null)) as { results?: ApplyResult[] } | null;
       if (data?.results) {
         setApplyResults(data.results);
-        setTimeout(() => setApplyResults(null), 6000);
+        // Auto-dismiss only all-ok results; failures stay until dismissed.
+        if (data.results.every((r) => r.ok)) setTimeout(() => setApplyResults(null), 6000);
       }
     } finally {
       setApplying(false);
@@ -247,11 +278,13 @@ export function AgentPanel() {
         results={applyResults}
         onApply={applyChanges}
         onDiscard={discardChanges}
+        onDismissResults={() => setApplyResults(null)}
       />
 
       {/* Collapsed tab on the right edge */}
       {!expanded && (
         <button
+          ref={openBtnRef}
           onClick={toggle}
           className="fixed right-0 top-1/2 z-[60] flex -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-xl border border-r-0 border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-3 text-[var(--color-fg-muted)] shadow-[0_10px_30px_-12px_#000] hover:text-[var(--color-fg)]"
           aria-label="Open agent"
@@ -266,6 +299,8 @@ export function AgentPanel() {
       <AnimatePresence>
         {expanded && (
           <motion.aside
+            ref={panelRef}
+            tabIndex={-1}
             initial={{ x: 400 }}
             animate={{ x: 0 }}
             exit={{ x: 400 }}
@@ -293,7 +328,16 @@ export function AgentPanel() {
               <SetupCard />
             ) : (
               <>
-                <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+                <div
+                  ref={scrollRef}
+                  role="log"
+                  aria-label="Copilot conversation"
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+                  }}
+                  className="flex-1 space-y-4 overflow-y-auto px-4 py-4"
+                >
                   {messages.length === 0 && <EmptyChat />}
                   {messages.map((m, i) => (
                     <Message key={i} msg={m} />
@@ -312,13 +356,14 @@ export function AgentPanel() {
                         }
                       }}
                       rows={1}
+                      aria-label="Message the copilot"
                       placeholder="Ask to deploy, configure, inspect…"
                       className="max-h-32 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-[var(--color-fg-subtle)]"
                     />
                     <button
                       onClick={send}
                       disabled={streaming || !input.trim()}
-                      className="rounded-lg bg-[var(--color-brand)] p-1.5 text-white hover:bg-[var(--color-brand-strong)] disabled:opacity-50"
+                      className="rounded-lg bg-[var(--color-brand-strong)] p-1.5 text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-50"
                       aria-label="Send"
                     >
                       {streaming ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
@@ -339,6 +384,7 @@ function Message({ msg }: { msg: ChatMsg }) {
     return (
       <div className="flex justify-end">
         <div className="max-w-[85%] whitespace-pre-wrap rounded-xl rounded-br-sm bg-[var(--color-brand-soft)] px-3 py-2 text-sm text-[var(--color-fg)]">
+          <span className="sr-only">You: </span>
           {msg.content}
         </div>
       </div>
@@ -346,6 +392,7 @@ function Message({ msg }: { msg: ChatMsg }) {
   }
   return (
     <div className="space-y-2">
+      <span className="sr-only">Copilot: </span>
       {msg.tools.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {msg.tools.map((t) => (
@@ -377,6 +424,9 @@ function ToolPill({ chip }: { chip: ToolChip }) {
       <Wrench className="size-3 text-[var(--color-fg-subtle)]" />
       {icon}
       {chip.label}
+      <span className="sr-only">
+        {chip.status === "running" ? "running" : chip.status === "error" ? "failed" : "done"}
+      </span>
     </span>
   );
 }
@@ -390,19 +440,45 @@ function ToolPill({ chip }: { chip: ToolChip }) {
 // /v1/models — so it's always current.
 
 const selectCls =
-  "min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 text-[11px] outline-none focus:border-[var(--color-brand)] disabled:opacity-50";
+  "min-w-0 flex-1 rounded-lg border border-[var(--color-border-control)] bg-[var(--color-bg-elevated)] px-2 py-1 text-[11px] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-50";
 const inputCls =
-  "min-w-0 flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 font-mono text-[11px] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]";
+  "min-w-0 flex-1 rounded-lg border border-[var(--color-border-control)] bg-[var(--color-bg-elevated)] px-2 py-1 font-mono text-[11px] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50";
+
+/**
+ * Wire the row label to the first native form control among `children`
+ * (searching two levels deep, so conditional fragments around an input still
+ * work) — same pattern as service/primitives.tsx `labelTarget`.
+ */
+function labelTarget(children: ReactNode, generated: string): { nodes: ReactNode; id?: string } {
+  let found: string | undefined;
+  const visit = (node: ReactNode, depth: number): ReactNode => {
+    if (found !== undefined || !isValidElement(node)) return node;
+    if (node.type === "input" || node.type === "select" || node.type === "textarea") {
+      const props = node.props as { id?: string };
+      found = props.id ?? generated;
+      return props.id ? node : cloneElement(node as ReactElement<{ id?: string }>, { id: generated });
+    }
+    if (depth >= 2) return node;
+    const props = node.props as { children?: ReactNode };
+    if (props.children == null) return node;
+    const nested = Children.map(props.children, (child) => visit(child, depth + 1));
+    return cloneElement(node as ReactElement<{ children?: ReactNode }>, {}, nested);
+  };
+  const nodes = Children.map(children, (child) => visit(child, 0));
+  return { nodes, id: found };
+}
 
 /** A labelled control row: fixed-width icon+label on the left, control(s) right. */
 function Field({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  const generated = useId();
+  const { nodes, id } = labelTarget(children, generated);
   return (
     <div className="flex items-center gap-2">
-      <span className="flex w-[4.25rem] shrink-0 items-center gap-1.5 text-[11px] text-[var(--color-fg-muted)]">
+      <label htmlFor={id} className="flex w-[4.25rem] shrink-0 items-center gap-1.5 text-[11px] text-[var(--color-fg-muted)]">
         <span className="text-[var(--color-fg-subtle)]">{icon}</span>
         {label}
-      </span>
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">{children}</div>
+      </label>
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">{nodes}</div>
     </div>
   );
 }
@@ -606,7 +682,7 @@ function KeyField({ config, onChanged }: { config: AgentConfig | null; onChanged
             <button
               onClick={save}
               disabled={saving || !value.trim()}
-              className="shrink-0 rounded-lg bg-[var(--color-brand-strong)] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+              className="shrink-0 rounded-lg bg-[var(--color-brand-strong)] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
             >
               {saving ? <Loader2 className="size-3.5 animate-spin" /> : "Save"}
             </button>
@@ -625,7 +701,11 @@ function KeyField({ config, onChanged }: { config: AgentConfig | null; onChanged
           </>
         )}
       </Field>
-      {error && <p className="pl-[5.25rem] text-[11px] text-[var(--color-danger)]">{error}</p>}
+      {error && (
+        <p role="alert" className="pl-[5.25rem] text-[11px] text-[var(--color-danger)]">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

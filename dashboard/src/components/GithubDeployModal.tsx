@@ -18,6 +18,7 @@ import {
   githubBranchesAction,
   quickDeployGithubAction,
 } from "@/app/actions";
+import { useDialogFocus } from "@/components/use-focus-trap";
 
 /**
  * GitHub App deploy flow: pick installation -> repo -> branch -> deploy.
@@ -173,7 +174,11 @@ export function GithubDeployModal({
             className="fixed inset-0 z-50 bg-black/50"
             onClick={handleClose}
           />
-          <motion.div
+          <FocusTrapPanel
+            onClose={handleClose}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="github-deploy-title"
             initial={{ opacity: 0, y: 12, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
@@ -185,13 +190,14 @@ export function GithubDeployModal({
                 <GitFork className="size-4.5" />
               </span>
               <div className="flex-1">
-                <h2 className="text-sm font-semibold">Deploy from GitHub</h2>
+                <h2 id="github-deploy-title" className="text-sm font-semibold">Deploy from GitHub</h2>
                 <p className="text-[11px] text-[var(--color-fg-subtle)]">
                   Private repos, auto-deploy on push.
                 </p>
               </div>
               <button
                 onClick={handleClose}
+                aria-label="Close"
                 className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
               >
                 <X className="size-4" />
@@ -199,7 +205,7 @@ export function GithubDeployModal({
             </div>
 
             {providers === null ? (
-              <div className="flex items-center gap-2 py-8 text-sm text-[var(--color-fg-muted)]">
+              <div role="status" className="flex items-center gap-2 py-8 text-sm text-[var(--color-fg-muted)]">
                 <Loader2 className="size-4 animate-spin" /> Loading installations…
               </div>
             ) : providers.length === 0 ? (
@@ -213,7 +219,7 @@ export function GithubDeployModal({
                     href={connectUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)]"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)]"
                   >
                     <GitFork className="size-4" /> Connect GitHub App
                     <ExternalLink className="size-3" />
@@ -286,7 +292,7 @@ export function GithubDeployModal({
                   <button
                     onClick={deploy}
                     disabled={!selectedRepo || !branch || deploying}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
                   >
                     {deploying ? <Loader2 className="size-4 animate-spin" /> : null}
                     Deploy
@@ -296,11 +302,11 @@ export function GithubDeployModal({
             )}
 
             {error && (
-              <div className="mt-3 flex items-start gap-1.5 text-xs text-[var(--color-danger)]">
+              <div role="alert" className="mt-3 flex items-start gap-1.5 text-xs text-[var(--color-danger)]">
                 <AlertCircle className="mt-0.5 size-3.5 shrink-0" /> {error}
               </div>
             )}
-          </motion.div>
+          </FocusTrapPanel>
         </>
       )}
     </AnimatePresence>
@@ -308,7 +314,20 @@ export function GithubDeployModal({
 }
 
 const selectCls =
-  "w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-2 text-xs outline-none focus:border-[var(--color-brand)] disabled:opacity-50";
+  "w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2.5 py-2 text-xs outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-50";
+
+/**
+ * motion.div that mounts and unmounts with the overlay it renders, so
+ * useDialogFocus (whose effect runs on mount) can trap focus for exactly the
+ * overlay's lifetime.
+ */
+function FocusTrapPanel({
+  onClose,
+  ...props
+}: { onClose: () => void } & React.ComponentProps<typeof motion.div>) {
+  const ref = useDialogFocus<HTMLDivElement>(onClose);
+  return <motion.div {...props} ref={ref} />;
+}
 
 function Labeled({
   label,
@@ -323,7 +342,11 @@ function Labeled({
     <label className="block">
       <span className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-subtle)]">
         {label}
-        {hint && <span className="normal-case tracking-normal">· {hint}</span>}
+        {hint && (
+          <span role="status" className="normal-case tracking-normal">
+            · {hint}
+          </span>
+        )}
       </span>
       {children}
     </label>

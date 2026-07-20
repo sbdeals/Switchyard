@@ -42,8 +42,7 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ type: "spring", stiffness: 320, damping: 28 }}
-      onClick={onOpen}
-      className="group relative cursor-pointer overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-colors hover:bg-[var(--color-surface-hover)]"
+      className="group relative overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-colors hover:bg-[var(--color-surface-hover)]"
     >
       <span
         className="absolute inset-x-0 top-0 h-px opacity-60"
@@ -57,7 +56,16 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
           size="size-10"
         />
         <div className="min-w-0 flex-1">
-          <div className="truncate font-medium leading-tight">{service.name}</div>
+          {/* Stretched button: the whole card is the click/keyboard target,
+              while Deploy below stays independently operable (z-10). */}
+          <button
+            type="button"
+            onClick={onOpen}
+            className="block w-full cursor-pointer truncate text-left font-medium leading-tight after:absolute after:inset-0 after:cursor-pointer after:content-['']"
+          >
+            {service.name}
+            <span className="sr-only">, open service details</span>
+          </button>
           <div className="truncate text-xs text-[var(--color-fg-muted)]">
             {serviceSubtitle(service)}
           </div>
@@ -71,9 +79,10 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
         </span>
         {service.status === "idle" ? (
           <button
+            type="button"
             onClick={deploy}
             disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+            className="relative z-10 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
           >
             <Rocket className="size-3.5" /> Deploy
           </button>
@@ -82,7 +91,11 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
         )}
       </div>
 
-      {error && <p className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-[var(--color-danger)]">
+          {error}
+        </p>
+      )}
     </motion.div>
   );
 }

@@ -109,6 +109,8 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
               key={r.id}
               onClick={() => setRange(r.id)}
               disabled={r.id !== "live" && storeOn === false}
+              aria-pressed={range === r.id}
+              title={r.id !== "live" && storeOn === false ? "Metrics history is off" : undefined}
               className={
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 " +
                 (range === r.id
@@ -125,11 +127,7 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
         )}
       </div>
 
-      {idle && range === "live" ? (
-        <div className="flex h-40 items-center justify-center text-sm text-[var(--color-fg-subtle)]">
-          No metrics — the service isn&apos;t running.
-        </div>
-      ) : (
+      {!(idle && range === "live") && (
         <>
           <div className="grid grid-cols-2 gap-3">
             <Stat
@@ -149,21 +147,32 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
 
           <Chart title="CPU %" data={data} dataKey="cpu" color="#a06bff" unit="%" />
           <Chart title="Memory" data={data} dataKey="memUsed" color="#3ecf8e" formatter={fmtMB} />
-
-          {historyEmpty && (
-            <div className="flex items-center justify-center text-xs text-[var(--color-fg-subtle)]">
-              {storeOn === false
-                ? "Metric history needs the Switchyard store (SWITCHYARD_STORE_URL)."
-                : "No metrics recorded in this range yet."}
-            </div>
-          )}
-          {range === "live" && data.length === 0 && (
-            <div className="flex items-center justify-center gap-2 text-xs text-[var(--color-fg-subtle)]">
-              <Loader2 className="size-4 animate-spin" /> sampling…
-            </div>
-          )}
         </>
       )}
+
+      {/* Single stable live region: status messages render inside it so they're announced. */}
+      <div aria-live="polite" className="empty:hidden">
+        {idle && range === "live" ? (
+          <div className="flex h-40 items-center justify-center text-sm text-[var(--color-fg-subtle)]">
+            No metrics — the service isn&apos;t running.
+          </div>
+        ) : (
+          <>
+            {historyEmpty && (
+              <div className="flex items-center justify-center text-xs text-[var(--color-fg-subtle)]">
+                {storeOn === false
+                  ? "Metric history needs the Switchyard store (SWITCHYARD_STORE_URL)."
+                  : "No metrics recorded in this range yet."}
+              </div>
+            )}
+            {range === "live" && data.length === 0 && (
+              <div className="flex items-center justify-center gap-2 text-xs text-[var(--color-fg-subtle)]">
+                <Loader2 className="size-4 animate-spin" /> sampling…
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       <HttpSection appName={appName} active={active} />
     </div>
@@ -179,7 +188,7 @@ function Stat({
 }: {
   icon: React.ReactNode;
   label: string;
-  value: string;
+  value: React.ReactNode;
   sub?: string;
   accent: string;
 }) {
@@ -213,7 +222,7 @@ function Chart({
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
       <div className="mb-2 text-xs font-medium text-[var(--color-fg-muted)]">{title}</div>
-      <div className="h-28">
+      <div className="h-28" role="img" aria-label={`${title} chart`}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
             <defs>
@@ -358,6 +367,7 @@ function HttpSection({ appName, active }: { appName: string; active: boolean }) 
             <button
               key={r.min}
               onClick={() => setRangeMin(r.min)}
+              aria-pressed={rangeMin === r.min}
               className={
                 "rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors " +
                 (rangeMin === r.min
@@ -378,10 +388,10 @@ function HttpSection({ appName, active }: { appName: string; active: boolean }) 
       ) : !available ? (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <Stat icon={<span>↕</span>} label="Requests" value="—" accent="#4a9eff" />
-            <Stat icon={<span>⚠</span>} label="Error rate" value="—" accent="#ff5c5c" />
-            <Stat icon={<span>↓</span>} label="Ingress" value="—" accent={INGRESS} />
-            <Stat icon={<span>↑</span>} label="Egress" value="—" accent={EGRESS} />
+            <Stat icon={<span aria-hidden="true">↕</span>} label="Requests" value="—" accent="#4a9eff" />
+            <Stat icon={<span aria-hidden="true">⚠</span>} label="Error rate" value="—" accent="#ff5c5c" />
+            <Stat icon={<span aria-hidden="true">↓</span>} label="Ingress" value="—" accent={INGRESS} />
+            <Stat icon={<span aria-hidden="true">↑</span>} label="Egress" value="—" accent={EGRESS} />
           </div>
           <p className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-fg-subtle)]">
             HTTP metrics need the Traefik metrics endpoint (TRAEFIK_METRICS_URL).
@@ -390,15 +400,20 @@ function HttpSection({ appName, active }: { appName: string; active: boolean }) 
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <Stat icon={<span>↕</span>} label="Requests" value={fmtNum(totals.reqs)} accent="#4a9eff" />
+            <Stat icon={<span aria-hidden="true">↕</span>} label="Requests" value={fmtNum(totals.reqs)} accent="#4a9eff" />
             <Stat
-              icon={<span>⚠</span>}
+              icon={<span aria-hidden="true">⚠</span>}
               label="Error rate"
-              value={`${errorRate.toFixed(errorRate >= 10 ? 0 : 1)}%`}
+              value={
+                <>
+                  {`${errorRate.toFixed(errorRate >= 10 ? 0 : 1)}%`}
+                  {errorRate > 1 && <span className="sr-only"> high</span>}
+                </>
+              }
               accent={errorRate > 1 ? "#ff5c5c" : "#3ecf8e"}
             />
-            <Stat icon={<span>↓</span>} label="Ingress" value={fmtBytes(totals.ingress)} accent={INGRESS} />
-            <Stat icon={<span>↑</span>} label="Egress" value={fmtBytes(totals.egress)} accent={EGRESS} />
+            <Stat icon={<span aria-hidden="true">↓</span>} label="Ingress" value={fmtBytes(totals.ingress)} accent={INGRESS} />
+            <Stat icon={<span aria-hidden="true">↑</span>} label="Egress" value={fmtBytes(totals.egress)} accent={EGRESS} />
           </div>
 
           {points.length === 0 ? (
@@ -434,7 +449,7 @@ function PanelCard({
         <div className="text-xs font-medium text-[var(--color-fg-muted)]">{title}</div>
         {right && <div className="text-xs tabular-nums text-[var(--color-fg-subtle)]">{right}</div>}
       </div>
-      <div className="h-32">{children}</div>
+      <div className="h-32" role="img" aria-label={`${title} chart`}>{children}</div>
     </div>
   );
 }
@@ -477,6 +492,7 @@ function TrafficPanel({ points }: { points: HttpPoint[] }) {
             dataKey="egress"
             stroke={EGRESS}
             strokeWidth={2}
+            strokeDasharray="6 3"
             fill="url(#g-egress)"
             isAnimationActive={false}
           />
@@ -550,9 +566,9 @@ function ResponseTimePanel({ points, lastP95 }: { points: HttpPoint[]; lastP95: 
           />
           <Legend wrapperStyle={LEGEND_STYLE} iconType="plainline" />
           <Line type="monotone" name="p50" dataKey="p50" stroke="#3ecf8e" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-          <Line type="monotone" name="p90" dataKey="p90" stroke="#4a9eff" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-          <Line type="monotone" name="p95" dataKey="p95" stroke="#f5a623" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-          <Line type="monotone" name="p99" dataKey="p99" stroke="#ff5c5c" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+          <Line type="monotone" name="p90" dataKey="p90" stroke="#4a9eff" strokeWidth={1.5} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
+          <Line type="monotone" name="p95" dataKey="p95" stroke="#f5a623" strokeWidth={1.5} strokeDasharray="3 3" dot={false} isAnimationActive={false} />
+          <Line type="monotone" name="p99" dataKey="p99" stroke="#ff5c5c" strokeWidth={1.5} strokeDasharray="1 3" dot={false} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </PanelCard>

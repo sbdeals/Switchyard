@@ -213,7 +213,7 @@ function DomainRow({ d }: { d: AppDomain }) {
     return (
       <div className="space-y-3 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-3">
         <DomainFields value={draft} onChange={(patch) => setDraft((v) => ({ ...v, ...patch }))} />
-        {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+        {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
         <div className="flex items-center justify-end gap-2">
           <button
             onClick={() => {
@@ -229,7 +229,7 @@ function DomainRow({ d }: { d: AppDomain }) {
           <button
             onClick={save}
             disabled={pending || !draft.host.trim()}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
           >
             {pending && <Loader2 className="size-4 animate-spin" />}
             Save
@@ -263,6 +263,8 @@ function DomainRow({ d }: { d: AppDomain }) {
         disabled={pending}
         className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
         title="Edit domain"
+        aria-label="Edit domain"
+        aria-expanded={editing}
       >
         <Pencil className="size-3.5" />
       </button>
@@ -271,10 +273,11 @@ function DomainRow({ d }: { d: AppDomain }) {
         disabled={pending}
         className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
         title="Remove domain"
+        aria-label="Remove domain"
       >
         {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
       </button>
-      {error && <span className="text-xs text-[var(--color-danger)]">{error}</span>}
+      {error && <span role="alert" className="text-xs text-[var(--color-danger)]">{error}</span>}
     </div>
   );
 }
@@ -327,14 +330,14 @@ export function DomainsTab({ app }: { app: Application }) {
           <button
             onClick={add}
             disabled={pending || !draft.host.trim()}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
           >
             {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
             Add
           </button>
         </div>
       </div>
-      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );
 }
@@ -481,6 +484,7 @@ export function DeploymentHistory({ deployments: history }: { deployments: AppDe
             className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
           >
             <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
+            {d.rollbackId && <span className="sr-only">{d.status}</span>}
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm">{d.title}</div>
               <div className="text-[11px] text-[var(--color-fg-subtle)]">
@@ -522,7 +526,7 @@ function RollbackButton({ rollbackId, title }: { rollbackId: string; title: stri
         {pending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
         Roll back
       </button>
-      {error && <span className="text-[11px] text-[var(--color-danger)]">{error}</span>}
+      {error && <span role="alert" className="text-[11px] text-[var(--color-danger)]">{error}</span>}
     </div>
   );
 }
@@ -733,6 +737,8 @@ function DockerSourceForm({ app }: { app: Application }) {
               <button
                 type="button"
                 onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
                 className="absolute inset-y-0 right-2 flex items-center text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
               >
                 {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
@@ -1168,7 +1174,7 @@ export function SchedulesTab({ app }: { app: Application }) {
             <Loader2 className="size-4 animate-spin" /> loading schedules…
           </div>
         ) : loadError ? (
-          <p className="text-xs text-[var(--color-danger)]">{loadError}</p>
+          <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>
         ) : schedules.length === 0 ? (
           <p className="text-xs text-[var(--color-fg-subtle)]">No schedules yet.</p>
         ) : (
@@ -1272,13 +1278,13 @@ function CreateScheduleForm({
         <button
           onClick={create}
           disabled={pending || !valid}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
         >
           {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
           Create
         </button>
       </div>
-      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );
 }
@@ -1362,7 +1368,7 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
           >
             <Power className={cn("size-3.5", schedule.enabled && "text-[var(--color-ok)]")} />
           </IconBtn>
-          <IconBtn title="Edit" onClick={() => (editing ? setEditing(false) : openEdit())} disabled={busy}>
+          <IconBtn title="Edit" ariaExpanded={editing} onClick={() => (editing ? setEditing(false) : openEdit())} disabled={busy}>
             <Pencil className="size-3.5" />
           </IconBtn>
           <IconBtn
@@ -1426,7 +1432,7 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
         </div>
       )}
 
-      {error && <p className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );
 }
@@ -1436,15 +1442,19 @@ function IconBtn({
   title,
   onClick,
   disabled,
+  ariaExpanded,
 }: {
   children: React.ReactNode;
   title: string;
   onClick: () => void;
   disabled?: boolean;
+  ariaExpanded?: boolean;
 }) {
   return (
     <button
       title={title}
+      aria-label={title}
+      aria-expanded={ariaExpanded}
       onClick={onClick}
       disabled={disabled}
       className="rounded-md p-1.5 text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)] disabled:opacity-40"

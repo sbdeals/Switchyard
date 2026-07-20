@@ -7,7 +7,7 @@ import { loginAction, signupAction, type LoginState } from "./actions";
 const initialState: LoginState = {};
 
 const inputClass =
-  "rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-brand)]";
+  "rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50";
 
 export function LoginForm() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -71,7 +71,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={pending}
-        className="mt-1 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand)] disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-1 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand-deep)] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {signup
           ? pending

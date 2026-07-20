@@ -20,8 +20,17 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`${service.name}, ${serviceSubtitle(service)}, ${status.label} — open details`}
       onClick={() => onSelect(service)}
-      className="w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)]"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(service);
+        }
+      }}
+      className="w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
       style={{
         borderColor: selected ? accent : "var(--color-border-strong)",
         boxShadow: selected ? `0 0 0 1px ${accent}, 0 8px 30px -12px ${accent}80` : undefined,

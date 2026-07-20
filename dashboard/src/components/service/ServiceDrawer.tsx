@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useDialogFocus } from "@/components/use-focus-trap";
 import {
   X,
   Database as DatabaseIcon,
@@ -135,6 +136,8 @@ const COMPOSE_TABS: TabId[] = [
 
 export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
+  const titleId = useId();
+  const dialogRef = useDialogFocus<HTMLElement>(onClose);
   // Reset to Overview when a different service is opened (adjust state during
   // render — the React-recommended alternative to a resetting effect).
   const [shownId, setShownId] = useState<string | null>(null);
@@ -161,17 +164,46 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             onClick={onClose}
           />
           <motion.aside
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", stiffness: 320, damping: 34 }}
             className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
           >
-            <Header service={service} onClose={onClose} />
-            <nav className="flex gap-1 overflow-x-auto border-b border-[var(--color-border)] px-4 [scrollbar-width:thin]">
+            <Header service={service} onClose={onClose} titleId={titleId} />
+            <nav
+              role="tablist"
+              aria-label="Service sections"
+              onKeyDown={(e) => {
+                const idx = tabs.indexOf(tab);
+                let next: number | null = null;
+                if (e.key === "ArrowRight") next = (idx + 1) % tabs.length;
+                else if (e.key === "ArrowLeft") next = (idx - 1 + tabs.length) % tabs.length;
+                else if (e.key === "Home") next = 0;
+                else if (e.key === "End") next = tabs.length - 1;
+                if (next === null) return;
+                e.preventDefault();
+                setTab(tabs[next]);
+                const el = e.currentTarget.querySelector<HTMLElement>(
+                  `#drawer-tab-${tabs[next]}`
+                );
+                el?.focus();
+              }}
+              className="flex gap-1 overflow-x-auto border-b border-[var(--color-border)] px-4 [scrollbar-width:thin]"
+            >
               {tabs.map((id) => (
                 <button
                   key={id}
+                  type="button"
+                  role="tab"
+                  id={`drawer-tab-${id}`}
+                  aria-selected={tab === id}
+                  aria-controls="drawer-tabpanel"
+                  tabIndex={tab === id ? 0 : -1}
                   onClick={() => setTab(id)}
                   className={cn(
                     "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
@@ -186,7 +218,13 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               ))}
             </nav>
 
-            <div className="flex-1 overflow-auto p-5">
+            <div
+              id="drawer-tabpanel"
+              role="tabpanel"
+              aria-labelledby={`drawer-tab-${tab}`}
+              tabIndex={0}
+              className="flex-1 overflow-auto p-5"
+            >
               {tab === "overview" &&
                 (service.kind === "database" ? (
                   <OverviewTab db={service} />
@@ -237,7 +275,15 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
   );
 }
 
-function Header({ service, onClose }: { service: Service; onClose: () => void }) {
+function Header({
+  service,
+  onClose,
+  titleId,
+}: {
+  service: Service;
+  onClose: () => void;
+  titleId: string;
+}) {
   const accent = serviceAccent(service);
   const Icon = service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
   return (
@@ -251,7 +297,9 @@ function Header({ service, onClose }: { service: Service; onClose: () => void })
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold">{service.name}</h2>
+            <h2 id={titleId} className="font-semibold">
+              {service.name}
+            </h2>
             <StatusBadge status={service.status} />
           </div>
           <div className="text-xs text-[var(--color-fg-muted)]">
@@ -260,7 +308,9 @@ function Header({ service, onClose }: { service: Service; onClose: () => void })
         </div>
       </div>
       <button
+        type="button"
         onClick={onClose}
+        aria-label="Close service details"
         className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
       >
         <X className="size-4" />
@@ -408,7 +458,10 @@ function PasswordRow({ db }: { db: Database }) {
           {show ? db.databasePassword : "•".repeat(16)}
         </code>
         <button
+          type="button"
           onClick={() => setShow((s) => !s)}
+          aria-label={show ? "Hide password" : "Show password"}
+          aria-pressed={show}
           className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
         >
           {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}

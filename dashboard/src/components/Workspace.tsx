@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
@@ -39,6 +39,7 @@ export function Workspace({
   };
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="mx-auto max-w-7xl px-6 py-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -95,6 +96,7 @@ export function Workspace({
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
       <AgentPanel />
     </div>
+    </MotionConfig>
   );
 }
 
@@ -109,7 +111,9 @@ function ViewToggle({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
         active
@@ -138,7 +142,7 @@ function EmptyState({
       <div className="flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
         <Boxes className="size-7" />
       </div>
-      <h3 className="mt-4 font-medium">No services yet</h3>
+      <h2 className="mt-4 font-medium">No services yet</h2>
       <p className="mb-5 mt-1 max-w-sm text-sm text-[var(--color-fg-muted)]">
         Deploy an app from a Docker image, or spin up a managed database in one click.
       </p>

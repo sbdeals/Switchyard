@@ -113,6 +113,7 @@ export function FlowCanvas({
   const buildEdges = useCallback(
     (): Edge[] =>
       serviceEdges.map((e) => {
+        const source = services.find((s) => s.id === e.source);
         const target = services.find((s) => s.id === e.target);
         const accent = target ? serviceAccent(target) : "#a06bff";
         return {
@@ -120,6 +121,8 @@ export function FlowCanvas({
           source: e.source,
           target: e.target,
           animated: true,
+          ariaLabel:
+            source && target ? `${source.name} connects to ${target.name}` : undefined,
           style: { stroke: accent, strokeWidth: 1.5 },
         };
       }),
@@ -170,7 +173,11 @@ export function FlowCanvas({
   );
 
   return (
-    <div className="h-[calc(100vh-9rem)] w-full overflow-hidden rounded-2xl border border-[var(--color-border)]">
+    <div
+      role="region"
+      aria-label="Service canvas"
+      className="h-[calc(100vh-9rem)] w-full overflow-hidden rounded-2xl border border-[var(--color-border)]"
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}

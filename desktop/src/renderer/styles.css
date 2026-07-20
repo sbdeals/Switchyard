@@ -15,6 +15,19 @@
   box-sizing: border-box;
 }
 
+/* Visually hidden, still read by screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 html,
 body {
   height: 100%;
@@ -117,7 +130,8 @@ body {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(148, 168, 210, 0.35);
+  /* >=3:1 against the panel (WCAG 1.4.11). */
+  background: rgba(148, 168, 210, 0.6);
 }
 
 .step.done .mark {
@@ -241,7 +255,8 @@ button {
 
 .field input {
   background: rgba(11, 16, 28, 0.8);
-  border: 1px solid var(--panel-border);
+  /* Stronger than --panel-border: field boundaries need >=3:1 (WCAG 1.4.11). */
+  border: 1px solid rgba(148, 168, 210, 0.62);
   color: var(--text);
   border-radius: 8px;
   padding: 9px 12px;
@@ -258,7 +273,7 @@ button {
 .progress {
   height: 8px;
   border-radius: 6px;
-  background: rgba(148, 168, 210, 0.15);
+  background: rgba(148, 168, 210, 0.45);
   overflow: hidden;
   margin-top: 16px;
 }
