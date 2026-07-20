@@ -36,16 +36,30 @@ jobs:
   # the SAME release object. When none exists, electron-builder's publisher
   # creates one per leg — a race that split the v0.1.1/v0.1.2 assets across
   # duplicate releases for the same tag (GitHub happily hosts several).
+  #
+  # Created as a DRAFT so `releases/latest` (the README download link and the
+  # electron-updater feed) never points at a release that has no installers
+  # yet; the `publish` job at the end verifies the assets and flips it live.
+  # The existence check replaces a blanket `|| true`, which would also have
+  # swallowed real failures and quietly resurrected the duplicate race.
   release:
     needs: check
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - env:
+      - name: Create draft release for the tag (skip if one already exists)
+        env:
           GH_TOKEN: ${{ github.token }}
-        # `|| true`: keep re-runs idempotent once the release exists.
-        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes || true
+        run: |
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq --arg t "$GITHUB_REF_NAME" '[.[] | select(.tag_name == $t)] | length')
+          if [ "$existing" -gt 0 ]; then
+            echo "release for $GITHUB_REF_NAME already exists — reusing it"
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --draft --title "${GITHUB_REF_NAME#v}" --generate-notes
+          fi
 
   image:
     needs: check
@@ -97,11 +111,11 @@ jobs:
   # uploads the installers AND latest.yml/latest-mac.yml (the auto-update feed)
   # to the tag's GitHub release.
   #
-  # macOS signing/notarization: driven entirely by the env vars below (see
-  # desktop/README.md for the one-time Apple Developer setup). When the secrets
-  # are absent — forks, or before certs exist — the vars resolve to empty
-  # strings, electron-builder skips signing/notarization with a warning, and
-  # the build still succeeds (unsigned; macOS auto-update won't work on it).
+  # macOS signing/notarization: the gating step below exports the signing env
+  # only when the cert secret is actually set (see desktop/README.md for the
+  # one-time Apple Developer setup); with the vars truly unset, electron-builder
+  # skips signing/notarization with a warning and the build succeeds unsigned
+  # (macOS auto-update won't work on it; plain download/install does).
   desktop:
     needs: [image, release]
     permissions:
@@ -154,3 +168,41 @@ jobs:
         working-directory: desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Flip the draft live once the assets a Windows user needs are actually on
+  # it, and mark it the repo's Latest release (so /releases/latest — the README
+  # download link and electron-updater's feed — resolves to it). Runs even if
+  # a desktop leg failed: a broken macOS build must not strand the release as
+  # an invisible draft, but a missing Windows installer fails loudly here and
+  # leaves the draft for inspection.
+  publish:
+    needs: [release, desktop]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Verify required assets, then publish + mark Latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          matches=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq --arg t "$GITHUB_REF_NAME" '[.[] | select(.tag_name == $t)] | map(.id)')
+          count=$(jq 'length' <<<"$matches")
+          if [ "$count" -ne 1 ]; then
+            echo "::error::expected exactly 1 release for $GITHUB_REF_NAME, found $count — refusing to publish"
+            exit 1
+          fi
+          release_id=$(jq -r '.[0]' <<<"$matches")
+          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq '.assets[].name')
+          printf 'assets on release %s:\n%s\n' "$release_id" "$assets"
+          version="${GITHUB_REF_NAME#v}"
+          for required in "Switchyard-Setup-$version.exe" "latest.yml"; do
+            if ! grep -qxF "$required" <<<"$assets"; then
+              echo "::error::required asset $required is missing — leaving the release as a draft"
+              exit 1
+            fi
+          done
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -F draft=false -f make_latest=true >/dev/null
+          echo "published release $GITHUB_REF_NAME (id $release_id) as Latest"

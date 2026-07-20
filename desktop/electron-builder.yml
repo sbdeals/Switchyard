@@ -51,9 +51,14 @@ mac:
 publish:
   provider: github
   owner: sbdeals
-  # The repo's CANONICAL name (it was renamed from plain "switchyard"; GitHub
-  # redirects old names, but the update feed shouldn't rely on that).
-  repo: Switchyard-The-Open-Source-Railway-Alternative
-  # Publish straight to the tag's release (not a draft) so latest.yml is
-  # immediately visible to electron-updater.
-  releaseType: release
+  # The repo's CANONICAL name (renamed again from the long
+  # "Switchyard-The-Open-Source-Railway-Alternative" slug; GitHub redirects old
+  # names, but the update feed baked into shipped apps shouldn't rely on that).
+  repo: Switchyard
+  # CI pre-creates the tag's release as a DRAFT and its `publish` job flips it
+  # live after verifying the assets (.github/workflows/release.yml). draft here
+  # means the legs only ever upload into that existing draft — with `release`,
+  # electron-builder would publish a half-populated release the moment the
+  # first leg finishes (and, when no release exists yet, each leg creates its
+  # own — the v0.1.1/v0.1.2 duplicate-release race).
+  releaseType: draft
