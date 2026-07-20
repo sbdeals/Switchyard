@@ -14,6 +14,7 @@ import {
   removeEnvironmentAction,
   type ActionResult,
 } from "@/app/actions";
+import { useDialogFocus } from "@/components/use-focus-trap";
 
 export function ProjectsPanel({
   open,
@@ -54,7 +55,11 @@ export function ProjectsPanel({
           exit={{ opacity: 0 }}
         >
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-          <motion.div
+          <FocusTrapPanel
+            onClose={onClose}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="projects-panel-title"
             initial={{ opacity: 0, scale: 0.96, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -62,9 +67,10 @@ export function ProjectsPanel({
             className="relative flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
-              <h2 className="text-sm font-semibold">Projects &amp; environments</h2>
+              <h2 id="projects-panel-title" className="text-sm font-semibold">Projects &amp; environments</h2>
               <button
                 onClick={onClose}
+                aria-label="Close projects"
                 className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
               >
                 <X className="size-4" />
@@ -126,7 +132,8 @@ export function ProjectsPanel({
                           }
                         }}
                         placeholder="new environment"
-                        className="min-w-0 flex-1 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-1 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
+                        aria-label="New environment name"
+                        className="min-w-0 flex-1 rounded-md border border-[var(--color-border-control)] bg-[var(--color-bg-elevated)] px-2 py-1 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                       />
                       <button
                         onClick={() => {
@@ -149,7 +156,7 @@ export function ProjectsPanel({
             </div>
 
             <div className="border-t border-[var(--color-border)] px-5 py-4">
-              {error && <p className="mb-2 text-xs text-[var(--color-danger)]">{error}</p>}
+              {error && <p role="alert" className="mb-2 text-xs text-[var(--color-danger)]">{error}</p>}
               <div className="flex items-center gap-2">
                 <input
                   value={newProject}
@@ -161,7 +168,8 @@ export function ProjectsPanel({
                     }
                   }}
                   placeholder="new project name"
-                  className="flex-1 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
+                  aria-label="New project name"
+                  className="flex-1 rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                 />
                 <button
                   onClick={() => {
@@ -171,18 +179,31 @@ export function ProjectsPanel({
                     }
                   }}
                   disabled={pending || !newProject.trim()}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
                 >
                   {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
                   Project
                 </button>
               </div>
             </div>
-          </motion.div>
+          </FocusTrapPanel>
         </motion.div>
       )}
     </AnimatePresence>
   );
+}
+
+/**
+ * motion.div that mounts and unmounts with the overlay it renders, so
+ * useDialogFocus (whose effect runs on mount) can trap focus for exactly the
+ * overlay's lifetime.
+ */
+function FocusTrapPanel({
+  onClose,
+  ...props
+}: { onClose: () => void } & React.ComponentProps<typeof motion.div>) {
+  const ref = useDialogFocus<HTMLDivElement>(onClose);
+  return <motion.div {...props} ref={ref} />;
 }
 
 function IconBtn({
@@ -200,6 +221,7 @@ function IconBtn({
     <button
       onClick={onClick}
       title={title}
+      aria-label={title}
       className={
         "rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface-hover)] " +
         (danger ? "hover:text-[var(--color-danger)]" : "hover:text-[var(--color-fg)]")

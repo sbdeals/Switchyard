@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ChevronRight, Loader2, TerminalSquare } from "lucide-react";
 
 interface Entry {
@@ -35,6 +35,19 @@ export function ConsoleTab({ appName }: { appName: string }) {
   const [histIdx, setHistIdx] = useState<number>(-1);
   const nextId = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const hasRun = useRef(false);
+
+  // The input is disabled while a command runs, which drops focus to <body>;
+  // give it back when the command finishes. Skip the initial render so the
+  // tab doesn't steal focus on mount.
+  useEffect(() => {
+    if (!hasRun.current) {
+      hasRun.current = true;
+      return;
+    }
+    if (!running) inputRef.current?.focus();
+  }, [running]);
 
   const stickToBottom = () =>
     requestAnimationFrame(() => {
@@ -121,6 +134,9 @@ export function ConsoleTab({ appName }: { appName: string }) {
 
       <div
         ref={scrollRef}
+        tabIndex={0}
+        role="log"
+        aria-label="Console output"
         className="flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-3 font-mono text-[11px] leading-relaxed"
       >
         {entries.length === 0 ? (
@@ -142,11 +158,13 @@ export function ConsoleTab({ appName }: { appName: string }) {
               )}
               {en.stderr && (
                 <pre className="whitespace-pre-wrap break-all text-[var(--color-danger)]">
+                  <span className="sr-only">stderr: </span>
                   {en.stderr}
                 </pre>
               )}
               {en.error && (
                 <pre className="whitespace-pre-wrap break-all text-[var(--color-danger)]">
+                  <span className="sr-only">error: </span>
                   {en.error}
                 </pre>
               )}
@@ -168,21 +186,23 @@ export function ConsoleTab({ appName }: { appName: string }) {
         <div className="relative flex-1">
           <ChevronRight className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-brand)]" />
           <input
+            ref={inputRef}
             value={command}
             onChange={(e) => setCommand(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Run a command…"
+            aria-label="Command to run in the container"
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
             disabled={running}
-            className="w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] py-1.5 pl-8 pr-3 font-mono text-xs outline-none focus:border-[var(--color-brand)] disabled:opacity-50"
+            className="w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] py-1.5 pl-8 pr-3 font-mono text-xs outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-50"
           />
         </div>
         <button
           type="submit"
           disabled={running || !command.trim()}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-medium text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
         >
           {running ? <Loader2 className="size-3.5 animate-spin" /> : "Run"}
         </button>

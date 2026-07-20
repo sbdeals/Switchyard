@@ -26,6 +26,7 @@ const DEMO_STATE = {
 const viewEl = document.getElementById("view");
 const logEl = document.getElementById("log");
 const versionEl = document.getElementById("version");
+const announceEl = document.getElementById("announce");
 
 let lastViewKey = "";
 
@@ -42,17 +43,28 @@ function esc(s) {
 // ---- step list -----------------------------------------------------------------
 
 function stepMark(status) {
-  if (status === "done") return '<span class="mark">✓</span>';
-  if (status === "failed") return '<span class="mark">✕</span>';
-  if (status === "active") return '<span class="mark"><span class="spinner"></span></span>';
-  return '<span class="mark"><span class="dot"></span></span>';
+  if (status === "done") return '<span class="mark" aria-hidden="true">✓</span>';
+  if (status === "failed") return '<span class="mark" aria-hidden="true">✕</span>';
+  if (status === "active")
+    return '<span class="mark" aria-hidden="true"><span class="spinner"></span></span>';
+  return '<span class="mark" aria-hidden="true"><span class="dot"></span></span>';
 }
+
+// Spoken alternative for the glyph/spinner/dot marks.
+const STEP_STATUS_TEXT = {
+  done: "done",
+  failed: "failed",
+  active: "in progress",
+  pending: "pending",
+};
 
 function stepsHtml(steps) {
   return `<ul class="steps">${steps
     .map(
       (s) =>
-        `<li class="step ${s.status}">${stepMark(s.status)}<span class="label">${esc(s.label)}</span>${
+        `<li class="step ${s.status}">${stepMark(s.status)}<span class="sr-only">${
+          STEP_STATUS_TEXT[s.status] ?? esc(s.status)
+        }: </span><span class="label">${esc(s.label)}</span>${
           s.note ? `<span class="note">${esc(s.note)}</span>` : ""
         }</li>`,
     )
@@ -103,7 +115,7 @@ function wizardView(state) {
       const pct = Math.round((w.progress ?? 0) * 100);
       return `<h2>Downloading Docker Desktop</h2>
         <p>Fetching the official installer from docker.com ...</p>
-        <div class="progress"><div id="dlbar" style="width:${pct}%"></div></div>
+        <div class="progress" id="dlprogress" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div id="dlbar" style="width:${pct}%"></div></div>
         <p class="fineprint" id="dlpct">${pct}%</p>`;
     }
     case "installing":
@@ -133,7 +145,7 @@ function wizardView(state) {
 function credentialsView(state) {
   const c = state.credentials ?? {};
   return `<h2>Sign in to Dokploy</h2>
-    <div class="notice" id="credmsg">${esc(c.message ?? "")}</div>
+    <div class="notice" id="credmsg" role="alert">${esc(c.message ?? "")}</div>
     <form id="credform">
       <div class="field"><label for="cred-email">Admin email</label>
         <input id="cred-email" type="email" autocomplete="username" value="${esc(c.email ?? "")}" required /></div>
@@ -170,6 +182,9 @@ function render(state) {
 
   if (structural) {
     lastViewKey = viewKey;
+    // Replacing innerHTML drops keyboard focus to <body>; remember whether it
+    // was inside the view so it can be restored after the swap.
+    const hadFocus = viewEl.contains(document.activeElement);
     switch (state.phase) {
       case "boot":
       case "starting":
@@ -197,6 +212,13 @@ function render(state) {
       default:
         viewEl.innerHTML = workingView();
     }
+    if (hadFocus) {
+      const target = viewEl.querySelector("button, input, select, textarea, [tabindex]");
+      if (target) target.focus();
+    }
+    // Announce the new view's headline through the scoped live region.
+    const headline = viewEl.querySelector("h2, p");
+    announceEl.textContent = headline ? headline.textContent : "";
   } else {
     // In-place updates that must not clobber form inputs.
     if (state.phase === "starting" || state.phase === "boot") {
@@ -206,8 +228,10 @@ function render(state) {
       const pct = Math.round((state.wizard.progress ?? 0) * 100);
       const bar = document.getElementById("dlbar");
       const label = document.getElementById("dlpct");
+      const progress = document.getElementById("dlprogress");
       if (bar) bar.style.width = `${pct}%`;
       if (label) label.textContent = `${pct}%`;
+      if (progress) progress.setAttribute("aria-valuenow", String(pct));
     } else if (state.phase === "credentials") {
       const msg = document.getElementById("credmsg");
       if (msg) msg.textContent = state.credentials?.message ?? "";

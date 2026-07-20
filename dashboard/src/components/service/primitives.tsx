@@ -6,7 +6,14 @@
  * danger zone — parameterized only by which server action they call.
  */
 
-import { useState, useTransition } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useId,
+  useState,
+  useTransition,
+} from "react";
 import {
   Rocket,
   Play,
@@ -26,7 +33,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
 
 export const inputCls =
-  "w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]";
+  "w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50";
 
 // --- hooks --------------------------------------------------------------------
 
@@ -70,18 +77,46 @@ export function Btn({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-40",
         primary
-          ? "bg-[var(--color-brand-strong)] text-white hover:bg-[var(--color-brand)]"
+          ? "bg-[var(--color-brand-strong)] text-white hover:bg-[var(--color-brand-deep)]"
           : "border border-[var(--color-border-strong)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
       )}
     >
       {children}
     </button>
   );
+}
+
+/**
+ * Wire the Field label to the first native form control among `children`
+ * (searching two levels deep, so wrappers like `<div className="relative">`
+ * around an input still work). Controls without an id get `generated`.
+ */
+function labelTarget(
+  children: React.ReactNode,
+  generated: string
+): { nodes: React.ReactNode; id?: string } {
+  let found: string | undefined;
+  const visit = (node: React.ReactNode, depth: number): React.ReactNode => {
+    if (found !== undefined || !isValidElement(node)) return node;
+    if (node.type === "input" || node.type === "select" || node.type === "textarea") {
+      const props = node.props as { id?: string };
+      found = props.id ?? generated;
+      return props.id ? node : cloneElement(node as React.ReactElement<{ id?: string }>, { id: generated });
+    }
+    if (depth >= 2) return node;
+    const props = node.props as { children?: React.ReactNode };
+    if (props.children == null) return node;
+    const nested = Children.map(props.children, (child) => visit(child, depth + 1));
+    return cloneElement(node as React.ReactElement<{ children?: React.ReactNode }>, {}, nested);
+  };
+  const nodes = Children.map(children, (child) => visit(child, 0));
+  return { nodes, id: found };
 }
 
 export function Field({
@@ -93,13 +128,17 @@ export function Field({
   hint?: string;
   children: React.ReactNode;
 }) {
+  const generated = useId();
+  const { nodes, id } = labelTarget(children, generated);
   return (
     <div>
       <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-xs font-medium text-[var(--color-fg-muted)]">{label}</span>
+        <label htmlFor={id} className="text-xs font-medium text-[var(--color-fg-muted)]">
+          {label}
+        </label>
         {hint && <span className="text-[10px] text-[var(--color-fg-subtle)]">{hint}</span>}
       </div>
-      {children}
+      {nodes}
     </div>
   );
 }
@@ -120,24 +159,39 @@ export function CopyButton({ text }: { text: string }) {
   const [copied, flash] = useSavedFlash(1200);
   return (
     <button
+      type="button"
       onClick={() => {
         navigator.clipboard.writeText(text);
         flash();
       }}
+      aria-label="Copy to clipboard"
       className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
     >
       {copied ? <Check className="size-3.5 text-[var(--color-ok)]" /> : <Copy className="size-3.5" />}
+      <span aria-live="polite" className="sr-only">
+        {copied ? "Copied" : ""}
+      </span>
     </button>
   );
 }
 
 /** Small trailing "remove" icon button for config-list rows. */
-export function RemoveBtn({ onClick, pending }: { onClick: () => void; pending: boolean }) {
+export function RemoveBtn({
+  onClick,
+  pending,
+  label = "Remove",
+}: {
+  onClick: () => void;
+  pending: boolean;
+  /** Name the item, e.g. "Remove redirect ^/old" — lists of bare "Remove"s are indistinguishable to screen readers. */
+  label?: string;
+}) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={pending}
-      aria-label="Remove"
+      aria-label={label}
       className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
     >
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
@@ -249,7 +303,11 @@ export function LifecycleButtons({
           </Btn>
         )}
       </div>
-      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+      {error && (
+        <p role="alert" className="text-xs text-[var(--color-danger)]">
+          {error}
+        </p>
+      )}
     </>
   );
 }
@@ -272,16 +330,21 @@ export function SaveRow({
 }) {
   return (
     <div className="flex items-center justify-end gap-2">
-      {error && <span className="text-xs text-[var(--color-danger)]">{error}</span>}
+      {error && (
+        <span role="alert" className="text-xs text-[var(--color-danger)]">
+          {error}
+        </span>
+      )}
       {saved && (
-        <span className="flex items-center gap-1 text-xs text-[var(--color-ok)]">
+        <span role="status" className="flex items-center gap-1 text-xs text-[var(--color-ok)]">
           <Check className="size-3.5" /> Saved
         </span>
       )}
       <button
+        type="button"
         onClick={onSave}
         disabled={saving || disabled}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+        className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
       >
         {saving && <Loader2 className="size-4 animate-spin" />}
         {label}
@@ -311,6 +374,7 @@ export function DangerZone({
         {message} This cannot be undone.
       </p>
       <button
+        type="button"
         onClick={() => {
           if (confirm(`Destroy "${name}"? This cannot be undone.`)) onDestroy();
         }}
@@ -319,7 +383,11 @@ export function DangerZone({
       >
         <Trash2 className="size-3.5" /> Destroy {name}
       </button>
-      {error && <p className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-[var(--color-danger)]">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

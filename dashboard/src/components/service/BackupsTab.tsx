@@ -84,7 +84,7 @@ function BackupsPanel({ db, engine }: { db: Database; engine: BackupEngine }) {
 
   return (
     <div className="space-y-6">
-      {loadError && <p className="text-xs text-[var(--color-danger)]">{loadError}</p>}
+      {loadError && <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>}
 
       <DestinationsSection destinations={destinations} onChange={refresh} />
 
@@ -138,6 +138,7 @@ function DestinationsSection({
                     await onChange();
                   }
                 }}
+                aria-label={`Remove destination ${d.name}`}
                 className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
               >
                 <Trash2 className="size-3.5" />
@@ -162,6 +163,7 @@ function DestinationsSection({
       ) : (
         <button
           onClick={() => setOpen(true)}
+          aria-expanded={open}
           className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
         >
           <Plus className="size-3.5" /> Add destination
@@ -261,8 +263,8 @@ function DestinationForm({
         </Field>
       </div>
       <div className="flex items-center justify-end gap-2">
-        {error && <span className="mr-auto text-xs text-[var(--color-danger)]">{error}</span>}
-        {tested && <span className="mr-auto text-xs text-[var(--color-ok)]">{tested}</span>}
+        {error && <span role="alert" className="mr-auto text-xs text-[var(--color-danger)]">{error}</span>}
+        {tested && <span role="status" className="mr-auto text-xs text-[var(--color-ok)]">{tested}</span>}
         <button onClick={onCancel} className="rounded-lg px-3 py-2 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]">
           Cancel
         </button>
@@ -276,7 +278,7 @@ function DestinationForm({
         <button
           onClick={save}
           disabled={pending || !complete}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
         >
           Save destination
         </button>
@@ -330,6 +332,7 @@ function ScheduleSection({
                     b.enabled ? "bg-[var(--color-ok)]" : "bg-[var(--color-idle)]"
                   )}
                 />
+                <span className="sr-only">{b.enabled ? "Enabled" : "Disabled"}</span>
                 <code className="font-mono text-xs text-[var(--color-fg)]">{b.schedule}</code>
                 <span className="ml-auto truncate text-[11px] text-[var(--color-fg-subtle)]">
                   {b.destinationName ?? b.destinationId} · {b.prefix}
@@ -384,7 +387,7 @@ function ScheduleSection({
       ) : (
         <p className="text-xs text-[var(--color-fg-subtle)]">No backup schedules yet.</p>
       )}
-      {rowError && <p className="text-xs text-[var(--color-danger)]">{rowError}</p>}
+      {rowError && <p role="alert" className="text-xs text-[var(--color-danger)]">{rowError}</p>}
 
       {destinations.length > 0 ? (
         <NewScheduleForm db={db} engine={engine} destinations={destinations} onChange={onChange} />
@@ -459,7 +462,7 @@ function NewScheduleForm({
           <input
             value={keep}
             onChange={(e) => setKeep(e.target.value.replace(/[^0-9]/g, ""))}
-            placeholder="∞"
+            placeholder="all"
             className={inputCls}
           />
         </Field>
@@ -473,11 +476,11 @@ function NewScheduleForm({
           Enabled (run on schedule)
         </label>
         <div className="flex items-center gap-2">
-          {error && <span className="text-xs text-[var(--color-danger)]">{error}</span>}
+          {error && <span role="alert" className="text-xs text-[var(--color-danger)]">{error}</span>}
           <button
             onClick={create}
             disabled={pending || !complete}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
           >
             {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
             Create schedule
@@ -591,8 +594,8 @@ function RestoreSection({
         </Field>
 
         <div className="flex items-center justify-end gap-2">
-          {error && <span className="mr-auto text-xs text-[var(--color-danger)]">{error}</span>}
-          {done && <span className="mr-auto text-xs text-[var(--color-ok)]">Restore finished</span>}
+          {error && <span role="alert" className="mr-auto text-xs text-[var(--color-danger)]">{error}</span>}
+          {done && <span role="status" className="mr-auto text-xs text-[var(--color-ok)]">Restore finished</span>}
           <button
             onClick={restore}
             disabled={restoring || !selected || !target.trim()}

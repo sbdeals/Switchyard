@@ -19,7 +19,10 @@
         </div>
       </header>
 
-      <section id="view" class="card" aria-live="polite"></section>
+      <!-- Announcements go through #announce; a live region spanning the whole
+           card would re-read the entire view on every state change. -->
+      <section id="view" class="card"></section>
+      <div id="announce" class="sr-only" role="status" aria-live="polite"></div>
 
       <details id="logbox">
         <summary>Activity log</summary>

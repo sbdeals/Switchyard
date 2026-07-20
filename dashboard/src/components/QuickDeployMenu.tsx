@@ -26,6 +26,7 @@ import {
   quickDeployTemplateAction,
 } from "@/app/actions";
 import { GithubDeployModal } from "@/components/GithubDeployModal";
+import { useDialogFocus } from "@/components/use-focus-trap";
 
 /**
  * One-click provisioning: pick a database engine (auto name/password/version) or
@@ -115,7 +116,9 @@ export function QuickDeployMenu({
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand)]"
+        aria-haspopup="true"
+        aria-expanded={open}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)]"
       >
         <Plus className="size-4" /> New service
       </button>
@@ -124,7 +127,10 @@ export function QuickDeployMenu({
         {open && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-            <motion.div
+            <FocusTrapPanel
+              onClose={() => setOpen(false)}
+              role="dialog"
+              aria-label="New service"
               initial={{ opacity: 0, y: -6, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
@@ -135,7 +141,8 @@ export function QuickDeployMenu({
                 <select
                   value={targetEnv}
                   onChange={(e) => setTarget(e.target.value)}
-                  className="mb-1 w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--color-brand)]"
+                  aria-label="Target project and environment"
+                  className="mb-1 w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                 >
                   {envOptions.map((o) => (
                     <option key={o.id} value={o.id}>
@@ -155,14 +162,22 @@ export function QuickDeployMenu({
                   onChange={(e) => setImage(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && image.trim() && deployImage()}
                   placeholder="docker image, e.g. nginx:alpine"
-                  className="min-w-0 flex-1 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
+                  aria-label="Docker image"
+                  className="min-w-0 flex-1 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                 />
                 <button
                   onClick={deployImage}
                   disabled={!image.trim() || busy !== null}
-                  className="shrink-0 rounded-md bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+                  className="shrink-0 rounded-md bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
                 >
-                  {busy === "app" ? <Loader2 className="size-4 animate-spin" /> : "Deploy"}
+                  {busy === "app" ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      <span className="sr-only">Deploying</span>
+                    </>
+                  ) : (
+                    "Deploy"
+                  )}
                 </button>
               </div>
               <div className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1">
@@ -174,14 +189,22 @@ export function QuickDeployMenu({
                   onChange={(e) => setRepo(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && repo.trim() && deployRepo()}
                   placeholder="git repo url (Nixpacks build)"
-                  className="min-w-0 flex-1 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)]"
+                  aria-label="Git repository URL"
+                  className="min-w-0 flex-1 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                 />
                 <button
                   onClick={deployRepo}
                   disabled={!repo.trim() || busy !== null}
-                  className="shrink-0 rounded-md bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-brand)] disabled:opacity-40"
+                  className="shrink-0 rounded-md bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
                 >
-                  {busy === "repo" ? <Loader2 className="size-4 animate-spin" /> : "Deploy"}
+                  {busy === "repo" ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      <span className="sr-only">Deploying</span>
+                    </>
+                  ) : (
+                    "Deploy"
+                  )}
                 </button>
               </div>
               <button
@@ -215,6 +238,7 @@ export function QuickDeployMenu({
               <SectionLabel>Templates</SectionLabel>
               <button
                 onClick={toggleTemplates}
+                aria-expanded={showTemplates}
                 className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)]"
               >
                 <span
@@ -233,12 +257,13 @@ export function QuickDeployMenu({
 
               {showTemplates && (
                 <div className="mb-1">
-                  <div className="mb-1 flex items-center gap-1.5 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 py-1.5">
+                  <div className="mb-1 flex items-center gap-1.5 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 focus-within:border-[var(--color-brand)]">
                     <Search className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
                     <input
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       placeholder="Search templates (n8n, plausible, ...)"
+                      aria-label="Search app catalog"
                       className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[var(--color-fg-subtle)]"
                     />
                   </div>
@@ -315,11 +340,11 @@ export function QuickDeployMenu({
               </div>
 
               {error && (
-                <div className="mt-1 flex items-start gap-1.5 px-2 py-1.5 text-xs text-[var(--color-danger)]">
+                <div role="alert" className="mt-1 flex items-start gap-1.5 px-2 py-1.5 text-xs text-[var(--color-danger)]">
                   <AlertCircle className="mt-0.5 size-3.5 shrink-0" /> {error}
                 </div>
               )}
-            </motion.div>
+            </FocusTrapPanel>
           </>
         )}
       </AnimatePresence>
@@ -332,6 +357,19 @@ export function QuickDeployMenu({
       />
     </div>
   );
+}
+
+/**
+ * motion.div that mounts and unmounts with the overlay it renders, so
+ * useDialogFocus (whose effect runs on mount) can trap focus for exactly the
+ * overlay's lifetime.
+ */
+function FocusTrapPanel({
+  onClose,
+  ...props
+}: { onClose: () => void } & React.ComponentProps<typeof motion.div>) {
+  const ref = useDialogFocus<HTMLDivElement>(onClose);
+  return <motion.div {...props} ref={ref} />;
 }
 
 /**
