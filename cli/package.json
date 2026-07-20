@@ -1,6 +1,6 @@
 {
   "name": "switchyard-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "One-command install & management for the Dokploy + Switchyard stack",
   "type": "module",
   "bin": {

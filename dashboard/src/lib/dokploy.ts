@@ -24,12 +24,26 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE, openSession } from "./session";
 
 const BASE = process.env.DOKPLOY_URL ?? "http://localhost:3000";
-// Origin header for better-auth's CSRF check. Dokploy only trusts its
-// host-facing origins (e.g. http://localhost:3000) — when the BFF reaches it
-// through container service DNS (DOKPLOY_URL=http://dokploy:3000), that URL
-// is NOT a trusted origin, so the two must diverge. Defaults to BASE, which
-// preserves dev-mode behavior.
-const ORIGIN = process.env.DOKPLOY_ORIGIN ?? BASE;
+// Origin header for better-auth's CSRF check. Which origins Dokploy trusts
+// changed across versions: older builds accept only host-facing origins
+// (http://localhost:3000) while current builds accept the origin matching the
+// URL the request actually hits (http://dokploy:3000 over service DNS) and
+// 403 INVALID_ORIGIN on anything else — verified live on Docker Desktop.
+// Probe the candidates on auth calls and remember the first one accepted.
+// DOKPLOY_AUTH_ORIGIN pins it explicitly for proxied setups.
+const ORIGIN_CANDIDATES = [
+  ...(process.env.DOKPLOY_AUTH_ORIGIN ? [process.env.DOKPLOY_AUTH_ORIGIN] : []),
+  BASE,
+  ...(process.env.DOKPLOY_ORIGIN ? [process.env.DOKPLOY_ORIGIN] : []),
+].filter((origin, i, all) => all.indexOf(origin) === i);
+let workingOrigin = ORIGIN_CANDIDATES[0];
+/** Candidates to try, current winner first. */
+const originCandidates = () => [
+  workingOrigin,
+  ...ORIGIN_CANDIDATES.filter((o) => o !== workingOrigin),
+];
+const isInvalidOrigin = async (res: Response) =>
+  res.status === 403 && /INVALID_ORIGIN/i.test(await res.clone().text());
 const EMAIL = process.env.DOKPLOY_EMAIL ?? "";
 const PASSWORD = process.env.DOKPLOY_PASSWORD ?? "";
 
@@ -38,12 +52,14 @@ const PASSWORD = process.env.DOKPLOY_PASSWORD ?? "";
 // unresponsive backend from hanging the caller forever. Override via env.
 const DOKPLOY_TIMEOUT_MS = Number(process.env.DOKPLOY_TIMEOUT_MS) || 30_000;
 
-// Host-facing base for Dokploy's own deploy webhook (`/api/deploy/<token>`).
-// The BFF reaches Dokploy over service DNS (DOKPLOY_URL), which a Git host
-// cannot resolve, so prefer the host-facing origin. Even so, if Dokploy sits
-// behind a public domain the user must swap this host — surfaced as a note in
-// the Deploys tab. Trailing slashes trimmed so URL joins stay clean.
-const WEBHOOK_BASE = (process.env.DOKPLOY_ORIGIN ?? BASE).replace(/\/+$/, "");
+// Host-facing base for URLs that leave the server: Dokploy's own deploy
+// webhook (`/api/deploy/<token>`) and links opened in the user's browser. The
+// BFF reaches Dokploy over service DNS (DOKPLOY_URL), which neither a Git
+// host nor a browser can resolve, so prefer the host-facing origin
+// (DOKPLOY_ORIGIN, set by the CLI/desktop installers). Even so, if Dokploy
+// sits behind a public domain the user must swap this host — surfaced as a
+// note in the Deploys tab. Trailing slashes trimmed so URL joins stay clean.
+const HOST_ORIGIN = (process.env.DOKPLOY_ORIGIN ?? BASE).replace(/\/+$/, "");
 
 export const ENGINES = ["postgres", "mysql", "mariadb", "mongo", "redis"] as const;
 export type Engine = (typeof ENGINES)[number];
@@ -263,13 +279,26 @@ export interface ProjectNode {
  * (attributes like Path/HttpOnly stripped). Shared by the per-user login flow
  * (src/app/login/actions.ts) and the admin system probe below.
  */
+/** better-auth POST that walks the origin candidates on INVALID_ORIGIN. */
+async function authFetch(path: string, payload: unknown): Promise<Response> {
+  let res: Response | null = null;
+  for (const origin of originCandidates()) {
+    res = await fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: origin },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
+    if (await isInvalidOrigin(res)) continue;
+    workingOrigin = origin;
+    break;
+  }
+  // Non-null: ORIGIN_CANDIDATES always contains at least BASE.
+  return res!;
+}
+
 export async function signInToDokploy(email: string, password: string): Promise<string> {
-  const res = await fetch(`${BASE}/api/auth/sign-in/email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Origin: ORIGIN },
-    body: JSON.stringify({ email, password }),
-    cache: "no-store",
-  });
+  const res = await authFetch("/api/auth/sign-in/email", { email, password });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Dokploy sign-in failed (${res.status}): ${body.slice(0, 200)}`);
@@ -294,12 +323,7 @@ export async function signUpToDokploy(
   email: string,
   password: string
 ): Promise<void> {
-  const res = await fetch(`${BASE}/api/auth/sign-up/email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Origin: ORIGIN },
-    body: JSON.stringify({ name, email, password }),
-    cache: "no-store",
-  });
+  const res = await authFetch("/api/auth/sign-up/email", { name, email, password });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Dokploy sign-up failed (${res.status}): ${body.slice(0, 200)}`);
@@ -335,19 +359,29 @@ export async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
   const cookie = await userCookie();
   let res: Response;
   try {
-    res = await fetch(`${BASE}/api/${path}`, {
-      method: init.method ?? "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: ORIGIN,
-        Cookie: cookie,
-      },
-      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-      cache: "no-store",
-      // Bound the call so an unresponsive Dokploy backend can't hang the caller
-      // indefinitely (e.g. the agent's tool loop, which awaits each tool inline).
-      signal: AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
-    });
+    // Walk the origin candidates like authFetch: after a dashboard restart the
+    // first cookie'd call may come before any sign-in re-probes the origin.
+    const candidates = originCandidates();
+    let attempt: Response | null = null;
+    for (const origin of candidates) {
+      attempt = await fetch(`${BASE}/api/${path}`, {
+        method: init.method ?? "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: origin,
+          Cookie: cookie,
+        },
+        body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+        cache: "no-store",
+        // Bound the call so an unresponsive Dokploy backend can't hang the caller
+        // indefinitely (e.g. the agent's tool loop, which awaits each tool inline).
+        signal: AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
+      });
+      if (await isInvalidOrigin(attempt)) continue;
+      workingOrigin = origin;
+      break;
+    }
+    res = attempt!;
   } catch (e) {
     if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
       throw new Error(`Dokploy ${path} timed out after ${DOKPLOY_TIMEOUT_MS}ms.`);
@@ -383,7 +417,7 @@ export async function ping(): Promise<void> {
   const doFetch = (cookie: string) =>
     fetch(`${BASE}/api/project.all`, {
       method: "GET",
-      headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+      headers: { "Content-Type": "application/json", Origin: workingOrigin, Cookie: cookie },
       cache: "no-store",
     });
   let res = await doFetch(adminCookieCache ?? (await adminSignIn()));
@@ -807,7 +841,7 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
         gitUrl: d.customGitUrl ?? null,
         watchPaths: d.watchPaths ?? [],
         webhookUrl: d.refreshToken
-          ? `${WEBHOOK_BASE}/api/deploy/${d.refreshToken}`
+          ? `${HOST_ORIGIN}/api/deploy/${d.refreshToken}`
           : null,
       } satisfies Application;
     })
@@ -1033,10 +1067,11 @@ export async function setAppGithubSource(
  * Dokploy hosts the GitHub App creation + installation flow (an app-manifest
  * exchange that needs a public callback — not something the BFF can proxy).
  * Surface a deep link to that settings page so the user completes it there,
- * then returns to pick an installation. Uses ORIGIN (the host-facing URL).
+ * then returns to pick an installation. Uses HOST_ORIGIN — the link opens in
+ * the user's browser, which cannot resolve the service-DNS URL.
  */
 export function githubConnectUrl(): string {
-  return `${ORIGIN.replace(/\/$/, "")}/dashboard/settings/git-providers`;
+  return `${HOST_ORIGIN}/dashboard/settings/git-providers`;
 }
 
 export interface ApplicationPatch {
@@ -1906,7 +1941,7 @@ export async function restoreBackup(input: RestoreBackupInput): Promise<void> {
   const url = `${BASE}/api/trpc/backup.restoreBackupWithLogs?input=${inputParam}`;
   const res = await fetch(url, {
     method: "GET",
-    headers: { Accept: "text/event-stream", Origin: ORIGIN, Cookie: await userCookie() },
+    headers: { Accept: "text/event-stream", Origin: workingOrigin, Cookie: await userCookie() },
     cache: "no-store",
   });
   if (res.status === 401) redirect("/login");
