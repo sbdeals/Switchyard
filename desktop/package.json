@@ -1,7 +1,7 @@
 {
   "name": "switchyard-desktop",
   "productName": "Switchyard",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "One-click desktop app for the Switchyard + Dokploy stack",
   "author": "sbdeals",
   "private": true,
