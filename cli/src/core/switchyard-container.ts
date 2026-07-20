@@ -27,9 +27,11 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
   const bindHost = cfg.expose ? "0.0.0.0" : "127.0.0.1";
   const env: Record<string, string> = {
     DOKPLOY_URL: cfg.dokployUrlInContainer,
-    // better-auth only trusts Dokploy's host-facing origins; the service-DNS
-    // URL the container connects through is not one of them (403
-    // INVALID_ORIGIN otherwise — verified live on Docker Desktop).
+    // Host-facing origin for URLs that leave the server (deploy webhooks,
+    // browser links) — a Git host or browser can't resolve the service-DNS
+    // URL. The dashboard also keeps it as an auth-Origin fallback for older
+    // Dokploy builds, which only trust host-facing origins (current builds
+    // trust the request Host instead; the dashboard probes both).
     DOKPLOY_ORIGIN: `http://localhost:${cfg.dokployPort}`,
     DOKPLOY_EMAIL: cfg.adminEmail,
     DOKPLOY_PASSWORD: cfg.adminPassword,

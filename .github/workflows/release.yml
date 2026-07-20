@@ -105,15 +105,37 @@ jobs:
         working-directory: desktop
       - run: npm run build
         working-directory: desktop
+      # Export macOS signing env only when the cert secret exists. An
+      # empty-but-defined CSC_LINK is NOT ignored by electron-builder: it tries
+      # to read '' as a certificate file and the build dies with "not a file"
+      # (exactly how the v0.1.1 macOS leg failed). Gated to the macOS leg:
+      # CSC_LINK is cross-platform in electron-builder, and the Developer ID
+      # cert must not leak into the Windows signing path.
+      - name: Enable macOS signing when certs are configured
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        env:
+          S_CSC_LINK: ${{ secrets.CSC_LINK }}
+          S_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          S_APPLE_ID: ${{ secrets.APPLE_ID }}
+          S_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          S_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$S_CSC_LINK" ]; then
+            {
+              echo "CSC_LINK=$S_CSC_LINK"
+              echo "CSC_KEY_PASSWORD=$S_CSC_KEY_PASSWORD"
+              echo "APPLE_ID=$S_APPLE_ID"
+              echo "APPLE_APP_SPECIFIC_PASSWORD=$S_APPLE_APP_SPECIFIC_PASSWORD"
+              echo "APPLE_TEAM_ID=$S_APPLE_TEAM_ID"
+            } >> "$GITHUB_ENV"
+            echo "Signing secrets present — signed + notarized build."
+          else
+            # Also stop electron-builder from probing the runner keychain.
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "No signing secrets — building unsigned."
+          fi
       - run: npx electron-builder --publish always
         working-directory: desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Gated to the macOS leg: CSC_LINK is cross-platform in
-          # electron-builder, and the Developer ID cert must not leak into the
-          # Windows signing path.
-          CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.CSC_KEY_PASSWORD || '' }}
-          APPLE_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_TEAM_ID || '' }}
