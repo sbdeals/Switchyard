@@ -32,6 +32,21 @@ jobs:
             fi
           done
 
+  # Create the tag's release up front so both desktop legs attach assets to
+  # the SAME release object. When none exists, electron-builder's publisher
+  # creates one per leg — a race that split the v0.1.1/v0.1.2 assets across
+  # duplicate releases for the same tag (GitHub happily hosts several).
+  release:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        # `|| true`: keep re-runs idempotent once the release exists.
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes || true
+
   image:
     needs: check
     runs-on: ubuntu-latest
@@ -88,7 +103,7 @@ jobs:
   # strings, electron-builder skips signing/notarization with a warning, and
   # the build still succeeds (unsigned; macOS auto-update won't work on it).
   desktop:
-    needs: image
+    needs: [image, release]
     permissions:
       contents: write
     strategy:
