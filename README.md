@@ -34,11 +34,14 @@ Five pieces live here:
 You don't need Docker, Node.js, or any command line. The app handles
 everything.
 
-1. **Download** `Switchyard-Setup-<version>.exe` (Windows) or
-   `Switchyard-<version>.dmg` (macOS) from the
-   [latest release](https://github.com/sbdeals/Switchyard/releases/latest).
-   (No installer on the latest release yet? It ships with the next tag, or
-   build it yourself: `cd desktop && npm install && npm run dist`.)
+1. **Download the installer** — these links always fetch the newest version:
+
+   **[⬇ Download for Windows](https://github.com/sbdeals/Switchyard/releases/latest/download/Switchyard-Setup-Windows.exe)**
+   · **[⬇ Download for Mac (Apple Silicon)](https://github.com/sbdeals/Switchyard/releases/latest/download/Switchyard-Mac-AppleSilicon.dmg)**
+
+   Prefer browsing the [release page](https://github.com/sbdeals/Switchyard/releases/latest)?
+   Its notes open with a "which file do I download" table — everything else
+   under Assets is auto-updater plumbing you can ignore.
 2. **Run it.** The build isn't code-signed yet, so both OSes will warn you the
    first time:
    - **Windows:** SmartScreen may warn; click **More info → Run anyway**.

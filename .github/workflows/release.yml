@@ -3,6 +3,9 @@
 #   2. switchyard-cli@<version> to npm                  (needs NPM_TOKEN secret)
 #   3. desktop installers (NSIS + DMG/zip) + latest.yml onto the GitHub
 #      release — electron-updater's auto-update feed
+#   4. beginner-facing polish on that release: stable-named installer aliases
+#      (the README's evergreen download buttons) and a "which file do I
+#      download" intro prepended to the generated notes
 # The image job runs first so the CLI's default tag (its own version) always
 # has a matching image by the time the package is installable.
 name: Release
@@ -175,6 +178,15 @@ jobs:
   # a desktop leg failed: a broken macOS build must not strand the release as
   # an invisible draft, but a missing Windows installer fails loudly here and
   # leaves the draft for inspection.
+  #
+  # Before flipping it live, make the release page beginner-readable — the raw
+  # Assets list (blockmaps, yml feeds, mac zip) is electron-updater plumbing
+  # GitHub won't let us hide, so:
+  #   - re-upload the installers under stable names: /releases/latest/download/
+  #     of a stable name is what the README's download buttons point at, and
+  #     it keeps working from version to version
+  #   - prepend a "which file do I download" table to the generated notes so
+  #     the first thing a visitor sees answers exactly that
   publish:
     needs: [release, desktop]
     if: ${{ !cancelled() && needs.release.result == 'success' }}
@@ -182,7 +194,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Verify required assets, then publish + mark Latest
+      - name: Locate the tag's release and verify required assets
+        id: locate
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -203,6 +216,110 @@ jobs:
               exit 1
             fi
           done
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+          {
+            echo "release_id=$release_id"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+
+      # The Windows source asset is guaranteed by the check above; the mac
+      # alias is skipped when that leg didn't build (its notes row then points
+      # at the CLI instead). Deleting a stale alias first keeps re-runs clean.
+      # curl doesn't forward the Authorization header across the redirect to
+      # the asset CDN, which is exactly what that host requires.
+      - name: Re-upload installers under stable names for the README buttons
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.locate.outputs.release_id }}
+          VERSION: ${{ steps.locate.outputs.version }}
+        run: |
+          assets_json=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            --jq '[.assets[] | {id, name}]')
+          for pair in \
+            "Switchyard-Setup-$VERSION.exe=Switchyard-Setup-Windows.exe" \
+            "Switchyard-$VERSION-arm64.dmg=Switchyard-Mac-AppleSilicon.dmg"; do
+            src="${pair%%=*}" dest="${pair#*=}"
+            src_id=$(jq -r --arg n "$src" '.[] | select(.name == $n).id' <<<"$assets_json")
+            if [ -z "$src_id" ]; then
+              echo "$src not on the release (leg skipped or failed) — no $dest alias"
+              continue
+            fi
+            old_id=$(jq -r --arg n "$dest" '.[] | select(.name == $n).id' <<<"$assets_json")
+            if [ -n "$old_id" ]; then
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old_id"
+            fi
+            curl -fsSL --retry 3 -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/octet-stream" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/$src_id" \
+              -o /tmp/alias-src
+            curl -fsS --retry 3 -X POST -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @/tmp/alias-src \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$dest" \
+              >/dev/null
+            echo "aliased $src -> $dest"
+          done
+
+      - name: Prepend a "which file do I download" intro to the notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.locate.outputs.release_id }}
+        run: |
+          release_json=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
+          body=$(jq -r '.body // ""' <<<"$release_json")
+          if grep -qF 'Which file do I download?' <<<"$body"; then
+            echo "notes already carry the intro — leaving them alone"
+            exit 0
+          fi
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+          if jq -e '.assets[] | select(.name == "Switchyard-Mac-AppleSilicon.dmg")' \
+            <<<"$release_json" >/dev/null; then
+            mac_row="| 🍎 **Mac** with Apple Silicon (M1–M4) | **[Switchyard-Mac-AppleSilicon.dmg]($base/Switchyard-Mac-AppleSilicon.dmg)** |"
+          else
+            mac_row="| 🍎 **Mac** | no build this release — run \`npx switchyard-cli up\` |"
+          fi
+          {
+            cat <<INTRO
+          ## ⬇️ Which file do I download?
+
+          | Your computer | Download this one |
+          | --- | --- |
+          | 🪟 **Windows** 10 / 11 | **[Switchyard-Setup-Windows.exe]($base/Switchyard-Setup-Windows.exe)** |
+          $mac_row
+          | 🐧 **Linux** / a server | no download — run \`npx switchyard-cli up\` |
+
+          One download, one double-click. The setup wizard installs everything it needs (including Docker), and when it finishes the window **is** your dashboard, already signed in.
+
+          <details>
+          <summary>⚠️ <b>First launch shows a security warning</b> — the 10-second fix</summary>
+
+          The builds aren't code-signed yet (signing is planned):
+
+          - **Windows:** SmartScreen may warn → **More info** → **Run anyway**.
+          - **macOS 15 and later:** open the app once (it gets blocked), then **System Settings → Privacy & Security** → scroll down → **Open Anyway**.
+          - **macOS 14 and earlier:** right-click the app → **Open** → **Open**.
+          - **Intel Macs:** no installer yet — use \`npx switchyard-cli up\` in Terminal.
+          </details>
+
+          <details>
+          <summary>🤔 <b>What are all the other files under Assets?</b></summary>
+
+          Plumbing for the app's built-in auto-updater — \`latest.yml\` / \`latest-mac.yml\` (update feeds), \`*.blockmap\` (delta-download indexes), the mac \`.zip\` (what the updater actually installs), and the version-numbered originals of the installers above. You never need to download any of them yourself.
+          </details>
+
+          ---
+
+          INTRO
+            printf '%s\n' "$body"
+          } > /tmp/notes.md
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            -F "body=@/tmp/notes.md" >/dev/null
+          echo "prepended download intro to the release notes"
+
+      - name: Publish the release and mark it Latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.locate.outputs.release_id }}
+        run: |
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
             -F draft=false -f make_latest=true >/dev/null
-          echo "published release $GITHUB_REF_NAME (id $release_id) as Latest"
+          echo "published release $GITHUB_REF_NAME (id $RELEASE_ID) as Latest"
