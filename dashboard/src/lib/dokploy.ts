@@ -582,12 +582,18 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
  * Infer connections between services: if service A's env references service B's
  * appName or name (e.g. a host in a connection string), draw A -> B. Dokploy has
  * no native connection concept, so this is the closest signal available.
+ * Comment lines are ignored — template envs mention other products in prose
+ * (supabase's stock env says "…for S3/MinIO" and drew a phantom minio edge).
  */
 export function inferEdges(services: Service[]): ServiceEdge[] {
   const edges: ServiceEdge[] = [];
   const seen = new Set<string>();
   for (const a of services) {
-    const haystack = (a.env ?? "").toLowerCase();
+    const haystack = (a.env ?? "")
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n")
+      .toLowerCase();
     if (!haystack) continue;
     for (const b of services) {
       if (a.id === b.id) continue;
