@@ -23,6 +23,14 @@ import { redirect } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
+import {
+  deriveComposeRuntime,
+  deriveSwarmRuntime,
+  listRuntimeStates,
+  type ServiceRuntime,
+} from "./docker";
+
+export type { RuntimeHealth, ServiceRuntime } from "./docker";
 
 const BASE = process.env.DOKPLOY_URL ?? "http://localhost:3000";
 // Origin header for better-auth's CSRF check. Which origins Dokploy trusts
@@ -93,6 +101,13 @@ export interface ServiceBase {
   cpuLimit: string | null;
   memoryLimit: string | null;
   replicas: number | null;
+  /**
+   * Engine truth: what is actually running for this service right now.
+   * `status` above is only the last DEPLOY result — after a Docker Desktop VM
+   * reset it still reads "done" (Running) with zero containers on the engine.
+   * Undefined when the Docker socket wasn't reachable at load time.
+   */
+  runtime?: ServiceRuntime;
 }
 
 export interface Database extends ServiceBase {
@@ -2074,6 +2089,21 @@ export async function loadWorkspace(): Promise<{
   const services = [...databases, ...applications, ...compose].sort((a, b) =>
     a.name.localeCompare(b.name)
   );
+  // Attach engine truth: one `docker ps -a` sweep, grouped by the labels that
+  // tie containers to services (compose project / swarm service name — both
+  // equal the service's appName). Best-effort: with no reachable Docker
+  // socket every badge falls back to the deploy status alone.
+  try {
+    const runtime = await listRuntimeStates();
+    for (const s of services) {
+      s.runtime =
+        s.kind === "compose"
+          ? deriveComposeRuntime(runtime.compose.get(s.appName) ?? [])
+          : deriveSwarmRuntime(runtime.swarm.get(s.appName) ?? []);
+    }
+  } catch {
+    // dockerode unavailable in this deployment — leave runtime undefined.
+  }
   return { services, projects: projectsFromTree(tree) };
 }
 
