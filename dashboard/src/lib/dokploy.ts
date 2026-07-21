@@ -22,6 +22,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
+import { rewriteDataBindsToVolumes } from "./template-volumes";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
@@ -2047,6 +2048,24 @@ export async function deployTemplate(
     method: "POST",
     body: { composeId: created.composeId, isolatedDeployment: false },
   });
+  // Keep database data out of ../files host binds (= /etc/dokploy/..., which
+  // on Docker Desktop lives inside the VM and dies with VM resets): rewrite
+  // known data-dir binds to named volumes before the first deploy. Best-effort
+  // — a template the rewriter doesn't recognize deploys unchanged.
+  try {
+    const detail = await request<{ composeFile?: string | null }>(
+      `compose.one?composeId=${encodeURIComponent(created.composeId)}`
+    );
+    const rewrite = rewriteDataBindsToVolumes(detail.composeFile ?? "");
+    if (rewrite.rewritten.length > 0) {
+      await request("compose.update", {
+        method: "POST",
+        body: { composeId: created.composeId, composeFile: rewrite.compose },
+      });
+    }
+  } catch {
+    // Non-fatal: the stack still deploys with the template's stock binds.
+  }
   return created.composeId;
 }
 

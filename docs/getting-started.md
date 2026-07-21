@@ -207,6 +207,17 @@ path, but it has not yet been verified end-to-end there.
 > needed here and default Swarm networking works. Verified on Windows; assumed
 > (not yet verified) on macOS.
 
+> **Durability:** the Desktop VM's root filesystem — including Dokploy's
+> `/etc/dokploy` tree (its Traefik config and every compose stack's working
+> dir) — is rebuilt when the VM is recreated by a Docker Desktop update,
+> "Reset to factory defaults", or some restarts. Containers, images, and
+> **named volumes survive**; anything a stack binds under `/etc/dokploy` does
+> not. `switchyard up` (and the desktop app on launch) detects stacks a reset
+> broke and redeploys them from Dokploy's database, and templates deployed
+> from the Switchyard dashboard put database data in named volumes for exactly
+> this reason. If you deploy compose stacks by hand, prefer named volumes over
+> host binds for data.
+
 Clone the repo first (Switchyard runs from it later):
 
 ```powershell

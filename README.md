@@ -74,6 +74,15 @@ stack, reset everything, launch at login (on by default, so it's always warm),
 and auto-update. Closing the window keeps everything running; "Quit" does too.
 Your apps only stop if you ask for **Stop stack**.
 
+> **Docker Desktop VM resets:** Docker Desktop runs everything in a Linux VM
+> whose root filesystem — including Dokploy's `/etc/dokploy` config tree — is
+> rebuilt when the VM is recreated (Docker Desktop updates, "Reset to factory
+> defaults", some restarts). Your containers, images, and **named volumes
+> always survive**. Switchyard self-heals the rest: the next launch (or
+> `switchyard up`) detects stacks the reset broke and redeploys them, and
+> templates deployed from the dashboard keep database data in named volumes so
+> a reset can't take data with it.
+
 Source lives in [`desktop/`](desktop/). It drives the exact same converge
 logic as the CLI below, so the app and `switchyard up` can be used
 interchangeably on the same machine.
