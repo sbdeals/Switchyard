@@ -471,3 +471,210 @@ export async function readRecentLogs(appName: string, tail = 200): Promise<LogLi
       return { ts, text: m ? m[2] : line };
     });
 }
+
+// --- Postgres data browser (Data tab) ---------------------------------------
+// The Data tab runs read-only SQL against a service's Postgres by docker-exec'ing
+// `psql` inside the target container — the same dockerode socket the logs/console
+// tabs use. No external Postgres connection and no credentials from the user: we
+// connect over the container's local socket as its own POSTGRES_USER/DB (read
+// from the container env), so it inherits the image's default `trust` local auth.
+
+/** A running Postgres container backing a Dokploy service. */
+export interface PgContainer {
+  /** Stable-within-a-session key the client echoes back to pick this target
+   *  (the container name). Re-resolved to a live id on each request. */
+  key: string;
+  /** Container id (server-side only; never sent to the client). */
+  id: string;
+  /** Container name, e.g. "umami-…-db-1" or "postgres-….1.<taskid>". */
+  name: string;
+  /** Image ref, e.g. "postgres:16-alpine". */
+  image: string;
+}
+
+/**
+ * List the running Postgres containers that belong to a Dokploy service
+ * `appName`. This covers BOTH data models the Data tab supports:
+ *   - a Dokploy-managed Postgres database (its single Swarm task container,
+ *     name-prefixed by the appName, image `postgres:*`), and
+ *   - Postgres containers inside a compose stack (the stack's containers share
+ *     the compose-project name prefix; we keep the ones whose image is postgres).
+ * The Docker `name` filter is a substring match, so we re-check the prefix to
+ * avoid a coincidental match, then keep only postgres-imaged containers.
+ *
+ * Callers MUST have already validated `appName` against the user's known
+ * Dokploy services (see knownAppNames) — this helper trusts its input, exactly
+ * like runExec.
+ */
+export async function listPgContainers(appName: string): Promise<PgContainer[]> {
+  if (!appName) return [];
+  const containers = await withTimeout(
+    docker.listContainers({ all: false, filters: { name: [appName] } }),
+    DOCKER_OP_TIMEOUT_MS,
+    `Listing postgres containers for ${appName}`,
+  );
+  return containers
+    .filter((c) => c.Names.some((n) => n.replace(/^\//, "").startsWith(appName)))
+    .filter((c) => /postgres/i.test(c.Image))
+    .map((c) => {
+      const name = (c.Names[0] ?? "").replace(/^\//, "");
+      return { key: name, id: c.Id, name, image: c.Image };
+    });
+}
+
+/** The connection identity psql should use, resolved from a container's env. */
+export interface PgIdentity {
+  user: string;
+  db: string;
+  /** POSTGRES_PASSWORD if the image sets one; passed via PGPASSWORD so
+   *  password-auth images work too. Undefined for trust-only images. */
+  password?: string;
+}
+
+/** Read POSTGRES_USER / POSTGRES_DB / POSTGRES_PASSWORD from a container's env. */
+export async function inspectPgIdentity(id: string): Promise<PgIdentity> {
+  const info = await withTimeout(
+    docker.getContainer(id).inspect(),
+    DOCKER_OP_TIMEOUT_MS,
+    `Inspecting postgres env for ${id}`,
+  );
+  const env = info.Config?.Env ?? [];
+  const read = (k: string): string | undefined => {
+    const hit = env.find((e) => e.startsWith(`${k}=`));
+    return hit ? hit.slice(k.length + 1) : undefined;
+  };
+  // Postgres image conventions: POSTGRES_USER defaults to "postgres", and when
+  // POSTGRES_DB is unset the default database is named after the user.
+  const user = read("POSTGRES_USER") || "postgres";
+  const db = read("POSTGRES_DB") || user;
+  const password = read("POSTGRES_PASSWORD") || undefined;
+  return { user, db, password };
+}
+
+export interface PsqlResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  truncated: boolean;
+}
+
+/**
+ * Run one psql invocation inside a Postgres container and capture its output.
+ *
+ * The SQL is delivered over the exec's **stdin**, never interpolated into argv
+ * or a shell — `Cmd` is a fixed `psql` argument vector, so no query text can be
+ * reinterpreted as arguments or shell metacharacters. psql runs in `--csv` mode
+ * with `ON_ERROR_STOP=1` (so a SQL error exits non-zero) and a distinctive null
+ * marker so the parser can tell SQL NULL from an empty string. `-w` prevents a
+ * password prompt from silently consuming the SQL on stdin; PGPASSWORD (from the
+ * container's own env) covers password-auth images.
+ *
+ * We DON'T half-close stdin to signal end-of-input: over a Windows named pipe
+ * (Docker Desktop) the FIN races the data flush, so psql can see an empty stdin
+ * and exit 0 with no output. Instead we terminate the input with `\n;\n\q\n`:
+ * the `;` completes the trailing statement (so a missing final semicolon still
+ * runs) and psql's `\q` makes it exit cleanly. An unterminated string/comment
+ * therefore never reaches `\q`; that case is caught by the timeout below, which
+ * leaves ExitCode null so the caller reports it as "did not complete".
+ *
+ * Returns null when the container id no longer resolves to a running container.
+ */
+export async function runPsqlCsv(
+  target: { id: string; identity: PgIdentity },
+  sql: string,
+  opts: { timeoutMs?: number; maxBytes?: number; nullMarker: string },
+): Promise<PsqlResult | null> {
+  const { timeoutMs = 20_000, maxBytes = 5_000_000, nullMarker } = opts;
+  const container = docker.getContainer(target.id);
+  const { user, db, password } = target.identity;
+
+  const exec = await withTimeout(
+    container.exec({
+      // Fixed argv. The SQL is NOT here — it is written to stdin below.
+      Cmd: [
+        "psql",
+        "-U",
+        user,
+        "-d",
+        db,
+        "--csv",
+        "-w",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-P",
+        `null=${nullMarker}`,
+      ],
+      Env: password ? [`PGPASSWORD=${password}`] : [],
+      AttachStdin: true,
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
+    }),
+    DOCKER_OP_TIMEOUT_MS,
+    `Creating psql exec in ${target.id}`,
+  );
+  const stream: Duplex = await withTimeout(
+    exec.start({ hijack: true, stdin: true }),
+    DOCKER_OP_TIMEOUT_MS,
+    `Starting psql exec in ${target.id}`,
+  );
+
+  const { PassThrough } = await import("node:stream");
+  const outS = new PassThrough();
+  const errS = new PassThrough();
+  container.modem.demuxStream(stream, outS, errS);
+
+  let stdout = "";
+  let stderr = "";
+  let total = 0;
+  let truncated = false;
+  const collect = (s: NodeJS.ReadableStream, append: (t: string) => void) =>
+    s.on("data", (c: Buffer) => {
+      if (total >= maxBytes) {
+        truncated = true;
+        return;
+      }
+      total += c.length;
+      append(c.toString("utf8"));
+    });
+  collect(outS, (t) => (stdout += t));
+  collect(errS, (t) => (stderr += t));
+
+  // Send the SQL followed by a terminator + `\q` (see the doc comment for why we
+  // don't half-close). psql runs the statement(s), then quits and closes the
+  // exec stream, which resolves the wait below.
+  stream.write(Buffer.from(`${sql}\n;\n\\q\n`, "utf8"));
+
+  await new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      truncated = true;
+      try {
+        stream.destroy();
+      } catch {
+        /* ignore */
+      }
+      finish();
+    }, timeoutMs);
+    stream.on("end", finish);
+    stream.on("close", finish);
+    stream.on("error", finish);
+  });
+
+  let exitCode: number | null = null;
+  try {
+    exitCode =
+      (await withTimeout(exec.inspect(), DOCKER_OP_TIMEOUT_MS, `Inspecting psql exec`)).ExitCode ??
+      null;
+  } catch {
+    /* exec/container already gone, or inspect timed out */
+  }
+
+  return { stdout, stderr, exitCode, truncated };
+}
