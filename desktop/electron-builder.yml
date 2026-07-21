@@ -1,9 +1,11 @@
-# Packaging for the Switchyard desktop app. Windows is unsigned for now (shows
-# SmartScreen on first run). macOS is signed + notarized in CI when the
-# Developer ID secrets are present (see .github/workflows/release.yml and
-# desktop/README.md); without them electron-builder logs a warning and falls
-# back to an unsigned build, so forks and local `npm run dist` still work —
-# but macOS auto-update only functions on the signed builds.
+# Packaging for the Switchyard desktop app. Both OS legs sign in CI when the
+# corresponding secrets are present (see .github/workflows/release.yml and
+# desktop/README.md): macOS via Developer ID + notarization, Windows via
+# Azure Trusted Signing (win.azureSignOptions flags injected by the workflow)
+# or a classic PFX (WIN_CSC_LINK). Without secrets electron-builder logs a
+# warning and falls back to unsigned builds, so forks and local
+# `npm run dist` still work — but macOS auto-update needs signed builds, and
+# unsigned Windows installers show SmartScreen's "Windows protected your PC".
 appId: dev.switchyard.desktop
 productName: Switchyard
 directories:

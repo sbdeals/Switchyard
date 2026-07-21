@@ -167,7 +167,60 @@ jobs:
             echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
             echo "No signing secrets — building unsigned."
           fi
-      - run: npx electron-builder --publish always
+      # Windows code signing — the SmartScreen "Windows protected your PC"
+      # interstitial exists because the installer is unsigned. Two identities
+      # are supported, activated purely by secrets (absent secrets = unsigned
+      # build, exactly as before — forks and cert-less runs stay green):
+      #   A. Azure Trusted Signing (recommended: ~$10/month, SmartScreen trusts
+      #      it immediately): AZURE_TENANT_ID / AZURE_CLIENT_ID /
+      #      AZURE_CLIENT_SECRET + AZURE_SIGNING_ENDPOINT /
+      #      AZURE_SIGNING_ACCOUNT / AZURE_CERT_PROFILE. electron-builder's
+      #      win.azureSignOptions path drives the Invoke-TrustedSigning module,
+      #      installed here on demand (values must not contain spaces — they're
+      #      passed as -c flags).
+      #   B. Classic PFX (OV certificate): WIN_CSC_LINK (base64 .pfx) +
+      #      WIN_CSC_KEY_PASSWORD, picked up natively by electron-builder.
+      #      SmartScreen reputation then builds over time per certificate.
+      # See desktop/README.md for the one-time setup.
+      - name: Enable Windows signing when certs are configured
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          S_AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          S_AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          S_AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          S_AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          S_AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          S_AZURE_CERT_PROFILE: ${{ secrets.AZURE_CERT_PROFILE }}
+          S_WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          S_WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          if ($env:S_AZURE_TENANT_ID -and $env:S_AZURE_SIGNING_ENDPOINT -and $env:S_AZURE_SIGNING_ACCOUNT -and $env:S_AZURE_CERT_PROFILE) {
+            # The TrustedSigning module is what electron-builder invokes; the
+            # NuGet provider install first avoids the runner's interactive
+            # prompt (electron-builder#8828).
+            Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
+            Install-Module -Name TrustedSigning -Force -Scope CurrentUser -Repository PSGallery
+            @(
+              "AZURE_TENANT_ID=$env:S_AZURE_TENANT_ID"
+              "AZURE_CLIENT_ID=$env:S_AZURE_CLIENT_ID"
+              "AZURE_CLIENT_SECRET=$env:S_AZURE_CLIENT_SECRET"
+              "EB_WIN_SIGN_ARGS=-c.win.azureSignOptions.endpoint=$env:S_AZURE_SIGNING_ENDPOINT -c.win.azureSignOptions.codeSigningAccountName=$env:S_AZURE_SIGNING_ACCOUNT -c.win.azureSignOptions.certificateProfileName=$env:S_AZURE_CERT_PROFILE"
+            ) | Add-Content $env:GITHUB_ENV
+            Write-Host "Azure Trusted Signing secrets present - signed Windows build."
+          } elseif ($env:S_WIN_CSC_LINK) {
+            @(
+              "WIN_CSC_LINK=$env:S_WIN_CSC_LINK"
+              "WIN_CSC_KEY_PASSWORD=$env:S_WIN_CSC_KEY_PASSWORD"
+            ) | Add-Content $env:GITHUB_ENV
+            Write-Host "PFX signing secrets present - signed Windows build."
+          } else {
+            Write-Host "No Windows signing secrets - building unsigned (SmartScreen warning stays)."
+          }
+      # bash on both legs so the optional $EB_WIN_SIGN_ARGS expansion is
+      # uniform (empty and harmless on macOS / unsigned Windows runs).
+      - run: npx electron-builder --publish always $EB_WIN_SIGN_ARGS
+        shell: bash
         working-directory: desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

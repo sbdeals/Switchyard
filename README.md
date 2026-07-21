@@ -51,8 +51,11 @@ everything.
      **Open Anyway**.
    - **macOS 14 and earlier:** right-click the app → **Open** → **Open**.
 
-   These warnings disappear once the builds are signed and notarized (planned;
-   tracked separately).
+   These warnings disappear once the builds are signed — the release pipeline
+   is already wired for it on both OSes and activates the moment the signing
+   secrets exist (Windows: Azure Trusted Signing or a PFX cert; macOS:
+   Developer ID + notarization). See
+   [`desktop/README.md`](desktop/README.md) for the one-time setup.
 3. **First run only:** if Docker Desktop isn't installed, a setup wizard offers
    to download and install it for you. Click **Install Docker Desktop for
    me**, approve the administrator prompt, and wait. (Docker is the engine
