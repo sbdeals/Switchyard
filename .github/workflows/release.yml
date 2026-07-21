@@ -55,8 +55,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # NB: gh api's --jq does not support jq's --arg — interpolate the tag
+          # (a plain vX.Y.Z string) directly into the program.
           existing=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq --arg t "$GITHUB_REF_NAME" '[.[] | select(.tag_name == $t)] | length')
+            --jq "[.[] | select(.tag_name == \"$GITHUB_REF_NAME\")] | length")
           if [ "$existing" -gt 0 ]; then
             echo "release for $GITHUB_REF_NAME already exists — reusing it"
           else
@@ -104,7 +106,16 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - run: npm ci
         working-directory: cli
-      - run: npm publish --provenance --access public
+      # Idempotent so a tag re-run (after a failure elsewhere in the pipeline)
+      # doesn't die on "cannot publish over existing version".
+      - name: Publish (skip when the version is already on npm)
+        run: |
+          ver=$(node -p "require('./package.json').version")
+          if npm view "switchyard-cli@$ver" version >/dev/null 2>&1; then
+            echo "switchyard-cli@$ver is already on npm — skipping publish (re-run)."
+          else
+            npm publish --provenance --access public
+          fi
         working-directory: cli
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -316,8 +327,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # gh api's --jq has no --arg support; the tag is a plain vX.Y.Z string.
           matches=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq --arg t "$GITHUB_REF_NAME" '[.[] | select(.tag_name == $t)] | map(.id)')
+            --jq "[.[] | select(.tag_name == \"$GITHUB_REF_NAME\")] | map(.id)")
           count=$(jq 'length' <<<"$matches")
           if [ "$count" -ne 1 ]; then
             echo "::error::expected exactly 1 release for $GITHUB_REF_NAME, found $count — refusing to publish"
