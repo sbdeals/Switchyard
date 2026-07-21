@@ -1,6 +1,7 @@
 {
   "name": "switchyard-mcp",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "description": "Model Context Protocol server exposing Dokploy operations so Claude Code can drive Switchyard without dashboard clicks",
   "type": "module",

@@ -53,8 +53,8 @@ everything.
 
    These warnings disappear once the builds are signed — the release pipeline
    is already wired for it on both OSes and activates the moment the signing
-   secrets exist (Windows: Azure Trusted Signing or a PFX cert; macOS:
-   Developer ID + notarization). See
+   secrets exist (Windows: SignPath's free open-source signing, Azure Trusted
+   Signing, or a PFX cert; macOS: Developer ID + notarization). See
    [`desktop/README.md`](desktop/README.md) for the one-time setup.
 3. **First run only:** if Docker Desktop isn't installed, a setup wizard offers
    to download and install it for you. Click **Install Docker Desktop for
@@ -252,3 +252,8 @@ can't route service VIPs). Details and symptoms live in
 - [ ] Per-deployment build logs in the dashboard
 - [ ] TLS for the dashboard itself (today: localhost default / HTTPS proxy for
       exposure); real Let's Encrypt custom domains need a Linux host on 80/443
+
+## License
+
+[MIT](LICENSE) — free for any use; SignPath Foundation signs the Windows
+builds under their free open-source program.

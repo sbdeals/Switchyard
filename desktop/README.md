@@ -99,12 +99,40 @@ One-time setup (needs a paid Apple Developer Program membership):
 
 Unsigned installers trigger SmartScreen's "Windows protected your PC" (More
 info → Run anyway) and browser "not commonly downloaded" warnings. The
-release workflow signs the Windows leg when secrets for **either** identity
-are present; with none it builds unsigned exactly as before.
+release workflow signs the Windows leg when secrets for **any** of the three
+identities below are present (checked in this order); with none it builds
+unsigned exactly as before.
 
-**Option A — Azure Trusted Signing (recommended).** ~$10/month, and
-SmartScreen trusts it immediately (no reputation-building period). One-time
-setup:
+**Option A — SignPath Foundation (recommended: FREE for open source).**
+SignPath signs OSS builds at no cost on their HSM; the publisher on the
+certificate reads "SignPath Foundation" and they vouch that the binary was
+built from this repo's CI. Switchyard's MIT license satisfies their
+OSI-license requirement. One-time setup:
+
+1. Apply at [signpath.org](https://signpath.org) with the repo URL (they
+   review that the project is real, released, and actively maintained).
+   All maintainers need MFA enabled on GitHub and SignPath.
+2. After approval, in the SignPath app create the **project** (artifact
+   configuration: a single Windows PE executable) and a **release-signing
+   policy**. Note the organization id and both slugs; create a CI API token.
+3. Add repository secrets:
+
+| Repo secret | What it is |
+| --- | --- |
+| `SIGNPATH_API_TOKEN` | CI user API token |
+| `SIGNPATH_ORG_ID` | Organization id (GUID) |
+| `SIGNPATH_PROJECT_SLUG` | Project slug |
+| `SIGNPATH_POLICY_SLUG` | Signing policy slug (e.g. `release-signing`) |
+
+The workflow then builds the exe unpublished, submits it to SignPath, waits
+for the signature (release policies typically require a one-click approval
+in the SignPath UI — the job pauses until then), regenerates the
+blockmap + `latest.yml` hashes the signing invalidated, and uploads all
+three to the draft release.
+
+**Option B — Azure Trusted Signing.** ~$10/month, SmartScreen trusts it
+immediately (no reputation-building period), publisher shows your verified
+name. One-time setup:
 
 1. In the [Azure portal](https://portal.azure.com), create a **Trusted
    Signing account** (note its region **endpoint**, e.g.
@@ -125,9 +153,10 @@ setup:
 | `AZURE_SIGNING_ACCOUNT` | Trusted Signing account name |
 | `AZURE_CERT_PROFILE` | Certificate profile name |
 
-**Option B — classic PFX certificate** (e.g. an OV cert; Certum sells a
-discounted open-source one). SmartScreen keeps warning until the certificate
-accumulates reputation, so expect weeks of "Run anyway" even signed:
+**Option C — classic PFX certificate** (e.g. an OV cert; Certum sells a
+discounted open-source one, ~€69/year). SmartScreen keeps warning until the
+certificate accumulates reputation, so expect weeks of "Run anyway" even
+signed:
 
 | Repo secret | What it is |
 | --- | --- |
