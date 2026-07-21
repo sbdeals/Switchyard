@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
-import { serviceAccent, serviceLabel } from "@/lib/service-meta";
+import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -300,10 +300,13 @@ function Header({
             <h2 id={titleId} className="font-semibold">
               {service.name}
             </h2>
-            <StatusBadge status={service.status} />
+            <StatusBadge status={service.status} runtime={service.runtime} />
           </div>
           <div className="text-xs text-[var(--color-fg-muted)]">
             {serviceLabel(service)} · {service.projectName} / {service.environmentName}
+          </div>
+          <div className="text-[11px] text-[var(--color-fg-subtle)]">
+            Last deploy: {LAST_DEPLOY_LABEL[service.status] ?? service.status}
           </div>
         </div>
       </div>

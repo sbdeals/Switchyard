@@ -4,7 +4,7 @@ import { memo, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { Database as DatabaseIcon, Box, Layers } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
-import { STATUS_META, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
+import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 
 export interface ServiceNodeData extends Record<string, unknown> {
   service: Service;
@@ -16,13 +16,13 @@ export interface ServiceNodeData extends Record<string, unknown> {
 function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData }) {
   const { service, logo, onSelect } = data;
   const accent = serviceAccent(service);
-  const status = STATUS_META[service.status] ?? STATUS_META.idle;
+  const status = resolveServiceDisplay(service.status, service.runtime);
 
   return (
     <div
       role="button"
       tabIndex={0}
-      aria-label={`${service.name}, ${serviceSubtitle(service)}, ${status.label} — open details`}
+      aria-label={`${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""} — open details`}
       onClick={() => onSelect(service)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -50,11 +50,23 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
             {service.projectName} / {service.environmentName}
           </div>
         </div>
-        <span
-          className={`size-2 shrink-0 rounded-full ${status.pulse ? "animate-pulse" : ""}`}
-          style={{ backgroundColor: status.color }}
-          title={status.label}
-        />
+        {status.attention ? (
+          // Engine truth demands attention — a visible text badge, not just a
+          // colored dot (WCAG: never color alone for state).
+          <span
+            className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+            style={{ backgroundColor: status.soft, color: status.color }}
+            title={status.detail ?? status.label}
+          >
+            {status.label}
+          </span>
+        ) : (
+          <span
+            className={`size-2 shrink-0 rounded-full ${status.pulse ? "animate-pulse" : ""}`}
+            style={{ backgroundColor: status.color }}
+            title={status.label}
+          />
+        )}
       </div>
     </div>
   );

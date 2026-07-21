@@ -55,6 +55,86 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
+// --- runtime truth ----------------------------------------------------------
+// Dokploy's applicationStatus/composeStatus is the LAST DEPLOY result — it
+// stays "done" (shown as Running) even when the containers no longer exist
+// (observed after a Docker Desktop VM reset). These helpers read what is
+// actually running from the engine so the UI can tell the truth.
+
+export type RuntimeHealth = "running" | "degraded" | "not-running";
+
+/** What's actually on the engine for one service. */
+export interface ServiceRuntime {
+  health: RuntimeHealth;
+  /** Containers currently in the "running" state. */
+  running: number;
+  /** Containers that exist for the service (any state). */
+  total: number;
+}
+
+/** Container states grouped by owner, from one engine sweep. */
+export interface RuntimeStates {
+  /** com.docker.compose.project label -> container states. */
+  compose: Map<string, string[]>;
+  /** com.docker.swarm.service.name label -> container states. */
+  swarm: Map<string, string[]>;
+}
+
+/**
+ * One `docker ps -a` over the API, grouped by the labels that tie containers
+ * to Dokploy services: compose stacks carry the compose project label
+ * (project name = the stack's appName), Swarm tasks carry the service-name
+ * label (= the service's appName).
+ */
+export async function listRuntimeStates(): Promise<RuntimeStates> {
+  const containers = await withTimeout(
+    docker.listContainers({ all: true }),
+    DOCKER_OP_TIMEOUT_MS,
+    "runtime sweep",
+  );
+  const compose = new Map<string, string[]>();
+  const swarm = new Map<string, string[]>();
+  const push = (map: Map<string, string[]>, key: string, state: string) => {
+    const list = map.get(key);
+    if (list) list.push(state);
+    else map.set(key, [state]);
+  };
+  for (const c of containers) {
+    const labels = c.Labels ?? {};
+    const state = (c.State ?? "").toLowerCase();
+    const project = labels["com.docker.compose.project"];
+    if (project) push(compose, project, state);
+    const swarmService = labels["com.docker.swarm.service.name"];
+    if (swarmService) push(swarm, swarmService, state);
+  }
+  return { compose, swarm };
+}
+
+/**
+ * Collapse a compose stack's container states into a health verdict.
+ * "created" or "restarting" containers mean the stack is wedged mid-start
+ * (the Docker-Desktop-VM-reset signature) — degraded, not running. A one-shot
+ * helper exiting beside running siblings is normal and stays "running".
+ */
+export function deriveComposeRuntime(states: string[]): ServiceRuntime {
+  const total = states.length;
+  const running = states.filter((s) => s === "running").length;
+  const wedged = states.some((s) => s === "created" || s === "restarting" || s === "dead");
+  if (total === 0 || running === 0) return { health: "not-running", running, total };
+  if (wedged) return { health: "degraded", running, total };
+  return { health: "running", running, total };
+}
+
+/**
+ * Swarm keeps exited task containers around after restarts/updates, so for
+ * Swarm services only running tasks count; leftovers are not "degraded".
+ */
+export function deriveSwarmRuntime(states: string[]): ServiceRuntime {
+  const running = states.filter((s) => s === "running").length;
+  if (running > 0) return { health: "running", running, total: running };
+  return { health: "not-running", running: 0, total: states.length };
+}
+
 /**
  * Demultiplex Docker's log/exec stream format from a fully-buffered response,
  * synchronously. The stream is a sequence of frames:
