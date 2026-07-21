@@ -1,6 +1,7 @@
 {
   "name": "switchyard-cli",
   "version": "0.1.2",
+  "license": "MIT",
   "description": "One-command install & management for the Dokploy + Switchyard stack",
   "type": "module",
   "bin": {

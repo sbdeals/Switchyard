@@ -168,24 +168,30 @@ jobs:
             echo "No signing secrets — building unsigned."
           fi
       # Windows code signing — the SmartScreen "Windows protected your PC"
-      # interstitial exists because the installer is unsigned. Two identities
-      # are supported, activated purely by secrets (absent secrets = unsigned
-      # build, exactly as before — forks and cert-less runs stay green):
-      #   A. Azure Trusted Signing (recommended: ~$10/month, SmartScreen trusts
-      #      it immediately): AZURE_TENANT_ID / AZURE_CLIENT_ID /
-      #      AZURE_CLIENT_SECRET + AZURE_SIGNING_ENDPOINT /
-      #      AZURE_SIGNING_ACCOUNT / AZURE_CERT_PROFILE. electron-builder's
-      #      win.azureSignOptions path drives the Invoke-TrustedSigning module,
-      #      installed here on demand (values must not contain spaces — they're
-      #      passed as -c flags).
-      #   B. Classic PFX (OV certificate): WIN_CSC_LINK (base64 .pfx) +
+      # interstitial exists because the installer is unsigned. Three identities
+      # are supported, activated purely by secrets and checked in this order
+      # (absent secrets = unsigned build, exactly as before — forks and
+      # cert-less runs stay green). See desktop/README.md for setup:
+      #   A. SignPath Foundation — FREE for open source. The exe is built
+      #      unpublished, signed on SignPath's HSM by the post-build steps
+      #      below, its updater metadata rebuilt, then uploaded. Secrets:
+      #      SIGNPATH_API_TOKEN + SIGNPATH_ORG_ID (+ project/policy slugs
+      #      consumed by the signing step).
+      #   B. Azure Trusted Signing (~$10/month, immediate SmartScreen trust):
+      #      AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET +
+      #      AZURE_SIGNING_ENDPOINT / AZURE_SIGNING_ACCOUNT /
+      #      AZURE_CERT_PROFILE. electron-builder's win.azureSignOptions path
+      #      drives the Invoke-TrustedSigning module, installed on demand
+      #      (values must not contain spaces — they're passed as -c flags).
+      #   C. Classic PFX (OV certificate): WIN_CSC_LINK (base64 .pfx) +
       #      WIN_CSC_KEY_PASSWORD, picked up natively by electron-builder.
       #      SmartScreen reputation then builds over time per certificate.
-      # See desktop/README.md for the one-time setup.
       - name: Enable Windows signing when certs are configured
         if: matrix.os == 'windows-latest'
         shell: pwsh
         env:
+          S_SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          S_SIGNPATH_ORG_ID: ${{ secrets.SIGNPATH_ORG_ID }}
           S_AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           S_AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           S_AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
@@ -195,7 +201,13 @@ jobs:
           S_WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           S_WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
-          if ($env:S_AZURE_TENANT_ID -and $env:S_AZURE_SIGNING_ENDPOINT -and $env:S_AZURE_SIGNING_ACCOUNT -and $env:S_AZURE_CERT_PROFILE) {
+          if ($env:S_SIGNPATH_API_TOKEN -and $env:S_SIGNPATH_ORG_ID) {
+            @(
+              "SIGNPATH_ACTIVE=true"
+              "EB_PUBLISH=never"
+            ) | Add-Content $env:GITHUB_ENV
+            Write-Host "SignPath secrets present - signing post-build via SignPath (free OSS signing)."
+          } elseif ($env:S_AZURE_TENANT_ID -and $env:S_AZURE_SIGNING_ENDPOINT -and $env:S_AZURE_SIGNING_ACCOUNT -and $env:S_AZURE_CERT_PROFILE) {
             # The TrustedSigning module is what electron-builder invokes; the
             # NuGet provider install first avoids the runner's interactive
             # prompt (electron-builder#8828).
@@ -217,13 +229,65 @@ jobs:
           } else {
             Write-Host "No Windows signing secrets - building unsigned (SmartScreen warning stays)."
           }
-      # bash on both legs so the optional $EB_WIN_SIGN_ARGS expansion is
-      # uniform (empty and harmless on macOS / unsigned Windows runs).
-      - run: npx electron-builder --publish always $EB_WIN_SIGN_ARGS
+      # bash on both legs so the optional $EB_WIN_SIGN_ARGS / $EB_PUBLISH
+      # expansions are uniform (absent and harmless on macOS / unsigned runs).
+      # SignPath runs set EB_PUBLISH=never: the exe must be signed BEFORE it
+      # (and its updater metadata) reach the release.
+      - run: npx electron-builder --publish "${EB_PUBLISH:-always}" $EB_WIN_SIGN_ARGS
         shell: bash
         working-directory: desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- SignPath Foundation free OSS signing (active only with secrets) ---
+      # Ship the unpublished exe to SignPath's HSM, then rebuild what signing
+      # invalidated — the differential-update blockmap and latest.yml's
+      # sha512/size — and upload all three to the tag's draft release (created
+      # by the `release` job, published by `publish` after verification).
+      - name: Upload unsigned installer for SignPath
+        if: matrix.os == 'windows-latest' && env.SIGNPATH_ACTIVE == 'true'
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-unsigned-installer
+          path: desktop/release/Switchyard-Setup-*.exe
+          if-no-files-found: error
+      - name: Sign the installer via SignPath
+        if: matrix.os == 'windows-latest' && env.SIGNPATH_ACTIVE == 'true'
+        uses: signpath/github-action-submit-signing-request@v1.2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: desktop/release-signed
+      - name: Publish signed installer + rebuilt update metadata
+        if: matrix.os == 'windows-latest' && env.SIGNPATH_ACTIVE == 'true'
+        shell: bash
+        working-directory: desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          exe="Switchyard-Setup-$version.exe"
+          mv -f "release-signed/$exe" "release/$exe"
+          ./node_modules/.bin/app-builder blockmap --input "release/$exe" --output "release/$exe.blockmap"
+          sha=$(node -e "const c=require('crypto'),f=require('fs');console.log(c.createHash('sha512').update(f.readFileSync('release/$exe')).digest('base64'))")
+          size=$(node -e "console.log(require('fs').statSync('release/$exe').size)")
+          # latest.yml references only this one file, so global replaces are exact.
+          node -e "
+            const fs = require('fs');
+            const file = 'release/latest.yml';
+            let y = fs.readFileSync(file, 'utf8');
+            y = y.replace(/sha512: .*/g, 'sha512: ' + process.argv[1]);
+            y = y.replace(/size: .*/g, 'size: ' + process.argv[2]);
+            fs.writeFileSync(file, y);
+          " "$sha" "$size"
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber \
+            "release/$exe" "release/$exe.blockmap" "release/latest.yml"
+          echo "signed installer + rebuilt updater feed uploaded"
 
   # Flip the draft live once the assets a Windows user needs are actually on
   # it, and mark it the repo's Latest release (so /releases/latest — the README
