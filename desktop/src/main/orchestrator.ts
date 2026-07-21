@@ -14,6 +14,7 @@ import type { SwitchyardConfig } from "../../../cli/src/core/config.js";
 import { loadConfig, saveConfig } from "../../../cli/src/core/config.js";
 import { docker, dockerAvailability, dockerOk } from "../../../cli/src/core/docker.js";
 import { signInProbe, signUp, waitHttpReady } from "../../../cli/src/core/dokploy-api.js";
+import { repairComposeStacks } from "../../../cli/src/core/repair.js";
 import { UserError } from "../../../cli/src/core/errors.js";
 import { LOCAL_INGRESS_CONTAINER } from "../../../cli/src/core/local-ingress.js";
 import { nextFreePort, portFree } from "../../../cli/src/core/ports.js";
@@ -262,6 +263,19 @@ export class Orchestrator extends EventEmitter {
       await this.ensureAdmin(cfg, base);
       saveConfig(cfg, loaded.path);
       this.setStep("admin", "done", cfg.adminEmail);
+
+      // Self-heal stacks wedged by a Docker Desktop VM reset (mirrors
+      // up.ts — keep the two flows in sync). Never fatal; a no-op when
+      // everything is running.
+      try {
+        const repair = await repairComposeStacks(cfg, (m) => log(m));
+        if (repair.repaired.length > 0) {
+          log(`Re-deployed ${repair.repaired.length} stack(s) broken by an engine reset: ${repair.repaired.join(", ")}.`);
+        }
+        for (const failure of repair.failures) log(`Stack repair: ${failure}`);
+      } catch (e) {
+        log(`Stack repair skipped: ${e instanceof Error ? e.message : e}`);
+      }
 
       this.setStep("dashboard", "active");
       const result = await ensureSwitchyard(cfg, CLI_VERSION, (m) => log(m));

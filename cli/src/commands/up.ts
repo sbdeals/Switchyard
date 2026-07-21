@@ -5,6 +5,7 @@ import { signInProbe, signUp, waitHttpReady } from "../core/dokploy-api.js";
 import { UserError } from "../core/errors.js";
 import { nextFreePort, portFree } from "../core/ports.js";
 import { askConfirm, askPassword, askText, p, pc } from "../core/prompts.js";
+import { repairComposeStacks } from "../core/repair.js";
 import { serviceExists, servicePublishedPort } from "../core/swarm.js";
 import {
   CONTAINER_NAME,
@@ -200,6 +201,23 @@ export async function upCommand(flags: UpFlags): Promise<void> {
 
   // ---- admin account -----------------------------------------------------
   await ensureAdmin(cfg, base, interactive);
+
+  // ---- self-heal after Docker Desktop VM resets ---------------------------
+  // The Desktop VM's root filesystem (and /etc/dokploy with it) doesn't
+  // survive VM recreation; previously-deployed stacks come back with their
+  // containers gone or wedged on missing bind sources. Detect and redeploy
+  // them — never fatal, and a no-op when everything is running.
+  if (cfg.platform === "docker-desktop") {
+    try {
+      const repair = await repairComposeStacks(cfg, log);
+      if (repair.repaired.length > 0) {
+        ok(`Re-deployed ${repair.repaired.length} stack(s) broken by an engine reset: ${repair.repaired.join(", ")}.`);
+      }
+      for (const failure of repair.failures) warn(`Stack repair: ${failure}`);
+    } catch (e) {
+      warn(`Stack repair skipped: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
 
   // ---- auto-URL: detect the host IP so app deploys get a public URL --------
   // Linux only (Traefik is managed there); Docker Desktop leaves hostIp unset,

@@ -51,6 +51,58 @@ export async function signInProbe(base: string, email: string, password: string)
   }
 }
 
+/**
+ * Sign in and return the session cookie header value ("name=value; ..."), or
+ * null when the credentials are rejected or Dokploy is unreachable. Undici
+ * folds multiple Set-Cookie headers into one comma-joined string; split on
+ * commas that start a new cookie-pair (Expires dates also contain commas).
+ */
+export async function signInCookie(
+  base: string,
+  email: string,
+  password: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${base}/api/auth/sign-in/email`, {
+      method: "POST",
+      headers: headers(base),
+      body: JSON.stringify({ email, password }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return null;
+    const setCookie = res.headers.get("set-cookie");
+    if (!setCookie) return null;
+    return setCookie
+      .split(/,(?=\s*[^\s=;,]+=)/)
+      .map((c) => (c.split(";")[0] ?? "").trim())
+      .filter(Boolean)
+      .join("; ");
+  } catch {
+    return null;
+  }
+}
+
+/** Authenticated JSON request against Dokploy's REST-mapped API procedures. */
+export async function apiRequest<T = unknown>(
+  base: string,
+  cookie: string,
+  path: string,
+  init: { method?: "GET" | "POST"; body?: unknown } = {},
+): Promise<T> {
+  const res = await fetch(`${base}/api/${path}`, {
+    method: init.method ?? "GET",
+    headers: { ...headers(base), Cookie: cookie },
+    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) {
+    const body = (await res.text()).slice(0, 200);
+    throw new Error(`Dokploy ${path} failed (${res.status}): ${body}`);
+  }
+  const text = await res.text();
+  return (text ? JSON.parse(text) : null) as T;
+}
+
 export type SignUpResult =
   | { status: "created" }
   | { status: "rejected"; message: string }
