@@ -94,3 +94,47 @@ One-time setup (needs a paid Apple Developer Program membership):
 4. Add all five as GitHub **repository secrets** (Settings → Secrets and
    variables → Actions). The next `vX.Y.Z` tag produces a signed, notarized
    DMG/zip, and mac auto-update starts working from that release onward.
+
+### Windows code signing (kills the SmartScreen warning)
+
+Unsigned installers trigger SmartScreen's "Windows protected your PC" (More
+info → Run anyway) and browser "not commonly downloaded" warnings. The
+release workflow signs the Windows leg when secrets for **either** identity
+are present; with none it builds unsigned exactly as before.
+
+**Option A — Azure Trusted Signing (recommended).** ~$10/month, and
+SmartScreen trusts it immediately (no reputation-building period). One-time
+setup:
+
+1. In the [Azure portal](https://portal.azure.com), create a **Trusted
+   Signing account** (note its region **endpoint**, e.g.
+   `https://eus.codesigning.azure.net`), complete **identity validation**
+   (individual or organization), and create a **certificate profile**
+   (Public Trust).
+2. Create an app registration (service principal) with a client secret and
+   give it the **Trusted Signing Certificate Profile Signer** role on the
+   account.
+3. Add repository secrets — none of the values may contain spaces:
+
+| Repo secret | What it is |
+| --- | --- |
+| `AZURE_TENANT_ID` | Entra tenant id of the service principal |
+| `AZURE_CLIENT_ID` | App registration (client) id |
+| `AZURE_CLIENT_SECRET` | Client secret value |
+| `AZURE_SIGNING_ENDPOINT` | Trusted Signing regional endpoint URI |
+| `AZURE_SIGNING_ACCOUNT` | Trusted Signing account name |
+| `AZURE_CERT_PROFILE` | Certificate profile name |
+
+**Option B — classic PFX certificate** (e.g. an OV cert; Certum sells a
+discounted open-source one). SmartScreen keeps warning until the certificate
+accumulates reputation, so expect weeks of "Run anyway" even signed:
+
+| Repo secret | What it is |
+| --- | --- |
+| `WIN_CSC_LINK` | Base64 of the certificate as a `.pfx` |
+| `WIN_CSC_KEY_PASSWORD` | The `.pfx` export password |
+
+The next `vX.Y.Z` tag after adding either set produces a signed
+`Switchyard-Setup-<version>.exe`. (Later, once every user is on a signed
+build, `win.verifyUpdateCodeSignature`/`publisherName` can be enabled so
+auto-updates verify the signature too.)
