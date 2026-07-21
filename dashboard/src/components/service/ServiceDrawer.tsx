@@ -24,6 +24,7 @@ import {
   HardDrive,
   Server,
   TerminalSquare,
+  Table2,
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -37,6 +38,7 @@ import { VolumesTab } from "@/components/service/VolumesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
+import { DataTab } from "@/components/service/DataTab";
 import {
   AppOverviewTab,
   AppBuildTab,
@@ -69,6 +71,7 @@ import { cn } from "@/lib/utils";
 type TabId =
   | "overview"
   | "variables"
+  | "data"
   | "deploy"
   | "build"
   | "domains"
@@ -84,6 +87,7 @@ type TabId =
 const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
   variables: { label: "Variables", icon: <KeyRound className="size-4" /> },
+  data: { label: "Data", icon: <Table2 className="size-4" /> },
   deploy: { label: "Deploy", icon: <Server className="size-4" /> },
   build: { label: "Build", icon: <Hammer className="size-4" /> },
   domains: { label: "Networking", icon: <Globe className="size-4" /> },
@@ -134,6 +138,33 @@ const COMPOSE_TABS: TabId[] = [
   "settings",
 ];
 
+/**
+ * Whether to show the Postgres "Data" tab for a service. Covers the two data
+ * models the tab supports: a Dokploy-managed Postgres database, and a compose
+ * stack that declares a postgres-imaged service. Both signals are static (no
+ * runtime container query) so the tab list can render synchronously; the tab
+ * itself resolves the actual running container(s) server-side.
+ */
+function isPostgresService(s: Service): boolean {
+  if (s.kind === "database") return s.engine === "postgres" || /postgres/i.test(s.dockerImage ?? "");
+  if (s.kind === "compose") return composeMentionsPostgres(s.composeFile);
+  return false;
+}
+
+/** True when a compose file has a service whose `image:` references postgres. */
+function composeMentionsPostgres(file: string | null): boolean {
+  if (!file) return false;
+  return /^[ \t]*image:[ \t]*["']?[^\n#"']*postgres/im.test(file);
+}
+
+/** Insert the Data tab right after Overview. */
+function withDataTab(base: TabId[]): TabId[] {
+  const out = [...base];
+  const i = out.indexOf("overview");
+  out.splice(i + 1, 0, "data");
+  return out;
+}
+
 export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
   const titleId = useId();
@@ -145,12 +176,13 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
     setShownId(service.id);
     setTab("overview");
   }
-  const tabs =
+  const baseTabs =
     service?.kind === "application"
       ? APP_TABS
       : service?.kind === "compose"
         ? COMPOSE_TABS
         : DB_TABS;
+  const tabs = service && isPostgresService(service) ? withDataTab(baseTabs) : baseTabs;
 
   return (
     <AnimatePresence>
@@ -234,6 +266,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                   <AppOverviewTab app={service} />
                 ))}
               {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "data" && <DataTab key={service.id} service={service} />}
               {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
               {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
               {tab === "domains" && service.kind === "application" && (
