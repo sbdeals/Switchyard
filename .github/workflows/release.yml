@@ -449,6 +449,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ steps.locate.outputs.release_id }}
         run: |
+          # tag_name is asserted on publish: a draft can come loose from its
+          # tag (observed as an "untagged-…" release when the tag was deleted
+          # and re-pushed around a re-run) — harmless when already correct,
+          # self-healing when not.
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
-            -F draft=false -f make_latest=true >/dev/null
+            -f tag_name="$GITHUB_REF_NAME" -F draft=false -f make_latest=true >/dev/null
           echo "published release $GITHUB_REF_NAME (id $RELEASE_ID) as Latest"
