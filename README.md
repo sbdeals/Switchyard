@@ -266,3 +266,8 @@ can't route service VIPs). Details and symptoms live in
 
 [MIT](LICENSE) — free for any use; SignPath Foundation signs the Windows
 builds under their free open-source program.
+
+## Disclosure
+
+Switchyard is not affiliated with, sponsored by, or endorsed by Railway Corp. 'Railway' is a trademark of its owner, used only for comparison.
+
