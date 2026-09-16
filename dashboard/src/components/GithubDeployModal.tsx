@@ -211,8 +211,8 @@ export function GithubDeployModal({
             ) : providers.length === 0 ? (
               <div className="space-y-3 py-2">
                 <p className="text-xs text-[var(--color-fg-muted)]">
-                  No GitHub App is connected yet. Create and install one in Dokploy, then come back
-                  and refresh — your installations will appear here.
+                  No GitHub App is connected yet. Connect one (the Git provider settings open in a new
+                  tab), then come back and refresh — your installations will appear here.
                 </p>
                 <div className="flex items-center gap-2">
                   <a

@@ -30,7 +30,7 @@ export default async function LoginPage() {
           </div>
           <h1 className="text-xl font-semibold tracking-tight">Sign in to Switchyard</h1>
           <p className="mt-1.5 text-sm text-[var(--color-fg-muted)]">
-            Use your Dokploy account.
+            Use the account you created when you installed Switchyard.
           </p>
         </div>
         <LoginForm />

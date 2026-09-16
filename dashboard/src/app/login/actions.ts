@@ -26,7 +26,7 @@ async function establishSession(email: string, password: string): Promise<LoginS
     dokployCookie = await signInToDokploy(email, password);
   } catch {
     // Deliberately vague — don't distinguish "no such user" from "bad password".
-    return { error: "Sign-in failed. Check your Dokploy email and password." };
+    return { error: "Sign-in failed. Check your email and password." };
   }
 
   let token: string;
@@ -53,7 +53,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   if (!email || !password) {
-    return { error: "Enter your Dokploy email and password." };
+    return { error: "Enter your email and password." };
   }
   return establishSession(email, password);
 }
@@ -80,8 +80,8 @@ export async function signupAction(_prev: LoginState, formData: FormData): Promi
     const msg = e instanceof Error ? e.message : "";
     return {
       error: /\(4\d\d\)/.test(msg)
-        ? "Dokploy rejected the sign-up — an account may already exist or registration is closed. Sign in instead, or ask your admin for an invite."
-        : "Sign-up failed. Is Dokploy running and reachable?",
+        ? "Sign-up was rejected — an account may already exist or registration is closed. Sign in instead, or ask your admin for an invite."
+        : "Sign-up failed. Is the Switchyard stack running? Try `switchyard up`.",
     };
   }
   return establishSession(email, password);

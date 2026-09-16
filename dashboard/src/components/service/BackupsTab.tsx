@@ -40,8 +40,8 @@ export function BackupsTab({ db }: { db: Database }) {
   if (db.engine === "redis") {
     return (
       <p className="text-xs text-[var(--color-fg-subtle)]">
-        Scheduled backups aren&apos;t available for Redis — Dokploy only backs up
-        Postgres, MySQL, MariaDB and MongoDB.
+        Scheduled backups aren&apos;t available for Redis — only
+        Postgres, MySQL, MariaDB and MongoDB can be backed up.
       </p>
     );
   }
