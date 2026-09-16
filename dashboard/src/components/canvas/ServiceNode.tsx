@@ -56,7 +56,7 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
           <span
             className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
             style={{ backgroundColor: status.soft, color: status.color }}
-            title={status.detail ?? status.label}
+            title={status.explanation ?? status.detail ?? status.label}
           >
             {status.label}
           </span>

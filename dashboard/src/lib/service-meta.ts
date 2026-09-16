@@ -1,5 +1,6 @@
 import type { Service, ServiceRuntime } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
+import { explainDeployError } from "@/lib/deploy-errors";
 
 /** Brand accent for applications (databases use their engine accent). */
 export const APP_ACCENT = "#a06bff";
@@ -44,6 +45,8 @@ export interface StatusDisplay {
   attention?: boolean;
   /** Extra context, e.g. "3/13 containers running". */
   detail?: string;
+  /** Longer explanation for tooltips (e.g. why Swarm can't start the service). */
+  explanation?: string;
 }
 
 /** Display metadata for each lifecycle status (shared by badge and canvas). */
@@ -89,17 +92,36 @@ export const LAST_DEPLOY_LABEL: Record<string, string> = {
   idle: "Never deployed",
 };
 
+/** Clip a one-line detail so badges stay badge-sized (full text goes in `explanation`). */
+function clip(text: string, max = 48): string {
+  const one = text.replace(/\s+/g, " ").trim();
+  return one.length > max ? `${one.slice(0, max - 1)}…` : one;
+}
+
 /**
  * What a status indicator should show: engine truth when we have it, deploy
  * lifecycle otherwise. An in-flight deploy ("Deploying") and a never-deployed
  * service ("Idle") win over the runtime sweep — containers legitimately churn
- * during the former and don't exist yet for the latter.
+ * during the former and don't exist yet for the latter. A failed deploy with
+ * nothing running says so ("Deploy failed"), rather than a vaguer
+ * "Not running · 0/0".
  */
 export function resolveServiceDisplay(status: string, runtime?: ServiceRuntime): StatusDisplay {
   if (status === "running" || status === "idle" || !runtime) {
-    return STATUS_META[status] ?? STATUS_META.idle;
+    const meta = STATUS_META[status] ?? STATUS_META.idle;
+    return status === "error" ? { ...meta, label: "Deploy failed" } : meta;
   }
   const meta = RUNTIME_META[runtime.health];
-  if (runtime.health === "running") return meta;
-  return { ...meta, detail: `${runtime.running}/${runtime.total} containers running` };
+  if (runtime.health === "running") {
+    return status === "error"
+      ? { ...meta, detail: "latest deploy failed", explanation: "The previous version is still serving; the newest deploy failed." }
+      : meta;
+  }
+  const why = runtime.issue ? (explainDeployError(runtime.issue) ?? runtime.issue) : undefined;
+  const base = status === "error" ? { ...STATUS_META.error, label: "Deploy failed" } : meta;
+  if (runtime.health === "not-running" && runtime.issue) {
+    return { ...base, detail: clip(runtime.issue), explanation: why };
+  }
+  if (status === "error" && runtime.total === 0) return base;
+  return { ...base, detail: `${runtime.running}/${runtime.total} containers running`, explanation: why };
 }
