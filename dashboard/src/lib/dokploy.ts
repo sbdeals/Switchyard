@@ -22,8 +22,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
-import { randomServiceName } from "./names";
+import { randomPassword, randomServiceName } from "./names";
+import { ENGINE_META } from "./engines";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
+import { databaseStack, imageStack, parseManaged, type ManagedMeta } from "./managed-compose";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
@@ -272,6 +274,12 @@ export interface ComposeService extends ServiceBase {
   domains: AppDomain[];
   /** Deploy history for the stack (Dokploy `deployments`). */
   deployments: AppDeployment[];
+  /**
+   * Set when Switchyard generated this stack as a one-click database or image
+   * app on the bridge network (see lib/managed-compose.ts) — the UI presents
+   * it as that service rather than a raw compose stack.
+   */
+  managed: ManagedMeta | null;
 }
 
 /** Any deployable service rendered in the dashboard. */
@@ -1727,6 +1735,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
       const d = await request<RawComposeDetail>(
         `compose.one?composeId=${encodeURIComponent(id)}`
       );
+      const managed = parseManaged(d.composeFile);
       return {
         ...scope,
         kind: "compose",
@@ -1734,7 +1743,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         name: d.name ?? id,
         appName: d.appName ?? "",
         status: d.composeStatus ?? "idle",
-        dockerImage: null,
+        dockerImage: managed?.image ?? null,
         env: d.env ?? null,
         createdAt: d.createdAt ?? null,
         cpuLimit: null,
@@ -1744,6 +1753,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         composeType: d.composeType ?? null,
         domains: mapDomains(d.domains),
         deployments: mapDeployments(d.deployments),
+        managed,
       } satisfies ComposeService;
     })
   );
@@ -1764,6 +1774,81 @@ export async function createCompose(
     body: { composeId: created.composeId, sourceType: "raw", composeFile },
   });
   return created.composeId;
+}
+
+/**
+ * Create a Switchyard-generated compose stack (one-click service on the bridge
+ * network). The file depends on the stack's appName — its internal hostname —
+ * which Dokploy only assigns at creation, hence the builder callback. Does not
+ * deploy. Returns the compose id.
+ */
+export async function createManagedCompose(
+  name: string,
+  environmentId: string,
+  build: (appName: string) => { composeFile: string; env?: string }
+): Promise<string> {
+  // appName is the stack's internal hostname. The engine treats it as a prefix
+  // and appends a unique suffix, so seed it from the service name to get
+  // "redis-vdsg-x1y2z3" instead of a random word salad.
+  const prefix = name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  const created = await request<{ composeId: string; appName: string }>("compose.create", {
+    method: "POST",
+    body: { name, environmentId, ...(prefix ? { appName: prefix } : {}) },
+  });
+  const { composeFile, env } = build(created.appName);
+  await request("compose.update", {
+    method: "POST",
+    body: {
+      composeId: created.composeId,
+      sourceType: "raw",
+      composeType: "docker-compose",
+      composeFile,
+      // The stack joins the shared bridge itself; don't let the engine rewrite
+      // it onto an isolated per-stack network.
+      isolatedDeployment: false,
+    },
+  });
+  if (env) await saveComposeEnvironment(created.composeId, env);
+  return created.composeId;
+}
+
+/**
+ * One-click database on the bridge network: generate the compose stack (random
+ * password, latest version, named data volume) and deploy it. Returns the
+ * compose id.
+ */
+export async function deployBridgeDatabase(
+  engine: Engine,
+  name: string,
+  environmentId: string
+): Promise<string> {
+  const meta = ENGINE_META[engine];
+  const password = randomPassword();
+  const id = await createManagedCompose(name, environmentId, (appName) =>
+    databaseStack({
+      engine,
+      appName,
+      version: meta.versions[0],
+      password,
+      databaseName: name.replace(/-/g, "_"),
+      databaseUser: engine === "mongo" ? "root" : "app",
+    })
+  );
+  await composeAction(id, "deploy");
+  return id;
+}
+
+/** One-click Docker image app on the bridge network. Returns the compose id. */
+export async function deployBridgeImage(
+  name: string,
+  image: string,
+  environmentId: string
+): Promise<string> {
+  const id = await createManagedCompose(name, environmentId, (appName) => ({
+    composeFile: imageStack({ appName, image }),
+  }));
+  await composeAction(id, "deploy");
+  return id;
 }
 
 export async function updateComposeFile(id: string, composeFile: string): Promise<void> {

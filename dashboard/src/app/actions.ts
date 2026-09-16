@@ -45,6 +45,8 @@ import {
   createSecurity,
   deleteSecurity,
   createCompose,
+  deployBridgeDatabase,
+  deployBridgeImage,
   composeAction,
   updateComposeFile,
   saveComposeEnvironment,
@@ -99,6 +101,7 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { friendlyEngineError } from "@/lib/deploy-errors";
+import { deployTarget } from "@/lib/deploy-target";
 import { randomPassword, randomServiceName } from "@/lib/names";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -170,10 +173,17 @@ export async function quickDeployDatabaseAction(
 ): Promise<QuickDeployResult> {
   return wrapId(async () => {
     const meta = ENGINE_META[engine];
+    const name = randomServiceName(engine);
+    const environment = await resolveTargetEnv(environmentId);
+    if ((await deployTarget()) === "bridge") {
+      // Swarm services can't run on this host — same one-click result as a
+      // compose project on the local bridge network.
+      return deployBridgeDatabase(engine, name, environment);
+    }
     const id = await createDatabase({
       engine,
-      name: randomServiceName(engine),
-      environmentId: await resolveTargetEnv(environmentId),
+      name,
+      environmentId: environment,
       databasePassword: randomPassword(),
       dockerImage: `${meta.image}:${meta.versions[0]}`,
     });
@@ -256,10 +266,13 @@ export async function quickDeployImageAction(
     if (!trimmed) throw new Error("Image is required.");
     // Derive a friendly name from the image (e.g. "nginx:alpine" -> "nginx").
     const derived = trimmed.split("/").pop()!.split(":")[0];
-    const id = await createApplication(
-      name?.trim() || randomServiceName(derived),
-      await resolveTargetEnv(environmentId)
-    );
+    const serviceName = name?.trim() || randomServiceName(derived);
+    const environment = await resolveTargetEnv(environmentId);
+    if ((await deployTarget()) === "bridge") {
+      // No Swarm on this host: run the image as a compose project on the bridge.
+      return deployBridgeImage(serviceName, trimmed, environment);
+    }
+    const id = await createApplication(serviceName, environment);
     await setAppDockerSource(id, trimmed);
     await applicationAction(id, "deploy");
     await mintAutoDomain(id);

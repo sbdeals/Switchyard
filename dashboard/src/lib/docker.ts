@@ -55,6 +55,25 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
+// --- host capabilities ------------------------------------------------------
+
+/** Driver + scope of a Docker network, or null if it doesn't exist. */
+export async function inspectNetwork(
+  name: string,
+): Promise<{ driver: string; scope: string } | null> {
+  try {
+    const info = (await withTimeout(
+      docker.getNetwork(name).inspect(),
+      DOCKER_OP_TIMEOUT_MS,
+      `Inspecting network ${name}`,
+    )) as { Driver?: string; Scope?: string };
+    return { driver: info.Driver ?? "", scope: info.Scope ?? "" };
+  } catch (e) {
+    if ((e as { statusCode?: number }).statusCode === 404) return null;
+    throw e;
+  }
+}
+
 // --- runtime truth ----------------------------------------------------------
 // Dokploy's applicationStatus/composeStatus is the LAST DEPLOY result — it
 // stays "done" (shown as Running) even when the containers no longer exist

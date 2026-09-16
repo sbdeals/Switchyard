@@ -7,9 +7,9 @@
 /** Known failure signatures, most specific first. */
 const SIGNATURES: { test: RegExp; reason: string }[] = [
   {
-    test: /cannot be used with services|only networks scoped to the swarm|overlay.*(not supported|failed)|vxlan/i,
+    test: /cannot be used with services|only networks scoped to the swarm|network sandbox join failed|overlay.*(not supported|failed)|vxlan/i,
     reason:
-      "This host can't start Swarm services: overlay networking isn't available (the kernel lacks VXLAN). The image is fine — the service just can't be scheduled here.",
+      "This host can't start Swarm services: overlay networking isn't available (the kernel lacks VXLAN). The image is fine — the service just can't be scheduled here. New one-click services run on the local bridge network instead, so recreate it from New service.",
   },
   {
     test: /toomanyrequests|pull rate limit/i,

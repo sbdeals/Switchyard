@@ -20,11 +20,14 @@ import {
   databaseAction,
   saveEnvironment,
   composeAction,
+  deployBridgeDatabase,
+  deployBridgeImage,
   request,
   ENGINES,
   type Service,
   type Engine,
 } from "@/lib/dokploy";
+import { deployTarget } from "@/lib/deploy-target";
 import { readRecentLogs, runExec, sampleStatsOnce, type Sample } from "@/lib/docker";
 import { randomServiceName, randomPassword } from "@/lib/names";
 import { ENGINE_META } from "@/lib/engines";
@@ -147,7 +150,11 @@ export async function deployDockerImage(
   if (!trimmed) throw new Error("Image is required.");
   const derived = trimmed.split("/").pop()!.split(":")[0];
   const finalName = name?.trim() || randomServiceName(derived);
-  const id = await createApplication(finalName, await resolveTargetEnv(environmentId));
+  const env = await resolveTargetEnv(environmentId);
+  if ((await deployTarget()) === "bridge") {
+    return { id: await deployBridgeImage(finalName, trimmed, env), name: finalName };
+  }
+  const id = await createApplication(finalName, env);
   await setAppDockerSource(id, trimmed);
   await applicationAction(id, "deploy");
   return { id, name: finalName };
@@ -197,10 +204,14 @@ export async function createDatabaseOp(
   if (!isEngine(engine)) throw new Error(`Unknown engine "${engine}".`);
   const meta = ENGINE_META[engine];
   const finalName = name?.trim() || randomServiceName(engine);
+  const env = await resolveTargetEnv(environmentId);
+  if ((await deployTarget()) === "bridge") {
+    return { id: await deployBridgeDatabase(engine, finalName, env), name: finalName };
+  }
   const id = await createDatabase({
     engine,
     name: finalName,
-    environmentId: await resolveTargetEnv(environmentId),
+    environmentId: env,
     databasePassword: randomPassword(),
     dockerImage: `${meta.image}:${meta.versions[0]}`,
   });
