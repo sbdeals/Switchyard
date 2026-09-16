@@ -8,14 +8,20 @@ export const COMPOSE_ACCENT = "#2dd4bf";
 
 export function serviceAccent(s: Service): string {
   if (s.kind === "database") return ENGINE_META[s.engine].accent;
-  if (s.kind === "compose") return COMPOSE_ACCENT;
+  if (s.kind === "compose") {
+    if (s.managed?.kind === "database") return ENGINE_META[s.managed.engine].accent;
+    return s.managed?.kind === "image" ? APP_ACCENT : COMPOSE_ACCENT;
+  }
   return APP_ACCENT;
 }
 
 /** Human label, e.g. "PostgreSQL" or "Docker image". */
 export function serviceLabel(s: Service): string {
   if (s.kind === "database") return ENGINE_META[s.engine].label;
-  if (s.kind === "compose") return "Compose";
+  if (s.kind === "compose") {
+    if (s.managed?.kind === "database") return ENGINE_META[s.managed.engine].label;
+    return s.managed?.kind === "image" ? "Docker image" : "Compose";
+  }
   switch (s.sourceType) {
     case "docker":
       return "Docker image";
@@ -28,6 +34,15 @@ export function serviceLabel(s: Service): string {
     default:
       return "Application";
   }
+}
+
+/**
+ * The kind a service should LOOK like: a Switchyard-managed compose stack
+ * reads as the database or app it runs, not as a raw stack.
+ */
+export function presentedKind(s: Service): "database" | "application" | "compose" {
+  if (s.kind === "compose" && s.managed) return s.managed.kind === "database" ? "database" : "application";
+  return s.kind;
 }
 
 /** Secondary line under the name (image tag, or label). */
@@ -92,6 +107,16 @@ export const LAST_DEPLOY_LABEL: Record<string, string> = {
   idle: "Never deployed",
 };
 
+/**
+ * Deployed, then stopped: the engine resets the status to "idle" (same as
+ * never-deployed), but the stopped containers still exist on the engine.
+ */
+export function isStopped(s: Pick<Service, "status" | "runtime">): boolean {
+  return s.status === "idle" && !!s.runtime && s.runtime.total > 0 && s.runtime.running === 0;
+}
+
+const STOPPED: StatusDisplay = { label: "Stopped", color: "var(--color-idle)", soft: "var(--color-idle-soft)" };
+
 /** Clip a one-line detail so badges stay badge-sized (full text goes in `explanation`). */
 function clip(text: string, max = 48): string {
   const one = text.replace(/\s+/g, " ").trim();
@@ -107,6 +132,7 @@ function clip(text: string, max = 48): string {
  * "Not running · 0/0".
  */
 export function resolveServiceDisplay(status: string, runtime?: ServiceRuntime): StatusDisplay {
+  if (isStopped({ status: status as Service["status"], runtime })) return STOPPED;
   if (status === "running" || status === "idle" || !runtime) {
     const meta = STATUS_META[status] ?? STATUS_META.idle;
     return status === "error" ? { ...meta, label: "Deploy failed" } : meta;

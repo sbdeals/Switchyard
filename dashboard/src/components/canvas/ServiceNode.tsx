@@ -4,7 +4,7 @@ import { memo, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { Database as DatabaseIcon, Box, Layers } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
-import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
+import { presentedKind, resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 
 export interface ServiceNodeData extends Record<string, unknown> {
   service: Service;
@@ -90,7 +90,7 @@ export function ServiceLogo({
 }) {
   const [failed, setFailed] = useState(false);
   const Icon =
-    service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
+    presentedKind(service) === "database" ? DatabaseIcon : presentedKind(service) === "compose" ? Layers : Box;
   return (
     <div
       className={`flex ${size} shrink-0 items-center justify-center overflow-hidden rounded-lg`}

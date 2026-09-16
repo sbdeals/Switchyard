@@ -61,6 +61,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { DeploymentHistory } from "@/components/service/DeployActivity";
+import { isStopped } from "@/lib/service-meta";
 import { cn } from "@/lib/utils";
 
 /** Human labels for Dokploy's build strategies. */
@@ -89,7 +90,7 @@ export function AppOverviewTab({ app }: { app: Application }) {
     <div className="space-y-5">
       <PublicUrlBar domains={app.domains} status={app.status} />
 
-      <LifecycleButtons status={app.status} pending={pending} error={error} run={run} />
+      <LifecycleButtons status={app.status} stopped={isStopped(app)} pending={pending} error={error} run={run} />
 
       <PrivateNetwork host={app.appName} />
 

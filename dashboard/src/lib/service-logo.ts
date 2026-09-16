@@ -46,6 +46,9 @@ export function resolveServiceLogo(
   logoById: ReadonlyMap<string, string> | null
 ): string | null {
   if (service.kind === "database") return ENGINE_LOGOS[service.engine] ?? null;
+  if (service.kind === "compose" && service.managed?.kind === "database") {
+    return ENGINE_LOGOS[service.managed.engine] ?? null;
+  }
   if (!logoById || logoById.size === 0) return null;
   for (const key of candidates(service)) {
     const hit = logoById.get(key);

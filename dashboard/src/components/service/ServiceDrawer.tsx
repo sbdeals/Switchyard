@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
-import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
+import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel, presentedKind, isStopped } from "@/lib/service-meta";
 import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -515,7 +515,7 @@ function Header({
   titleId: string;
 }) {
   const accent = serviceAccent(service);
-  const Icon = service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
+  const Icon = presentedKind(service) === "database" ? DatabaseIcon : presentedKind(service) === "compose" ? Layers : Box;
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
       <div className="flex items-center gap-3">
@@ -536,7 +536,9 @@ function Header({
             {serviceLabel(service)} · {service.projectName} / {service.environmentName}
           </div>
           <div className="text-[11px] text-[var(--color-fg-subtle)]">
-            Last deploy: {LAST_DEPLOY_LABEL[service.status] ?? service.status}
+            {isStopped(service)
+              ? "Stopped"
+              : `Last deploy: ${LAST_DEPLOY_LABEL[service.status] ?? service.status}`}
           </div>
         </div>
       </div>
@@ -562,7 +564,7 @@ function OverviewTab({ db }: { db: Database }) {
 
   return (
     <div className="space-y-5">
-      <LifecycleButtons status={db.status} pending={pending} error={error} run={run} />
+      <LifecycleButtons status={db.status} stopped={isStopped(db)} pending={pending} error={error} run={run} />
 
       {conn && (
         <Field label="Connection string">
