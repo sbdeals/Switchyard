@@ -45,9 +45,9 @@ import {
   AppDeployTab,
   AppSettingsTab,
   DeploymentsTab,
-  DeploymentHistory,
   SchedulesTab,
 } from "@/components/service/AppTabs";
+import { DeployBanner, DeploymentHistory } from "@/components/service/DeployActivity";
 import { NetworkingTab } from "@/components/service/networking";
 import {
   ComposeOverviewTab,
@@ -352,9 +352,12 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
   // Reset to Overview when a different service is opened (adjust state during
   // render — the React-recommended alternative to a resetting effect).
   const [shownId, setShownId] = useState<string | null>(null);
+  // Deploy whose log the Deploys tab should open (set by the banner's "View logs").
+  const [logDeployId, setLogDeployId] = useState<string | null>(null);
   if (service && service.id !== shownId) {
     setShownId(service.id);
     setTab("overview");
+    setLogDeployId(null);
   }
   const baseTabs =
     service?.kind === "application"
@@ -392,6 +395,15 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
           >
             <ResizeHandle width={width} apply={applyWidth} reset={resetWidth} />
             <Header service={service} onClose={onClose} titleId={titleId} />
+            {service.kind !== "database" && (
+              <DeployBanner
+                service={service}
+                onViewLogs={(id) => {
+                  setLogDeployId(id);
+                  setTab("deployments");
+                }}
+              />
+            )}
             <nav
               role="tablist"
               aria-label="Service sections"
@@ -461,10 +473,10 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 <ComposeDomainsTab compose={service} />
               )}
               {tab === "deployments" && service.kind === "application" && (
-                <DeploymentsTab app={service} />
+                <DeploymentsTab key={logDeployId ?? ""} app={service} openId={logDeployId} />
               )}
               {tab === "deployments" && service.kind === "compose" && (
-                <DeploymentHistory deployments={service.deployments} />
+                <DeploymentHistory key={logDeployId ?? ""} service={service} openId={logDeployId} />
               )}
               {tab === "schedules" && service.kind === "application" && (
                 <SchedulesTab app={service} />
