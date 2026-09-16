@@ -98,6 +98,7 @@ import {
   type RestoreBackupInput,
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
+import { friendlyEngineError } from "@/lib/deploy-errors";
 import { randomPassword, randomServiceName } from "@/lib/names";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -106,7 +107,7 @@ export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: s
 export type GenerateUrlResult = { ok: true; host: string } | { ok: false; error: string };
 
 function fail(e: unknown): { ok: false; error: string } {
-  return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  return { ok: false, error: friendlyEngineError(e instanceof Error ? e.message : String(e)) };
 }
 
 /** Run a mutation, revalidate the page, normalize errors into the result. */

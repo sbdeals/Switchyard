@@ -153,6 +153,10 @@ export interface AppDeployment {
   status: string;
   title: string;
   createdAt: string;
+  /** When the deploy settled (done/error); null while in flight. */
+  finishedAt: string | null;
+  /** Dokploy's own failure summary, when it records one (often null — the log has the detail). */
+  errorMessage: string | null;
   /**
    * Non-null when this deployment produced a restorable image snapshot
    * (Dokploy only records these when the app deploys to a registry). Feeds
@@ -777,7 +781,12 @@ interface RawDeployment {
   status?: string;
   title?: string;
   createdAt?: string;
+  finishedAt?: string | null;
+  errorMessage?: string | null;
   rollbackId?: string | null;
+  /** Server-side log file; never sent to the browser (see deploymentLogTarget). */
+  logPath?: string | null;
+  serverId?: string | null;
 }
 
 /** Normalize a nested domains array (shared by applications and compose). */
@@ -800,6 +809,8 @@ function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment
     status: dp.status ?? "idle",
     title: dp.title ?? "Deployment",
     createdAt: dp.createdAt ?? "",
+    finishedAt: dp.finishedAt ?? null,
+    errorMessage: dp.errorMessage ?? null,
     rollbackId: dp.rollbackId ?? null,
   }));
 }
@@ -960,6 +971,69 @@ export async function rollbackToDeployment(rollbackId: string): Promise<void> {
     method: "POST",
     body: { rollbackId },
   });
+}
+
+// --- deploy logs ------------------------------------------------------------
+
+/** Service kinds that have Dokploy deployment records (databases don't). */
+export type DeployableKind = "application" | "compose";
+
+export interface DeploymentLogTarget {
+  status: string;
+  errorMessage: string | null;
+  logPath: string | null;
+  serverId: string | null;
+}
+
+/**
+ * Resolve one deployment of an app/stack as the CURRENT user. Going through
+ * `deployment.all` / `deployment.allByCompose` means Dokploy enforces access,
+ * and the log path is only ever resolved here — the browser names a
+ * deployment id, never a file, so it can't ask us to tail arbitrary paths.
+ * Null when the deployment doesn't belong to that service.
+ */
+export async function deploymentLogTarget(
+  kind: DeployableKind,
+  serviceId: string,
+  deploymentId: string
+): Promise<DeploymentLogTarget | null> {
+  const id = encodeURIComponent(serviceId);
+  const list = await request<RawDeployment[]>(
+    kind === "compose"
+      ? `deployment.allByCompose?composeId=${id}`
+      : `deployment.all?applicationId=${id}`
+  );
+  const d = (list ?? []).find((dp) => dp.deploymentId === deploymentId);
+  if (!d) return null;
+  return {
+    status: d.status ?? "idle",
+    errorMessage: d.errorMessage ?? null,
+    logPath: d.logPath ?? null,
+    serverId: d.serverId ?? null,
+  };
+}
+
+/**
+ * Open Dokploy's deployment-log socket (`/listen-deployment`, a `tail -n +1 -f`
+ * of the log file) with the current user's session. The socket never ends on
+ * its own — the caller decides when the deploy has settled.
+ */
+export async function openDeploymentLogSocket(
+  logPath: string,
+  serverId: string | null
+): Promise<WebSocket> {
+  const cookie = await userCookie();
+  if (typeof WebSocket === "undefined") {
+    throw new Error("Streaming build logs needs Node.js 22+ (global WebSocket).");
+  }
+  const url = new URL("/listen-deployment", BASE);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.searchParams.set("logPath", logPath);
+  if (serverId) url.searchParams.set("serverId", serverId);
+  // Node's (undici) WebSocket accepts a non-standard `headers` init, which is
+  // how the session cookie rides along server-side.
+  const init = { headers: { Cookie: cookie, Origin: workingOrigin } };
+  return new WebSocket(url, init as unknown as string[]);
 }
 
 // --- github app (private repos) ---------------------------------------------
@@ -2141,7 +2215,10 @@ export async function loadWorkspace(): Promise<{
       s.runtime =
         s.kind === "compose"
           ? deriveComposeRuntime(runtime.compose.get(s.appName) ?? [])
-          : deriveSwarmRuntime(runtime.swarm.get(s.appName) ?? []);
+          : deriveSwarmRuntime(
+              runtime.swarm.get(s.appName) ?? [],
+              runtime.swarmIssues.get(s.appName)
+            );
     }
   } catch {
     // dockerode unavailable in this deployment — leave runtime undefined.
