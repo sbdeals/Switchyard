@@ -344,7 +344,16 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
+export function ServiceDrawer({
+  service,
+  services,
+  onClose,
+}: {
+  service: Service | null;
+  /** Every service in the workspace — the Variables tab's reference targets. */
+  services: Service[];
+  onClose: () => void;
+}) {
   const [tab, setTab] = useState<TabId>("overview");
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
@@ -462,7 +471,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "variables" && <VariablesTab key={service.id} service={service} services={services} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
               {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
               {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
