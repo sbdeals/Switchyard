@@ -15,11 +15,10 @@ import {
   setAppDockerSource,
   setAppGitSource,
   applicationAction,
-  saveApplicationEnvironment,
   createDatabase,
   databaseAction,
-  saveEnvironment,
   composeAction,
+  saveServiceEnv,
   deployBridgeDatabase,
   deployBridgeImage,
   request,
@@ -220,10 +219,9 @@ export async function createDatabaseOp(
 }
 
 export async function saveServiceEnvironment(svc: Service, env: string): Promise<void> {
-  if (svc.kind === "application") return saveApplicationEnvironment(svc.id, env);
-  if (svc.kind === "database") return saveEnvironment(svc.engine, svc.id, env);
-  // compose: dedicated saveEnvironment procedure.
-  await request("compose.saveEnvironment", { method: "POST", body: { composeId: svc.id, env } });
+  // Same path as the Variables tab: ${{Service.VAR}} references are resolved.
+  if (svc.kind === "database") return saveServiceEnv({ kind: "database", engine: svc.engine, id: svc.id }, env);
+  return saveServiceEnv({ kind: svc.kind, id: svc.id }, env);
 }
 
 export async function createDomainForService(

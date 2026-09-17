@@ -25,7 +25,23 @@ import { SESSION_COOKIE, openSession } from "./session";
 import { randomPassword, randomServiceName } from "./names";
 import { ENGINE_META } from "./engines";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
-import { databaseStack, imageStack, parseManaged, type ManagedMeta } from "./managed-compose";
+import {
+  databaseStack,
+  imageStack,
+  parseManaged,
+  withImageEnvFile,
+  type ManagedMeta,
+} from "./managed-compose";
+import {
+  REF_ANNOTATION,
+  decodeStoredEnv,
+  describeIssues,
+  encodeStoredEnv,
+  findReferences,
+  hasReferences,
+  resolveTemplate,
+} from "./references";
+import { referenceTargets } from "./reference-vars";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
@@ -623,9 +639,21 @@ export function inferEdges(services: Service[]): ServiceEdge[] {
       .filter((line) => !line.trimStart().startsWith("#"))
       .join("\n")
       .toLowerCase();
-    if (!haystack) continue;
+    // Explicit ${{Service.VAR}} references are a certain connection.
+    const referenced = new Set(
+      findReferences(decodeStoredEnv(a.env)).map((r) => r.service.toLowerCase())
+    );
+    if (!haystack && referenced.size === 0) continue;
     for (const b of services) {
       if (a.id === b.id) continue;
+      if (referenced.has(b.name.toLowerCase())) {
+        const key = `${a.id}->${b.id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          edges.push({ source: a.id, target: b.id });
+        }
+        continue;
+      }
       const needles = [b.appName, b.name].filter(Boolean).map((s) => s.toLowerCase());
       if (needles.some((n) => n.length > 2 && haystack.includes(n))) {
         const key = `${a.id}->${b.id}`;
@@ -678,6 +706,7 @@ export type Action = "deploy" | "start" | "stop" | "remove";
 
 /** Run a lifecycle action against a database. */
 export async function databaseAction(engine: Engine, id: string, action: Action): Promise<void> {
+  if (action === "deploy") await refreshReferences({ kind: "database", engine, id });
   await request(`${engine}.${action}`, {
     method: "POST",
     body: { [idKey(engine)]: id },
@@ -1247,6 +1276,7 @@ export async function applicationAction(id: string, action: Action): Promise<voi
   // Like compose, applications use delete instead of remove (application.remove
   // does not exist — it 404s, which used to break the Destroy button).
   const proc = action === "remove" ? "delete" : action;
+  if (action === "deploy") await refreshReferences({ kind: "application", id });
   await request(`application.${proc}`, { method: "POST", body: { applicationId: id } });
 }
 
@@ -1870,7 +1900,100 @@ export async function saveComposeEnvironment(id: string, env: string): Promise<v
 export async function composeAction(id: string, action: Action): Promise<void> {
   // compose uses delete instead of remove.
   const proc = action === "remove" ? "delete" : action;
+  if (action === "deploy") await refreshReferences({ kind: "compose", id });
   await request(`compose.${proc}`, { method: "POST", body: { composeId: id } });
+}
+
+// --- reference variables ----------------------------------------------------
+//
+// `KEY=${{ServiceName.VAR}}` (lib/references.ts). The engine only ever stores
+// concrete values: a referencing variable is saved as an annotation comment
+// (the template) + the resolved line, so any engine-side deploy (webhooks,
+// its own UI) still gets working values. Switchyard re-resolves before every
+// deploy it starts, so a changed database password or host flows through on
+// the next deploy of the dependent service. Same on the bridge and Swarm
+// paths — the values are just strings by then.
+
+/** Which service's env is being written. */
+export type EnvOwner =
+  | { kind: "database"; engine: Engine; id: string }
+  | { kind: "application"; id: string }
+  | { kind: "compose"; id: string };
+
+async function writeEnv(owner: EnvOwner, env: string): Promise<void> {
+  if (owner.kind === "database") return saveEnvironment(owner.engine, owner.id, env);
+  if (owner.kind === "application") return saveApplicationEnvironment(owner.id, env);
+  return saveComposeEnvironment(owner.id, env);
+}
+
+/** Resolve `template` for `owner` against the current workspace; throws on issues. */
+async function resolveForOwner(owner: EnvOwner, template: string): Promise<string> {
+  const { services } = await loadWorkspace();
+  const self = services.find((s) => s.kind === owner.kind && s.id === owner.id);
+  const resolution = resolveTemplate(
+    template,
+    self?.name ?? null,
+    referenceTargets(services, self?.environmentId)
+  );
+  if (resolution.issues.length > 0) {
+    throw new Error(
+      `Some variable references don't resolve:\n${describeIssues(resolution.issues)}`
+    );
+  }
+  return encodeStoredEnv(template, resolution);
+}
+
+/**
+ * Save a service's variables, expanding `${{Service.VAR}}` references. Plain
+ * env (no references, no escapes) is written as-is without loading the
+ * workspace.
+ */
+export async function saveServiceEnv(owner: EnvOwner, template: string): Promise<void> {
+  const needsResolve = hasReferences(template) || /\$\$\{\{/.test(template);
+  await writeEnv(owner, needsResolve ? await resolveForOwner(owner, template) : template);
+}
+
+/** Current stored env + (for compose) file, straight from the engine. */
+async function readOwner(owner: EnvOwner): Promise<{ env: string; composeFile: string | null }> {
+  if (owner.kind === "database") {
+    const d = await getDetail(owner.engine, owner.id);
+    return { env: d.env ?? "", composeFile: null };
+  }
+  if (owner.kind === "application") {
+    const d = await request<{ env?: string | null }>(
+      `application.one?applicationId=${encodeURIComponent(owner.id)}`
+    );
+    return { env: d.env ?? "", composeFile: null };
+  }
+  const d = await request<{ env?: string | null; composeFile?: string | null }>(
+    `compose.one?composeId=${encodeURIComponent(owner.id)}`
+  );
+  return { env: d.env ?? "", composeFile: d.composeFile ?? null };
+}
+
+/**
+ * Pre-deploy hook: re-resolve reference variables so the deploy sees current
+ * values, and make sure one-click image apps pass their variables into the
+ * container. Cheap when there's nothing to do (one detail read). Throws a
+ * clear error — failing the deploy up front — if a reference no longer
+ * resolves (e.g. the referenced service was renamed or deleted).
+ */
+async function refreshReferences(owner: EnvOwner): Promise<void> {
+  const { env, composeFile } = await readOwner(owner);
+  if (owner.kind === "compose" && composeFile) {
+    const upgraded = withImageEnvFile(composeFile);
+    if (upgraded !== composeFile) await updateComposeFile(owner.id, upgraded);
+  }
+  if (!env.includes(REF_ANNOTATION)) return;
+  let stored: string;
+  try {
+    stored = await resolveForOwner(owner, decodeStoredEnv(env));
+  } catch (e) {
+    throw new Error(
+      `Can't deploy: ${e instanceof Error ? e.message : String(e)}\nFix them in Variables, then deploy again.`
+    );
+  }
+  if (stored !== env) await writeEnv(owner, stored);
 }
 
 // --- backups (S3 destinations + scheduled database backups) -----------------

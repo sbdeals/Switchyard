@@ -184,9 +184,28 @@ export function imageStack(input: { appName: string; image: string }): string {
     `  app:`,
     `    image: ${image}`,
     `    restart: unless-stopped`,
+    // The service's Variables (written by the engine next to this file).
+    `    env_file:`,
+    `      - .env`,
     networkBlock(input.appName),
     FOOTER,
   ].join("\n");
+}
+
+/**
+ * One-click image stacks created before variables were passed through lack
+ * `env_file`; add it under the `app` service so Variables reach the container.
+ * Returns the file unchanged for anything else (including user-edited stacks
+ * where the expected line isn't found).
+ */
+export function withImageEnvFile(composeFile: string): string {
+  if (parseManaged(composeFile)?.kind !== "image" || /^\s+env_file:/m.test(composeFile)) {
+    return composeFile;
+  }
+  return composeFile.replace(
+    /^(  app:\r?\n(?:    .*\r?\n)*?    restart: [^\r\n]*\r?\n)/m,
+    "$1    env_file:\n      - .env\n"
+  );
 }
 
 /**

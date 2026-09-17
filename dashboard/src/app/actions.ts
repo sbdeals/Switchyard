@@ -12,7 +12,6 @@ import {
   renameEnvironment,
   removeEnvironment,
   listProjects,
-  saveEnvironment,
   updateDatabase,
   reloadDatabase,
   createApplication,
@@ -31,7 +30,6 @@ import {
   applicationAction,
   updateApplication,
   saveAppBuildType,
-  saveApplicationEnvironment,
   createDomain,
   createComposeDomain,
   ensureAutoDomain,
@@ -45,11 +43,11 @@ import {
   createSecurity,
   deleteSecurity,
   createCompose,
+  saveServiceEnv,
   deployBridgeDatabase,
   deployBridgeImage,
   composeAction,
   updateComposeFile,
-  saveComposeEnvironment,
   listTemplates,
   deployTemplate,
   listSchedules,
@@ -226,7 +224,7 @@ export async function saveEnvironmentAction(
   id: string,
   env: string
 ): Promise<ActionResult> {
-  return wrap(() => saveEnvironment(engine, id, env));
+  return wrap(() => saveServiceEnv({ kind: "database", engine, id }, env));
 }
 
 // --- projects & environments ------------------------------------------------
@@ -399,7 +397,7 @@ export async function updateApplicationAction(
 }
 
 export async function saveApplicationEnvAction(id: string, env: string): Promise<ActionResult> {
-  return wrap(() => saveApplicationEnvironment(id, env));
+  return wrap(() => saveServiceEnv({ kind: "application", id }, env));
 }
 
 /** Set an application's build strategy (Nixpacks / Dockerfile / Railpack / …). */
@@ -659,7 +657,7 @@ export async function saveComposeFileAction(
 }
 
 export async function saveComposeEnvAction(id: string, env: string): Promise<ActionResult> {
-  return wrap(() => saveComposeEnvironment(id, env));
+  return wrap(() => saveServiceEnv({ kind: "compose", id }, env));
 }
 
 // --- backups ----------------------------------------------------------------
