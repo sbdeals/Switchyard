@@ -55,6 +55,25 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
+// --- host capabilities ------------------------------------------------------
+
+/** Driver + scope of a Docker network, or null if it doesn't exist. */
+export async function inspectNetwork(
+  name: string,
+): Promise<{ driver: string; scope: string } | null> {
+  try {
+    const info = (await withTimeout(
+      docker.getNetwork(name).inspect(),
+      DOCKER_OP_TIMEOUT_MS,
+      `Inspecting network ${name}`,
+    )) as { Driver?: string; Scope?: string };
+    return { driver: info.Driver ?? "", scope: info.Scope ?? "" };
+  } catch (e) {
+    if ((e as { statusCode?: number }).statusCode === 404) return null;
+    throw e;
+  }
+}
+
 // --- runtime truth ----------------------------------------------------------
 // Dokploy's applicationStatus/composeStatus is the LAST DEPLOY result — it
 // stays "done" (shown as Running) even when the containers no longer exist
@@ -70,6 +89,11 @@ export interface ServiceRuntime {
   running: number;
   /** Containers that exist for the service (any state). */
   total: number;
+  /**
+   * Why Swarm can't run it, from the newest task's error (e.g. "no suitable
+   * node", an image pull failure). Only set when nothing is running.
+   */
+  issue?: string;
 }
 
 /** Container states grouped by owner, from one engine sweep. */
@@ -78,6 +102,8 @@ export interface RuntimeStates {
   compose: Map<string, string[]>;
   /** com.docker.swarm.service.name label -> container states. */
   swarm: Map<string, string[]>;
+  /** Swarm service name -> newest task's error, for services with no running task. */
+  swarmIssues: Map<string, string>;
 }
 
 /**
@@ -107,7 +133,47 @@ export async function listRuntimeStates(): Promise<RuntimeStates> {
     const swarmService = labels["com.docker.swarm.service.name"];
     if (swarmService) push(swarm, swarmService, state);
   }
-  return { compose, swarm };
+  return { compose, swarm, swarmIssues: await listSwarmIssues() };
+}
+
+/**
+ * Newest-task errors per Swarm service. A service whose tasks never start
+ * (rejected image, unschedulable, broken network) has no containers at all, so
+ * the container sweep alone can only say "not running" — the task is where
+ * Swarm records why. Best-effort: not a manager / no Swarm -> empty.
+ */
+async function listSwarmIssues(): Promise<Map<string, string>> {
+  const issues = new Map<string, string>();
+  try {
+    const [services, tasks] = await withTimeout(
+      Promise.all([docker.listServices(), docker.listTasks()]),
+      DOCKER_OP_TIMEOUT_MS,
+      "swarm task sweep",
+    );
+    const names = new Map<string, string>();
+    for (const svc of services) if (svc.ID && svc.Spec?.Name) names.set(svc.ID, svc.Spec.Name);
+    const newest = new Map<string, (typeof tasks)[number]>();
+    const running = new Set<string>();
+    for (const t of tasks) {
+      const name = t.ServiceID ? names.get(t.ServiceID) : undefined;
+      if (!name) continue;
+      if (t.Status?.State === "running") running.add(name);
+      const prev = newest.get(name);
+      if (!prev || (t.UpdatedAt ?? "") > (prev.UpdatedAt ?? "")) newest.set(name, t);
+    }
+    for (const [name, t] of newest) {
+      if (running.has(name)) continue;
+      const state = t.Status?.State ?? "";
+      const err = t.Status?.Err;
+      if (err) issues.set(name, err);
+      else if (state === "pending" || state === "rejected" || state === "failed") {
+        issues.set(name, `task ${state}${t.Status?.Message ? `: ${t.Status.Message}` : ""}`);
+      }
+    }
+  } catch {
+    /* not a Swarm manager, or the daemon is busy — no extra detail */
+  }
+  return issues;
 }
 
 /**
@@ -129,10 +195,10 @@ export function deriveComposeRuntime(states: string[]): ServiceRuntime {
  * Swarm keeps exited task containers around after restarts/updates, so for
  * Swarm services only running tasks count; leftovers are not "degraded".
  */
-export function deriveSwarmRuntime(states: string[]): ServiceRuntime {
+export function deriveSwarmRuntime(states: string[], issue?: string): ServiceRuntime {
   const running = states.filter((s) => s === "running").length;
   if (running > 0) return { health: "running", running, total: running };
-  return { health: "not-running", running: 0, total: states.length };
+  return { health: "not-running", running: 0, total: states.length, ...(issue ? { issue } : {}) };
 }
 
 /**

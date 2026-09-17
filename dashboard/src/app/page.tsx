@@ -5,7 +5,7 @@ import { ensureCollector } from "@/lib/collector";
 import { Workspace } from "@/components/Workspace";
 import { LogoutButton } from "@/components/LogoutButton";
 
-// Always fetch fresh state from Dokploy.
+// Always fetch fresh state from Dokploy (the deploy engine behind Switchyard).
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
@@ -41,10 +41,10 @@ export default async function Page() {
     <div className="mx-auto max-w-2xl px-6 py-24">
       <div className="rounded-2xl border border-[var(--color-danger)]/40 bg-[var(--color-danger-soft)] p-6">
         <h1 className="text-lg font-semibold text-[var(--color-danger)]">
-          Couldn&apos;t reach Dokploy
+          Couldn&apos;t load your workspace
         </h1>
         <p className="mt-2 text-sm text-[var(--color-fg-muted)]">
-          The dashboard couldn&apos;t talk to the Dokploy API. Check that Dokploy is running and that{" "}
+          Switchyard couldn&apos;t reach its deploy engine. Check that the stack is running (<code className="font-mono">switchyard up</code>) and that{" "}
           <code className="font-mono">DOKPLOY_URL</code>, <code className="font-mono">DOKPLOY_EMAIL</code>{" "}
           and <code className="font-mono">DOKPLOY_PASSWORD</code> are correct — set them with{" "}
           <code className="font-mono">switchyard config</code> for the managed container, or in{" "}

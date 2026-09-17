@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -28,6 +28,10 @@ export function Workspace({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const router = useRouter();
+  const deploying = services.some((s) => s.status === "running");
+  const refreshing = useAutoRefresh(
+    deploying ? DEPLOYING_POLL_MS : selectedId ? DRAWER_POLL_MS : IDLE_POLL_MS
+  );
 
   // Re-resolve the selected service from fresh props so the drawer updates.
   const selected = services.find((s) => s.id === selectedId) ?? null;
@@ -50,7 +54,7 @@ export function Workspace({
             <h1 className="text-xl font-semibold tracking-tight">Services</h1>
           </div>
           <p className="mt-1.5 text-sm text-[var(--color-fg-muted)]">
-            Apps and databases across your Dokploy projects.
+            Apps, databases and stacks across your projects — status updates live.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -69,10 +73,12 @@ export function Workspace({
             <FolderGit2 className="size-3.5" /> Projects
           </button>
           <button
-            onClick={() => router.refresh()}
+            onClick={() => refreshing.now()}
+            title="Status refreshes automatically; click to refresh now"
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
           >
-            <RefreshCw className="size-3.5" /> Refresh
+            <RefreshCw className={cn("size-3.5", refreshing.pending && "animate-spin")} />
+            {deploying ? "Deploying…" : "Refresh"}
           </button>
           <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
         </div>
@@ -92,12 +98,45 @@ export function Workspace({
         </motion.div>
       )}
 
-      <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
+      <ServiceDrawer service={selected} services={services} onClose={() => setSelectedId(null)} />
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
       <AgentPanel />
     </div>
     </MotionConfig>
   );
+}
+
+/** Poll cadence: tight while a deploy is in flight, brisk with a drawer open. */
+const DEPLOYING_POLL_MS = 3_000;
+const DRAWER_POLL_MS = 5_000;
+const IDLE_POLL_MS = 15_000;
+
+/**
+ * Keep server-rendered workspace state (statuses, deploy history, runtime
+ * truth) fresh by re-running the page's server fetch on an interval. Paused
+ * while the tab is hidden, caught up as soon as it's visible again, and never
+ * stacked — a slow refresh just delays the next one.
+ */
+function useAutoRefresh(intervalMs: number) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    // Re-armed after every refresh settles, so the gap is measured from the
+    // last completed fetch.
+    if (pending) return;
+    const tick = () => {
+      if (!document.hidden) startTransition(() => router.refresh());
+    };
+    const timer = setTimeout(tick, intervalMs);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [intervalMs, pending, router]);
+
+  return { pending, now: () => startTransition(() => router.refresh()) };
 }
 
 function ViewToggle({

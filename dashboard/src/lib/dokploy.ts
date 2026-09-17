@@ -22,8 +22,26 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
-import { randomServiceName } from "./names";
+import { randomPassword, randomServiceName } from "./names";
+import { ENGINE_META } from "./engines";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
+import {
+  databaseStack,
+  imageStack,
+  parseManaged,
+  withImageEnvFile,
+  type ManagedMeta,
+} from "./managed-compose";
+import {
+  REF_ANNOTATION,
+  decodeStoredEnv,
+  describeIssues,
+  encodeStoredEnv,
+  findReferences,
+  hasReferences,
+  resolveTemplate,
+} from "./references";
+import { referenceTargets } from "./reference-vars";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
@@ -153,6 +171,10 @@ export interface AppDeployment {
   status: string;
   title: string;
   createdAt: string;
+  /** When the deploy settled (done/error); null while in flight. */
+  finishedAt: string | null;
+  /** Dokploy's own failure summary, when it records one (often null — the log has the detail). */
+  errorMessage: string | null;
   /**
    * Non-null when this deployment produced a restorable image snapshot
    * (Dokploy only records these when the app deploys to a registry). Feeds
@@ -268,6 +290,12 @@ export interface ComposeService extends ServiceBase {
   domains: AppDomain[];
   /** Deploy history for the stack (Dokploy `deployments`). */
   deployments: AppDeployment[];
+  /**
+   * Set when Switchyard generated this stack as a one-click database or image
+   * app on the bridge network (see lib/managed-compose.ts) — the UI presents
+   * it as that service rather than a raw compose stack.
+   */
+  managed: ManagedMeta | null;
 }
 
 /** Any deployable service rendered in the dashboard. */
@@ -611,9 +639,21 @@ export function inferEdges(services: Service[]): ServiceEdge[] {
       .filter((line) => !line.trimStart().startsWith("#"))
       .join("\n")
       .toLowerCase();
-    if (!haystack) continue;
+    // Explicit ${{Service.VAR}} references are a certain connection.
+    const referenced = new Set(
+      findReferences(decodeStoredEnv(a.env)).map((r) => r.service.toLowerCase())
+    );
+    if (!haystack && referenced.size === 0) continue;
     for (const b of services) {
       if (a.id === b.id) continue;
+      if (referenced.has(b.name.toLowerCase())) {
+        const key = `${a.id}->${b.id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          edges.push({ source: a.id, target: b.id });
+        }
+        continue;
+      }
       const needles = [b.appName, b.name].filter(Boolean).map((s) => s.toLowerCase());
       if (needles.some((n) => n.length > 2 && haystack.includes(n))) {
         const key = `${a.id}->${b.id}`;
@@ -666,6 +706,7 @@ export type Action = "deploy" | "start" | "stop" | "remove";
 
 /** Run a lifecycle action against a database. */
 export async function databaseAction(engine: Engine, id: string, action: Action): Promise<void> {
+  if (action === "deploy") await refreshReferences({ kind: "database", engine, id });
   await request(`${engine}.${action}`, {
     method: "POST",
     body: { [idKey(engine)]: id },
@@ -777,7 +818,12 @@ interface RawDeployment {
   status?: string;
   title?: string;
   createdAt?: string;
+  finishedAt?: string | null;
+  errorMessage?: string | null;
   rollbackId?: string | null;
+  /** Server-side log file; never sent to the browser (see deploymentLogTarget). */
+  logPath?: string | null;
+  serverId?: string | null;
 }
 
 /** Normalize a nested domains array (shared by applications and compose). */
@@ -800,6 +846,8 @@ function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment
     status: dp.status ?? "idle",
     title: dp.title ?? "Deployment",
     createdAt: dp.createdAt ?? "",
+    finishedAt: dp.finishedAt ?? null,
+    errorMessage: dp.errorMessage ?? null,
     rollbackId: dp.rollbackId ?? null,
   }));
 }
@@ -960,6 +1008,69 @@ export async function rollbackToDeployment(rollbackId: string): Promise<void> {
     method: "POST",
     body: { rollbackId },
   });
+}
+
+// --- deploy logs ------------------------------------------------------------
+
+/** Service kinds that have Dokploy deployment records (databases don't). */
+export type DeployableKind = "application" | "compose";
+
+export interface DeploymentLogTarget {
+  status: string;
+  errorMessage: string | null;
+  logPath: string | null;
+  serverId: string | null;
+}
+
+/**
+ * Resolve one deployment of an app/stack as the CURRENT user. Going through
+ * `deployment.all` / `deployment.allByCompose` means Dokploy enforces access,
+ * and the log path is only ever resolved here — the browser names a
+ * deployment id, never a file, so it can't ask us to tail arbitrary paths.
+ * Null when the deployment doesn't belong to that service.
+ */
+export async function deploymentLogTarget(
+  kind: DeployableKind,
+  serviceId: string,
+  deploymentId: string
+): Promise<DeploymentLogTarget | null> {
+  const id = encodeURIComponent(serviceId);
+  const list = await request<RawDeployment[]>(
+    kind === "compose"
+      ? `deployment.allByCompose?composeId=${id}`
+      : `deployment.all?applicationId=${id}`
+  );
+  const d = (list ?? []).find((dp) => dp.deploymentId === deploymentId);
+  if (!d) return null;
+  return {
+    status: d.status ?? "idle",
+    errorMessage: d.errorMessage ?? null,
+    logPath: d.logPath ?? null,
+    serverId: d.serverId ?? null,
+  };
+}
+
+/**
+ * Open Dokploy's deployment-log socket (`/listen-deployment`, a `tail -n +1 -f`
+ * of the log file) with the current user's session. The socket never ends on
+ * its own — the caller decides when the deploy has settled.
+ */
+export async function openDeploymentLogSocket(
+  logPath: string,
+  serverId: string | null
+): Promise<WebSocket> {
+  const cookie = await userCookie();
+  if (typeof WebSocket === "undefined") {
+    throw new Error("Streaming build logs needs Node.js 22+ (global WebSocket).");
+  }
+  const url = new URL("/listen-deployment", BASE);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.searchParams.set("logPath", logPath);
+  if (serverId) url.searchParams.set("serverId", serverId);
+  // Node's (undici) WebSocket accepts a non-standard `headers` init, which is
+  // how the session cookie rides along server-side.
+  const init = { headers: { Cookie: cookie, Origin: workingOrigin } };
+  return new WebSocket(url, init as unknown as string[]);
 }
 
 // --- github app (private repos) ---------------------------------------------
@@ -1165,6 +1276,7 @@ export async function applicationAction(id: string, action: Action): Promise<voi
   // Like compose, applications use delete instead of remove (application.remove
   // does not exist — it 404s, which used to break the Destroy button).
   const proc = action === "remove" ? "delete" : action;
+  if (action === "deploy") await refreshReferences({ kind: "application", id });
   await request(`application.${proc}`, { method: "POST", body: { applicationId: id } });
 }
 
@@ -1653,6 +1765,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
       const d = await request<RawComposeDetail>(
         `compose.one?composeId=${encodeURIComponent(id)}`
       );
+      const managed = parseManaged(d.composeFile);
       return {
         ...scope,
         kind: "compose",
@@ -1660,7 +1773,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         name: d.name ?? id,
         appName: d.appName ?? "",
         status: d.composeStatus ?? "idle",
-        dockerImage: null,
+        dockerImage: managed?.image ?? null,
         env: d.env ?? null,
         createdAt: d.createdAt ?? null,
         cpuLimit: null,
@@ -1670,6 +1783,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         composeType: d.composeType ?? null,
         domains: mapDomains(d.domains),
         deployments: mapDeployments(d.deployments),
+        managed,
       } satisfies ComposeService;
     })
   );
@@ -1692,6 +1806,81 @@ export async function createCompose(
   return created.composeId;
 }
 
+/**
+ * Create a Switchyard-generated compose stack (one-click service on the bridge
+ * network). The file depends on the stack's appName — its internal hostname —
+ * which Dokploy only assigns at creation, hence the builder callback. Does not
+ * deploy. Returns the compose id.
+ */
+export async function createManagedCompose(
+  name: string,
+  environmentId: string,
+  build: (appName: string) => { composeFile: string; env?: string }
+): Promise<string> {
+  // appName is the stack's internal hostname. The engine treats it as a prefix
+  // and appends a unique suffix, so seed it from the service name to get
+  // "redis-vdsg-x1y2z3" instead of a random word salad.
+  const prefix = name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  const created = await request<{ composeId: string; appName: string }>("compose.create", {
+    method: "POST",
+    body: { name, environmentId, ...(prefix ? { appName: prefix } : {}) },
+  });
+  const { composeFile, env } = build(created.appName);
+  await request("compose.update", {
+    method: "POST",
+    body: {
+      composeId: created.composeId,
+      sourceType: "raw",
+      composeType: "docker-compose",
+      composeFile,
+      // The stack joins the shared bridge itself; don't let the engine rewrite
+      // it onto an isolated per-stack network.
+      isolatedDeployment: false,
+    },
+  });
+  if (env) await saveComposeEnvironment(created.composeId, env);
+  return created.composeId;
+}
+
+/**
+ * One-click database on the bridge network: generate the compose stack (random
+ * password, latest version, named data volume) and deploy it. Returns the
+ * compose id.
+ */
+export async function deployBridgeDatabase(
+  engine: Engine,
+  name: string,
+  environmentId: string
+): Promise<string> {
+  const meta = ENGINE_META[engine];
+  const password = randomPassword();
+  const id = await createManagedCompose(name, environmentId, (appName) =>
+    databaseStack({
+      engine,
+      appName,
+      version: meta.versions[0],
+      password,
+      databaseName: name.replace(/-/g, "_"),
+      databaseUser: engine === "mongo" ? "root" : "app",
+    })
+  );
+  await composeAction(id, "deploy");
+  return id;
+}
+
+/** One-click Docker image app on the bridge network. Returns the compose id. */
+export async function deployBridgeImage(
+  name: string,
+  image: string,
+  environmentId: string
+): Promise<string> {
+  const id = await createManagedCompose(name, environmentId, (appName) => ({
+    composeFile: imageStack({ appName, image }),
+  }));
+  await composeAction(id, "deploy");
+  return id;
+}
+
 export async function updateComposeFile(id: string, composeFile: string): Promise<void> {
   await request("compose.update", { method: "POST", body: { composeId: id, composeFile } });
 }
@@ -1711,7 +1900,100 @@ export async function saveComposeEnvironment(id: string, env: string): Promise<v
 export async function composeAction(id: string, action: Action): Promise<void> {
   // compose uses delete instead of remove.
   const proc = action === "remove" ? "delete" : action;
+  if (action === "deploy") await refreshReferences({ kind: "compose", id });
   await request(`compose.${proc}`, { method: "POST", body: { composeId: id } });
+}
+
+// --- reference variables ----------------------------------------------------
+//
+// `KEY=${{ServiceName.VAR}}` (lib/references.ts). The engine only ever stores
+// concrete values: a referencing variable is saved as an annotation comment
+// (the template) + the resolved line, so any engine-side deploy (webhooks,
+// its own UI) still gets working values. Switchyard re-resolves before every
+// deploy it starts, so a changed database password or host flows through on
+// the next deploy of the dependent service. Same on the bridge and Swarm
+// paths — the values are just strings by then.
+
+/** Which service's env is being written. */
+export type EnvOwner =
+  | { kind: "database"; engine: Engine; id: string }
+  | { kind: "application"; id: string }
+  | { kind: "compose"; id: string };
+
+async function writeEnv(owner: EnvOwner, env: string): Promise<void> {
+  if (owner.kind === "database") return saveEnvironment(owner.engine, owner.id, env);
+  if (owner.kind === "application") return saveApplicationEnvironment(owner.id, env);
+  return saveComposeEnvironment(owner.id, env);
+}
+
+/** Resolve `template` for `owner` against the current workspace; throws on issues. */
+async function resolveForOwner(owner: EnvOwner, template: string): Promise<string> {
+  const { services } = await loadWorkspace();
+  const self = services.find((s) => s.kind === owner.kind && s.id === owner.id);
+  const resolution = resolveTemplate(
+    template,
+    self?.name ?? null,
+    referenceTargets(services, self?.environmentId)
+  );
+  if (resolution.issues.length > 0) {
+    throw new Error(
+      `Some variable references don't resolve:\n${describeIssues(resolution.issues)}`
+    );
+  }
+  return encodeStoredEnv(template, resolution);
+}
+
+/**
+ * Save a service's variables, expanding `${{Service.VAR}}` references. Plain
+ * env (no references, no escapes) is written as-is without loading the
+ * workspace.
+ */
+export async function saveServiceEnv(owner: EnvOwner, template: string): Promise<void> {
+  const needsResolve = hasReferences(template) || /\$\$\{\{/.test(template);
+  await writeEnv(owner, needsResolve ? await resolveForOwner(owner, template) : template);
+}
+
+/** Current stored env + (for compose) file, straight from the engine. */
+async function readOwner(owner: EnvOwner): Promise<{ env: string; composeFile: string | null }> {
+  if (owner.kind === "database") {
+    const d = await getDetail(owner.engine, owner.id);
+    return { env: d.env ?? "", composeFile: null };
+  }
+  if (owner.kind === "application") {
+    const d = await request<{ env?: string | null }>(
+      `application.one?applicationId=${encodeURIComponent(owner.id)}`
+    );
+    return { env: d.env ?? "", composeFile: null };
+  }
+  const d = await request<{ env?: string | null; composeFile?: string | null }>(
+    `compose.one?composeId=${encodeURIComponent(owner.id)}`
+  );
+  return { env: d.env ?? "", composeFile: d.composeFile ?? null };
+}
+
+/**
+ * Pre-deploy hook: re-resolve reference variables so the deploy sees current
+ * values, and make sure one-click image apps pass their variables into the
+ * container. Cheap when there's nothing to do (one detail read). Throws a
+ * clear error — failing the deploy up front — if a reference no longer
+ * resolves (e.g. the referenced service was renamed or deleted).
+ */
+async function refreshReferences(owner: EnvOwner): Promise<void> {
+  const { env, composeFile } = await readOwner(owner);
+  if (owner.kind === "compose" && composeFile) {
+    const upgraded = withImageEnvFile(composeFile);
+    if (upgraded !== composeFile) await updateComposeFile(owner.id, upgraded);
+  }
+  if (!env.includes(REF_ANNOTATION)) return;
+  let stored: string;
+  try {
+    stored = await resolveForOwner(owner, decodeStoredEnv(env));
+  } catch (e) {
+    throw new Error(
+      `Can't deploy: ${e instanceof Error ? e.message : String(e)}\nFix them in Variables, then deploy again.`
+    );
+  }
+  if (stored !== env) await writeEnv(owner, stored);
 }
 
 // --- backups (S3 destinations + scheduled database backups) -----------------
@@ -2141,7 +2423,10 @@ export async function loadWorkspace(): Promise<{
       s.runtime =
         s.kind === "compose"
           ? deriveComposeRuntime(runtime.compose.get(s.appName) ?? [])
-          : deriveSwarmRuntime(runtime.swarm.get(s.appName) ?? []);
+          : deriveSwarmRuntime(
+              runtime.swarm.get(s.appName) ?? [],
+              runtime.swarmIssues.get(s.appName)
+            );
     }
   } catch {
     // dockerode unavailable in this deployment — leave runtime undefined.

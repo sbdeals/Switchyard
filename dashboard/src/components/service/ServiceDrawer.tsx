@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
-import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
+import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel, presentedKind, isStopped } from "@/lib/service-meta";
 import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -45,9 +45,9 @@ import {
   AppDeployTab,
   AppSettingsTab,
   DeploymentsTab,
-  DeploymentHistory,
   SchedulesTab,
 } from "@/components/service/AppTabs";
+import { DeployBanner, DeploymentHistory } from "@/components/service/DeployActivity";
 import { NetworkingTab } from "@/components/service/networking";
 import {
   ComposeOverviewTab,
@@ -344,7 +344,16 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
+export function ServiceDrawer({
+  service,
+  services,
+  onClose,
+}: {
+  service: Service | null;
+  /** Every service in the workspace — the Variables tab's reference targets. */
+  services: Service[];
+  onClose: () => void;
+}) {
   const [tab, setTab] = useState<TabId>("overview");
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
@@ -352,9 +361,12 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
   // Reset to Overview when a different service is opened (adjust state during
   // render — the React-recommended alternative to a resetting effect).
   const [shownId, setShownId] = useState<string | null>(null);
+  // Deploy whose log the Deploys tab should open (set by the banner's "View logs").
+  const [logDeployId, setLogDeployId] = useState<string | null>(null);
   if (service && service.id !== shownId) {
     setShownId(service.id);
     setTab("overview");
+    setLogDeployId(null);
   }
   const baseTabs =
     service?.kind === "application"
@@ -392,6 +404,15 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
           >
             <ResizeHandle width={width} apply={applyWidth} reset={resetWidth} />
             <Header service={service} onClose={onClose} titleId={titleId} />
+            {service.kind !== "database" && (
+              <DeployBanner
+                service={service}
+                onViewLogs={(id) => {
+                  setLogDeployId(id);
+                  setTab("deployments");
+                }}
+              />
+            )}
             <nav
               role="tablist"
               aria-label="Service sections"
@@ -450,7 +471,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "variables" && <VariablesTab key={service.id} service={service} services={services} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
               {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
               {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
@@ -461,10 +482,10 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 <ComposeDomainsTab compose={service} />
               )}
               {tab === "deployments" && service.kind === "application" && (
-                <DeploymentsTab app={service} />
+                <DeploymentsTab key={logDeployId ?? ""} app={service} openId={logDeployId} />
               )}
               {tab === "deployments" && service.kind === "compose" && (
-                <DeploymentHistory deployments={service.deployments} />
+                <DeploymentHistory key={logDeployId ?? ""} service={service} openId={logDeployId} />
               )}
               {tab === "schedules" && service.kind === "application" && (
                 <SchedulesTab app={service} />
@@ -503,7 +524,7 @@ function Header({
   titleId: string;
 }) {
   const accent = serviceAccent(service);
-  const Icon = service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
+  const Icon = presentedKind(service) === "database" ? DatabaseIcon : presentedKind(service) === "compose" ? Layers : Box;
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
       <div className="flex items-center gap-3">
@@ -524,7 +545,9 @@ function Header({
             {serviceLabel(service)} · {service.projectName} / {service.environmentName}
           </div>
           <div className="text-[11px] text-[var(--color-fg-subtle)]">
-            Last deploy: {LAST_DEPLOY_LABEL[service.status] ?? service.status}
+            {isStopped(service)
+              ? "Stopped"
+              : `Last deploy: ${LAST_DEPLOY_LABEL[service.status] ?? service.status}`}
           </div>
         </div>
       </div>
@@ -550,7 +573,7 @@ function OverviewTab({ db }: { db: Database }) {
 
   return (
     <div className="space-y-5">
-      <LifecycleButtons status={db.status} pending={pending} error={error} run={run} />
+      <LifecycleButtons status={db.status} stopped={isStopped(db)} pending={pending} error={error} run={run} />
 
       {conn && (
         <Field label="Connection string">

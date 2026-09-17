@@ -6,8 +6,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Switchyard — Databases",
-  description: "A Railway-style control plane for Dokploy.",
+  title: "Switchyard",
+  description: "Deploy apps, databases and stacks on your own servers — a Railway-style PaaS you host.",
 };
 
 export default function RootLayout({

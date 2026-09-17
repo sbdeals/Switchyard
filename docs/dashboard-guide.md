@@ -163,6 +163,30 @@ The **Variables** tab (applications and databases) is a plain-text editor: one `
 
 Here `whoami-snim` carries one variable, `REDIS_URL`, set to `redis-mskd`'s internal connection string. This is also what draws the canvas edge between the two services — the variable's value contains the Redis service's app name, so Switchyard infers the dependency.
 
+#### Reference variables
+
+Instead of pasting a connection string, reference it. Railway-style references keep working when a password or host changes:
+
+```
+DATABASE_URL=${{postgres-p3ny.DATABASE_URL}}
+REDIS_URL=${{redis-rq6s.REDIS_URL}}
+CACHE_ADDR=${{redis-rq6s.REDIS_HOST}}:${{redis-rq6s.REDIS_PORT}}
+```
+
+- **Syntax:** `${{ServiceName.VAR}}`, where `ServiceName` is the name shown on the canvas. Everything before the last dot is the service name. It's matched exactly first, then case-insensitively if that's unambiguous. When the same name exists in several environments, the one in the service's own environment wins. A value can mix references and literal text.
+- **What you can reference:** any variable the other service defines in its own Variables (references there are resolved too, so they chain), plus built-ins Switchyard provides:
+  - every service: `SWITCHYARD_HOST` (the internal hostname other services reach it at) and `SWITCHYARD_SERVICE_NAME`;
+  - databases: `DATABASE_URL`, `<ENGINE>_URL`, `<ENGINE>_HOST`, `<ENGINE>_PORT`, `<ENGINE>_PASSWORD`, plus `<ENGINE>_USER` / `<ENGINE>_DATABASE` where the engine has them (`<ENGINE>` is `POSTGRES`, `MYSQL`, `MARIADB`, `MONGO` or `REDIS`). Postgres also gets `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` and `PGDATABASE`.
+
+  A service's own variable wins over a built-in of the same name.
+- **Picker:** **Add reference** lists the other services and the variables each offers (built-ins are highlighted). On an empty line it inserts a whole `VAR=${{Service.VAR}}` entry; with the cursor inside a value it inserts just the reference.
+- **Validation:** under the editor, every referencing variable shows "resolves" or the exact problem: unknown service, unknown variable (with what's available), invalid name, or a reference cycle. **Save variables** is disabled until they all resolve.
+- **When they resolve:** when you save, and again right before every deploy you start from Switchyard. A deploy whose references no longer resolve (say the database was renamed or deleted) fails up front and lists the broken references, instead of starting the service with a bad value.
+- **What the container sees:** plain values. Switchyard keeps your reference as a comment (`# switchyard:ref DATABASE_URL=${{…}}`) directly above the resolved `DATABASE_URL=…` line, so the running service, and any deploy triggered outside Switchyard such as a Git webhook, gets working values. Those outside deploys use the values from your last save or Switchyard deploy.
+- **Left alone:** `${{VAR}}` (no dot), `${{project.…}}`, `${{environment.…}}` and `${{vault.…}}` are the deploy engine's own shared-variable syntax and pass through unchanged. Write `$${{…}}` to emit a literal `${{…}}`.
+
+References appear as connections on the canvas. They work the same way whether a service runs on the local bridge network or as a Swarm service.
+
 ### Domains
 
 The **Domains** tab (applications only) attaches public hostnames. Enter the **Host** (for example `app.example.com`), the container **Port** your app listens on (default 80), and click **Add**. Certificates are automatic — domains are created with HTTPS and Let's Encrypt.
@@ -227,11 +251,11 @@ Every Settings tab ends in the red **Danger zone**: a **Destroy** button that re
 
 ## How canvas connections work
 
-Dokploy has no native "connect these services" concept, so Switchyard infers the arrows from environment variables: if service A's variables mention service B's app name (or its display name), an edge is drawn **from A to B** — from the consumer to the thing it depends on. That's why `whoami-snim → redis-mskd` appears in the hero screenshot: whoami's `REDIS_URL` contains the Redis service's app name. Edges animate and take the color of the service they point at.
+An explicit [reference variable](#reference-variables) (`${{B.VAR}}` in A's Variables) always draws an edge **from A to B**. Beyond that, Switchyard infers arrows from environment variables: if service A's variables mention service B's app name (or its display name), an edge is drawn **from A to B** — from the consumer to the thing it depends on. That's why `whoami-snim → redis-mskd` appears in the hero screenshot: whoami's `REDIS_URL` contains the Redis service's app name. Edges animate and take the color of the service they point at.
 
 Practical consequences:
 
-- **To create an edge**, put a real reference in the consumer's Variables — pasting a database's internal connection string is the canonical way.
+- **To create an edge**, add a reference variable to the consumer (**Add reference** in its Variables tab), or paste a database's internal connection string.
 - **To remove one**, delete the referencing variable and refresh.
 - **False positives happen.** The match is a plain substring check, so if one service's name happens to appear inside an unrelated variable value — or inside another service's name — you may get an arrow that means nothing. Cosmetic only; it changes no behavior.
 

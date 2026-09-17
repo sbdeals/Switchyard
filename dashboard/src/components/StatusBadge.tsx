@@ -9,6 +9,7 @@ export function StatusBadge({ status, runtime }: { status: string; runtime?: Ser
   const meta = resolveServiceDisplay(status, runtime);
   return (
     <span
+      title={meta.explanation}
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
       style={{ backgroundColor: meta.soft, color: meta.color }}
     >

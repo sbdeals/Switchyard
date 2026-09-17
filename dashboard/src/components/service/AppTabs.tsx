@@ -8,7 +8,6 @@ import {
   Loader2,
   GitBranch,
   Webhook,
-  RotateCcw,
   Eye,
   EyeOff,
   Play,
@@ -21,7 +20,6 @@ import {
 import type {
   Application,
   AppDomain,
-  AppDeployment,
   ApplicationPatch,
   BuildType,
   BuildTypePatch,
@@ -42,7 +40,6 @@ import {
   updateDomainAction,
   deleteDomainAction,
   updateGitDeployAction,
-  rollbackDeploymentAction,
   listSchedulesAction,
   createScheduleAction,
   updateScheduleAction,
@@ -63,6 +60,8 @@ import {
   useLifecycle,
   useSavedFlash,
 } from "@/components/service/primitives";
+import { DeploymentHistory } from "@/components/service/DeployActivity";
+import { isStopped } from "@/lib/service-meta";
 import { cn } from "@/lib/utils";
 
 /** Human labels for Dokploy's build strategies. */
@@ -91,7 +90,7 @@ export function AppOverviewTab({ app }: { app: Application }) {
     <div className="space-y-5">
       <PublicUrlBar domains={app.domains} status={app.status} />
 
-      <LifecycleButtons status={app.status} pending={pending} error={error} run={run} />
+      <LifecycleButtons status={app.status} stopped={isStopped(app)} pending={pending} error={error} run={run} />
 
       <PrivateNetwork host={app.appName} />
 
@@ -366,11 +365,11 @@ export function DomainsTab({ app }: { app: Application }) {
   );
 }
 
-export function DeploymentsTab({ app }: { app: Application }) {
+export function DeploymentsTab({ app, openId }: { app: Application; openId?: string | null }) {
   return (
     <div className="space-y-6">
+      <DeploymentHistory service={app} openId={openId} />
       {app.sourceType === "git" && <AutoDeployPanel app={app} />}
-      <DeploymentHistory deployments={app.deployments} />
     </div>
   );
 }
@@ -431,7 +430,7 @@ function AutoDeployPanel({ app }: { app: Application }) {
       </Field>
       <p className="text-[11px] leading-relaxed text-[var(--color-fg-subtle)]">
         Add this as a push webhook in your Git host (GitHub: Settings → Webhooks,
-        content type <span className="font-mono">application/json</span>). If Dokploy
+        content type <span className="font-mono">application/json</span>). If Switchyard
         is reachable at a public domain, replace the host with that address. A push
         to <span className="font-mono">{branch || "main"}</span> then redeploys this
         app while auto-deploy is on.
@@ -488,69 +487,6 @@ function AutoDeployPanel({ app }: { app: Application }) {
       </Field>
 
       <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
-    </div>
-  );
-}
-
-export function DeploymentHistory({ deployments: history }: { deployments: AppDeployment[] }) {
-  const deployments = [...history].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const color = (s: string) =>
-    s === "done" ? "var(--color-ok)" : s === "error" ? "var(--color-danger)" : s === "running" ? "var(--color-warn)" : "var(--color-idle)";
-  return (
-    <div className="space-y-2">
-      <p className="mb-1 text-xs text-[var(--color-fg-muted)]">Deployment history (newest first).</p>
-      {deployments.length === 0 ? (
-        <p className="text-xs text-[var(--color-fg-subtle)]">No deployments yet.</p>
-      ) : (
-        deployments.map((d) => (
-          <div
-            key={d.deploymentId}
-            className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
-          >
-            <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
-            {d.rollbackId && <span className="sr-only">{d.status}</span>}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm">{d.title}</div>
-              <div className="text-[11px] text-[var(--color-fg-subtle)]">
-                {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
-              </div>
-            </div>
-            {d.rollbackId ? (
-              <RollbackButton rollbackId={d.rollbackId} title={d.title} />
-            ) : (
-              <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
-            )}
-          </div>
-        ))
-      )}
-    </div>
-  );
-}
-
-/** Restore a past deployment's image snapshot (Dokploy image-based rollback). */
-function RollbackButton({ rollbackId, title }: { rollbackId: string; title: string }) {
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  function rollback() {
-    if (!confirm(`Roll back to "${title}"? This redeploys the recorded image.`)) return;
-    setError(null);
-    start(async () => {
-      const res = await rollbackDeploymentAction(rollbackId);
-      if (!res.ok) setError(res.error);
-    });
-  }
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <button
-        onClick={rollback}
-        disabled={pending}
-        title="Roll back to this deployment"
-        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)] disabled:opacity-40"
-      >
-        {pending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
-        Roll back
-      </button>
-      {error && <span role="alert" className="text-[11px] text-[var(--color-danger)]">{error}</span>}
     </div>
   );
 }

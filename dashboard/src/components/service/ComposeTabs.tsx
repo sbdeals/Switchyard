@@ -3,6 +3,9 @@
 import { useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { ENGINE_META } from "@/lib/engines";
+import { isStopped } from "@/lib/service-meta";
+import { BRIDGE_NETWORK, managedConnectionString, type ManagedMeta } from "@/lib/managed-compose";
 import {
   composeLifecycleAction,
   saveComposeFileAction,
@@ -13,6 +16,7 @@ import {
   inputCls,
   Field,
   Info,
+  CopyButton,
   LifecycleButtons,
   SaveRow,
   DangerZone,
@@ -29,16 +33,68 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   const { pending, error, run } = useComposeLifecycle(compose);
   return (
     <div className="space-y-5">
-      <PublicUrlBar domains={compose.domains} status={compose.status} />
-      <LifecycleButtons status={compose.status} pending={pending} error={error} run={run} />
-      <p className="text-xs text-[var(--color-fg-muted)]">
-        A raw <code className="font-mono">docker-compose</code> stack. Edit the file in the Compose
-        tab, then deploy.
-      </p>
+      {compose.managed?.kind !== "database" && (
+        <PublicUrlBar domains={compose.domains} status={compose.status} />
+      )}
+      <LifecycleButtons
+        status={compose.status}
+        stopped={isStopped(compose)}
+        pending={pending}
+        error={error}
+        run={run}
+      />
+      {compose.managed ? (
+        <ManagedOverview compose={compose} managed={compose.managed} />
+      ) : (
+        <>
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            A raw <code className="font-mono">docker-compose</code> stack. Edit the file in the
+            Compose tab, then deploy.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Info label="Type" value={compose.composeType ?? "docker-compose"} />
+            <Info label="App name" value={compose.appName} mono />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Overview body for a one-click database or image app that Switchyard runs as
+ * a compose project on the local bridge network.
+ */
+function ManagedOverview({ compose, managed }: { compose: ComposeService; managed: ManagedMeta }) {
+  const conn =
+    managed.kind === "database"
+      ? managedConnectionString(managed.engine, compose.appName, compose.env)
+      : null;
+  return (
+    <div className="space-y-4">
+      {conn && (
+        <Field label="Connection string">
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
+            <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
+              {conn}
+            </code>
+            <CopyButton text={conn} />
+          </div>
+        </Field>
+      )}
       <div className="grid grid-cols-2 gap-3">
-        <Info label="Type" value={compose.composeType ?? "docker-compose"} />
-        <Info label="App name" value={compose.appName} mono />
+        <Info label="Image" value={managed.image} mono />
+        {managed.kind === "database" && (
+          <Info label="Internal port" value={String(ENGINE_META[managed.engine].defaultPort)} />
+        )}
+        <Info label="Internal host" value={compose.appName} mono />
+        <Info label="Network" value={`${BRIDGE_NETWORK} (local bridge)`} mono />
       </div>
+      <p className="text-[11px] leading-relaxed text-[var(--color-fg-subtle)]">
+        Runs as a container on this host&apos;s local network, reachable from your other services
+        at <span className="font-mono">{compose.appName}</span>.
+        {managed.kind === "database" && " Credentials live in Variables; data persists in a named volume."}
+      </p>
     </div>
   );
 }

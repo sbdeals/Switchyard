@@ -279,7 +279,7 @@ export function QuickDeployMenu({
                   ) : templates && filteredTemplates.length === 0 ? (
                     <div className="px-2 py-3 text-xs text-[var(--color-fg-subtle)]">
                       {templates.length === 0
-                        ? "No templates available (Dokploy could not reach its template source)."
+                        ? "No templates available (the template catalog couldn't be reached)."
                         : "No templates match your search."}
                     </div>
                   ) : (
