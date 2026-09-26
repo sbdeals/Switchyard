@@ -1,16 +1,9 @@
 import { completeLogin } from "@/lib/agent/oauth";
 import { setOAuthCredential } from "@/lib/agent/key-store";
+import { requireAgentSession } from "@/lib/agent/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function assertSession(req: Request): Response | null {
-  const cookie = req.headers.get("cookie") ?? "";
-  if (!/(?:^|;\s*)switchyard_session=/.test(cookie)) {
-    return Response.json({ error: "Not signed in." }, { status: 401 });
-  }
-  return null;
-}
 
 /**
  * POST { code } -> exchange the one-time code the user pasted back for
@@ -18,7 +11,7 @@ function assertSession(req: Request): Response | null {
  * re-reads /api/agent/config for the new (masked) status.
  */
 export async function POST(req: Request) {
-  const denied = assertSession(req);
+  const denied = requireAgentSession(req);
   if (denied) return denied;
 
   let body: { code?: unknown };

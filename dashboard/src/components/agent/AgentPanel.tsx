@@ -134,6 +134,18 @@ export function AgentPanel() {
     return () => clearInterval(t);
   }, [refreshChanges, refreshConfig]);
 
+  useEffect(() => {
+    const onDraft = (event: Event) => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      if (typeof detail !== "string") return;
+      setInput(detail);
+      setExpanded(true);
+      try { localStorage.setItem(STORAGE_KEY, "1"); } catch { /* ignore */ }
+    };
+    window.addEventListener("switchyard:agent-draft", onDraft);
+    return () => window.removeEventListener("switchyard:agent-draft", onDraft);
+  }, []);
+
   // Stick to the bottom only when the user was already near it (same
   // heuristic as LogsTab) so scrolling back isn't fought by streaming updates.
   useEffect(() => {

@@ -36,9 +36,11 @@ import { useDialogFocus } from "@/components/use-focus-trap";
 export function QuickDeployMenu({
   projects,
   onDeployed,
+  defaultEnvironmentId,
 }: {
   projects: ProjectNode[];
   onDeployed: (id: string) => void;
+  defaultEnvironmentId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
@@ -63,7 +65,7 @@ export function QuickDeployMenu({
     [projects]
   );
   const [target, setTarget] = useState<string>("");
-  const targetEnv = target || envOptions[0]?.id;
+  const targetEnv = target || (envOptions.some((e) => e.id === defaultEnvironmentId) ? defaultEnvironmentId : envOptions[0]?.id);
 
   function run(key: string, fn: () => Promise<{ ok: true; id: string } | { ok: false; error: string }>) {
     setError(null);

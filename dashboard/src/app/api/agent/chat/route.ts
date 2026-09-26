@@ -3,6 +3,7 @@ import { isAgentConfigured } from "@/lib/agent/client";
 import { runAgentTurn, type AgentEvent } from "@/lib/agent/run";
 import { sessionKey } from "@/lib/agent/store";
 import { SSE_HEADERS } from "@/lib/sse";
+import { requireAgentSession } from "@/lib/agent/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,8 @@ function toMessages(raw: unknown): Anthropic.MessageParam[] {
  *    signals, then a final `done` event.
  */
 export async function POST(req: Request) {
+  const denied = requireAgentSession(req);
+  if (denied) return denied;
   if (!isAgentConfigured()) {
     return Response.json(
       { error: "No Anthropic API key configured — add one at the top of the Agent panel." },

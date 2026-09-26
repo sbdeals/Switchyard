@@ -9,20 +9,13 @@
  *    list + a note, and the UI falls back to the preset's curated suggestions.
  */
 import { getOpenAI } from "@/lib/agent/client";
+import { requireAgentSession } from "@/lib/agent/auth";
 import { AGENT_MODELS, resolveAgentKey, resolveProvider } from "@/lib/agent/key-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MODELS_TIMEOUT_MS = Number(process.env.AGENT_MODELS_TIMEOUT_MS) || 10_000;
-
-function assertSession(req: Request): Response | null {
-  const cookie = req.headers.get("cookie") ?? "";
-  if (!/(?:^|;\s*)switchyard_session=/.test(cookie)) {
-    return Response.json({ error: "Not signed in." }, { status: 401 });
-  }
-  return null;
-}
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -41,7 +34,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 export async function GET(req: Request) {
-  const denied = assertSession(req);
+  const denied = requireAgentSession(req);
   if (denied) return denied;
 
   if (resolveProvider() === "anthropic") {

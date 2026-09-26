@@ -76,7 +76,12 @@ export function openSession(token: string | undefined): SwitchyardSession | null
     if (
       !parsed ||
       typeof parsed.dokployCookie !== "string" ||
-      typeof parsed.email !== "string"
+      !parsed.dokployCookie ||
+      typeof parsed.email !== "string" ||
+      typeof parsed.iat !== "number" ||
+      !Number.isFinite(parsed.iat) ||
+      parsed.iat > Date.now() + 60_000 ||
+      Date.now() - parsed.iat > SESSION_MAX_AGE * 1000
     ) {
       return null;
     }

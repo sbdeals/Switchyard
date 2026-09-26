@@ -2,7 +2,7 @@ import type { Service, ServiceRuntime } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 
 /** Brand accent for applications (databases use their engine accent). */
-export const APP_ACCENT = "#a06bff";
+export const APP_ACCENT = "#ff9b52";
 export const COMPOSE_ACCENT = "#2dd4bf";
 
 export function serviceAccent(s: Service): string {

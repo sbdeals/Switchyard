@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { RotateCcw } from "lucide-react";
 import {
   ReactFlow,
   Background,
@@ -57,10 +58,12 @@ const nodeTypes = { service: ServiceNode };
 
 export function FlowCanvas({
   services,
+  allServices = services,
   edges: serviceEdges,
   onSelect,
 }: {
   services: Service[];
+  allServices?: Service[];
   edges: ServiceEdge[];
   onSelect: (service: Service) => void;
 }) {
@@ -74,7 +77,7 @@ export function FlowCanvas({
       // name renders inside each card (nodes are draggable — a label pinned to
       // the background would stay behind when its services move).
       const groups = new Map<string, Service[]>();
-      for (const svc of services) {
+      for (const svc of allServices) {
         const key = `${svc.projectName} / ${svc.environmentName}`;
         (groups.get(key) ?? groups.set(key, []).get(key)!).push(svc);
       }
@@ -105,9 +108,10 @@ export function FlowCanvas({
         rowMaxServices = Math.max(rowMaxServices, svcs.length);
         col++;
       }
-      return nodes;
+      const visible = new Set(services.map((s) => s.id));
+      return nodes.filter((n) => visible.has(n.id));
     },
-    [services, onSelect, logos]
+    [services, allServices, onSelect, logos]
   );
 
   const buildEdges = useCallback(
@@ -115,7 +119,7 @@ export function FlowCanvas({
       serviceEdges.map((e) => {
         const source = services.find((s) => s.id === e.source);
         const target = services.find((s) => s.id === e.target);
-        const accent = target ? serviceAccent(target) : "#a06bff";
+        const accent = target ? serviceAccent(target) : "#ff9b52";
         return {
           id: `${e.source}->${e.target}`,
           source: e.source,
@@ -162,22 +166,28 @@ export function FlowCanvas({
             const n = curr.find((n) => n.id === id && n.type === "service");
             if (n) pos[id] = n.position;
           }
-          const live = new Set(curr.filter((n) => n.type === "service").map((n) => n.id));
+          const live = new Set(allServices.map((s) => s.id));
           for (const id of Object.keys(pos)) if (!live.has(id)) delete pos[id];
           savePositions(pos);
           return curr;
         });
       }
     },
-    [onNodesChange, setNodes]
+    [onNodesChange, setNodes, allServices]
   );
 
   return (
     <div
       role="region"
       aria-label="Service canvas"
-      className="h-[calc(100vh-9rem)] w-full overflow-hidden rounded-2xl border border-[var(--color-border)]"
+      className="relative h-[min(72vh,820px)] min-h-[430px] w-full overflow-hidden rounded-xl border border-[var(--color-border-strong)] bg-[#0d0e13] sm:min-h-[520px]"
     >
+      <button type="button" onClick={() => {
+        try { localStorage.removeItem(POS_KEY); } catch { /* ignore */ }
+        setNodes(buildNodes());
+      }} className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2.5 py-2 text-[11px] text-[var(--color-fg-muted)] hover:text-white">
+        <RotateCcw className="size-3.5" /> Reset layout
+      </button>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -191,7 +201,7 @@ export function FlowCanvas({
         minZoom={0.3}
         maxZoom={1.5}
       >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#ffffff2b" />
+        <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#ffffff20" />
         <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
         <MiniMap
           pannable
