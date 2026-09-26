@@ -1,6 +1,7 @@
 import { isAgentConfigured } from "@/lib/agent/client";
 import { applyStaged } from "@/lib/agent/ops";
 import { listStaged, removeStaged, sessionKey, type StagedChange } from "@/lib/agent/store";
+import { requireAgentSession } from "@/lib/agent/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,8 @@ function publicView(c: StagedChange) {
 
 /** GET -> { configured, changes: [...] } */
 export async function GET(req: Request) {
+  const denied = requireAgentSession(req);
+  if (denied) return denied;
   const key = sessionKey(req);
   return Response.json({
     configured: isAgentConfigured(),
@@ -25,6 +28,8 @@ export async function GET(req: Request) {
  *  - discard: remove the (selected) staged changes without executing.
  */
 export async function POST(req: Request) {
+  const denied = requireAgentSession(req);
+  if (denied) return denied;
   const key = sessionKey(req);
   let body: { action?: string; ids?: unknown };
   try {

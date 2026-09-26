@@ -18,12 +18,12 @@
   /* >=4.5:1 on bg/surface/elevated — do not darken below #8888a0 (WCAG 1.4.3). */
   --color-fg-subtle: #8888a0;
 
-  --color-brand: #a06bff;
+  --color-brand: #ff9b52;
   /* White button text needs >=4.5:1: brand-strong is the fill, brand-deep the
    * hover. Bare --color-brand fails behind white text — never use it there. */
-  --color-brand-strong: #7c3aed;
-  --color-brand-deep: #6d28d9;
-  --color-brand-soft: #a06bff1a;
+  --color-brand-strong: #ba4b08;
+  --color-brand-deep: #963a06;
+  --color-brand-soft: #ff8b391c;
 
   --color-ok: #3ecf8e;
   --color-ok-soft: #3ecf8e1a;
@@ -47,10 +47,10 @@ html {
 body {
   background-color: var(--color-bg);
   color: var(--color-fg);
-  /* Subtle radial glow, the Railway look. */
+  /* Warm, restrained light around the operator surface. */
   background-image:
-    radial-gradient(60rem 60rem at 80% -10%, #6d28d918, transparent 60%),
-    radial-gradient(50rem 50rem at -10% 10%, #4f46e514, transparent 55%),
+    radial-gradient(58rem 45rem at 85% -15%, #a6460d19, transparent 60%),
+    radial-gradient(42rem 32rem at -15% 12%, #974b2510, transparent 60%),
     linear-gradient(to bottom, transparent, var(--color-bg));
   background-attachment: fixed;
 }

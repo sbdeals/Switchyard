@@ -15,6 +15,7 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
   const nextId = useRef(0);
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState("");
+  const [errorsOnly, setErrorsOnly] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
 
@@ -43,9 +44,11 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
     }
   }, [lines]);
 
-  const shown = filter
-    ? lines.filter((l) => l.text.toLowerCase().includes(filter.toLowerCase()))
-    : lines;
+  // Log formats vary by image. This is a text heuristic, not structured severity.
+  const shown = lines.filter((l) =>
+    (!filter || l.text.toLowerCase().includes(filter.toLowerCase())) &&
+    (!errorsOnly || /\b(error|fatal|panic|exception|failed|critical)\b/i.test(l.text))
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -68,6 +71,10 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
           {connected ? "Live" : "Disconnected"}
         </span>
       </div>
+      <button type="button" aria-pressed={errorsOnly} onClick={() => setErrorsOnly((v) => !v)}
+        className={`mb-3 self-start rounded-md border px-2.5 py-1 text-[11px] ${errorsOnly ? "border-[var(--color-danger)] text-[var(--color-danger)]" : "border-[var(--color-border-strong)] text-[var(--color-fg-muted)]"}`}>
+        Likely errors
+      </button>
 
       <div
         ref={scrollRef}
@@ -82,7 +89,7 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
       >
         {shown.length === 0 ? (
           <div className="flex h-full items-center justify-center gap-2 text-[var(--color-fg-subtle)]">
-            <Loader2 className="size-4 animate-spin" /> waiting for logs…
+            {lines.length === 0 ? <><Loader2 className="size-4 animate-spin" /> Waiting for logs…</> : "No matching log lines."}
           </div>
         ) : (
           shown.map((l) => (

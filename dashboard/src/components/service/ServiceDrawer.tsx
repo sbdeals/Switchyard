@@ -25,6 +25,8 @@ import {
   Server,
   TerminalSquare,
   Table2,
+  Bot,
+  ChevronDown,
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -83,9 +85,10 @@ type TabId =
   | "logs"
   | "console"
   | "backups"
-  | "settings";
+  | "settings"
+  | "agent";
 const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
-  overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
+  overview: { label: "Service", icon: <SlidersHorizontal className="size-4" /> },
   variables: { label: "Variables", icon: <KeyRound className="size-4" /> },
   data: { label: "Data", icon: <Table2 className="size-4" /> },
   deploy: { label: "Deploy", icon: <Server className="size-4" /> },
@@ -100,9 +103,11 @@ const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   console: { label: "Console", icon: <TerminalSquare className="size-4" /> },
   backups: { label: "Backups", icon: <Archive className="size-4" /> },
   settings: { label: "Settings", icon: <Settings2 className="size-4" /> },
+  agent: { label: "Agent", icon: <Bot className="size-4" /> },
 };
 const DB_TABS: TabId[] = [
   "overview",
+  "deployments",
   "variables",
   "volumes",
   "metrics",
@@ -110,6 +115,7 @@ const DB_TABS: TabId[] = [
   "console",
   "backups",
   "settings",
+  "agent",
 ];
 const APP_TABS: TabId[] = [
   "overview",
@@ -124,6 +130,7 @@ const APP_TABS: TabId[] = [
   "logs",
   "console",
   "settings",
+  "agent",
 ];
 const COMPOSE_TABS: TabId[] = [
   "overview",
@@ -136,7 +143,9 @@ const COMPOSE_TABS: TabId[] = [
   "logs",
   "console",
   "settings",
+  "agent",
 ];
+const PRIMARY_TABS: TabId[] = ["overview", "metrics", "logs", "deployments", "agent"];
 
 /**
  * Whether to show the Postgres "Data" tab for a service. Covers the two data
@@ -346,6 +355,7 @@ function ResizeHandle({
 
 export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
+  const moreRef = useRef<HTMLDetailsElement>(null);
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
@@ -363,6 +373,8 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
         ? COMPOSE_TABS
         : DB_TABS;
   const tabs = service && isPostgresService(service) ? withDataTab(baseTabs) : baseTabs;
+  const primaryTabs = PRIMARY_TABS.filter((id) => tabs.includes(id));
+  const moreTabs = tabs.filter((id) => !PRIMARY_TABS.includes(id));
 
   return (
     <AnimatePresence>
@@ -384,35 +396,33 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", stiffness: 320, damping: 34 }}
-            // Width is a layout property; the slide-in animates `x` (transform),
-            // so resizing and the framer-motion animation never fight. maxWidth
-            // is a CSS backstop for the same 90vw cap the JS clamp enforces.
-            style={{ width, maxWidth: "90vw" }}
-            className="fixed inset-y-0 right-0 z-50 flex flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
+            // Full-screen service view on phones, resizable side panel on desktop.
+            style={{ "--drawer-width": `${width}px` } as React.CSSProperties}
+            className="fixed inset-y-0 right-0 z-50 flex w-screen flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl sm:w-[var(--drawer-width)] sm:max-w-[90vw]"
           >
-            <ResizeHandle width={width} apply={applyWidth} reset={resetWidth} />
+            <div className="hidden sm:block"><ResizeHandle width={width} apply={applyWidth} reset={resetWidth} /></div>
             <Header service={service} onClose={onClose} titleId={titleId} />
             <nav
               role="tablist"
               aria-label="Service sections"
               onKeyDown={(e) => {
-                const idx = tabs.indexOf(tab);
+                const idx = primaryTabs.indexOf(tab);
                 let next: number | null = null;
-                if (e.key === "ArrowRight") next = (idx + 1) % tabs.length;
-                else if (e.key === "ArrowLeft") next = (idx - 1 + tabs.length) % tabs.length;
+                if (e.key === "ArrowRight") next = (idx + 1) % primaryTabs.length;
+                else if (e.key === "ArrowLeft") next = (idx - 1 + primaryTabs.length) % primaryTabs.length;
                 else if (e.key === "Home") next = 0;
-                else if (e.key === "End") next = tabs.length - 1;
+                else if (e.key === "End") next = primaryTabs.length - 1;
                 if (next === null) return;
                 e.preventDefault();
-                setTab(tabs[next]);
+                setTab(primaryTabs[next]);
                 const el = e.currentTarget.querySelector<HTMLElement>(
-                  `#drawer-tab-${tabs[next]}`
+                  `#drawer-tab-${primaryTabs[next]}`
                 );
                 el?.focus();
               }}
-              className="flex gap-1 overflow-x-auto border-b border-[var(--color-border)] px-4 [scrollbar-width:thin]"
+              className="flex shrink-0 flex-wrap items-center gap-0 border-b border-[var(--color-border)] px-2 sm:px-4"
             >
-              {tabs.map((id) => (
+              {primaryTabs.map((id) => (
                 <button
                   key={id}
                   type="button"
@@ -423,7 +433,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                   tabIndex={tab === id ? 0 : -1}
                   onClick={() => setTab(id)}
                   className={cn(
-                    "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
+                    "flex shrink-0 items-center gap-1 whitespace-nowrap border-b-2 px-2 py-3 text-[11px] font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-xs",
                     tab === id
                       ? "border-[var(--color-brand)] text-[var(--color-fg)]"
                       : "border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
@@ -433,14 +443,26 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                   {TAB_META[id].label}
                 </button>
               ))}
+              <details ref={moreRef} className="group relative ml-auto shrink-0 self-stretch">
+                <summary className={cn("flex h-full cursor-pointer list-none items-center gap-1 border-b-2 px-2 text-[11px] font-medium sm:px-3 sm:text-xs",
+                  moreTabs.includes(tab) ? "border-[var(--color-brand)] text-white" : "border-transparent text-[var(--color-fg-muted)]")}>
+                  Manage <ChevronDown className="size-3" />
+                </summary>
+                <div className="absolute right-0 top-full z-[70] mt-1 max-h-[60vh] w-44 overflow-auto rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-1 shadow-xl">
+                  {moreTabs.map((id) => <button type="button" key={id} onClick={() => { setTab(id); if (moreRef.current) moreRef.current.open = false; }}
+                    className={cn("flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs hover:bg-[var(--color-surface-hover)]", tab === id ? "text-[var(--color-brand)]" : "text-[var(--color-fg-muted)]")}>
+                    {TAB_META[id].icon}{TAB_META[id].label}
+                  </button>)}
+                </div>
+              </details>
             </nav>
 
             <div
               id="drawer-tabpanel"
               role="tabpanel"
-              aria-labelledby={`drawer-tab-${tab}`}
+              aria-label={`${TAB_META[tab].label} details`}
               tabIndex={0}
-              className="flex-1 overflow-auto p-5"
+              className="flex-1 overflow-auto p-4 sm:p-5"
             >
               {tab === "overview" &&
                 (service.kind === "database" ? (
@@ -466,6 +488,13 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               {tab === "deployments" && service.kind === "compose" && (
                 <DeploymentHistory deployments={service.deployments} />
               )}
+              {tab === "deployments" && service.kind === "database" && (
+                <div className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-4 text-sm">
+                  <h3 className="font-medium">Database deployment</h3>
+                  <p className="mt-2 text-[var(--color-fg-muted)]">Last deploy: {LAST_DEPLOY_LABEL[service.status] ?? service.status}. Use Service for lifecycle actions. Detailed deployment history is not available for managed databases yet.</p>
+                </div>
+              )}
+              {tab === "agent" && <ServiceAgentTab service={service} />}
               {tab === "schedules" && service.kind === "application" && (
                 <SchedulesTab app={service} />
               )}
@@ -538,6 +567,37 @@ function Header({
       </button>
     </div>
   );
+}
+
+function ServiceAgentTab({ service }: { service: Service }) {
+  const status = service.runtime
+    ? `${service.runtime.health} (${service.runtime.running}/${service.runtime.total} containers)`
+    : service.status;
+  const draft = (task: string) => {
+    window.dispatchEvent(new CustomEvent("switchyard:agent-draft", {
+      detail: `Service: ${service.name} (id: ${service.id}, kind: ${service.kind}, project: ${service.projectName}, environment: ${service.environmentName}, status: ${status}). ${task}`,
+    }));
+  };
+  return <div className="space-y-4">
+    <div className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-4">
+      <div className="flex items-center gap-2 text-sm font-medium"><Bot className="size-4 text-[var(--color-brand)]" /> Work with this service</div>
+      <p className="mt-2 text-xs leading-relaxed text-[var(--color-fg-muted)]">Choose a task to open the built-in agent with this service and environment in the draft. Review the request before sending it. Changes proposed by the agent remain staged for approval.</p>
+    </div>
+    <div className="grid gap-2">
+      <button type="button" onClick={() => draft("Inspect the current service state and summarize what needs attention. Read logs and metrics before suggesting changes.")}
+        className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-4 text-left text-sm hover:border-[var(--color-brand)]">
+        Diagnose service <span className="mt-1 block text-xs text-[var(--color-fg-muted)]">Review health, logs, and metrics</span>
+      </button>
+      <button type="button" onClick={() => draft("Review recent deployments and explain any failures. Propose a safe recovery plan; do not apply changes until I approve.")}
+        className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-4 text-left text-sm hover:border-[var(--color-brand)]">
+        Review deploys <span className="mt-1 block text-xs text-[var(--color-fg-muted)]">Investigate failures and recovery options</span>
+      </button>
+      <button type="button" onClick={() => draft("Help me plan the next update to this service. Show the exact deployment or configuration changes for review before applying them.")}
+        className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-4 text-left text-sm hover:border-[var(--color-brand)]">
+        Plan an update <span className="mt-1 block text-xs text-[var(--color-fg-muted)]">Draft a reviewed change for this environment</span>
+      </button>
+    </div>
+  </div>;
 }
 
 const useDbLifecycle = (db: Database) =>
