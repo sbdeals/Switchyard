@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
+import { Globe, ExternalLink, Plus, Loader2, RotateCcw } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { isStopped, serviceLabel } from "@/lib/service-meta";
@@ -12,9 +12,11 @@ import {
   saveComposeFileAction,
   createComposeDomainAction,
   generateComposeDomainAction,
+  rollbackComposeAction,
 } from "@/app/actions";
 import {
   inputCls,
+  Btn,
   Field,
   Info,
   CopyButton,
@@ -32,6 +34,21 @@ const useComposeLifecycle = (c: ComposeService) =>
 
 export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   const { pending, error, run } = useComposeLifecycle(compose);
+  const [rollbackPending, startRollback] = useTransition();
+  const [rollbackError, setRollbackError] = useState<string | null>(null);
+  const managedApp = compose.managed?.kind === "image" || compose.managed?.kind === "repo"
+    ? compose.managed : null;
+  const busy = pending || rollbackPending || Boolean(managedApp && compose.status === "running");
+
+  function rollback(timestamp: string, image: string) {
+    if (!confirm(`Roll back "${compose.name}" to ${image}? This redeploys the service.`)) return;
+    setRollbackError(null);
+    startRollback(async () => {
+      const res = await rollbackComposeAction(compose.id, timestamp);
+      if (!res.ok) setRollbackError(res.error);
+    });
+  }
+
   return (
     <div className="space-y-5">
       {compose.managed?.kind !== "database" && (
@@ -40,9 +57,11 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
       <LifecycleButtons
         status={compose.status}
         stopped={isStopped(compose)}
-        pending={pending}
+        pending={busy}
         error={error}
         run={run}
+        deployLabel={managedApp?.kind === "repo" && managedApp.pinnedTag
+          ? `Redeploy latest from ${managedApp.branch}` : undefined}
       />
       {compose.managed ? (
         <ManagedOverview compose={compose} managed={compose.managed} />
@@ -58,6 +77,71 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
           </div>
         </>
       )}
+      {managedApp && (
+        <PreviousDeploys
+          compose={compose}
+          managed={managedApp}
+          pending={busy}
+          error={rollbackError}
+          rollback={rollback}
+        />
+      )}
+    </div>
+  );
+}
+
+function PreviousDeploys({ compose, managed, pending, error, rollback }: {
+  compose: ComposeService;
+  managed: Exclude<ManagedMeta, { kind: "database" }>;
+  pending: boolean;
+  error: string | null;
+  rollback: (timestamp: string, image: string) => void;
+}) {
+  const history = managed.history ?? [];
+  const currentImage = managed.kind === "repo" ? managed.pinnedTag ?? managed.image : managed.image;
+  const currentIndex = history.findIndex((entry) => entry.image === currentImage);
+  const latestDeploy = [...compose.deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  const rows = history.map((entry, index) => ({ ...entry, current: index === currentIndex, saved: true }));
+  if (managed.kind === "repo" && currentIndex === -1) {
+    rows.unshift({ image: currentImage, timestamp: latestDeploy?.createdAt ?? "", current: true, saved: false });
+  }
+
+  return (
+    <div className="space-y-2 border-t border-[var(--color-border)] pt-4">
+      <h3 className="text-xs font-medium text-[var(--color-fg-muted)]">Previous deploys</h3>
+      {rows.length ? rows.map((entry) => (
+        <div key={`${entry.timestamp}-${entry.image}`} className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5">
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-mono text-xs" title={entry.image}>{entry.image}</div>
+            <div className="mt-0.5 text-[11px] text-[var(--color-fg-subtle)]">
+              {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "Not deployed yet"}
+            </div>
+          </div>
+          {entry.current ? (
+            <span title="Current configured image; see Deploys for deployment status." className="shrink-0 rounded-full bg-[var(--color-brand-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-brand)]">
+              Current
+            </span>
+          ) : entry.saved && (
+            <Btn onClick={() => rollback(entry.timestamp, entry.image)} disabled={pending}>
+              <RotateCcw className="size-3" /> Roll back
+            </Btn>
+          )}
+        </div>
+      )) : (
+        <p className="text-xs text-[var(--color-fg-subtle)]">No previous deploys saved yet. Deploy this service to start its history.</p>
+      )}
+      <p className="text-[11px] leading-relaxed text-[var(--color-fg-subtle)]">
+        Up to five saved images. Current marks the configured image; check Deploys for its status.
+        {managed.kind === "repo" && (managed.pinnedTag
+          ? " Pinned to a saved image. Redeploy latest rebuilds from the branch head."
+          : " The running image is saved before the next redeploy.")}
+      </p>
+      {managed.rollbackUnavailable && (
+        <p role="status" className="text-xs text-[var(--color-warn)]">
+          The previous running image could not be saved. Rollback is unavailable for that deploy.
+        </p>
+      )}
+      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );
 }

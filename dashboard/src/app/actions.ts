@@ -49,7 +49,8 @@ import {
   deployBridgeRepo,
   redeployManagedImage,
   composeAction,
-  updateComposeFile,
+  saveComposeFile,
+  rollbackManagedCompose,
   listTemplates,
   deployTemplate,
   listSchedules,
@@ -684,10 +685,11 @@ export async function saveComposeFileAction(
   composeFile: string,
   redeploy = false
 ): Promise<ActionResult> {
-  return wrap(async () => {
-    await updateComposeFile(id, composeFile);
-    if (redeploy) await composeAction(id, "deploy");
-  });
+  return wrap(() => saveComposeFile(id, composeFile, redeploy));
+}
+
+export async function rollbackComposeAction(id: string, timestamp: string): Promise<ActionResult> {
+  return wrap(() => rollbackManagedCompose(id, timestamp));
 }
 
 export async function saveComposeEnvAction(id: string, env: string): Promise<ActionResult> {

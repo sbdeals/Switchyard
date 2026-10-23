@@ -9,6 +9,7 @@
 import "server-only";
 import Docker from "dockerode";
 import type { Duplex } from "node:stream";
+import { validateManagedAppName, validateRepoTag } from "./managed-compose";
 
 const socketPath = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
 const docker = new Docker({ socketPath });
@@ -85,6 +86,85 @@ export async function inspectImageExposedPorts(image: string): Promise<string[]>
     return Object.keys(info.Config?.ExposedPorts ?? {});
   } catch {
     return [];
+  }
+}
+
+// --- managed compose rollback images ----------------------------------------
+
+const snapshotTags = new Set<string>();
+
+/** Preserve the running app's image ID before a repo build replaces :latest. */
+export async function snapshotComposeAppImage(appName: string, tag: string): Promise<void> {
+  validateManagedAppName(appName);
+  validateRepoTag(appName, tag);
+  if (snapshotTags.has(tag)) throw new Error("This rollback image is already being saved");
+  snapshotTags.add(tag);
+  try {
+    const labels = {
+      "com.docker.compose.project": appName,
+      "com.docker.compose.service": "app",
+    };
+    const containers = await withTimeout(
+      docker.listContainers({
+        all: false,
+        filters: { label: Object.entries(labels).map(([key, value]) => `${key}=${value}`) },
+      }),
+      DOCKER_OP_TIMEOUT_MS,
+      "Finding the running compose app",
+    );
+    const container = containers
+      .filter((c) => c.State === "running" && Object.entries(labels).every(([key, value]) => c.Labels?.[key] === value))
+      .sort((a, b) => b.Created - a.Created)[0];
+    if (!container) throw new Error("No running app image is available to save");
+    const info = await withTimeout(
+      docker.getContainer(container.Id).inspect(),
+      DOCKER_OP_TIMEOUT_MS,
+      "Inspecting the running compose app",
+    );
+    if (!info.State.Running || !Object.entries(labels).every(([key, value]) => info.Config.Labels?.[key] === value)) {
+      throw new Error("The compose app changed before its image could be saved");
+    }
+    if (!/^sha256:[a-f0-9]{64}$/.test(info.Image)) throw new Error("The running app has an invalid image ID");
+
+    let exists = true;
+    try {
+      await withTimeout(docker.getImage(tag).inspect(), DOCKER_OP_TIMEOUT_MS, "Checking the rollback image tag");
+    } catch (error) {
+      if ((error as { statusCode?: number }).statusCode !== 404) throw error;
+      exists = false;
+    }
+    if (exists) throw new Error("This rollback image tag already exists");
+    await withTimeout(
+      docker.getImage(info.Image).tag({ repo: `${appName}-app`, tag: tag.slice(tag.lastIndexOf(":") + 1) }),
+      DOCKER_OP_TIMEOUT_MS,
+      "Saving the running app image",
+    );
+  } finally {
+    snapshotTags.delete(tag);
+  }
+}
+
+/** A recorded local image must still exist before pinning a compose app to it. */
+export async function verifyComposeAppImage(appName: string, tag: string): Promise<void> {
+  validateManagedAppName(appName);
+  validateRepoTag(appName, tag);
+  await withTimeout(docker.getImage(tag).inspect(), DOCKER_OP_TIMEOUT_MS, "Checking the rollback image");
+}
+
+/** Best effort: only untag this app's expired snapshots, without forcing removal. */
+export async function pruneComposeAppImages(appName: string, tags: string[]): Promise<void> {
+  validateManagedAppName(appName);
+  for (const tag of new Set(tags)) {
+    try {
+      validateRepoTag(appName, tag);
+      await withTimeout(
+        docker.getImage(tag).remove({ force: false, noprune: true }),
+        DOCKER_OP_TIMEOUT_MS,
+        "Pruning an expired rollback image",
+      );
+    } catch {
+      /* Invalid, missing, or still in use: leave it alone and continue. */
+    }
   }
 }
 

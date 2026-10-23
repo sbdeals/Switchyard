@@ -32,8 +32,17 @@ import {
   imageStack,
   repoStack,
   parseManaged,
+  managedAppImage,
+  recordManagedDeploy,
+  repoSnapshotTag,
+  rewriteManagedApp,
+  validateImageRef,
+  validateManagedAppName,
+  validateRepoTag,
   validateRepoSource,
   withImageEnvFile,
+  writeManagedMeta,
+  type ManagedDeployEntry,
   type ManagedMeta,
   type RepoStackInput,
 } from "./managed-compose";
@@ -52,6 +61,9 @@ import {
   deriveSwarmRuntime,
   inspectImageExposedPorts,
   listRuntimeStates,
+  snapshotComposeAppImage,
+  verifyComposeAppImage,
+  pruneComposeAppImages,
   type ServiceRuntime,
 } from "./docker";
 
@@ -1891,6 +1903,7 @@ export async function deployBridgeImage(
   image: string,
   environmentId: string
 ): Promise<string> {
+  validateImageRef(image);
   const id = await createManagedCompose(name, environmentId, (appName) => ({
     composeFile: imageStack({ appName, image }),
   }));
@@ -1957,11 +1970,162 @@ export async function redeployManagedImage(composeId: string): Promise<void> {
     `compose.one?composeId=${encodeURIComponent(composeId)}`
   );
   const managed = parseManaged(detail.composeFile);
-  if (managed?.kind === "image" || managed?.kind === "repo") await composeAction(composeId, "deploy");
+  if (managed?.kind === "image" || managed?.kind === "repo") {
+    await composeAction(composeId, "deploy", true);
+  }
 }
 
 export async function updateComposeFile(id: string, composeFile: string): Promise<void> {
   await request("compose.update", { method: "POST", body: { composeId: id, composeFile } });
+}
+
+// Serialize metadata read/modify/write within this dashboard. Dokploy's running
+// status also guards the interval after its asynchronous deploy was enqueued.
+const composeMutations = new Set<string>();
+
+async function withComposeMutation(id: string, fn: () => Promise<void>): Promise<void> {
+  if (composeMutations.has(id)) throw new Error("This stack is already being updated. Try again shortly.");
+  composeMutations.add(id);
+  try {
+    await fn();
+  } finally {
+    composeMutations.delete(id);
+  }
+}
+
+function assertComposeNotDeploying(detail: RawComposeDetail): void {
+  if (detail.composeStatus === "running" || detail.deployments?.some((d) => d.status === "running")) {
+    throw new Error("Wait for the current deployment to finish before deploying again.");
+  }
+}
+
+function hasComposeDeployed(detail: RawComposeDetail): boolean {
+  return (detail.deployments?.length ?? 0) > 0 || detail.composeStatus === "done" || detail.composeStatus === "error";
+}
+
+/** Preserve server-stored history even when the Compose editor holds an older file. */
+export async function saveComposeFile(id: string, composeFile: string, redeploy: boolean): Promise<void> {
+  await withComposeMutation(id, async () => {
+    // All detail reads and mutations use the caller's Dokploy session, exactly
+    // like the other compose actions; no system/admin credentials are used.
+    const detail = await request<RawComposeDetail>(`compose.one?composeId=${encodeURIComponent(id)}`);
+    const previous = parseManaged(detail.composeFile);
+    const next = parseManaged(composeFile);
+    if (previous && previous.kind !== "database" && next?.kind === previous.kind) {
+      assertComposeNotDeploying(detail);
+      let history = previous.history ?? [];
+      if (previous.kind === "image" && previous.history === undefined && hasComposeDeployed(detail)) {
+        history = recordManagedDeploy(history, {
+          timestamp: new Date().toISOString(), image: previous.image,
+        }).history;
+      }
+      next.history = history;
+      next.rollbackUnavailable = previous.rollbackUnavailable;
+      if (next.kind === "repo" && previous.kind === "repo") {
+        next.pinnedTag = previous.pinnedTag;
+        next.image = previous.image;
+        if (next.pinnedTag) composeFile = rewriteManagedApp(composeFile, detail.appName ?? "", next);
+      } else {
+        next.image = managedAppImage(composeFile);
+      }
+      composeFile = writeManagedMeta(composeFile, next);
+    }
+    await updateComposeFile(id, composeFile);
+    if (redeploy) await deployCompose(id);
+  });
+}
+
+/** Select only a server-stored history entry, never a client-supplied image ref. */
+export async function rollbackManagedCompose(id: string, timestamp: string): Promise<void> {
+  if (typeof timestamp !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(timestamp)) {
+    throw new Error("Choose a valid deployment from the rollback history.");
+  }
+  await withComposeMutation(id, () => deployCompose(id, false, timestamp));
+}
+
+async function deployCompose(id: string, preservePinned = false, rollbackTimestamp?: string): Promise<void> {
+  const detail = await request<RawComposeDetail>(`compose.one?composeId=${encodeURIComponent(id)}`);
+  let composeFile = withImageEnvFile(detail.composeFile ?? "");
+  const managed = parseManaged(composeFile);
+  if (!managed || managed.kind === "database") {
+    if (rollbackTimestamp !== undefined) throw new Error("Rollback is only available for managed image and repo apps.");
+    await refreshReferences({ kind: "compose", id });
+    await request("compose.deploy", { method: "POST", body: { composeId: id } });
+    return;
+  }
+  assertComposeNotDeploying(detail);
+  const appName = detail.appName ?? "";
+  validateManagedAppName(appName);
+  let history = managed.history ?? [];
+  const originalHistory = history;
+  let target: ManagedDeployEntry | undefined;
+  if (rollbackTimestamp !== undefined) {
+    target = history.find((entry) => entry.timestamp === rollbackTimestamp);
+    if (!target) throw new Error("This deployment is no longer in the rollback history. Refresh and try again.");
+    if (managed.kind === "repo") {
+      validateRepoTag(appName, target.image);
+      await verifyComposeAppImage(appName, target.image);
+    } else validateImageRef(target.image);
+  }
+
+  const timestamp = new Date(Math.max(Date.now(), ...history.map((entry) => Date.parse(entry.timestamp) + 1))).toISOString();
+  let snapshot: ManagedDeployEntry | undefined;
+  if (managed.kind === "repo") {
+    // Metadata is editable YAML. Validate every retained tag against this
+    // authorized stack before it can reach the host-wide Docker socket.
+    for (const entry of history) validateRepoTag(appName, entry.image);
+    if (managed.pinnedTag) validateRepoTag(appName, managed.pinnedTag);
+    validateRepoSource(managed);
+    if (managed.pinnedTag && preservePinned) await verifyComposeAppImage(appName, managed.pinnedTag);
+    await refreshReferences({ kind: "compose", id });
+    if (!managed.pinnedTag && hasComposeDeployed(detail)) {
+      const image = repoSnapshotTag(appName, timestamp);
+      try {
+        await snapshotComposeAppImage(appName, image);
+        snapshot = { timestamp, image };
+        // Keep all candidates until the rollback target has been promoted;
+        // otherwise choosing the oldest retained tag could prune that target.
+        history = [snapshot, ...history];
+        managed.rollbackUnavailable = false;
+      } catch {
+        // Deploy must proceed even if the old image/socket is unavailable.
+        // Persist a safe notice; Docker errors can contain sensitive details.
+        managed.rollbackUnavailable = true;
+      }
+    }
+    if (target) {
+      managed.image = target.image;
+      managed.pinnedTag = target.image;
+      history = recordManagedDeploy(history, {
+        timestamp: new Date(Date.parse(timestamp) + 1).toISOString(), image: target.image,
+      }).history;
+      composeFile = rewriteManagedApp(composeFile, appName, managed);
+    } else if (managed.pinnedTag && !preservePinned) {
+      delete managed.pinnedTag;
+      managed.image = `${appName}-app:latest`;
+      composeFile = rewriteManagedApp(composeFile, appName, managed);
+    } else if (managed.pinnedTag) {
+      composeFile = rewriteManagedApp(composeFile, appName, managed);
+    }
+    if (snapshot && !target) history = recordManagedDeploy(originalHistory, snapshot).history;
+  } else {
+    managed.image = target?.image ?? managedAppImage(composeFile);
+    validateImageRef(managed.image);
+    await refreshReferences({ kind: "compose", id });
+    history = recordManagedDeploy(history, { timestamp, image: managed.image }).history;
+    if (target) composeFile = rewriteManagedApp(composeFile, appName, managed);
+  }
+  if (history.length || managed.history) managed.history = history;
+  composeFile = writeManagedMeta(composeFile, managed);
+  if (composeFile !== detail.composeFile) await updateComposeFile(id, composeFile);
+  await request("compose.deploy", { method: "POST", body: { composeId: id } });
+  if (managed.kind === "repo") {
+    const retained = new Set(history.map((entry) => entry.image));
+    const pruned = [...originalHistory, ...(snapshot ? [snapshot] : [])]
+      .map((entry) => entry.image)
+      .filter((image) => !retained.has(image) && image !== managed.pinnedTag);
+    if (pruned.length) await pruneComposeAppImages(appName, pruned);
+  }
 }
 
 /**
@@ -1976,10 +2140,13 @@ export async function saveComposeEnvironment(id: string, env: string): Promise<v
   });
 }
 
-export async function composeAction(id: string, action: Action): Promise<void> {
+export async function composeAction(id: string, action: Action, preservePinned = false): Promise<void> {
   // compose uses delete instead of remove.
   const proc = action === "remove" ? "delete" : action;
-  if (action === "deploy") await refreshReferences({ kind: "compose", id });
+  if (action === "deploy") {
+    await withComposeMutation(id, () => deployCompose(id, preservePinned));
+    return;
+  }
   await request(`compose.${proc}`, { method: "POST", body: { composeId: id } });
 }
 

@@ -15,43 +15,84 @@ import { ENGINE_META } from "@/lib/engines";
 /** Shared bridge network every Dokploy-managed container joins (Traefik lives here). */
 export const BRIDGE_NETWORK = "dokploy-network";
 
+export const MAX_MANAGED_HISTORY = 5;
+
+export interface ManagedDeployEntry {
+  timestamp: string;
+  image: string;
+}
+
+interface ManagedAppHistory {
+  history?: ManagedDeployEntry[];
+  rollbackUnavailable?: boolean;
+}
+
 export type ManagedMeta =
   | { kind: "database"; engine: Engine; image: string }
-  | { kind: "image"; image: string }
-  | { kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string };
+  | ({ kind: "image"; image: string } & ManagedAppHistory)
+  | ({ kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string; pinnedTag?: string } & ManagedAppHistory);
 
 const ENGINES = new Set<string>(Object.keys(ENGINE_META));
+const META_BLOCK = /^x-switchyard:[ \t]*\r?\n(?:(?:[ \t]+[^\r\n]*|[ \t]*)(?:\r?\n|$))*/m;
+
+function readScalar(value: string): string | null {
+  if (value.startsWith('"')) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return typeof parsed === "string" ? parsed : null;
+    } catch { return null; }
+  }
+  if (/^'(?:[^']|'')*'$/.test(value)) return value.slice(1, -1).replace(/''/g, "'");
+  return value.startsWith("'") ? null : value;
+}
+
+function validTimestamp(timestamp: unknown): timestamp is string {
+  return typeof timestamp === "string" && Number.isFinite(Date.parse(timestamp)) &&
+    new Date(timestamp).toISOString() === timestamp;
+}
+
+function readHistory(value: string): ManagedDeployEntry[] {
+  try {
+    const entries: unknown = JSON.parse(value);
+    if (!Array.isArray(entries)) return [];
+    return entries.filter((entry): entry is ManagedDeployEntry => {
+      if (!entry || typeof entry !== "object" || !validTimestamp(entry.timestamp)) return false;
+      try { validateImageRef(entry.image); return true; } catch { return false; }
+    }).sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .filter((entry, index, all) => all.findIndex((other) => other.image === entry.image) === index)
+      .slice(0, MAX_MANAGED_HISTORY).map(({ timestamp, image }) => ({ timestamp, image }));
+  } catch { return []; }
+}
 
 /** Read the `x-switchyard` block from a compose file, or null for ordinary stacks. */
 export function parseManaged(composeFile: string | null | undefined): ManagedMeta | null {
   if (!composeFile) return null;
-  const block = composeFile.match(/^x-switchyard:[ \t]*\r?\n((?:[ \t]+\S.*(?:\r?\n|$))+)/m);
+  const block = composeFile.match(META_BLOCK);
   if (!block) return null;
   const fields: Record<string, string> = {};
-  for (const line of block[1].split("\n")) {
-    const m = line.match(/^[ \t]+([\w-]+):[ \t]*(.*?)[ \t\r]*$/);
+  for (const line of block[0].split("\n")) {
+    // Only direct metadata fields count; nested YAML must not override identity.
+    const m = line.match(/^  ([\w-]+):[ \t]*(.*?)[ \t\r]*$/);
     if (!m) continue;
-    const value = m[2];
-    if (value.startsWith('"')) {
-      try {
-        const parsed: unknown = JSON.parse(value);
-        if (typeof parsed === "string") fields[m[1]] = parsed;
-      } catch { /* Ignore malformed quoted metadata. */ }
-    } else if (/^'(?:[^']|'')*'$/.test(value)) {
-      fields[m[1]] = value.slice(1, -1).replace(/''/g, "'");
-    } else if (!value.startsWith("'")) {
-      fields[m[1]] = value;
-    }
+    if (Object.hasOwn(fields, m[1])) return null;
+    const value = readScalar(m[2]);
+    if (value !== null) fields[m[1]] = value;
   }
   if (fields.kind === "database" && ENGINES.has(fields.engine) && fields.image) {
     return { kind: "database", engine: fields.engine as Engine, image: fields.image };
   }
-  if (fields.kind === "image" && fields.image) return { kind: "image", image: fields.image };
+  const history: ManagedAppHistory = {
+    ...(fields.history !== undefined ? { history: readHistory(fields.history) } : {}),
+    ...(/^(true|false)$/.test(fields.rollbackUnavailable ?? "") ? { rollbackUnavailable: fields.rollbackUnavailable === "true" } : {}),
+  };
+  if (fields.kind === "image" && fields.image) return { kind: "image", image: fields.image, ...history };
   if (fields.kind === "repo" && fields.image && fields.repoUrl && fields.branch) {
     return {
       kind: "repo", image: fields.image, repoUrl: fields.repoUrl, branch: fields.branch,
       ...(fields.subdirectory ? { subdirectory: fields.subdirectory } : {}),
       ...(fields.dockerfile ? { dockerfile: fields.dockerfile } : {}),
+      ...(fields.pinnedTag ? { pinnedTag: fields.pinnedTag } : {}),
+      ...history,
     };
   }
   return null;
@@ -86,6 +127,112 @@ const FOOTER = `networks:
 function scalar(s: string): string {
   return /^[\w./][\w./:@-]*$/.test(s) && !s.endsWith(":") &&
     !/^(?:null|true|false|yes|no|on|off|\d.*|\.(?:\d.*|inf|nan))$/i.test(s) ? s : JSON.stringify(s);
+}
+
+/** Names are used in Docker repository names and Compose project filters. */
+export function validateManagedAppName(appName: string): void {
+  if (typeof appName !== "string" || /\s/.test(appName) || !/^[a-z0-9][a-z0-9_-]{0,127}$/.test(appName)) {
+    throw new Error("Invalid managed app name.");
+  }
+}
+
+/** Docker references only: no URLs, credentials, interpolation, or shell syntax. */
+export function validateImageRef(image: string): void {
+  if (typeof image !== "string" || image.length > 512 || !image || /[\s$]/.test(image)) {
+    throw new Error("Invalid Docker image reference.");
+  }
+  const [named, digest, ...extra] = image.split("@");
+  if (extra.length || (digest !== undefined && !/^(?:sha256:[a-fA-F0-9]{64}|sha384:[a-fA-F0-9]{96}|sha512:[a-fA-F0-9]{128})$/.test(digest))) {
+    throw new Error("Invalid Docker image reference.");
+  }
+  const tagSeparator = named.lastIndexOf(":");
+  const hasTag = tagSeparator > named.lastIndexOf("/") && !named.endsWith("]");
+  const name = hasTag ? named.slice(0, tagSeparator) : named;
+  if (hasTag && !/^[\w][\w.-]{0,127}$/.test(named.slice(tagSeparator + 1))) {
+    throw new Error("Invalid Docker image tag.");
+  }
+  const parts = name.split("/");
+  if (parts.length > 1 && (/[.:\[\]]/.test(parts[0]) || parts[0] === "localhost")) {
+    const registry = parts.shift()!;
+    if (!/^(?:[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?|\[[a-fA-F0-9:]+\])(?::[0-9]{1,5})?$/.test(registry)) {
+      throw new Error("Invalid Docker image registry.");
+    }
+  }
+  if (name.length > 255 || !parts.every((part) => /^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*$/.test(part))) {
+    throw new Error("Invalid Docker image reference.");
+  }
+}
+
+/** Only this app's immutable local snapshots may be pinned or deleted. */
+export function validateRepoTag(appName: string, tag: string): void {
+  validateManagedAppName(appName);
+  validateImageRef(tag);
+  const prefix = `${appName}-app:sy-`;
+  const timestamp = tag.startsWith(prefix) ? tag.slice(prefix.length) : "";
+  if (!/^(?:0|[1-9][0-9]{0,15})$/.test(timestamp) || !Number.isSafeInteger(Number(timestamp)) || Number(timestamp) > 8640000000000000) {
+    throw new Error("Invalid local rollback image tag.");
+  }
+}
+
+export function repoSnapshotTag(appName: string, timestamp: string): string {
+  validateManagedAppName(appName);
+  if (!validTimestamp(timestamp)) throw new Error("Invalid deployment timestamp.");
+  const tag = `${appName}-app:sy-${Date.parse(timestamp)}`;
+  validateRepoTag(appName, tag);
+  return tag;
+}
+
+/** Retain the newest deployment of each image, without pruning a retained tag. */
+export function recordManagedDeploy(history: ManagedDeployEntry[] | undefined, entry: ManagedDeployEntry): {
+  history: ManagedDeployEntry[];
+  pruned: ManagedDeployEntry[];
+} {
+  const all = [entry, ...(history ?? [])];
+  for (const deploy of all) {
+    if (!validTimestamp(deploy.timestamp)) throw new Error("Invalid deployment timestamp.");
+    validateImageRef(deploy.image);
+  }
+  const retained = [...all].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    .filter((deploy, index, sorted) => sorted.findIndex((other) => other.image === deploy.image) === index)
+    .slice(0, MAX_MANAGED_HISTORY);
+  const pruned = all.filter((deploy, index) => !retained.some((other) => other.image === deploy.image) &&
+    all.findIndex((other) => other.image === deploy.image) === index);
+  return { history: retained, pruned };
+}
+
+/** Update the extension block only; Dokploy owns domains and service labels. */
+export function writeManagedMeta(composeFile: string, meta: ManagedMeta): string {
+  if ((composeFile.match(/^x-switchyard:/gm) ?? []).length !== 1 || !META_BLOCK.test(composeFile)) {
+    throw new Error("Managed compose metadata is missing or ambiguous.");
+  }
+  validateImageRef(meta.image);
+  const lines = ["x-switchyard:", `  kind: ${meta.kind}`];
+  if (meta.kind === "database") lines.push(`  engine: ${meta.engine}`);
+  lines.push(`  image: ${scalar(meta.image)}`);
+  if (meta.kind === "repo") {
+    validateRepoSource(meta);
+    lines.push(`  repoUrl: ${scalar(meta.repoUrl)}`, `  branch: ${scalar(meta.branch)}`);
+    if (meta.subdirectory) lines.push(`  subdirectory: ${scalar(meta.subdirectory)}`);
+    if (meta.dockerfile) lines.push(`  dockerfile: ${scalar(meta.dockerfile)}`);
+    if (meta.pinnedTag) {
+      validateImageRef(meta.pinnedTag);
+      lines.push(`  pinnedTag: ${scalar(meta.pinnedTag)}`);
+    }
+  }
+  if (meta.kind !== "database") {
+    if (meta.history !== undefined) {
+      // Validate before writing, rather than silently storing an unusable entry.
+      for (const entry of meta.history) {
+        if (!validTimestamp(entry.timestamp)) throw new Error("Invalid deployment timestamp.");
+        validateImageRef(entry.image);
+      }
+      if (meta.history.length > MAX_MANAGED_HISTORY) throw new Error("Too many previous deploys.");
+      lines.push(`  history: ${JSON.stringify(meta.history)}`);
+    }
+    if (meta.rollbackUnavailable !== undefined) lines.push(`  rollbackUnavailable: ${meta.rollbackUnavailable}`);
+  }
+  const newline = composeFile.includes("\r\n") ? "\r\n" : "\n";
+  return composeFile.replace(META_BLOCK, `${lines.join(newline)}${newline}`);
 }
 
 export interface RepoStackInput {
@@ -231,6 +378,8 @@ export function databaseStack(input: DatabaseStackInput): { composeFile: string;
 
 /** Compose file for a one-click Docker image app on the bridge network. */
 export function imageStack(input: { appName: string; image: string }): string {
+  validateManagedAppName(input.appName);
+  validateImageRef(input.image);
   const image = scalar(input.image);
   return [
     `x-switchyard:`,
@@ -250,13 +399,9 @@ export function imageStack(input: { appName: string; image: string }): string {
 
 /** Build a public Dockerfile repository as a local image on the bridge network. */
 export function repoStack(input: RepoStackInput): string {
+  validateManagedAppName(input.appName);
   validateRepoSource(input);
   const image = scalar(`${input.appName}-app:latest`);
-  // BuildKit needs the .git suffix to distinguish a Git context from an HTTP file.
-  const repoUrl = new URL(input.repoUrl);
-  const path = repoUrl.pathname.replace(/\/+$/, "");
-  repoUrl.pathname = path.endsWith(".git") ? path : `${path}.git`;
-  const context = `${repoUrl.href}#${input.branch}${input.subdirectory ? `:${input.subdirectory}` : ""}`;
   const lines = [
     `x-switchyard:`,
     `  kind: repo`,
@@ -269,13 +414,7 @@ export function repoStack(input: RepoStackInput): string {
   lines.push(
     `services:`,
     `  app:`,
-    `    build:`,
-    `      context: ${scalar(context)}`,
-  );
-  if (input.dockerfile && input.dockerfile !== "Dockerfile") {
-    lines.push(`      dockerfile: ${scalar(input.dockerfile)}`);
-  }
-  lines.push(
+    ...repoBuildLines(input),
     `    image: ${image}`,
     `    restart: unless-stopped`,
     `    env_file:`,
@@ -284,6 +423,93 @@ export function repoStack(input: RepoStackInput): string {
     FOOTER,
   );
   return lines.join("\n");
+}
+
+function repoBuildLines(input: Omit<RepoStackInput, "appName">): string[] {
+  validateRepoSource(input);
+  // BuildKit needs the .git suffix to distinguish a Git context from an HTTP file.
+  const repoUrl = new URL(input.repoUrl);
+  const path = repoUrl.pathname.replace(/\/+$/, "");
+  repoUrl.pathname = path.endsWith(".git") ? path : `${path}.git`;
+  const context = `${repoUrl.href}#${input.branch}${input.subdirectory ? `:${input.subdirectory}` : ""}`;
+  const lines = ["    build:", `      context: ${scalar(context)}`];
+  if (input.dockerfile && input.dockerfile !== "Dockerfile") lines.push(`      dockerfile: ${scalar(input.dockerfile)}`);
+  return lines;
+}
+
+/** Restrict string rewrites to the unambiguous block shape we generate. */
+function managedAppBlock(composeFile: string): { lines: string[]; start: number; end: number; image: number } {
+  const lines = composeFile.split(/\r?\n/);
+  if (lines.some((line) => /^(?:"services"|'services'):/.test(line))) throw new Error("Managed app services must use a plain YAML block.");
+  const services = lines.flatMap((line, index) => /^services[ \t]*:/.test(line) ? [index] : []);
+  if (services.length !== 1 || lines[services[0]] !== "services:") throw new Error("Managed app services must use a plain YAML block.");
+  let servicesEnd = services[0] + 1;
+  while (servicesEnd < lines.length && (!lines[servicesEnd].trim() || /^\s|^#/.test(lines[servicesEnd]))) servicesEnd++;
+  const apps = lines.flatMap((line, index) => index > services[0] && index < servicesEnd && /^  app:/.test(line) ? [index] : []);
+  if (apps.length !== 1 || lines[apps[0]] !== "  app:") throw new Error("Managed app service is missing or ambiguous.");
+  const start = apps[0] + 1;
+  let end = start;
+  while (end < servicesEnd && (!lines[end].trim() || /^ {4}|^\s*#/.test(lines[end]))) end++;
+  const keys = new Set<string>();
+  let image = -1;
+  for (let i = services[0] + 1; i < servicesEnd; i++) {
+    if (/^ *\t/.test(lines[i])) throw new Error("Managed app services must use spaces for indentation.");
+    if (/^ {2}\S/.test(lines[i]) && !/^ {2}(?:[a-zA-Z0-9][a-zA-Z0-9_.-]*:|#)/.test(lines[i])) {
+      throw new Error("Managed app services must use plain YAML keys.");
+    }
+  }
+  for (let i = start; i < end; i++) {
+    const key = lines[i].match(/^ {4}([^\s:]+):/);
+    if (/^ {4}\S/.test(lines[i]) && !/^ {4}(?:[a-zA-Z0-9_-]+:|#)/.test(lines[i])) {
+      throw new Error("Managed app fields must use plain YAML keys.");
+    }
+    if (!key) continue;
+    if (key[1] === "<<" || key[1] === "extends" || keys.has(key[1])) throw new Error("Managed app fields are ambiguous.");
+    if (/^    (?:build|pull_policy):\s*[&*!]/.test(lines[i])) throw new Error("Managed app build fields cannot use YAML aliases or tags.");
+    keys.add(key[1]);
+    if (key[1] === "image") image = i;
+  }
+  if (image < 0) throw new Error("Managed app image is missing.");
+  return { lines, start, end, image };
+}
+
+/** Read the service image, since the compose editor may have changed it. */
+export function managedAppImage(composeFile: string): string {
+  const block = managedAppBlock(composeFile);
+  const value = readScalar(block.lines[block.image].slice("    image:".length).trim());
+  if (value === null) throw new Error("Managed app image must be a plain image reference.");
+  validateImageRef(value);
+  return value;
+}
+
+/** Pin a previous image or reconstruct a repo's normal branch-head build. */
+export function rewriteManagedApp(composeFile: string, appName: string, meta: Exclude<ManagedMeta, { kind: "database" }>): string {
+  validateManagedAppName(appName);
+  managedAppImage(composeFile);
+  const block = managedAppBlock(composeFile);
+  const image = meta.kind === "repo" ? meta.pinnedTag ?? `${appName}-app:latest` : meta.image;
+  validateImageRef(image);
+  if (meta.kind === "repo") {
+    validateRepoSource(meta);
+    if (meta.pinnedTag) validateRepoTag(appName, meta.pinnedTag);
+    for (const entry of meta.history ?? []) validateRepoTag(appName, entry.image);
+  }
+  const replacement: string[] = [];
+  for (let i = block.start; i < block.end; i++) {
+    if (/^    (?:build|pull_policy):/.test(block.lines[i])) {
+      // Remove the entire old field, including a nested build map.
+      while (i + 1 < block.end && (/^ {5}|^\s*#/.test(block.lines[i + 1]) || !block.lines[i + 1].trim())) i++;
+    } else if (i === block.image) {
+      if (meta.kind === "repo" && !meta.pinnedTag) replacement.push(...repoBuildLines(meta));
+      replacement.push(`    image: ${scalar(image)}`);
+      if (meta.kind === "repo" && meta.pinnedTag) replacement.push("    pull_policy: never");
+    } else {
+      replacement.push(block.lines[i]);
+    }
+  }
+  block.lines.splice(block.start, block.end - block.start, ...replacement);
+  const newline = composeFile.includes("\r\n") ? "\r\n" : "\n";
+  return writeManagedMeta(block.lines.join(newline), { ...meta, image });
 }
 
 /**
