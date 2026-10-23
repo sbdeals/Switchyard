@@ -734,6 +734,9 @@ interface RawApplicationDetail {
   command?: string | null;
   registryUrl?: string | null;
   env?: string | null;
+  buildArgs?: string | null;
+  buildSecrets?: string | null;
+  createEnvFile?: boolean | null;
   createdAt?: string | null;
   cpuLimit?: string | null;
   memoryLimit?: string | null;
@@ -1153,11 +1156,24 @@ export async function saveAppBuildType(id: string, patch: BuildTypePatch): Promi
   await request("application.saveBuildType", { method: "POST", body });
 }
 
-export async function saveApplicationEnvironment(id: string, env: string): Promise<void> {
-  // application.saveEnvironment also accepts build args/secrets; send empty.
+export async function saveApplicationEnvironment(
+  id: string,
+  env: string,
+  settings: { buildArgs?: string; buildSecrets?: string; createEnvFile?: boolean } = {},
+): Promise<void> {
+  const current = await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(id)}`
+  );
+  // saveEnvironment requires all fields, including build settings unrelated to runtime env.
   await request("application.saveEnvironment", {
     method: "POST",
-    body: { applicationId: id, env, buildArgs: "", buildSecrets: "", createEnvFile: false },
+    body: {
+      applicationId: id,
+      env,
+      buildArgs: settings.buildArgs ?? current.buildArgs ?? "",
+      buildSecrets: settings.buildSecrets ?? current.buildSecrets ?? "",
+      createEnvFile: settings.createEnvFile ?? current.createEnvFile ?? false,
+    },
   });
 }
 
