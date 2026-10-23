@@ -4,11 +4,14 @@
  *
  * Dokploy templates bind everything under `../files/` — that resolves to
  * /etc/dokploy/compose/<app>/files on the host. On Docker Desktop that path
- * is inside the Linux VM, whose root filesystem does not survive VM
- * recreation (updates, "Reset to factory defaults"), so database data bound
- * there (e.g. supabase's `db/data`) dies with the VM. Named volumes live in
- * the Docker data root and survive. Config-file binds stay as binds: Dokploy
- * rewrites those from its database on every deploy, so they self-heal.
+ * is inside the Linux VM; rebuilding its root filesystem can lose database
+ * data bound there (e.g. supabase's `db/data`). Named volumes survive container
+ * recreation, Switchyard/Dokploy upgrades, and Docker Desktop restarts, and
+ * VM disk recreation only if Docker preserves the volume data. "Reset to
+ * factory defaults", "Clean / Purge data", and uninstalling Docker Desktop
+ * delete volumes too: named-volume persistence is not a backup. Config-file
+ * binds stay as binds: Dokploy rewrites those on every deploy, provided its
+ * database survives.
  */
 
 /** Container paths that hold data worth keeping in the template catalog. */
