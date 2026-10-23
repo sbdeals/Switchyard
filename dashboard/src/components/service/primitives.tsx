@@ -305,6 +305,7 @@ export function LifecycleButtons({
   error,
   run,
   stopped = false,
+  deployLabel,
 }: {
   status: ServiceStatus;
   pending: boolean;
@@ -312,13 +313,15 @@ export function LifecycleButtons({
   run: (action: Action) => void;
   /** Deployed but stopped (status reads "idle"): offer Start, not a first Deploy. */
   stopped?: boolean;
+  /** Explain the deploy target when it differs from the currently running image. */
+  deployLabel?: string;
 }) {
   return (
     <>
       <div className="flex flex-wrap gap-2">
         {status === "idle" && !stopped ? (
           <Btn onClick={() => run("deploy")} disabled={pending} primary>
-            <Rocket className="size-3.5" /> Deploy
+            <Rocket className="size-3.5" /> {deployLabel ?? "Deploy"}
           </Btn>
         ) : status === "done" ? (
           <Btn onClick={() => run("stop")} disabled={pending}>
@@ -331,7 +334,7 @@ export function LifecycleButtons({
         )}
         {(status !== "idle" || stopped) && (
           <Btn onClick={() => run("deploy")} disabled={pending}>
-            <RefreshCw className="size-3.5" /> Redeploy
+            <RefreshCw className="size-3.5" /> {deployLabel ?? "Redeploy"}
           </Btn>
         )}
       </div>

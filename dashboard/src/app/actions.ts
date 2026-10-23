@@ -50,7 +50,8 @@ import {
   redeployManagedImage,
   stopBridgeRepoPortWatch,
   composeAction,
-  updateComposeFile,
+  saveComposeFile,
+  rollbackManagedCompose,
   listTemplates,
   deployTemplate,
   listSchedules,
@@ -691,8 +692,14 @@ export async function saveComposeFileAction(
 ): Promise<ActionResult> {
   return wrap(async () => {
     await stopBridgeRepoPortWatch(id);
-    await updateComposeFile(id, composeFile);
-    if (redeploy) await composeAction(id, "deploy");
+    await saveComposeFile(id, composeFile, redeploy);
+  });
+}
+
+export async function rollbackComposeAction(id: string, timestamp: string): Promise<ActionResult> {
+  return wrap(async () => {
+    await stopBridgeRepoPortWatch(id);
+    await rollbackManagedCompose(id, timestamp);
   });
 }
 

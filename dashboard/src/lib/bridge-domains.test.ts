@@ -7,7 +7,12 @@ vi.mock("./session", () => ({
   SESSION_COOKIE: "switchyard-session",
   openSession: () => ({ dokployCookie: "dokploy-session=test" }),
 }));
-vi.mock("./docker", () => ({ inspectImageExposedPorts: vi.fn() }));
+vi.mock("./docker", () => ({
+  inspectImageExposedPorts: vi.fn(),
+  snapshotComposeAppImage: vi.fn(),
+  verifyComposeAppImage: vi.fn(),
+  pruneComposeAppImages: vi.fn(),
+}));
 vi.mock("./repo-port", () => ({ fetchRepoExposedPorts: async () => [] }));
 
 import { inspectImageExposedPorts } from "./docker";
@@ -231,7 +236,11 @@ describe("bridge auto-domain reconciliation", () => {
   it.each(["idle", "running", "error"] as const)("does not reconcile before a successful build (%s)", async (status) => {
     await deployRepo();
     detail.composeStatus = status;
-    await composeAction("compose-1", "deploy");
+    if (status === "running") {
+      await expect(composeAction("compose-1", "deploy")).rejects.toThrow("current deployment");
+    } else {
+      await composeAction("compose-1", "deploy");
+    }
     expect(detail.domains[0].port).toBe(3000);
     expect(requests.some(({ procedure }) => procedure === "domain.update")).toBe(false);
   });
