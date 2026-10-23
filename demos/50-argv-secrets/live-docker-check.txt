@@ -1,0 +1,9 @@
+## main pattern
+docker run -d --rm --name argv-check-26815 -e DOKPLOY_PASSWORD=SYNTH-live-<ts> alpine sleep 30
+  secret present in argv: 1   container sees correct DOKPLOY_PASSWORD: yes
+## branch: dashboard container (-e NAME)
+docker run -d --rm --name argv-check-20990 -e DOKPLOY_PASSWORD alpine sleep 30
+  secret present in argv: 0   container sees correct DOKPLOY_PASSWORD: yes
+## branch: metrics store (--env-file, name-only line)
+docker run -d --rm --name argv-check-8627 --env-file /tmp/tmp.hWV0Bv0JR9 alpine sleep 30
+  secret present in argv: 0   container sees correct POSTGRES_PASSWORD: yes

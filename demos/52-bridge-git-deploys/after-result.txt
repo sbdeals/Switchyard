@@ -1,0 +1,11 @@
+containers matching welcome-to-docker:
+  welcome-to-docker-ivuw-ojypxo-app-1|welcome-to-docker-ivuw-ojypxo-app:latest|Up 2 minutes|welcome-to-docker-ivuw-ojypxo
+swarm services matching:
+  (none)
+  traefik.docker.network=dokploy-network
+  traefik.enable=true
+  traefik.http.routers.welcome-to-docker-ivuw-ojypxo-10-web.entrypoints=web
+  traefik.http.routers.welcome-to-docker-ivuw-ojypxo-10-web.rule=Host(`welcome-to-docker-ivuw-ojypxo-88481e-140-248-50-52.sslip.io`)
+  traefik.http.routers.welcome-to-docker-ivuw-ojypxo-10-web.service=welcome-to-docker-ivuw-ojypxo-10-web
+  traefik.http.services.welcome-to-docker-ivuw-ojypxo-10-web.loadbalancer.server.port=3000
+curl -H "Host: welcome-to-docker-ivuw-ojypxo-88481e-140-248-50-52.sslip.io" http://127.0.0.1/ -> 200

@@ -1,0 +1,91 @@
+[
+  {
+    "kind": "database",
+    "id": "db-mariadb",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-staging",
+    "environmentName": "Staging",
+    "engine": "mariadb",
+    "name": "MariaDB",
+    "appName": "shop-mariadb",
+    "status": "running",
+    "env": "DB_TOKEN=secret-mariadb-env"
+  },
+  {
+    "kind": "database",
+    "id": "db-mongo",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-staging",
+    "environmentName": "Staging",
+    "engine": "mongo",
+    "name": "Mongo",
+    "appName": "shop-mongo",
+    "status": "error",
+    "env": "DB_TOKEN=secret-mongo-env"
+  },
+  {
+    "kind": "database",
+    "id": "db-mysql",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-production",
+    "environmentName": "Production",
+    "engine": "mysql",
+    "name": "MySQL",
+    "appName": "shop-mysql",
+    "status": "idle",
+    "env": "DB_TOKEN=secret-mysql-env"
+  },
+  {
+    "kind": "database",
+    "id": "db-postgres",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-production",
+    "environmentName": "Production",
+    "engine": "postgres",
+    "name": "Postgres",
+    "appName": "shop-postgres",
+    "status": "running",
+    "env": "DB_TOKEN=secret-postgres-env"
+  },
+  {
+    "kind": "database",
+    "id": "db-redis",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-production",
+    "environmentName": "Production",
+    "engine": "redis",
+    "name": "Redis",
+    "appName": "shop-redis",
+    "status": "running",
+    "env": "DB_TOKEN=secret-redis-env"
+  },
+  {
+    "kind": "application",
+    "id": "app-web",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-production",
+    "environmentName": "Production",
+    "name": "Web",
+    "appName": "shop-web",
+    "status": "running",
+    "env": "API_TOKEN=secret-app-env\nPUBLIC_URL=https://example.test"
+  },
+  {
+    "kind": "compose",
+    "id": "compose-worker",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-staging",
+    "environmentName": "Staging",
+    "name": "Worker",
+    "appName": "shop-worker",
+    "status": "idle",
+    "env": "QUEUE_TOKEN=secret-compose-env"
+  }
+]

@@ -1,0 +1,5 @@
+### after — codex/mcp-list-metadata build, live bridge Dokploy, 2026-10-23 05:19:30 EDT
+services: 15   response bytes: 4679
+fields returned: appName, engine, environmentId, environmentName, id, kind, name, projectId, projectName, status
+services with a non-empty env block: 0
+services with password/buildArgs/buildSecrets fields: 0

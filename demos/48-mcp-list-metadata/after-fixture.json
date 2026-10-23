@@ -1,0 +1,84 @@
+[
+  {
+    "id": "db-mariadb",
+    "name": "MariaDB",
+    "appName": "shop-mariadb",
+    "kind": "database",
+    "status": "running",
+    "engine": "mariadb",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-staging",
+    "environmentName": "Staging"
+  },
+  {
+    "id": "db-mongo",
+    "name": "Mongo",
+    "appName": "shop-mongo",
+    "kind": "database",
+    "status": "error",
+    "engine": "mongo",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-staging",
+    "environmentName": "Staging"
+  },
+  {
+    "id": "db-mysql",
+    "name": "MySQL",
+    "appName": "shop-mysql",
+    "kind": "database",
+    "status": "idle",
+    "engine": "mysql",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-production",
+    "environmentName": "Production"
+  },
+  {
+    "id": "db-postgres",
+    "name": "Postgres",
+    "appName": "shop-postgres",
+    "kind": "database",
+    "status": "running",
+    "engine": "postgres",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-production",
+    "environmentName": "Production"
+  },
+  {
+    "id": "db-redis",
+    "name": "Redis",
+    "appName": "shop-redis",
+    "kind": "database",
+    "status": "running",
+    "engine": "redis",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-production",
+    "environmentName": "Production"
+  },
+  {
+    "id": "app-web",
+    "name": "Web",
+    "appName": "shop-web",
+    "kind": "application",
+    "status": "running",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-production",
+    "environmentName": "Production"
+  },
+  {
+    "id": "compose-worker",
+    "name": "Worker",
+    "appName": "shop-worker",
+    "kind": "compose",
+    "status": "idle",
+    "projectId": "project-shop",
+    "projectName": "Shop",
+    "environmentId": "env-staging",
+    "environmentName": "Staging"
+  }
+]

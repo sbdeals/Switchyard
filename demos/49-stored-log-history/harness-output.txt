@@ -1,0 +1,12 @@
+PASS stopped container emits reset, stored lines in order, then one unchanged marker
+PASS empty history retains reset and stopped marker
+PASS throwing store retains reset and stopped marker
+PASS unset store URL performs no database work and retains old stopped behavior
+PASS database failure degrades to old behavior without exposing store errors
+PASS ownership rejects unknown apps before Docker or history access
+PASS workspace failure fails closed before Docker or history access
+PASS missing app retains 400 and does not read workspace, Docker, or history
+PASS live stream resets immediately, preserves live data, and never queries history
+PASS queryLogs binds identity, since, limit and returns newest 300 oldest-first with deterministic ties
+PASS LogsTab labels and dims history, filters it, and clears it on live reset
+11/11 verification checks passed

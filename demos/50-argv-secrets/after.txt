@@ -1,0 +1,25 @@
+### after — codex/argv-secrets CLI dist, 2026-10-23 05:25:56 EDT
+Dashboard rendered docker argv: ["run","-d","--name","switchyard","--restart","unless-stopped","--network","dokploy-network","-p","127.0.0.1:3001:3001","-v","/var/run/docker.sock:/var/run/docker.sock","-e","DOKPLOY_URL=http://dokploy:3000","-e","DOKPLOY_ORIGIN=http://localhost:3000","-e","DOKPLOY_EMAIL=demo@example.invalid","-e","DOKPLOY_PASSWORD","-e","SWITCHYARD_SESSION_SECRET","-e","SWITCHYARD_STORE_URL","-l","switchyard.managed=true","-l","switchyard.config-hash=0584b0023664fd6c8475399cb8f0bdf805a01a3655dcab786d4c5de264b27147","ghcr.io/sbdeals/switchyard:0.0.0-demo"]
+rendered dashboard argv: adminPassword synthetic secret appears = false
+rendered dashboard argv: sessionSecret synthetic secret appears = false
+rendered dashboard argv: storePassword synthetic secret appears = false
+Fake docker argv: ["network","inspect","dokploy-network"]
+Fake docker env names: ["ARGV_DEMO_CAPTURE","PATH","TMPDIR"]
+Fake docker argv: ["inspect","switchyard","--format","{{ index .Config.Labels \"switchyard.config-hash\" }}|{{ .State.Running }}"]
+Fake docker env names: ["ARGV_DEMO_CAPTURE","PATH","TMPDIR"]
+Fake docker argv: ["pull","ghcr.io/sbdeals/switchyard:0.0.0-demo"]
+Fake docker env names: ["ARGV_DEMO_CAPTURE","PATH","TMPDIR"]
+Fake docker argv: ["run","-d","--name","switchyard","--restart","unless-stopped","--network","dokploy-network","-p","127.0.0.1:3001:3001","-v","/var/run/docker.sock:/var/run/docker.sock","-e","DOKPLOY_URL=http://dokploy:3000","-e","DOKPLOY_ORIGIN=http://localhost:3000","-e","DOKPLOY_EMAIL=demo@example.invalid","-e","DOKPLOY_PASSWORD","-e","SWITCHYARD_SESSION_SECRET","-e","SWITCHYARD_STORE_URL","-l","switchyard.managed=true","-l","switchyard.config-hash=0584b0023664fd6c8475399cb8f0bdf805a01a3655dcab786d4c5de264b27147","ghcr.io/sbdeals/switchyard:0.0.0-demo"]
+Fake docker env names: ["ARGV_DEMO_CAPTURE","DOKPLOY_PASSWORD","PATH","SWITCHYARD_SESSION_SECRET","SWITCHYARD_STORE_URL","TMPDIR"]
+Fake docker env names containing synthetic credentials: ["DOKPLOY_PASSWORD","SWITCHYARD_SESSION_SECRET","SWITCHYARD_STORE_URL"]
+Fake sudo argv: ["FORCE=1","bash","/tmp/argv-secrets-demo-02Cp9P/scripts/dokploy-up.sh"]
+Fake sudo env names: ["ARGV_DEMO_CAPTURE","PATH","TMPDIR"]
+Fake sudo argv: ["SWITCHYARD_ENV_FILE=/tmp/switchyard-env-H3Ijc7/env","bash","/tmp/argv-secrets-demo-02Cp9P/scripts/switchyard-store-up.sh"]
+Fake sudo env names: ["ARGV_DEMO_CAPTURE","PATH","TMPDIR"]
+spawned dashboard argv: adminPassword synthetic secret appears = false
+spawned dashboard argv: sessionSecret synthetic secret appears = false
+spawned dashboard argv: storePassword synthetic secret appears = false
+spawned sudo argv: adminPassword synthetic secret appears = false
+spawned sudo argv: sessionSecret synthetic secret appears = false
+spawned sudo argv: storePassword synthetic secret appears = false
+Demo completed; no real commands or containers were used.

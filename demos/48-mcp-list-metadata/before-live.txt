@@ -1,0 +1,8 @@
+### before — main (1fc46d5) mcp build, live bridge Dokploy, 2026-10-23 05:19:29 EDT
+services: 15   response bytes: 4993
+fields returned: appName, engine, env, environmentId, environmentName, id, kind, name, projectId, projectName, status
+services with a non-empty env block: 3
+  api: ["ENV_MARKER=<value redacted in this demo>"]
+  api-stg: ["ENV_MARKER=<value redacted in this demo>"]
+  web: ["PORT=<value redacted in this demo>","LOG_LEVEL=<value redacted in this demo>"]
+services with password/buildArgs/buildSecrets fields: 0
