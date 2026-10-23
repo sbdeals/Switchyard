@@ -231,6 +231,7 @@ export async function followLogs(
   const out = new PassThrough();
   container.modem.demuxStream(raw, out, out);
   raw.on("end", () => out.end());
+  raw.on("close", () => out.end());
   raw.on("error", (e: Error) => out.destroy(e));
 
   return {
