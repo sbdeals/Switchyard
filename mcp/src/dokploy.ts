@@ -332,7 +332,9 @@ export async function databaseAction(engine: Engine, id: string, action: Action)
   await request(`${engine}.${action}`, { method: "POST", body: { [idKey(engine)]: id } });
 }
 export async function applicationAction(id: string, action: Action): Promise<void> {
-  await request(`application.${action}`, { method: "POST", body: { applicationId: id } });
+  // Like compose, applications use delete instead of remove.
+  const proc = action === "remove" ? "delete" : action;
+  await request(`application.${proc}`, { method: "POST", body: { applicationId: id } });
 }
 export async function composeAction(id: string, action: Action): Promise<void> {
   // compose uses delete instead of remove.
