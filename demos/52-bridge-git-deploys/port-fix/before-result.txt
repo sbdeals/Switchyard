@@ -1,0 +1,6 @@
+## [before] one-click deploy of uncached image nginxdemos/hello
+$ docker image inspect nginxdemos/hello  -> not present locally
+app: hello-tchw-vcebjb
+$ docker image inspect nginxdemos/hello --format '{{json .Config.ExposedPorts}}'  -> {"80/tcp":{}}
+$ grep loadbalancer.server.port docker-compose.yml  -> loadbalancer.server.port=3000
+$ curl -H "Host: hello-tchw-vcebjb-a8e35b-140-248-50-52.sslip.io" http://127.0.0.1/  -> HTTP 502

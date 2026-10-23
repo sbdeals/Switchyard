@@ -1,0 +1,6 @@
+## [after] one-click deploy of uncached image kennethreitz/httpbin
+$ docker image inspect kennethreitz/httpbin  -> not present locally
+app: httpbin-khpb-h9q36h
+$ docker image inspect kennethreitz/httpbin --format '{{json .Config.ExposedPorts}}'  -> {"80/tcp":{}}
+$ grep loadbalancer.server.port docker-compose.yml  -> loadbalancer.server.port=80
+$ curl -H "Host: httpbin-khpb-h9q36h-1b094c-140-248-50-52.sslip.io" http://127.0.0.1/  -> HTTP 200
