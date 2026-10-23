@@ -1,6 +1,6 @@
 # #58: operator guide refresh (DOC-P2-2)
 
-PR: https://github.com/sbdeals/Switchyard/pull/58. Docs-only and non-UI, so the proof is a terminal before/after. Captured 07:27 EDT, 2026-10-23.
+PR: https://github.com/sbdeals/Switchyard/pull/58. Docs-only and non-UI, so the proof is a terminal before/after. Captured 07:20 EDT, 2026-10-23.
 
 - **before-terminal.txt**: the stale claims on `origin/main`:
   - Compose shows only "Overview · Compose · Logs · Settings".
