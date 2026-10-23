@@ -55,6 +55,20 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
+/** Inspect an image already pulled locally; missing images/daemons use fallbacks. */
+export async function readImageExposedPorts(image: string): Promise<string[]> {
+  try {
+    const detail = await withTimeout(
+      docker.getImage(image).inspect(),
+      DOCKER_OP_TIMEOUT_MS,
+      "Reading image ports",
+    );
+    return Object.keys(detail.Config?.ExposedPorts ?? {});
+  } catch {
+    return [];
+  }
+}
+
 // --- runtime truth ----------------------------------------------------------
 // Dokploy's applicationStatus/composeStatus is the LAST DEPLOY result — it
 // stays "done" (shown as Running) even when the containers no longer exist
