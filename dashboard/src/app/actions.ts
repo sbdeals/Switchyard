@@ -63,6 +63,7 @@ import {
   type DatabasePatch,
   type ApplicationPatch,
   type BuildTypePatch,
+  type DockerRegistryPatch,
   type DomainInput,
   type Engine,
   type DokployTemplate,
@@ -402,19 +403,19 @@ export async function saveAppBuildTypeAction(
 
 /**
  * Point a docker-image application at an image, optionally with private
- * registry credentials. Empty credentials mean a public image.
+ * registry credentials. Empty credentials preserve stored values; clearing
+ * credentials requires the explicit clearCredentials flag.
  */
 export async function setAppDockerSourceAction(
   id: string,
   dockerImage: string,
-  registry?: { username: string; password: string; registryUrl: string },
+  registry?: DockerRegistryPatch,
   redeploy = false
 ): Promise<ActionResult> {
   return wrap(async () => {
     const image = dockerImage.trim();
     if (!image) throw new Error("Image is required.");
-    const hasCreds = registry && (registry.username || registry.password || registry.registryUrl);
-    await setAppDockerSource(id, image, hasCreds ? registry : undefined);
+    await setAppDockerSource(id, image, registry);
     if (redeploy) await applicationAction(id, "deploy");
   });
 }
