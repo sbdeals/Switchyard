@@ -1,0 +1,83 @@
+
+> switchyard-mcp@0.1.0 test
+> npm run build && node --test
+
+
+> switchyard-mcp@0.1.0 build
+> tsc
+
+TAP version 13
+# Subtest: findService resolves a unique exact name before substring matches
+ok 1 - findService resolves a unique exact name before substring matches
+  ---
+  duration_ms: 28.829835
+  ...
+# Subtest: findService rejects duplicate display names with scoped candidates
+ok 2 - findService rejects duplicate display names with scoped candidates
+  ---
+  duration_ms: 1.500145
+  ...
+# Subtest: findService prefers an exact id over appName and duplicate display names
+ok 3 - findService prefers an exact id over appName and duplicate display names
+  ---
+  duration_ms: 1.144929
+  ...
+# Subtest: findService prefers an exact appName over duplicate display names
+ok 4 - findService prefers an exact appName over duplicate display names
+  ---
+  duration_ms: 1.236725
+  ...
+# Subtest: service_action stop rejects duplicate names before mutation
+ok 5 - service_action stop rejects duplicate names before mutation
+  ---
+  duration_ms: 2.090438
+  ...
+# Subtest: service_action remove rejects duplicate names before mutation
+ok 6 - service_action remove rejects duplicate names before mutation
+  ---
+  duration_ms: 0.92327
+  ...
+# Subtest: manage_env replace rejects duplicate names before mutation
+ok 7 - manage_env replace rejects duplicate names before mutation
+  ---
+  duration_ms: 0.84863
+  ...
+# Subtest: manage_domain add rejects duplicate names before mutation
+ok 8 - manage_domain add rejects duplicate names before mutation
+  ---
+  duration_ms: 0.981564
+  ...
+# Subtest: TOOLS covers exactly the expected tool set
+ok 9 - TOOLS covers exactly the expected tool set
+  ---
+  duration_ms: 1.693881
+  ...
+# Subtest: every tool has a title, description, and object input schema
+ok 10 - every tool has a title, description, and object input schema
+  ---
+  duration_ms: 0.195104
+  ...
+# Subtest: service_action is annotated destructive
+ok 11 - service_action is annotated destructive
+  ---
+  duration_ms: 0.178792
+  ...
+# Subtest: server constructs and exposes the tool list over MCP
+ok 12 - server constructs and exposes the tool list over MCP
+  ---
+  duration_ms: 18.66224
+  ...
+# Subtest: calling a tool without credentials returns a tool error, not a crash
+ok 13 - calling a tool without credentials returns a tool error, not a crash
+  ---
+  duration_ms: 3.929797
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 396.996089

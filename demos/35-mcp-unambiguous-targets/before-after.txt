@@ -1,0 +1,66 @@
+########## BEFORE: origin/main (1fc46d5) mcp/dist ##########
+
+$ list_projects {}   # two apps are both named "api" (production + staging); showing name/env only
+[
+  {
+    "projectId": "MN1YFsYwf9lnyDcdGy51z",
+    "name": "demo",
+    "environments": [
+      {
+        "environmentId": "CsNYQDYF-gVoOGHEbdgWb",
+        "name": "production"
+      },
+      {
+        "environmentId": "NJOou-LjGt9q4AgbplWza",
+        "name": "staging"
+      }
+    ]
+  }
+]
+
+$ manage_env {"service":"api","mode":"read"}   # ambiguous display name
+{
+  "service": "api",
+  "kind": "application",
+  "env": "ENV_MARKER=production"
+}
+
+$ manage_env {"service":"api-7dcbbh","mode":"read"}   # explicit appName
+{
+  "service": "api",
+  "kind": "application",
+  "env": "ENV_MARKER=staging"
+}
+
+########## AFTER: codex/mcp-unambiguous-targets mcp/dist ##########
+
+$ list_projects {}   # two apps are both named "api" (production + staging); showing name/env only
+[
+  {
+    "projectId": "MN1YFsYwf9lnyDcdGy51z",
+    "name": "demo",
+    "environments": [
+      {
+        "environmentId": "CsNYQDYF-gVoOGHEbdgWb",
+        "name": "production"
+      },
+      {
+        "environmentId": "NJOou-LjGt9q4AgbplWza",
+        "name": "staging"
+      }
+    ]
+  }
+]
+
+$ manage_env {"service":"api","mode":"read"}   # ambiguous display name
+[isError] Error: "api" matches multiple services:
+- api (project: demo, environment: production, id: DDBkvNy9AI8Lu4ZiLu-J1, appName: api-zfptif)
+- api (project: demo, environment: staging, id: lvL2bCxQL-OG87Qc4taZj, appName: api-7dcbbh)
+Pass the id or appName to select a service.
+
+$ manage_env {"service":"api-7dcbbh","mode":"read"}   # explicit appName
+{
+  "service": "api",
+  "kind": "application",
+  "env": "ENV_MARKER=staging"
+}

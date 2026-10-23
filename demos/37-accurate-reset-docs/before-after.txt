@@ -1,0 +1,52 @@
+== BEFORE (origin/main) mentions of reset/backup ==
+origin/main:README.md:161:  **backups** (S3 destinations, cron schedules, back-up-now, restore).
+origin/main:README.md:246:- [x] Backups: S3 destinations, schedules, manual runs, restore
+
+== AFTER (codex/accurate-reset-docs) ==
+HEAD:README.md:84:> **Named-volume persistence is not a backup.** Docker Desktop's "Reset to
+HEAD:README.md:87:> data. Back up first using
+HEAD:README.md:88:> [Docker's backup/restore guide](https://docs.docker.com/desktop/settings-and-maintenance/backup-and-restore/)
+HEAD:README.md:89:> and [Dokploy database backups](https://docs.dokploy.com/docs/core/databases/backups).
+HEAD:README.md:166:  **backups** (S3 destinations, cron schedules, back-up-now, restore).
+HEAD:README.md:251:- [x] Backups: S3 destinations, schedules, manual runs, restore
+HEAD:cli/src/core/repair.ts:24: * volumes. Named-volume persistence is not a backup. No-op when everything
+HEAD:dashboard/src/lib/template-volumes.ts:12: * delete volumes too: named-volume persistence is not a backup. Config-file
+HEAD:docs/getting-started.md:219:> **Named-volume persistence is not a backup.** Docker Desktop's "Reset to
+HEAD:docs/getting-started.md:222:> data. Back up first using
+HEAD:docs/getting-started.md:223:> [Docker's backup/restore guide](https://docs.docker.com/desktop/settings-and-maintenance/backup-and-restore/)
+HEAD:docs/getting-started.md:224:> and [Dokploy database backups](https://docs.dokploy.com/docs/core/databases/backups).
+
+== link check ==
+200 https://docs.docker.com/desktop/settings-and-maintenance/backup-and-restore/
+200 https://docs.dokploy.com/docs/core/databases/backups
+
+== Removed claims (diff '-' lines) ==
+-> **Docker Desktop VM resets:** Docker Desktop runs everything in a Linux VM
+-> whose root filesystem — including Dokploy's `/etc/dokploy` config tree — is
+-> rebuilt when the VM is recreated (Docker Desktop updates, "Reset to factory
+-> defaults", some restarts). Your containers, images, and **named volumes
+-> always survive**. Switchyard self-heals the rest: the next launch (or
+-> `switchyard up`) detects stacks the reset broke and redeploys them, and
+-> templates deployed from the dashboard keep database data in named volumes so
+-> a reset can't take data with it.
+- * Self-heal compose stacks after a Docker Desktop VM reset.
+- * filesystem does not survive VM recreation (updates, restarts on some
+- * setups, "Reset to factory defaults"). Dokploy regenerates its own Traefik
+- * config on boot, but previously-deployed compose stacks are left broken:
+- * working dir and template mount files from its database, so the stack comes
+- * back exactly as configured. No-op when everything is running.
+- * is inside the Linux VM, whose root filesystem does not survive VM
+- * recreation (updates, "Reset to factory defaults"), so database data bound
+- * there (e.g. supabase's `db/data`) dies with the VM. Named volumes live in
+- * the Docker data root and survive. Config-file binds stay as binds: Dokploy
+- * rewrites those from its database on every deploy, so they self-heal.
+-> **Durability:** the Desktop VM's root filesystem — including Dokploy's
+-> `/etc/dokploy` tree (its Traefik config and every compose stack's working
+-> dir) — is rebuilt when the VM is recreated by a Docker Desktop update,
+-> "Reset to factory defaults", or some restarts. Containers, images, and
+-> **named volumes survive**; anything a stack binds under `/etc/dokploy` does
+-> not. `switchyard up` (and the desktop app on launch) detects stacks a reset
+-> broke and redeploys them from Dokploy's database, and templates deployed
+-> from the Switchyard dashboard put database data in named volumes for exactly
+-> this reason. If you deploy compose stacks by hand, prefer named volumes over
+-> host binds for data.

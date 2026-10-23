@@ -1,0 +1,14 @@
+{
+  "before": {
+    "env": "PORT=8080",
+    "buildArgs": "NODE_ENV=production",
+    "buildSecrets": "NPM_TOKEN=demo-build-secret",
+    "createEnvFile": true
+  },
+  "after": {
+    "env": "PORT=8080\nLOG_LEVEL=debug",
+    "buildArgs": "NODE_ENV=production",
+    "buildSecrets": "NPM_TOKEN=demo-build-secret",
+    "createEnvFile": true
+  }
+}

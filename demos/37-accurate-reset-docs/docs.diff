@@ -1,0 +1,127 @@
+diff --git a/README.md b/README.md
+index 5ce3d26..d1f47ea 100644
+--- a/README.md
++++ b/README.md
+@@ -74,14 +74,19 @@ stack, reset everything, launch at login (on by default, so it's always warm),
+ and auto-update. Closing the window keeps everything running; "Quit" does too.
+ Your apps only stop if you ask for **Stop stack**.
+ 
+-> **Docker Desktop VM resets:** Docker Desktop runs everything in a Linux VM
+-> whose root filesystem — including Dokploy's `/etc/dokploy` config tree — is
+-> rebuilt when the VM is recreated (Docker Desktop updates, "Reset to factory
+-> defaults", some restarts). Your containers, images, and **named volumes
+-> always survive**. Switchyard self-heals the rest: the next launch (or
+-> `switchyard up`) detects stacks the reset broke and redeploys them, and
+-> templates deployed from the dashboard keep database data in named volumes so
+-> a reset can't take data with it.
++> **Docker Desktop VM resets:** named volumes survive container recreation,
++> Switchyard/Dokploy upgrades, and Docker Desktop restarts. VM disk recreation
++> preserves them only if Docker keeps the volume data. If the VM's
++> `/etc/dokploy` config tree is lost but Dokploy's database and volumes survive,
++> the next launch (or `switchyard up`) can redeploy affected stacks.
++> Dashboard templates use named volumes for recognized database data binds.
++>
++> **Named-volume persistence is not a backup.** Docker Desktop's "Reset to
++> factory defaults", "Clean / Purge data", and uninstalling Docker Desktop
++> delete containers, images, and volumes; Switchyard cannot restore deleted
++> data. Back up first using
++> [Docker's backup/restore guide](https://docs.docker.com/desktop/settings-and-maintenance/backup-and-restore/)
++> and [Dokploy database backups](https://docs.dokploy.com/docs/core/databases/backups).
+ 
+ Source lives in [`desktop/`](desktop/). It drives the exact same converge
+ logic as the CLI below, so the app and `switchyard up` can be used
+diff --git a/cli/src/core/repair.ts b/cli/src/core/repair.ts
+index 5d8953d..d6d349a 100644
+--- a/cli/src/core/repair.ts
++++ b/cli/src/core/repair.ts
+@@ -3,12 +3,12 @@ import { docker } from "./docker.js";
+ import { apiRequest, signInCookie } from "./dokploy-api.js";
+ 
+ /**
+- * Self-heal compose stacks after a Docker Desktop VM reset.
++ * Self-heal compose stacks after loss of Docker Desktop VM config.
+  *
+  * Docker Desktop keeps /etc/dokploy inside its Linux VM, and the VM's root
+- * filesystem does not survive VM recreation (updates, restarts on some
+- * setups, "Reset to factory defaults"). Dokploy regenerates its own Traefik
+- * config on boot, but previously-deployed compose stacks are left broken:
++ * filesystem can be rebuilt while Docker preserves its volume data. With
++ * its database intact, Dokploy regenerates its own Traefik config on boot,
++ * but previously-deployed compose stacks are left broken:
+  * their working dirs (/etc/dokploy/compose/<app>) are gone, docker auto-creates
+  * the missing bind sources as directories the moment a container starts, and
+  * `compose up` then reuses those wedged containers ("not a directory" mount
+@@ -18,8 +18,11 @@ import { apiRequest, signInCookie } from "./dokploy-api.js";
+  * that has no RUNNING container — or that has containers stuck in "created"
+  * (compose up wedged mid-creation) — is broken. Remove its leftover containers
+  * (never its volumes) and ask Dokploy to redeploy; Dokploy rewrites the
+- * working dir and template mount files from its database, so the stack comes
+- * back exactly as configured. No-op when everything is running.
++ * working dir and template mount files from its surviving database. This
++ * cannot restore deleted data: "Reset to factory defaults", "Clean / Purge
++ * data", and uninstalling Docker Desktop delete containers, images, and
++ * volumes. Named-volume persistence is not a backup. No-op when everything
++ * is running.
+  */
+ 
+ export interface RepairResult {
+diff --git a/dashboard/src/lib/template-volumes.ts b/dashboard/src/lib/template-volumes.ts
+index 3f9265e..5a31f84 100644
+--- a/dashboard/src/lib/template-volumes.ts
++++ b/dashboard/src/lib/template-volumes.ts
+@@ -4,11 +4,14 @@
+  *
+  * Dokploy templates bind everything under `../files/` — that resolves to
+  * /etc/dokploy/compose/<app>/files on the host. On Docker Desktop that path
+- * is inside the Linux VM, whose root filesystem does not survive VM
+- * recreation (updates, "Reset to factory defaults"), so database data bound
+- * there (e.g. supabase's `db/data`) dies with the VM. Named volumes live in
+- * the Docker data root and survive. Config-file binds stay as binds: Dokploy
+- * rewrites those from its database on every deploy, so they self-heal.
++ * is inside the Linux VM; rebuilding its root filesystem can lose database
++ * data bound there (e.g. supabase's `db/data`). Named volumes survive container
++ * recreation, Switchyard/Dokploy upgrades, and Docker Desktop restarts, and
++ * VM disk recreation only if Docker preserves the volume data. "Reset to
++ * factory defaults", "Clean / Purge data", and uninstalling Docker Desktop
++ * delete volumes too: named-volume persistence is not a backup. Config-file
++ * binds stay as binds: Dokploy rewrites those on every deploy, provided its
++ * database survives.
+  */
+ 
+ /** Container paths that hold data worth keeping in the template catalog. */
+diff --git a/docs/getting-started.md b/docs/getting-started.md
+index de2f55a..f1c9bbb 100644
+--- a/docs/getting-started.md
++++ b/docs/getting-started.md
+@@ -207,16 +207,21 @@ path, but it has not yet been verified end-to-end there.
+ > needed here and default Swarm networking works. Verified on Windows; assumed
+ > (not yet verified) on macOS.
+ 
+-> **Durability:** the Desktop VM's root filesystem — including Dokploy's
+-> `/etc/dokploy` tree (its Traefik config and every compose stack's working
+-> dir) — is rebuilt when the VM is recreated by a Docker Desktop update,
+-> "Reset to factory defaults", or some restarts. Containers, images, and
+-> **named volumes survive**; anything a stack binds under `/etc/dokploy` does
+-> not. `switchyard up` (and the desktop app on launch) detects stacks a reset
+-> broke and redeploys them from Dokploy's database, and templates deployed
+-> from the Switchyard dashboard put database data in named volumes for exactly
+-> this reason. If you deploy compose stacks by hand, prefer named volumes over
+-> host binds for data.
++> **Durability:** named volumes survive container recreation,
++> Switchyard/Dokploy upgrades, and Docker Desktop restarts. VM disk recreation
++> preserves them only if Docker keeps the volume data. If the VM's
++> `/etc/dokploy` tree is lost but Dokploy's database and volumes survive,
++> `switchyard up` (and the desktop app on launch) can redeploy affected stacks.
++> Dashboard templates use named volumes for recognized database data binds;
++> if you deploy compose stacks by hand, prefer named volumes over host binds
++> for data.
++>
++> **Named-volume persistence is not a backup.** Docker Desktop's "Reset to
++> factory defaults", "Clean / Purge data", and uninstalling Docker Desktop
++> delete containers, images, and volumes; Switchyard cannot restore deleted
++> data. Back up first using
++> [Docker's backup/restore guide](https://docs.docker.com/desktop/settings-and-maintenance/backup-and-restore/)
++> and [Dokploy database backups](https://docs.dokploy.com/docs/core/databases/backups).
+ 
+ Clone the repo first (Switchyard runs from it later):
+ 
