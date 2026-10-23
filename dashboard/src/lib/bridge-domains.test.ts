@@ -7,12 +7,17 @@ vi.mock("./session", () => ({
   SESSION_COOKIE: "switchyard-session",
   openSession: () => ({ dokployCookie: "dokploy-session=test" }),
 }));
-vi.mock("./docker", () => ({ inspectImageExposedPorts: vi.fn() }));
+vi.mock("./docker", () => ({
+  inspectImageExposedPorts: vi.fn(),
+  snapshotComposeAppImage: vi.fn(),
+  verifyComposeAppImage: vi.fn(),
+  pruneComposeAppImages: vi.fn(),
+}));
 
 import { inspectImageExposedPorts } from "./docker";
-import { deployBridgeImage, ensureAutoDomain, ensureBridgeAutoDomain, redeployManagedImage } from "./dokploy";
-import { imageStack } from "./managed-compose";
-import { createComposeDomainAction, deleteDomainAction, generateComposeDomainAction, updateDomainAction } from "@/app/actions";
+import { composeAction, deployBridgeImage, deployBridgeRepo, ensureAutoDomain, ensureBridgeAutoDomain, redeployManagedImage } from "./dokploy";
+import { imageStack, parseManaged } from "./managed-compose";
+import { composeLifecycleAction, createComposeDomainAction, deleteDomainAction, generateComposeDomainAction, updateDomainAction } from "@/app/actions";
 
 const appName = "web-a1b2";
 const host = `${appName}-c3d4.203.0.113.10.traefik.me`;
@@ -20,7 +25,8 @@ let detail: {
   appName: string;
   composeFile: string;
   env: string;
-  domains: { domainId: string; host: string; serviceName: string | null }[];
+  composeStatus?: "idle" | "running" | "done" | "error";
+  domains: { domainId: string; host: string; serviceName: string | null; port?: number; https?: boolean; certificateType?: "none" | "letsencrypt"; path?: string }[];
 };
 let generatedHost: string;
 let domainFailure: boolean;
@@ -44,10 +50,19 @@ beforeEach(() => {
       case "application.one": return Response.json({ appName, domains: [] });
       case "domain.generateDomain": return Response.json(generatedHost);
       case "domain.create":
-        return domainFailure ? new Response("Domain unavailable", { status: 500 }) : Response.json({});
+        if (domainFailure) return new Response("Domain unavailable", { status: 500 });
+        detail.domains.push({ domainId: "domain-1", ...body });
+        return Response.json({});
       case "domain.update":
+        if (domainFailure) return new Response("Domain unavailable", { status: 500 });
+        detail.domains = detail.domains.map((d) => d.domainId === body.domainId ? { ...d, ...body } : d);
+        return Response.json({});
       case "domain.delete":
+        detail.domains = detail.domains.filter((d) => d.domainId !== body.domainId);
+        return Response.json({});
       case "compose.update":
+        if (typeof body.composeFile === "string") detail.composeFile = body.composeFile;
+        return Response.json({});
       case "compose.deploy": return Response.json({});
       default: throw new Error(`Unexpected request: ${procedure}`);
     }
@@ -95,7 +110,7 @@ describe("bridge public domains", () => {
   it("uses the lowest exposed TCP port ahead of the image default", async () => {
     vi.mocked(inspectImageExposedPorts).mockResolvedValue(["9000/tcp", "443/tcp", "53/udp"]);
     await ensureBridgeAutoDomain("compose-1");
-    expect(inspectImageExposedPorts).toHaveBeenCalledWith("nginx:alpine");
+    expect(inspectImageExposedPorts).toHaveBeenCalledWith("nginx:alpine", { pullIfMissing: true });
     expect(domainRequests()[0].body.port).toBe(443);
   });
 
@@ -103,6 +118,21 @@ describe("bridge public domains", () => {
     detail.composeFile = imageStack({ appName, image: "example/web:latest" });
     await ensureBridgeAutoDomain("compose-1");
     expect(domainRequests()[0].body.port).toBe(3000);
+  });
+
+  it("uses a freshly pulled image's exposed port before deploying", async () => {
+    vi.mocked(inspectImageExposedPorts).mockResolvedValue(["80/tcp"]);
+    await deployBridgeImage("web", "traefik/whoami", "environment-1");
+    expect(inspectImageExposedPorts).toHaveBeenCalledWith("traefik/whoami", { pullIfMissing: true });
+    expect(domainRequests()[0].body.port).toBe(80);
+    expect(requests.at(-1)?.procedure).toBe("compose.deploy");
+  });
+
+  it("still deploys with the fallback when the image pull yields no metadata", async () => {
+    await expect(deployBridgeImage("web", "traefik/whoami", "environment-1")).resolves.toBe("compose-1");
+    expect(inspectImageExposedPorts).toHaveBeenCalledWith("traefik/whoami", { pullIfMissing: true });
+    expect(domainRequests()[0].body.port).toBe(3000);
+    expect(requests.at(-1)?.procedure).toBe("compose.deploy");
   });
 
   it("falls back to sslip.io when Dokploy cannot generate a usable host", async () => {
@@ -118,6 +148,13 @@ describe("bridge public domains", () => {
     expect(await ensureBridgeAutoDomain("compose-1")).toBe(host);
     expect(domainRequests()).toEqual([]);
     expect(requests.some(({ procedure }) => procedure === "domain.generateDomain")).toBe(false);
+  });
+
+  it("leaves an existing custom app domain alone", async () => {
+    detail.domains = [{ domainId: "domain-1", host: "web.example.com", serviceName: "app", port: 4000 }];
+    expect(await ensureBridgeAutoDomain("compose-1")).toBe("web.example.com");
+    expect(domainRequests()).toEqual([]);
+    expect(inspectImageExposedPorts).not.toHaveBeenCalled();
   });
 
   it("does not mistake another compose service's auto-domain for the app URL", async () => {
@@ -149,6 +186,111 @@ describe("bridge public domains", () => {
     await redeployManagedImage("compose-1");
     expect(domainRequests()).toEqual([]);
     expect(requests.some(({ procedure }) => procedure === "compose.deploy")).toBe(false);
+  });
+});
+
+describe("bridge auto-domain reconciliation", () => {
+  async function deployRepo() {
+    await deployBridgeRepo("web", { repoUrl: "https://github.com/example/web", branch: "main" }, "environment-1");
+    detail.composeStatus = "done";
+    vi.mocked(inspectImageExposedPorts).mockResolvedValue(["8080/tcp"]);
+    requests = [];
+  }
+
+  it("corrects a repo's fallback 3000 to the built image's 8080 on the next redeploy only once", async () => {
+    await deployRepo();
+    expect(detail.domains[0].port).toBe(3000);
+    expect(await composeLifecycleAction("compose-1", "deploy")).toEqual({ ok: true });
+    expect(detail.domains[0].port).toBe(8080);
+    expect(requests.filter(({ procedure }) => procedure === "domain.update")).toEqual([{
+      procedure: "domain.update",
+      body: { domainId: "domain-1", host, port: 8080, https: false, certificateType: "none", path: "/" },
+    }]);
+    expect(requests.filter(({ procedure }) => procedure === "compose.deploy")).toHaveLength(1);
+    expect(requests.at(-1)?.procedure).toBe("compose.deploy");
+    expect(parseManaged(detail.composeFile)).toMatchObject({ autoDomain: { host, port: 8080 } });
+    await composeAction("compose-1", "deploy");
+    expect(requests.filter(({ procedure }) => procedure === "domain.update")).toHaveLength(1);
+    expect(requests.filter(({ procedure }) => procedure === "compose.deploy")).toHaveLength(2);
+  });
+
+  it("rechecks an image whose initial pull failed after a successful deployment", async () => {
+    await deployBridgeImage("web", "traefik/whoami", "environment-1");
+    expect(detail.domains[0].port).toBe(3000);
+    detail.composeStatus = "done";
+    vi.mocked(inspectImageExposedPorts).mockResolvedValue(["80/tcp"]);
+    requests = [];
+    await composeAction("compose-1", "deploy");
+    expect(detail.domains[0].port).toBe(80);
+    expect(requests.filter(({ procedure }) => procedure === "compose.deploy")).toHaveLength(1);
+  });
+
+  it("also refreshes an untouched URL on the next ensure without duplicating it", async () => {
+    await deployRepo();
+    expect(await ensureBridgeAutoDomain("compose-1")).toBe(host);
+    expect(detail.domains[0].port).toBe(8080);
+    expect(domainRequests()).toHaveLength(0);
+  });
+
+  it.each(["idle", "running", "error"] as const)("does not reconcile before a successful build (%s)", async (status) => {
+    await deployRepo();
+    detail.composeStatus = status;
+    if (status === "running") {
+      await expect(composeAction("compose-1", "deploy")).rejects.toThrow("current deployment");
+    } else {
+      await composeAction("compose-1", "deploy");
+    }
+    expect(detail.domains[0].port).toBe(3000);
+    expect(requests.some(({ procedure }) => procedure === "domain.update")).toBe(false);
+  });
+
+  it.each([[], ["53/udp"], ["0/tcp", "65536/tcp"]])("keeps the recorded port when there is no usable local TCP metadata (%j)", async (...ports) => {
+    await deployRepo();
+    vi.mocked(inspectImageExposedPorts).mockResolvedValue(ports as string[]);
+    await composeAction("compose-1", "deploy");
+    expect(detail.domains[0].port).toBe(3000);
+    expect(requests.some(({ procedure }) => procedure === "domain.update")).toBe(false);
+  });
+
+  it.each(["port", "host", "custom domain", "PORT", "untracked"])("preserves explicit or untracked configuration (%s)", async (edit) => {
+    await deployRepo();
+    if (edit === "port") detail.domains[0].port = 9090;
+    if (edit === "host") detail.domains[0].host = "edited.203.0.113.10.traefik.me";
+    if (edit === "custom domain") detail.domains.push({ domainId: "custom-1", host: "web.example.com", serviceName: "app", port: 3000 });
+    if (edit === "PORT") detail.env = "PORT=3000";
+    if (edit === "untracked") detail.composeFile = detail.composeFile.replace(/^  autoDomain.*\n/gm, "");
+    const domains = structuredClone(detail.domains);
+    await composeAction("compose-1", "deploy");
+    expect(detail.domains).toEqual(domains);
+    expect(requests.some(({ procedure }) => procedure === "domain.update")).toBe(false);
+  });
+
+  it("clears tracking for a Networking edit even when the user explicitly keeps port 3000", async () => {
+    await deployRepo();
+    expect(await updateDomainAction("domain-1", {
+      host, port: 3000, https: false, certificateType: "none",
+    }, "compose-1")).toEqual({ ok: true });
+    expect(parseManaged(detail.composeFile)).not.toHaveProperty("autoDomain");
+    await composeAction("compose-1", "deploy");
+    expect(detail.domains[0].port).toBe(3000);
+    expect(requests.filter(({ procedure }) => procedure === "domain.update")).toHaveLength(1);
+  });
+
+  it("continues deployment if correcting the URL fails", async () => {
+    await deployRepo();
+    domainFailure = true;
+    await expect(composeAction("compose-1", "deploy")).resolves.toBeUndefined();
+    expect(detail.domains[0].port).toBe(3000);
+    expect(requests.at(-1)?.procedure).toBe("compose.deploy");
+  });
+
+  it("does not inspect or mutate a compose stack the current user cannot access", async () => {
+    await deployRepo();
+    vi.mocked(inspectImageExposedPorts).mockClear();
+    vi.mocked(fetch).mockResolvedValue(new Response("Forbidden", { status: 403 }));
+    expect(await composeLifecycleAction("compose-1", "deploy")).toMatchObject({ ok: false });
+    expect(inspectImageExposedPorts).not.toHaveBeenCalled();
+    expect(requests).toEqual([]);
   });
 });
 

@@ -31,12 +31,14 @@ import {
   snapshotComposeAppImage,
   verifyComposeAppImage,
 } from "./docker";
+import { composeAction, redeployManagedImage } from "./dokploy";
 import {
   imageStack,
   parseManaged,
   repoSnapshotTag,
   repoStack,
   rewriteManagedApp,
+  withManagedAutoDomain,
   writeManagedMeta,
   type ManagedDeployEntry,
 } from "./managed-compose";
@@ -46,12 +48,13 @@ const repoUrl = "https://github.com/docker/welcome-to-docker";
 const now = "2026-10-23T12:00:00.000Z";
 const prior = "2026-10-22T12:00:00.000Z";
 const domain = { domainId: "domain-1", host: "web.example.com", serviceName: "app" };
+const autoHost = `${appName}.203.0.113.10.sslip.io`;
 let detail: {
   appName: string;
   composeFile: string;
   composeStatus: string;
   env: string;
-  domains: typeof domain[];
+  domains: (typeof domain & { port?: number })[];
   deployments: { status: string; createdAt: string }[];
 };
 let requests: { procedure: string; body: Record<string, unknown>; cookie: string | null }[];
@@ -122,6 +125,9 @@ beforeEach(() => {
         return Response.json({ composeId: "compose-1", appName });
       case "compose.update":
         if (typeof body.composeFile === "string") detail.composeFile = body.composeFile;
+        return Response.json({});
+      case "domain.update":
+        detail.domains = detail.domains.map((entry) => entry.domainId === body.domainId ? { ...entry, ...body } : entry);
         return Response.json({});
       case "compose.deploy":
       case "domain.create": return Response.json({});
@@ -235,15 +241,112 @@ describe("bridge repo rollback", () => {
     expect(snapshotComposeAppImage).not.toHaveBeenCalled();
   });
 
-  it("keeps the saved image pinned when Networking redeploys domain labels", async () => {
-    const [target] = withHistory(historyEntries(), true);
-    expect(await createComposeDomainAction("compose-1", "app", "second.example.com", 8080)).toEqual({ ok: true });
-    expect(appMeta()).toMatchObject({ image: target.image, pinnedTag: target.image });
+  it("reconciles a pinned rollback's auto-domain from its local image without changing the pin or history", async () => {
+    const history = withHistory(historyEntries(), true);
+    const [target] = history;
+    detail.domains = [{ ...domain, host: autoHost, port: 3000 }];
+    detail.composeFile = withManagedAutoDomain(detail.composeFile, { host: autoHost, port: 3000 });
+    vi.mocked(inspectImageExposedPorts).mockResolvedValue(["8080/tcp"]);
+
+    await expect(composeAction("compose-1", "deploy", true)).resolves.toBeUndefined();
+
+    expect(vi.mocked(inspectImageExposedPorts).mock.calls).toEqual([[target.image]]);
+    expect(appMeta()).toMatchObject({ image: target.image, pinnedTag: target.image, history, autoDomain: { host: autoHost, port: 8080 } });
     expect(detail.composeFile).not.toContain("    build:");
+    expect(detail.composeFile).toContain("    pull_policy: never\n");
+    expect(detail.domains[0].port).toBe(8080);
     expect(verifyComposeAppImage).toHaveBeenCalledWith(appName, target.image);
+    expect(snapshotComposeAppImage).not.toHaveBeenCalled();
+    expect(requests.filter(({ procedure }) => procedure === "compose.deploy")).toHaveLength(1);
+    expect(requests.at(-1)?.procedure).toBe("compose.deploy");
+  });
+
+  it("reconciles the selected rollback image's port after pinning it", async () => {
+    const [target] = withHistory();
+    detail.domains = [{ ...domain, host: autoHost, port: 3000 }];
+    detail.composeFile = withManagedAutoDomain(detail.composeFile, { host: autoHost, port: 3000 });
+    vi.mocked(inspectImageExposedPorts).mockResolvedValue(["8080/tcp"]);
+
+    expect(await rollbackComposeAction("compose-1", target.timestamp)).toEqual({ ok: true });
+
+    expect(vi.mocked(inspectImageExposedPorts).mock.calls).toEqual([[target.image]]);
+    expect(appMeta()).toMatchObject({ image: target.image, pinnedTag: target.image, autoDomain: { host: autoHost, port: 8080 } });
+    expect(appMeta().history).toEqual([
+      { timestamp: "2026-10-23T12:00:00.001Z", image: target.image },
+      { timestamp: now, image: repoSnapshotTag(appName, now) },
+    ]);
+    expect(detail.composeFile).not.toContain("    build:");
+    expect(detail.composeFile).toContain("    pull_policy: never\n");
+    expect(detail.domains[0].port).toBe(8080);
+    expect(requests.filter(({ procedure }) => procedure === "compose.deploy")).toHaveLength(1);
+  });
+
+  it("still deploys the selected rollback when inspecting its local port fails", async () => {
+    const [target] = withHistory();
+    detail.domains = [{ ...domain, host: autoHost, port: 3000 }];
+    detail.composeFile = withManagedAutoDomain(detail.composeFile, { host: autoHost, port: 3000 });
+    vi.mocked(inspectImageExposedPorts).mockRejectedValueOnce(new Error("Docker unavailable"));
+
+    expect(await rollbackComposeAction("compose-1", target.timestamp)).toEqual({ ok: true });
+
+    expect(vi.mocked(inspectImageExposedPorts).mock.calls).toEqual([[target.image]]);
+    expect(appMeta()).toMatchObject({ image: target.image, pinnedTag: target.image, autoDomain: { host: autoHost, port: 3000 } });
+    expect(appMeta().history?.[0].image).toBe(target.image);
+    expect(detail.composeFile).not.toContain("    build:");
+    expect(detail.composeFile).toContain("    pull_policy: never\n");
+    expect(requests.some(({ procedure }) => procedure === "domain.update")).toBe(false);
+    expect(requests.at(-1)?.procedure).toBe("compose.deploy");
+  });
+
+  it("clears auto-domain tracking and keeps the saved image pinned when Networking redeploys domain labels", async () => {
+    const [target] = withHistory(historyEntries(), true);
+    detail.domains = [{ ...domain, host: autoHost, port: 3000 }];
+    detail.composeFile = withManagedAutoDomain(detail.composeFile, { host: autoHost, port: 3000 });
+    vi.mocked(inspectImageExposedPorts).mockResolvedValue(["8080/tcp"]);
+    expect(await createComposeDomainAction("compose-1", "app", "second.example.com", 8080)).toEqual({ ok: true });
+    expect(appMeta()).toMatchObject({ image: target.image, pinnedTag: target.image, history: [target] });
+    expect(appMeta()).not.toHaveProperty("autoDomain");
+    expect(detail.composeFile).not.toContain("    build:");
+    expect(detail.composeFile).toContain("    pull_policy: never\n");
+    expect(verifyComposeAppImage).toHaveBeenCalledWith(appName, target.image);
+    expect(inspectImageExposedPorts).not.toHaveBeenCalled();
     expect(snapshotComposeAppImage).not.toHaveBeenCalled();
     expect(requests.some(({ procedure }) => procedure === "domain.create")).toBe(true);
     expect(requests.some(({ procedure }) => procedure === "compose.deploy")).toBe(true);
+  });
+
+  it("rejects a concurrent Networking redeploy before it can clear rollback metadata", async () => {
+    const [target] = withHistory();
+    detail.composeFile = withManagedAutoDomain(detail.composeFile, { host: autoHost, port: 3000 });
+    const originalFile = detail.composeFile;
+    let releaseVerification!: () => void;
+    const verificationPending = new Promise<void>((resolve) => { releaseVerification = resolve; });
+    let signalVerification!: () => void;
+    const verificationStarted = new Promise<void>((resolve) => { signalVerification = resolve; });
+    vi.mocked(verifyComposeAppImage).mockImplementationOnce(async () => {
+      signalVerification();
+      await verificationPending;
+    });
+
+    const rollback = rollbackComposeAction("compose-1", target.timestamp);
+    await verificationStarted;
+    try {
+      await expect(redeployManagedImage("compose-1")).rejects.toThrow("already being updated");
+      expect(mutations()).toEqual([]);
+      expect(detail.composeFile).toBe(originalFile);
+    } finally {
+      releaseVerification();
+      await rollback;
+    }
+
+    expect(await rollback).toEqual({ ok: true });
+    expect(appMeta()).toMatchObject({ image: target.image, pinnedTag: target.image, autoDomain: { host: autoHost, port: 3000 } });
+    expect(appMeta().history).toEqual([
+      { timestamp: "2026-10-23T12:00:00.001Z", image: target.image },
+      { timestamp: now, image: repoSnapshotTag(appName, now) },
+    ]);
+    expect(detail.composeFile).not.toContain("    build:");
+    expect(detail.composeFile).toContain("    pull_policy: never\n");
   });
 
   it("caps history at five and prunes only the expired local tag after deploying", async () => {

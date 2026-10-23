@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_MANAGED_HISTORY, bridgeImageDomain, imageStack, managedAppImage, parseManaged, recordManagedDeploy,
   repoSnapshotTag, repoStack, rewriteManagedApp, validateImageRef, validateManagedAppName, validateRepoSource,
-  validateRepoTag, withImageEnvFile, writeManagedMeta, type ManagedDeployEntry, type ManagedMeta,
+  validateRepoTag, withImageEnvFile, withManagedAutoDomain, writeManagedMeta, type ManagedDeployEntry, type ManagedMeta,
 } from "./managed-compose";
 
 const repoInput = { appName: "web-x1", repoUrl: "https://github.com/docker/welcome-to-docker", branch: "main" };
@@ -47,6 +47,83 @@ describe("imageStack", () => {
     expect(compose).toContain("    env_file:\n      - .env\n");
     expect(compose).toContain("    networks:\n      dokploy-network:\n        aliases:\n          - web-x1\n");
     expect(compose).toContain("\nnetworks:\n  dokploy-network:\n    external: true\n");
+  });
+});
+
+describe("managed automatic domain metadata", () => {
+  const domain = { host: "web-x1.203.0.113.10.sslip.io", port: 3000 };
+
+  it.each([imageStack({ appName: "web-x1", image: "nginx:alpine" }), repoStack(repoInput)])(
+    "records and replaces the automatic choice without changing the compose configuration",
+    (compose) => {
+      const tagged = withManagedAutoDomain(compose, domain);
+      expect(parseManaged(tagged)).toEqual({ ...parseManaged(compose), autoDomain: domain });
+      expect(withManagedAutoDomain(tagged, domain)).toBe(tagged);
+      const updated = withManagedAutoDomain(tagged, { ...domain, port: 8080 });
+      expect(parseManaged(updated)).toEqual({ ...parseManaged(compose), autoDomain: { ...domain, port: 8080 } });
+      expect(updated.match(/autoDomainHost:/g)).toHaveLength(1);
+      expect(updated.match(/autoDomainPort:/g)).toHaveLength(1);
+      expect(withManagedAutoDomain(updated, null)).toBe(compose);
+      expect(withManagedAutoDomain(compose, null)).toBe(compose);
+    }
+  );
+
+  it.each(["\n", "\r\n"])("preserves %j line endings and an unterminated final line", (newline) => {
+    const compose = ["x-switchyard:", "  kind: image", "  image: nginx:alpine"].join(newline);
+    const tagged = withManagedAutoDomain(compose, domain);
+    expect(parseManaged(tagged)).toEqual({ kind: "image", image: "nginx:alpine", autoDomain: domain });
+    expect(tagged.endsWith(newline)).toBe(false);
+    expect(withManagedAutoDomain(tagged, null)).toBe(compose);
+    if (newline === "\r\n") expect(tagged.replaceAll("\r\n", "")).not.toContain("\n");
+  });
+
+  it("leaves unrelated extension fields and identical service field names untouched", () => {
+    const compose = imageStack({ appName: "web-x1", image: "nginx:alpine" })
+      .replace("  kind: image", "  owner: unchanged\n  custom:\n    autoDomainHost: untouched.example\n    autoDomainPort: 1234\n  kind: image")
+      .replace("    restart: unless-stopped", "    labels:\n      autoDomainHost: preserved.example\n    restart: unless-stopped");
+    expect(parseManaged(compose)).not.toHaveProperty("autoDomain");
+    const tagged = withManagedAutoDomain(compose, domain);
+    expect(parseManaged(tagged)).toHaveProperty("autoDomain", domain);
+    expect(tagged).toContain("  owner: unchanged\n");
+    expect(tagged).toContain("      autoDomainHost: preserved.example\n");
+    expect(withManagedAutoDomain(tagged, null)).toBe(compose);
+  });
+
+  it("reads single-quoted hostname and port after YAML re-serialization", () => {
+    const compose = `x-switchyard:\n  kind: image\n  image: nginx\n  autoDomainHost: '${domain.host}'\n  autoDomainPort: '8080'`;
+    expect(parseManaged(compose)).toEqual({ kind: "image", image: "nginx", autoDomain: { ...domain, port: 8080 } });
+  });
+
+  it.each([
+    "  autoDomainPort: 80\n",
+    "  autoDomainHost: app.example\n",
+    "  autoDomainHost: ${HOST}\n  autoDomainPort: 80\n",
+    "  autoDomainHost: app example\n  autoDomainPort: 80\n",
+    "  autoDomainHost: app.example\n  autoDomainPort: 0\n",
+    "  autoDomainHost: app.example\n  autoDomainPort: 65536\n",
+    "  autoDomainHost: app.example\n  autoDomainPort: 1e3\n",
+    "  autoDomainHost: app.example\n  autoDomainPort: 80.5\n",
+  ])("ignores invalid or incomplete automatic choices: %s", (marker) => {
+    const compose = `x-switchyard:\n  kind: image\n  image: nginx\n${marker}`;
+    expect(parseManaged(compose)).toEqual({ kind: "image", image: "nginx" });
+  });
+
+  it.each([
+    { host: "${HOST}", port: 80 }, { host: "app.example\n  injected: true", port: 80 },
+    { host: "app.example/path", port: 80 }, { host: "", port: 80 },
+    { host: "app.example", port: 0 }, { host: "app.example", port: 65536 },
+    { host: "app.example", port: 80.5 }, { host: "app.example", port: NaN },
+  ])("rejects unsafe marker input before changing YAML: %o", (marker) => {
+    expect(() => withManagedAutoDomain(imageStack({ appName: "web-x1", image: "nginx" }), marker))
+      .toThrow("Invalid automatic domain metadata");
+  });
+
+  it.each([
+    "services:\n  app:\n    image: nginx\n",
+    "x-switchyard:\n  kind: database\n  engine: redis\n  image: redis:7\n",
+  ])("leaves raw stacks and databases unchanged", (compose) => {
+    expect(withManagedAutoDomain(compose, domain)).toBe(compose);
+    expect(withManagedAutoDomain(compose, null)).toBe(compose);
   });
 });
 
@@ -167,14 +244,15 @@ describe("withImageEnvFile", () => {
 
 const timestamp = "2026-10-23T12:00:00.000Z";
 const snapshot = repoSnapshotTag(repoInput.appName, timestamp);
+const autoDomain = { host: "web-x1.203.0.113.10.sslip.io", port: 8080 };
 
 describe("managed deploy metadata", () => {
   it.each(["image", "repo"] as const)("round-trips history and optional state for %s apps", (kind) => {
     const compose = kind === "image" ? imageStack({ appName: "web-x1", image: "nginx:alpine" }) : repoStack(repoInput);
     const original = parseManaged(compose)!;
     const meta: ManagedMeta = kind === "image"
-      ? { kind, image: "nginx:alpine", history: [{ timestamp, image: "nginx:alpine" }], rollbackUnavailable: false }
-      : { ...original, kind, repoUrl: repoInput.repoUrl, branch: "main", image: snapshot, pinnedTag: snapshot, history: [{ timestamp, image: snapshot }], rollbackUnavailable: true };
+      ? { kind, image: "nginx:alpine", history: [{ timestamp, image: "nginx:alpine" }], rollbackUnavailable: false, autoDomain }
+      : { ...original, kind, repoUrl: repoInput.repoUrl, branch: "main", image: snapshot, pinnedTag: snapshot, history: [{ timestamp, image: snapshot }], rollbackUnavailable: true, autoDomain };
     const rewritten = writeManagedMeta(compose, meta);
     expect(parseManaged(rewritten)).toEqual(meta);
     expect(rewritten.slice(rewritten.indexOf("services:"))).toBe(compose.slice(compose.indexOf("services:")));
@@ -210,6 +288,23 @@ describe("managed deploy metadata", () => {
     const compose = imageStack({ appName: "web-x1", image: "nginx:alpine" });
     expect(() => writeManagedMeta(`${compose}\nx-switchyard:\n  kind: image\n`, { kind: "image", image: "nginx:alpine" })).toThrow("ambiguous");
     expect(() => writeManagedMeta(compose, { kind: "image", image: "nginx:alpine", history: [{ timestamp: "yesterday", image: "nginx:alpine" }] })).toThrow("timestamp");
+    expect(() => writeManagedMeta(compose, { kind: "image", image: "nginx:alpine", autoDomain: { ...autoDomain, port: 0 } })).toThrow("Invalid automatic domain metadata");
+  });
+
+  it("keeps history and a pinned image when adding, replacing, and clearing the automatic domain", () => {
+    const compose = repoStack(repoInput);
+    const meta = parseManaged(compose)!;
+    if (meta.kind !== "repo") throw new Error("Expected repo metadata");
+    const pinned = rewriteManagedApp(compose, repoInput.appName, {
+      ...meta, pinnedTag: snapshot, history: [{ timestamp, image: snapshot }], rollbackUnavailable: false,
+    });
+    const expected = parseManaged(pinned);
+    const tagged = withManagedAutoDomain(pinned, autoDomain);
+    expect(parseManaged(tagged)).toEqual({ ...expected, autoDomain });
+    const updated = withManagedAutoDomain(tagged, { ...autoDomain, port: 3000 });
+    expect(parseManaged(updated)).toEqual({ ...expected, autoDomain: { ...autoDomain, port: 3000 } });
+    expect(updated.slice(updated.indexOf("services:"))).toBe(pinned.slice(pinned.indexOf("services:")));
+    expect(withManagedAutoDomain(updated, null)).toBe(pinned);
   });
 });
 
@@ -238,6 +333,20 @@ describe("recordManagedDeploy", () => {
     recordManagedDeploy(original, entries[5]);
     expect(original).toEqual(entries.slice(0, 5));
   });
+
+  it.each(["image", "repo"] as const)("keeps the automatic domain when recording a %s deploy", (kind) => {
+    const compose = withManagedAutoDomain(
+      kind === "image" ? imageStack({ appName: "web-x1", image: "nginx:alpine" }) : repoStack(repoInput),
+      autoDomain,
+    );
+    const meta = parseManaged(compose)!;
+    if (meta.kind === "database") throw new Error("Expected app metadata");
+    const entry = { timestamp, image: kind === "image" ? "nginx:alpine" : snapshot };
+    const { history } = recordManagedDeploy(meta.history, entry);
+    const recorded = writeManagedMeta(compose, { ...meta, history });
+    expect(parseManaged(recorded)).toEqual({ ...meta, history: [entry], autoDomain });
+    expect(recorded.slice(recorded.indexOf("services:"))).toBe(compose.slice(compose.indexOf("services:")));
+  });
 });
 
 describe("managed app rollback rewrites", () => {
@@ -254,7 +363,10 @@ describe("managed app rollback rewrites", () => {
 
   it("pins a repo without build or registry pulls and restores its exact source on redeploy", () => {
     const input = { ...repoInput, branch: "release/v2", subdirectory: "packages/web", dockerfile: "docker/web.Dockerfile" };
-    const compose = repoStack(input).replace("    restart:", '    labels:\n      - "traefik.enable=true"\n    restart:');
+    const compose = withManagedAutoDomain(
+      repoStack(input).replace("    restart:", '    labels:\n      - "traefik.enable=true"\n    restart:'),
+      autoDomain,
+    );
     const meta = parseManaged(compose)!;
     if (meta.kind !== "repo") throw new Error("Expected repo metadata");
     const history = [{ timestamp, image: snapshot }];
@@ -262,11 +374,15 @@ describe("managed app rollback rewrites", () => {
     expect(pinned).not.toMatch(/^    build:/m);
     expect(pinned).toContain(`    image: ${snapshot}\n    pull_policy: never\n`);
     expect(pinned.slice(pinned.indexOf("    labels:"))).toBe(compose.slice(compose.indexOf("    labels:")));
-    expect(parseManaged(pinned)).toMatchObject({ pinnedTag: snapshot, image: snapshot, history });
-    const restored = rewriteManagedApp(pinned, "web-x1", { ...meta, history });
+    expect(parseManaged(pinned)).toMatchObject({ pinnedTag: snapshot, image: snapshot, history, autoDomain });
+    const unpinned = parseManaged(pinned)!;
+    if (unpinned.kind !== "repo") throw new Error("Expected repo metadata");
+    delete unpinned.pinnedTag;
+    const restored = rewriteManagedApp(pinned, "web-x1", unpinned);
     expect(restored).toContain('    build:\n      context: "https://github.com/docker/welcome-to-docker.git#release/v2:packages/web"\n      dockerfile: docker/web.Dockerfile\n    image: web-x1-app:latest\n');
     expect(restored).not.toContain("pull_policy:");
     expect(parseManaged(restored)).not.toHaveProperty("pinnedTag");
+    expect(parseManaged(restored)).toMatchObject({ image: "web-x1-app:latest", history, autoDomain });
     expect(restored.slice(restored.indexOf("services:"))).toBe(compose.slice(compose.indexOf("services:")));
   });
 

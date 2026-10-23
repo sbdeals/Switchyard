@@ -41,6 +41,7 @@ import {
   validateRepoTag,
   validateRepoSource,
   withImageEnvFile,
+  withManagedAutoDomain,
   writeManagedMeta,
   type ManagedDeployEntry,
   type ManagedMeta,
@@ -1936,7 +1937,7 @@ async function deployBridgeApp(id: string): Promise<void> {
   await composeAction(id, "deploy");
 }
 
-/** Mint an automatic URL for a managed app, leaving databases/raw stacks alone. */
+/** Mint/refresh a managed app URL. The caller deploys to apply its labels. */
 export async function ensureBridgeAutoDomain(composeId: string): Promise<string | null> {
   const hostIp = process.env.SWITCHYARD_HOST_IP?.trim();
   if (!hostIp) return null;
@@ -1945,11 +1946,13 @@ export async function ensureBridgeAutoDomain(composeId: string): Promise<string 
   );
   const managed = parseManaged(detail.composeFile);
   if ((managed?.kind !== "image" && managed?.kind !== "repo") || !detail.appName) return null;
-  const existing = (detail.domains ?? []).find(
-    (d) => d.serviceName === "app" && isAutoDomainHost(d.host)
-  );
-  if (existing) return existing.host;
-  const port = await resolveImagePort(managed.image, detail.env);
+  const existing = (detail.domains ?? []).find((d) => d.serviceName === "app");
+  if (existing) {
+    await reconcileBridgeAutoDomain(composeId, detail);
+    return existing.host;
+  }
+  // Repo images only exist after the build; never try pulling their local tag.
+  const port = await resolveImagePort(managed.image, detail.env, managed.kind === "image");
   const domain = bridgeImageDomain({
     appName: detail.appName,
     hostIp,
@@ -1957,22 +1960,61 @@ export async function ensureBridgeAutoDomain(composeId: string): Promise<string 
     port,
   });
   await createComposeDomain(composeId, "app", domain.host, domain.port, domain);
+  // Only a URL we created and whose host/port remain unchanged is ours to fix.
+  await updateComposeFile(composeId, withManagedAutoDomain(detail.composeFile!, domain));
   return domain.host;
 }
 
-async function resolveImagePort(image: string, env?: string | null): Promise<number> {
-  return resolveAppPort({ image, env, exposedPorts: await inspectImageExposedPorts(image) });
+async function resolveImagePort(image: string, env?: string | null, pullIfMissing = false): Promise<number> {
+  const exposedPorts = pullIfMissing
+    ? await inspectImageExposedPorts(image, { pullIfMissing: true })
+    : await inspectImageExposedPorts(image);
+  return resolveAppPort({ image, env, exposedPorts });
+}
+
+/**
+ * compose.deploy only queues work; there is no server-side completion hook.
+ * On the next requested deploy (or ensure), use the successfully built/pulled
+ * local image to correct an untouched auto-domain. That deploy applies labels
+ * once, without starting deployments as a side effect of status polling.
+ */
+async function reconcileBridgeAutoDomain(composeId: string, detail: RawComposeDetail): Promise<void> {
+  const managed = parseManaged(detail.composeFile);
+  if (managed?.kind !== "image" && managed?.kind !== "repo") return;
+  const auto = managed.autoDomain;
+  if (!auto || detail.composeStatus !== "done" || /^\s*(?:export\s+)?PORT\s*=/m.test(detail.env ?? "")) return;
+  const domains = (detail.domains ?? []).filter((d) => d.serviceName === "app");
+  const domain = domains[0];
+  if (domains.length !== 1 || domain.host !== auto.host || domain.port !== auto.port || !isAutoDomainHost(domain.host)) return;
+  // Rollback snapshots are local-only: reconciliation must never pull their tag.
+  const exposedPorts = await inspectImageExposedPorts(managed.image);
+  // A missing image/socket (or no exposed TCP port) is not evidence to change a URL.
+  if (!exposedPorts.some((key) => /^\d+\/tcp$/.test(key) && Number(key.split("/")[0]) >= 1 && Number(key.split("/")[0]) <= 65535)) return;
+  const port = resolveAppPort({ image: managed.image, exposedPorts, env: detail.env });
+  if (port === domain.port) return;
+  await updateDomain(domain.domainId, {
+    host: domain.host, port, https: domain.https ?? false,
+    certificateType: domain.certificateType ?? "none", path: domain.path ?? "/",
+  });
+  await updateComposeFile(composeId, withManagedAutoDomain(detail.composeFile!, { host: domain.host, port }));
 }
 
 /** Compose label changes take effect on deploy; apply Networking edits to managed apps. */
 export async function redeployManagedImage(composeId: string): Promise<void> {
-  const detail = await request<RawComposeDetail>(
-    `compose.one?composeId=${encodeURIComponent(composeId)}`
-  );
-  const managed = parseManaged(detail.composeFile);
-  if (managed?.kind === "image" || managed?.kind === "repo") {
-    await composeAction(composeId, "deploy", true);
-  }
+  await withComposeMutation(composeId, async () => {
+    const detail = await request<RawComposeDetail>(
+      `compose.one?composeId=${encodeURIComponent(composeId)}`
+    );
+    const managed = parseManaged(detail.composeFile);
+    if (managed?.kind === "image" || managed?.kind === "repo") {
+      // Networking edits are explicit choices, even when the submitted port is
+      // the same as our fallback. Stop managing it before this or future deploys.
+      if (managed.autoDomain) {
+        await updateComposeFile(composeId, withManagedAutoDomain(detail.composeFile!, null));
+      }
+      await deployCompose(composeId, true);
+    }
+  });
 }
 
 export async function updateComposeFile(id: string, composeFile: string): Promise<void> {
@@ -2118,6 +2160,14 @@ async function deployCompose(id: string, preservePinned = false, rollbackTimesta
   if (history.length || managed.history) managed.history = history;
   composeFile = writeManagedMeta(composeFile, managed);
   if (composeFile !== detail.composeFile) await updateComposeFile(id, composeFile);
+  try {
+    // Reconcile after selecting and persisting the deployment target, so a
+    // rollback uses its pinned image and retains the updated deploy history.
+    const updated = await request<RawComposeDetail>(`compose.one?composeId=${encodeURIComponent(id)}`);
+    await reconcileBridgeAutoDomain(id, updated);
+  } catch {
+    // URL provisioning is best-effort; never block a requested deployment.
+  }
   await request("compose.deploy", { method: "POST", body: { composeId: id } });
   if (managed.kind === "repo") {
     const retained = new Set(history.map((entry) => entry.image));

@@ -27,10 +27,15 @@ interface ManagedAppHistory {
   rollbackUnavailable?: boolean;
 }
 
+export interface ManagedAutoDomain {
+  host: string;
+  port: number;
+}
+
 export type ManagedMeta =
   | { kind: "database"; engine: Engine; image: string }
-  | ({ kind: "image"; image: string } & ManagedAppHistory)
-  | ({ kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string; pinnedTag?: string } & ManagedAppHistory);
+  | ({ kind: "image"; image: string; autoDomain?: ManagedAutoDomain } & ManagedAppHistory)
+  | ({ kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string; pinnedTag?: string; autoDomain?: ManagedAutoDomain } & ManagedAppHistory);
 
 const ENGINES = new Set<string>(Object.keys(ENGINE_META));
 const META_BLOCK = /^x-switchyard:[ \t]*\r?\n(?:(?:[ \t]+[^\r\n]*|[ \t]*)(?:\r?\n|$))*/m;
@@ -64,6 +69,11 @@ function readHistory(value: string): ManagedDeployEntry[] {
   } catch { return []; }
 }
 
+function validManagedAutoDomain(domain: ManagedAutoDomain): boolean {
+  return typeof domain.host === "string" && /^[A-Za-z0-9.-]+$/.test(domain.host) &&
+    Number.isInteger(domain.port) && domain.port >= 1 && domain.port <= 65535;
+}
+
 /** Read the `x-switchyard` block from a compose file, or null for ordinary stacks. */
 export function parseManaged(composeFile: string | null | undefined): ManagedMeta | null {
   if (!composeFile) return null;
@@ -85,7 +95,10 @@ export function parseManaged(composeFile: string | null | undefined): ManagedMet
     ...(fields.history !== undefined ? { history: readHistory(fields.history) } : {}),
     ...(/^(true|false)$/.test(fields.rollbackUnavailable ?? "") ? { rollbackUnavailable: fields.rollbackUnavailable === "true" } : {}),
   };
-  if (fields.kind === "image" && fields.image) return { kind: "image", image: fields.image, ...history };
+  const marker = { host: fields.autoDomainHost, port: Number(fields.autoDomainPort) };
+  const autoDomain = /^\d+$/.test(fields.autoDomainPort ?? "") && validManagedAutoDomain(marker)
+    ? { autoDomain: marker } : {};
+  if (fields.kind === "image" && fields.image) return { kind: "image", image: fields.image, ...history, ...autoDomain };
   if (fields.kind === "repo" && fields.image && fields.repoUrl && fields.branch) {
     return {
       kind: "repo", image: fields.image, repoUrl: fields.repoUrl, branch: fields.branch,
@@ -93,9 +106,27 @@ export function parseManaged(composeFile: string | null | undefined): ManagedMet
       ...(fields.dockerfile ? { dockerfile: fields.dockerfile } : {}),
       ...(fields.pinnedTag ? { pinnedTag: fields.pinnedTag } : {}),
       ...history,
+      ...autoDomain,
     };
   }
   return null;
+}
+
+/** Record the last automatic routing choice; clearing it preserves explicit Networking edits. */
+export function withManagedAutoDomain(composeFile: string, domain: ManagedAutoDomain | null): string {
+  const kind = parseManaged(composeFile)?.kind;
+  if (kind !== "image" && kind !== "repo") return composeFile;
+  if (domain && !validManagedAutoDomain(domain)) throw new Error("Invalid automatic domain metadata.");
+  return composeFile.replace(META_BLOCK, (block: string) => {
+    const newline = block.includes("\r\n") ? "\r\n" : "\n";
+    const markerFields = /^  (?:autoDomainHost|autoDomainPort):[^\r\n]*(?:\r?\n|$)/gm;
+    const updated = block.replace(markerFields, "");
+    if (!domain) return updated;
+    const headerEnd = updated.indexOf("\n") + 1;
+    return updated.slice(0, headerEnd) +
+      `  autoDomainHost: ${JSON.stringify(domain.host)}${newline}` +
+      `  autoDomainPort: ${domain.port}${newline}` + updated.slice(headerEnd);
+  });
 }
 
 /** Parse a "KEY=value" env block (comments and blanks skipped). */
@@ -220,6 +251,10 @@ export function writeManagedMeta(composeFile: string, meta: ManagedMeta): string
     }
   }
   if (meta.kind !== "database") {
+    if (meta.autoDomain) {
+      if (!validManagedAutoDomain(meta.autoDomain)) throw new Error("Invalid automatic domain metadata.");
+      lines.push(`  autoDomainHost: ${JSON.stringify(meta.autoDomain.host)}`, `  autoDomainPort: ${meta.autoDomain.port}`);
+    }
     if (meta.history !== undefined) {
       // Validate before writing, rather than silently storing an unusable entry.
       for (const entry of meta.history) {
