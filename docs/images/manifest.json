@@ -16,37 +16,37 @@
   },
   {
     "file": "db-overview.png",
-    "title": "Database drawer \u2014 Overview",
+    "title": "Database drawer — Overview",
     "shows": "redis-mskd drawer, Overview tab: Running status badge, internal connection string with copy button, and Image (redis:7), Internal port (6379), Replicas, Database, User, and Resources fields. Stop/Redeploy lifecycle buttons."
   },
   {
     "file": "db-logs.png",
-    "title": "Database drawer \u2014 Logs",
+    "title": "Database drawer — Logs",
     "shows": "redis-mskd Logs tab streaming real Redis startup log lines over SSE, with timestamps, the log filter box, and the green 'Live' indicator."
   },
   {
     "file": "db-metrics.png",
-    "title": "Database drawer \u2014 Metrics",
+    "title": "Database drawer — Metrics",
     "shows": "redis-mskd Metrics tab: live CPU (0.3%) and Memory (4 MB) stat cards plus CPU % and Memory area charts populated with ~13s of real per-second docker stats samples."
   },
   {
     "file": "db-settings.png",
-    "title": "Database drawer \u2014 Settings",
+    "title": "Database drawer — Settings",
     "shows": "redis-mskd Settings tab: rename field, version selector (redis:7, 'changing redeploys'), external port, CPU/memory limits with Save changes, masked password with reveal/copy, app name, created date, and the Danger zone."
   },
   {
     "file": "app-overview.png",
-    "title": "Application drawer \u2014 Overview",
-    "shows": "whoami-snim drawer, Overview tab: Running badge, 'Docker image \u00b7 My Project / production' subtitle, Public URL empty state pointing at the Domains tab, and Source (docker), Image (traefik/whoami), Build (nixpacks), Replicas fields."
+    "title": "Application drawer — Overview",
+    "shows": "whoami-snim drawer, Overview tab: Running badge, 'Docker image · My Project / production' subtitle, Public URL empty state pointing at the Domains tab, and Source (docker), Image (traefik/whoami), Build (nixpacks), Replicas fields."
   },
   {
     "file": "app-variables.png",
-    "title": "Application drawer \u2014 Variables",
+    "title": "Application drawer — Variables",
     "shows": "whoami-snim Variables tab with the REDIS_URL entry set to the redis-mskd internal connection string ('1 variable' counter, Save variables button). This env reference is what draws the canvas edge between the two services."
   },
   {
     "file": "app-domains.png",
-    "title": "Application drawer \u2014 Domains",
+    "title": "Application drawer — Domains",
     "shows": "whoami-snim Domains tab empty state: 'No domains attached.', the auto-SSL (Let's Encrypt) hint, and the add-domain form (Host, Port, Add). No domain was actually attached."
   },
   {
@@ -57,7 +57,7 @@
   {
     "file": "grid-view.png",
     "title": "Grid view",
-    "shows": "The Grid view toggle active, showing both service cards \u2014 redis-mskd (redis:7) and whoami-snim (traefik/whoami) \u2014 each with a Running badge and its 'My Project / production' scope."
+    "shows": "The Grid view toggle active, showing both service cards — redis-mskd (redis:7) and whoami-snim (traefik/whoami) — each with a Running badge and its 'My Project / production' scope."
   },
   {
     "file": "projects-view.png",
