@@ -6,6 +6,7 @@ import { Loader2, Search } from "lucide-react";
 interface Line {
   ts: number;
   text: string;
+  stored?: boolean;
 }
 
 export function LogsTab({ appName, active }: { appName: string; active: boolean }) {
@@ -81,13 +82,18 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
         }}
         className="flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-3 font-mono text-[11px] leading-relaxed"
       >
+        {shown.some((l) => l.stored) && (
+          <div className="mb-2 border-b border-[var(--color-border)] pb-2 text-[var(--color-fg-subtle)]">
+            from history
+          </div>
+        )}
         {shown.length === 0 ? (
           <div className="flex h-full items-center justify-center gap-2 text-[var(--color-fg-subtle)]">
             <Loader2 className="size-4 animate-spin" /> waiting for logs…
           </div>
         ) : (
           shown.map((l) => (
-            <div key={l.id} className="flex gap-3 whitespace-pre-wrap break-all">
+            <div key={l.id} className={`flex gap-3 whitespace-pre-wrap break-all ${l.stored ? "opacity-70" : ""}`}>
               <span className="shrink-0 select-none text-[var(--color-fg-subtle)]">
                 {new Date(l.ts).toLocaleTimeString()}
               </span>
