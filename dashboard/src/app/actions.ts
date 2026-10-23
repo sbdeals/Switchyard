@@ -104,6 +104,10 @@ import { friendlyEngineError } from "@/lib/deploy-errors";
 import { deployTarget } from "@/lib/deploy-target";
 import { validateRepoSource } from "@/lib/managed-compose";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import {
+  listBridgeDatabaseBackups, createBridgeDatabaseBackup, restoreBridgeDatabaseBackup,
+  type BridgeDatabaseBackup,
+} from "@/lib/bridge-backups";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -692,6 +696,25 @@ export async function saveComposeFileAction(
 
 export async function saveComposeEnvAction(id: string, env: string): Promise<ActionResult> {
   return wrap(() => saveServiceEnv({ kind: "compose", id }, env));
+}
+
+export async function listBridgeDatabaseBackupsAction(id: string): Promise<
+  { ok: true; backups: BridgeDatabaseBackup[] } | { ok: false; error: string }
+> {
+  try {
+    return { ok: true, backups: await listBridgeDatabaseBackups(id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return fail(e);
+  }
+}
+
+export async function createBridgeDatabaseBackupAction(id: string): Promise<ActionResult> {
+  return wrap(() => createBridgeDatabaseBackup(id));
+}
+
+export async function restoreBridgeDatabaseBackupAction(id: string, filename: string): Promise<ActionResult> {
+  return wrap(() => restoreBridgeDatabaseBackup(id, filename));
 }
 
 // --- backups ----------------------------------------------------------------

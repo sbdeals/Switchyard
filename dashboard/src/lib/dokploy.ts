@@ -1767,6 +1767,20 @@ interface RawComposeDetail {
   deployments?: RawDeployment[];
 }
 
+/** Fresh per-user authorization before accessing bridge database files or Docker. */
+export async function getManagedBridgeDatabase(id: string): Promise<{ appName: string; engine: Engine }> {
+  if (typeof id !== "string" || !id || id.length > 256) throw new Error("Invalid compose service.");
+  // Do not use the logs/metrics app-name cache for backup authorization.
+  const refs = collectIds(await rawTree(), (env) => (env.compose ?? []).map((c) => c.composeId));
+  if (!refs.some((ref) => ref.id === id)) throw new Error("Unknown compose service or access denied.");
+  const detail = await request<RawComposeDetail>(`compose.one?composeId=${encodeURIComponent(id)}`);
+  const managed = parseManaged(detail.composeFile);
+  if (managed?.kind !== "database" || !detail.appName || detail.composeType !== "docker-compose") {
+    throw new Error("Backups are only available for managed bridge databases.");
+  }
+  return { appName: detail.appName, engine: managed.engine };
+}
+
 export const STARTER_COMPOSE = `services:
   web:
     image: nginx:alpine

@@ -54,6 +54,7 @@ import {
   ComposeEditorTab,
   ComposeDomainsTab,
   ComposeSettingsTab,
+  ComposeBackupsTab,
 } from "@/components/service/ComposeTabs";
 import {
   inputCls,
@@ -135,6 +136,11 @@ const COMPOSE_TABS: TabId[] = [
   "metrics",
   "logs",
   "console",
+  "settings",
+];
+const MANAGED_DATABASE_TABS: TabId[] = [
+  ...COMPOSE_TABS.slice(0, -1),
+  "backups",
   "settings",
 ];
 
@@ -372,7 +378,7 @@ export function ServiceDrawer({
     service?.kind === "application"
       ? APP_TABS
       : service?.kind === "compose"
-        ? COMPOSE_TABS
+        ? service.managed?.kind === "database" ? MANAGED_DATABASE_TABS : COMPOSE_TABS
         : DB_TABS;
   const tabs = service && isPostgresService(service) ? withDataTab(baseTabs) : baseTabs;
 
@@ -498,6 +504,7 @@ export function ServiceDrawer({
               {tab === "logs" && <LogsTab key={service.appName} appName={service.appName} active />}
               {tab === "console" && <ConsoleTab key={service.appName} appName={service.appName} />}
               {tab === "backups" && service.kind === "database" && <BackupsTab db={service} />}
+              {tab === "backups" && service.kind === "compose" && <ComposeBackupsTab compose={service} />}
               {tab === "settings" &&
                 (service.kind === "database" ? (
                   <SettingsTab db={service} onClose={onClose} />

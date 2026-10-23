@@ -8,7 +8,10 @@
  */
 import "server-only";
 import Docker from "dockerode";
-import type { Duplex } from "node:stream";
+import { Writable, type Duplex, type Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { setTimeout as delay } from "node:timers/promises";
+import { dockerExecOutput } from "./docker-exec-stream";
 
 const socketPath = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
 const docker = new Docker({ socketPath });
@@ -375,6 +378,96 @@ export interface ExecResult {
   stderr: string;
   exitCode: number | null;
   truncated: boolean;
+}
+
+/** The process may still be running: callers must retain the operation lock. */
+export class DatabaseExecUncertainError extends Error {}
+
+/** Exact compose labels avoid name-substring matches or selecting a sidecar. */
+export async function inspectComposeDatabase(appName: string, service: string): Promise<{
+  id: string;
+  env: Record<string, string>;
+}> {
+  const containers = await withTimeout(docker.listContainers({
+    all: false,
+    filters: { label: [`com.docker.compose.project=${appName}`, `com.docker.compose.service=${service}`] },
+  }), DOCKER_OP_TIMEOUT_MS, "Finding database container");
+  const matches = containers.filter((c) =>
+    c.Labels["com.docker.compose.project"] === appName &&
+    c.Labels["com.docker.compose.service"] === service &&
+    c.Labels["com.docker.compose.oneoff"]?.toLowerCase() !== "true"
+  );
+  if (matches.length !== 1) {
+    throw new Error("Expected one running database container. Start the database and retry.");
+  }
+  const id = matches[0].Id;
+  const info = await withTimeout(docker.getContainer(id).inspect(), DOCKER_OP_TIMEOUT_MS, "Reading database environment");
+  const env = Object.fromEntries((info.Config?.Env ?? []).flatMap((entry) => {
+    const at = entry.indexOf("=");
+    return at > 0 ? [[entry.slice(0, at), entry.slice(at + 1)]] : [];
+  }));
+  return { id, env };
+}
+
+/**
+ * Stream a backup to disk, or a restore into stdin. Callers authorize the
+ * compose service and redact errors. Unlike demuxStream, the async generator
+ * honors disk backpressure; neither stdout nor an entire Docker frame is held.
+ */
+export async function streamDatabaseExec(
+  id: string,
+  command: { cmd: string[]; env: string[] },
+  io: { input?: Readable; output?: Writable; stderr: (chunk: Buffer) => void },
+): Promise<{ exitCode: number | null; error?: string }> {
+  const exec = await withTimeout(docker.getContainer(id).exec({
+    Cmd: command.cmd,
+    Env: command.env,
+    AttachStdin: Boolean(io.input),
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: false,
+  }), DOCKER_OP_TIMEOUT_MS, "Creating database exec");
+  let raw: Duplex;
+  try {
+    raw = await withTimeout(exec.start({
+      hijack: true,
+      stdin: Boolean(io.input),
+      Tty: false,
+      abortSignal: AbortSignal.timeout(DOCKER_OP_TIMEOUT_MS),
+    }), DOCKER_OP_TIMEOUT_MS, "Starting database exec") as Duplex;
+  } catch (e) {
+    const reason = e instanceof Error ? ` ${e.message}` : "";
+    throw new DatabaseExecUncertainError(`Could not verify database exec startup (exit code unknown). Ask the operator to check for running dump/restore processes before retrying.${reason}`);
+  }
+  // Restore requires EOF on stdin while stdout/stderr remain readable.
+  raw.allowHalfOpen = true;
+  const output = io.output ?? new Writable({ write(_chunk, _encoding, done) { done(); } });
+  const streams = [pipeline(raw, (source) => dockerExecOutput(source, io.stderr), output)];
+  if (io.input) streams.push(pipeline(io.input, raw));
+  const results = await Promise.allSettled(streams);
+  const failure = results.find((result) => result.status === "rejected");
+  const streamError = failure?.status === "rejected"
+    ? failure.reason instanceof Error && failure.reason.message ? failure.reason.message : "Backup stream failed."
+    : undefined;
+  // EOF can precede process exit. Wait briefly for Docker to publish the exit
+  // status; losing the stream alone is not evidence that a restore has stopped.
+  const deadline = Date.now() + DOCKER_OP_TIMEOUT_MS;
+  let info: Docker.ExecInspectInfo;
+  try {
+    do {
+      info = await withTimeout(exec.inspect(), Math.max(1, deadline - Date.now()), "Checking database exec result");
+      if (!info.Running && info.ExitCode !== null) break;
+      if (Date.now() >= deadline) throw new Error("Exec still running");
+      await delay(50);
+    } while (true);
+  } catch (e) {
+    const reason = e instanceof Error ? ` ${e.message}` : "";
+    throw new DatabaseExecUncertainError(`Database exec completion could not be verified (exit code unknown). A restore may still be running. Ask the operator to check it before retrying.${streamError ? ` ${streamError}` : ""}${reason}`);
+  }
+  return {
+    exitCode: info.ExitCode,
+    ...(streamError ? { error: streamError } : {}),
+  };
 }
 
 /**

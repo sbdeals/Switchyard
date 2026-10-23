@@ -48,6 +48,45 @@ See `.env.example` for the optional auto-URL (`SWITCHYARD_HOST_IP`) and
 observability persistence/alerting (`SWITCHYARD_STORE_URL`, `SWITCHYARD_ALERT_*`)
 variables.
 
+## Bridge database backups
+
+Switchyard-managed compose databases have a **Backups** tab with **Back up now**,
+**Download**, and a confirmed **Restore**. PostgreSQL uses custom-format dumps;
+MySQL/MariaDB use SQL dumps; MongoDB uses gzip archives. Redis backups are not
+supported yet. Native Dokploy database backups keep their existing S3 workflow.
+
+Backups stream through the Docker socket into
+`SWITCHYARD_BACKUP_DIR/<appName>/<UTC timestamp>.<ext>`. The default is
+`./data/backups`, or `/app/data/backups` in the dashboard image. The runner is root
+and can create this directory. **Mount a persistent volume before taking backups**:
+add `-v switchyard-data:/app/data` to the dashboard's `docker run` options, or mount
+a writable directory at the configured `SWITCHYARD_BACKUP_DIR`. The existing
+launchers do not add this volume automatically. Without it, replacing the dashboard
+container loses backups. Files are private (0600); database directories are 0700.
+Backups contain sensitive database contents and are not encrypted at rest.
+
+The latest 10 successful backups per database are retained; incomplete dumps are
+never offered for download or restore. Download a copy for off-host protection.
+Downloads and every backup action recheck the signed-in user's Dokploy access.
+Credentials come from the running database container and never enter dump/restore
+arguments. MongoDB tools read a temporary 0600 config, removed after the operation.
+
+Stop application writes before restoring and keep a fresh backup first. Restores
+replace objects present in the backup; objects created after the backup may remain.
+PostgreSQL/MySQL/MariaDB cover the configured application database, not global
+roles or server settings. MongoDB restores application namespaces, preserving
+`admin`, `config`, and `local` (including current login credentials). Mongo dumps
+without a replica-set oplog and SQL dumps of nontransactional tables require
+quiescent writes for consistency. Use the same engine/version for restore.
+
+Operations run synchronously and require a running database, the local Docker
+socket, free disk space, and request timeouts long enough for the dump/restore.
+A lock serializes backups/restores per database. After a dashboard crash, verify
+no dump/restore process is still running before removing that database's
+`.operation.lock` and abandoned `.partial` files. Removing a service does not
+delete its backup directory; operators can remove it after keeping any needed
+copies. Scheduled backups and S3 storage for bridge databases are follow-ups.
+
 ## Layout
 
 ```
