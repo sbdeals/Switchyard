@@ -1,0 +1,226 @@
+$ bash proof.sh   # on codex/release-latest-guard @ 7faa4f8, offline
+TAP version 13
+# Subtest: newer published version exists
+ok 1 - newer published version exists
+  ---
+  duration_ms: 1.362876
+  ...
+# Subtest: candidate is newest in unsorted history
+ok 2 - candidate is newest in unsorted history
+  ---
+  duration_ms: 0.175815
+  ...
+# Subtest: equal version rerun
+ok 3 - equal version rerun
+  ---
+  duration_ms: 0.129315
+  ...
+# Subtest: prerelease never becomes latest
+ok 4 - prerelease never becomes latest
+  ---
+  duration_ms: 0.106225
+  ...
+# Subtest: candidate without v prefix
+ok 5 - candidate without v prefix
+  ---
+  duration_ms: 0.083217
+  ...
+# Subtest: history without v prefix
+ok 6 - history without v prefix
+  ---
+  duration_ms: 0.071394
+  ...
+# Subtest: malformed entries are ignored
+ok 7 - malformed entries are ignored
+  ---
+  duration_ms: 0.067439
+  ...
+# Subtest: higher prerelease tags are ignored
+ok 8 - higher prerelease tags are ignored
+  ---
+  duration_ms: 0.063987
+  ...
+# Subtest: first stable release
+ok 9 - first stable release
+  ---
+  duration_ms: 0.122991
+  ...
+# Subtest: numeric components compare numerically
+ok 10 - numeric components compare numerically
+  ---
+  duration_ms: 0.132685
+  ...
+# Subtest: patch versions compare numerically
+ok 11 - patch versions compare numerically
+  ---
+  duration_ms: 0.079407
+  ...
+# Subtest: major takes precedence
+ok 12 - major takes precedence
+  ---
+  duration_ms: 0.072632
+  ...
+# Subtest: large numeric components retain precision
+ok 13 - large numeric components retain precision
+  ---
+  duration_ms: 0.083999
+  ...
+# Subtest: build metadata does not affect precedence
+ok 14 - build metadata does not affect precedence
+  ---
+  duration_ms: 0.129818
+  ...
+# Subtest: newer version with build metadata blocks promotion
+ok 15 - newer version with build metadata blocks promotion
+  ---
+  duration_ms: 0.21505
+  ...
+# Subtest: draft and API-marked prerelease records are ignored
+ok 16 - draft and API-marked prerelease records are ignored
+  ---
+  duration_ms: 0.264374
+  ...
+# Subtest: published stable release records participate in ordering
+ok 17 - published stable release records participate in ordering
+  ---
+  duration_ms: 0.138031
+  ...
+# Subtest: malformed candidates cannot become latest
+ok 18 - malformed candidates cannot become latest
+  ---
+  duration_ms: 0.26848
+  ...
+# Subtest: release history must be an array
+ok 19 - release history must be an array
+  ---
+  duration_ms: 0.464522
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 141.842038
+TAP version 13
+# Subtest: newer published version exists
+ok 1 - newer published version exists
+  ---
+  duration_ms: 1.371925
+  ...
+# Subtest: candidate is newest in unsorted history
+ok 2 - candidate is newest in unsorted history
+  ---
+  duration_ms: 0.12217
+  ...
+# Subtest: equal version rerun
+ok 3 - equal version rerun
+  ---
+  duration_ms: 0.095887
+  ...
+# Subtest: prerelease never becomes latest
+ok 4 - prerelease never becomes latest
+  ---
+  duration_ms: 0.074675
+  ...
+# Subtest: candidate without v prefix
+ok 5 - candidate without v prefix
+  ---
+  duration_ms: 0.077008
+  ...
+# Subtest: history without v prefix
+ok 6 - history without v prefix
+  ---
+  duration_ms: 0.074081
+  ...
+# Subtest: malformed entries are ignored
+ok 7 - malformed entries are ignored
+  ---
+  duration_ms: 0.079931
+  ...
+# Subtest: higher prerelease tags are ignored
+ok 8 - higher prerelease tags are ignored
+  ---
+  duration_ms: 0.063867
+  ...
+# Subtest: first stable release
+ok 9 - first stable release
+  ---
+  duration_ms: 0.138917
+  ...
+# Subtest: numeric components compare numerically
+ok 10 - numeric components compare numerically
+  ---
+  duration_ms: 0.178979
+  ...
+# Subtest: patch versions compare numerically
+ok 11 - patch versions compare numerically
+  ---
+  duration_ms: 0.11785
+  ...
+# Subtest: major takes precedence
+ok 12 - major takes precedence
+  ---
+  duration_ms: 0.095532
+  ...
+# Subtest: large numeric components retain precision
+ok 13 - large numeric components retain precision
+  ---
+  duration_ms: 0.068008
+  ...
+# Subtest: build metadata does not affect precedence
+ok 14 - build metadata does not affect precedence
+  ---
+  duration_ms: 0.129358
+  ...
+# Subtest: newer version with build metadata blocks promotion
+ok 15 - newer version with build metadata blocks promotion
+  ---
+  duration_ms: 0.070209
+  ...
+# Subtest: draft and API-marked prerelease records are ignored
+ok 16 - draft and API-marked prerelease records are ignored
+  ---
+  duration_ms: 0.186908
+  ...
+# Subtest: published stable release records participate in ordering
+ok 17 - published stable release records participate in ordering
+  ---
+  duration_ms: 0.12191
+  ...
+# Subtest: malformed candidates cannot become latest
+ok 18 - malformed candidates cannot become latest
+  ---
+  duration_ms: 0.242786
+  ...
+# Subtest: release history must be an array
+ok 19 - release history must be an array
+  ---
+  duration_ms: 0.587574
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 23.121017
+| case | version | before image latest | before make_latest | after image latest | after make_latest |
+|---|---|---|---|---|---|
+| older/delayed | v0.1.3 | true | true | false | false |
+| newest | v0.1.4 | true | true | true | true |
+| equal rerun | v0.1.4 | true | true | true | true |
+| prerelease | v0.2.0-rc.1 | true | true | false | false |
+| mixed v prefixes | 0.1.3 | true | true | false | false |
+| malformed ignored | v0.1.4 | true | true | true | true |
+| draft ignored | v0.1.4 | true | true | true | true |
+| API prerelease ignored | v0.1.4 | true | true | true | true |
+PASS: 8 decision rows; both YAML files and workflow guard assertions
+Expected property name or '}' in JSON at position 1
+Expected a JSON array of releases
+PASS: CLI false/true and both invalid-history cases
+EXIT 0

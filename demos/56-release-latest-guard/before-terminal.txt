@@ -1,0 +1,7 @@
+$ git show origin/main:.github/workflows/release.yml | grep -nE "type=raw,value=latest|make_latest|\+ :latest"   # before
+2:#   1. ghcr.io/<owner>/switchyard:<version> + :latest   (dashboard image)
+87:            type=raw,value=latest
+457:            -f tag_name="$GITHUB_REF_NAME" -F draft=false -f make_latest=true >/dev/null
+
+# before: every tag push (older re-run, rc) tags :latest and marks itself Latest -> no guard, no concurrency group:
+concurrency blocks: 0
