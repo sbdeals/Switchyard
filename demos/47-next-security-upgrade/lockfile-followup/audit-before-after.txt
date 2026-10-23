@@ -1,0 +1,21 @@
+# #47 lockfile follow-up 9586f70: dashboard prod npm audit, before (fdbe3bc) vs after (9586f70)
+# captured 2026-10-23 11:43 EDT on the box; npm audit --omit=dev --package-lock-only
+
+===== BEFORE fdbe3bc (previous #47 head) =====
+@grpc/grpc-js  1.14.0 - 1.14.4
+Severity: high
+baseline-browser-mapping  >=2.0.0 <2.11.0
+Severity: moderate
+nanoid  <3.3.18
+Severity: high
+source-map-js  1.0.0 - 1.2.1
+Severity: high
+4 vulnerabilities (1 moderate, 3 high)
+
+===== AFTER 9586f70 (current #47 head) =====
+found 0 vulnerabilities
+
+===== diff fdbe3bc..9586f70 =====
+ dashboard/package-lock.json | 24 ++++++++++++------------
+ 1 file changed, 12 insertions(+), 12 deletions(-)
+PASS: dashboard/package.json unchanged (lockfile-only)

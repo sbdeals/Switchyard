@@ -1,0 +1,5 @@
+## [before] existing live-proof app repo-port-mdj6-4gvdft, deployed on integration-52port (5e66b3e, before Round Q) — queried 08:23:04 EDT
+Dokploy deployments (oldest first): the watcher's follow-up is indistinguishable from a user deploy
+07:43:10 EDT | Manual deployment | done
+07:43:16 EDT | Manual deployment | done
+(see also demos/52-bridge-git-deploys/first-deploy-port/after-local-3-deploys.png: two 'Manual deployment' rows)

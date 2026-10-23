@@ -1,0 +1,34 @@
+
+ RUN  v3.2.7 /workspace/wt-bridge-rollback/dashboard
+
+ ✓ src/lib/bridge-repo-release.test.ts > repo release timing > uses the first deploy timestamp when the newest deployment is a port fix-up 9ms
+ ✓ src/lib/bridge-repo-release.test.ts > repo release timing > selects the newest user deploy from an unsorted deployment list 0ms
+ ✓ src/lib/bridge-repo-release.test.ts > repo release timing > only excludes the exact fix-up title, not automatic port fix-up 0ms
+ ✓ src/lib/bridge-repo-release.test.ts > repo release timing > only excludes the exact fix-up title, not Automatic port fix-up  0ms
+ ✓ src/lib/bridge-repo-release.test.ts > repo release timing > only excludes the exact fix-up title, not Automatic port fix-up failed 0ms
+ ✓ src/lib/bridge-repo-release.test.ts > repo release timing > falls back to the newest deployment when only port fix-ups are available 0ms
+ ✓ src/lib/bridge-repo-release.test.ts > repo release timing > has no timestamp or fix-up note before the first deployment 0ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > uses the public Dockerfile's port 80 on the first deploy and needs no follow-up 47ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > treats the automatic port 80 fix-up as the same release, saving it only before an explicit redeploy 12ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > treats the automatic port 8080 fix-up as the same release, saving it only before an explicit redeploy 4ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > still deploys and repairs the port when fetching the public Dockerfile fails 4ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > preserves a Networking edit, including explicitly selecting fallback port 3000 4ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > leaves a port edited directly in Dokploy alone 3ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > rechecks a direct Dokploy edit made while local image inspection is pending 5ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > cancels in-flight detection before an explicit deploy change 4ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > cancels in-flight detection before an explicit stop change 4ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > cancels in-flight detection before an explicit Networking change 5ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > cancels in-flight detection before an explicit Compose file change 4ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > cancels in-flight detection before an explicit PORT change 4ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > applies a correction accepted before the deadline even if the writes cross it 4ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > does not follow up after error 4ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > does not follow up after another deployment 2ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > does not follow up after changed deployment 2ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > expires without acting on a stale done compose status or missing deployment record 2ms
+ ✓ src/lib/bridge-repo-port.test.ts > first repo deployment port > does not throw or mutate when background authorization expires 3ms
+
+ Test Files  2 passed (2)
+      Tests  25 passed (25)
+   Start at  08:24:18
+   Duration  671ms (transform 231ms, setup 0ms, collect 334ms, tests 129ms, environment 0ms, prepare 116ms)
+

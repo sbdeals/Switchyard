@@ -1,0 +1,37 @@
+branch: codex/deps-audit-residual @ 70aa3db; base origin/main @ 1fc46d5
+
+===== BEFORE (origin/main) mcp: npm audit --omit=dev =====
+@grpc/grpc-js  1.14.0 - 1.14.4
+Severity: high
+@hono/node-server  <1.19.15
+Severity: moderate
+@modelcontextprotocol/sdk  <=1.31.0
+Severity: high
+fast-uri  3.0.0 - 3.1.7
+Severity: high
+hono  <=4.13.10
+Severity: moderate
+ip-address  <=10.7.3
+Severity: high
+proxy-addr  1.1.0 - 2.0.7
+Severity: critical
+qs  2.2.5 - 6.15.3
+Severity: moderate
+8 vulnerabilities (3 moderate, 4 high, 1 critical)
+
+===== AFTER (branch) mcp: npm audit --omit=dev =====
+found 0 vulnerabilities
+
+===== BEFORE (origin/main) desktop: npm audit --omit=dev =====
+js-yaml  4.0.0 - 4.3.1
+Severity: high
+1 high severity vulnerability
+
+===== AFTER (branch) desktop: npm audit --omit=dev =====
+found 0 vulnerabilities
+
+===== package.json unchanged? =====
+ desktop/package-lock.json | 24 ++++++++++++------
+ mcp/package-lock.json     | 62 ++++++++++++++++++++++++-----------------------
+ 2 files changed, 49 insertions(+), 37 deletions(-)
+PASS: package.json files unchanged (lockfile-only)

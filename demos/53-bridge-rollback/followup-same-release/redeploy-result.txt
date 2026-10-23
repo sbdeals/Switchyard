@@ -1,0 +1,15 @@
+## [redeploy] explicit Redeploy of repo-port-wu4m-4vzaqw — 08:22:28 EDT
+Dokploy deployments (oldest first):
+08:21:49 EDT | Manual deployment | done
+08:21:55 EDT | Automatic port fix-up | done
+08:22:33 EDT | Manual deployment | done
+08:22:38 EDT | Manual deployment | done
+
+x-switchyard history after one explicit Redeploy:
+history:
+    - timestamp: 2026-10-23T12:22:38.209Z
+      image: repo-port-wu4m-4vzaqw-app:sy-1792758158209
+    - timestamp: 2026-10-23T12:22:33.688Z
+      image: repo-port-wu4m-4vzaqw-app:sy-1792758153688
+  rollbackUnavailable: false
+history entries: 2 (the script clicked Redeploy twice: the first click, then a "confirm" click that hit the same button since there is no confirm dialog). 4 Dokploy deployments = 1 first deploy + 1 automatic fix-up + 2 explicit redeploys -> 2 history entries: one per explicit redeploy, none for the fix-up.

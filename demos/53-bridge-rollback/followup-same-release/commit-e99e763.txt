@@ -1,0 +1,20 @@
+commit e99e763479a5a3ddd544e101c6d4bdfaada287ac
+Author: sbdeals <198242477+sbdeals@users.noreply.github.com>
+Date:   Fri Oct 23 08:19:19 2026 -0400
+
+    fix(bridge): treat the automatic port fix-up deploy as the same release
+    
+    The post-build watcher's single follow-up deploy only re-applies the
+    corrected Traefik port. It now carries Dokploy title 'Automatic port
+    fix-up' plus a description, never snapshots or adds a rollback-history
+    entry (so rollback cannot offer the wrong-port first build), and the
+    Previous deploys Current row keeps the release's own timestamp with a
+    'same release' note. Tests: the fix-up records no history; the next
+    explicit redeploy records exactly one entry.
+
+ dashboard/src/components/service/ComposeTabs.tsx | 10 ++++--
+ dashboard/src/lib/bridge-repo-port.test.ts       | 31 +++++++++++++----
+ dashboard/src/lib/bridge-repo-release.test.ts    | 44 ++++++++++++++++++++++++
+ dashboard/src/lib/bridge-repo-release.ts         | 11 ++++++
+ dashboard/src/lib/dokploy.ts                     | 32 +++++++++++------
+ 5 files changed, 108 insertions(+), 20 deletions(-)

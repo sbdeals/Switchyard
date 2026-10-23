@@ -1,0 +1,13 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1792760858, "env": {"SHELL": null, "TERM": "dumb"}}
+[0.013822, "o", "branch: codex/deps-audit-residual @ 70aa3db; base origin/main @ 1fc46d5\r\n"]
+[0.01964, "o", "\r\n===== BEFORE (origin/main) mcp: npm audit --omit=dev =====\r\n"]
+[0.80642, "o", "@grpc/grpc-js  1.14.0 - 1.14.4\r\nSeverity: high\r\n@hono/node-server  <1.19.15\r\nSeverity: moderate\r\n@modelcontextprotocol/sdk  <=1.31.0\r\nSeverity: high\r\nfast-uri  3.0.0 - 3.1.7\r\nSeverity: high\r\nhono  <=4.13.10\r\nSeverity: moderate\r\nip-address  <=10.7.3\r\nSeverity: high\r\nproxy-addr  1.1.0 - 2.0.7\r\nSeverity: critical\r\nqs  2.2.5 - 6.15.3\r\nSeverity: moderate\r\n8 vulnerabilities (3 moderate, 4 high, 1 critical)\r\n"]
+[0.81646, "o", "\r\n===== AFTER (branch) mcp: npm audit --omit=dev =====\r\n"]
+[1.495517, "o", "found 0 vulnerabilities\r\n"]
+[1.502539, "o", "\r\n===== BEFORE (origin/main) desktop: npm audit --omit=dev =====\r\n"]
+[2.079768, "o", "js-yaml  4.0.0 - 4.3.1\r\nSeverity: high\r\n1 high severity vulnerability\r\n"]
+[2.090324, "o", "\r\n===== AFTER (branch) desktop: npm audit --omit=dev =====\r\n"]
+[2.635189, "o", "found 0 vulnerabilities\r\n"]
+[2.63581, "o", "\r\n===== package.json unchanged? =====\r\n"]
+[2.644163, "o", " desktop/package-lock.json | 24 ++++++++++++------\r\n mcp/package-lock.json     | 62 ++++++++++++++++++++++++-----------------------\r\n 2 files changed, 49 insertions(+), 37 deletions(-)\r\n"]
+[2.647037, "o", "PASS: package.json files unchanged (lockfile-only)\r\n"]

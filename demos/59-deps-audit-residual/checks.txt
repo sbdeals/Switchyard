@@ -1,0 +1,9 @@
+# mcp: npm ci && npm test
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+# tests 5
+# pass 5
+# fail 0
+# desktop: npm ci && typecheck && build
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+typecheck exit 0
+CJS ⚡️ Build success in 22ms

@@ -1,0 +1,22 @@
+## [after] fresh local-Git repo app http://127.0.0.1:8765/repo-port.git (no manual Redeploy) — 08:21:44 EDT
+image: switchyard-dash:integration-roundq
+app: repo-port-wu4m-4vzaqw
+t+2s curl repo-port-wu4m-4vzaqw-f35afe-140-248-50-52.sslip.io -> 502 server.port=3000
+t+10s curl repo-port-wu4m-4vzaqw-f35afe-140-248-50-52.sslip.io -> 200 server.port=80
+RESULT: 200 at t+10s with server.port=80 and NO manual Redeploy
+
+Dokploy deployments for repo-port-wu4m-4vzaqw (oldest first):
+08:21:49 EDT | Manual deployment | done | 
+08:21:55 EDT | Automatic port fix-up | done | Same release as the first deploy: applies the detected port 80 to the public URL. No rollback entry is recorded.
+
+x-switchyard block (rollback history lives here as 'history:'):
+x-switchyard:
+  autoDomainHost: repo-port-wu4m-4vzaqw-f35afe-140-248-50-52.sslip.io
+  autoDomainPort: 80
+  kind: repo
+  image: repo-port-wu4m-4vzaqw-app:latest
+  repoUrl: http://127.0.0.1:8765/repo-port.git
+  branch: main
+history entries: 0 (grep -c found no "history:" key; no rollback entry for the fix-up)
+rollback snapshot images for repo-port-wu4m-4vzaqw: 0
+UI note "Includes an automatic port fix-up (same release)." visible: true
