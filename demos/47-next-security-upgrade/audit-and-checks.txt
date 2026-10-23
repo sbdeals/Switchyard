@@ -1,0 +1,22 @@
+$ npm audit --omit=dev   # main (next 16.2.9)
+{"info":0,"low":0,"moderate":1,"high":5,"critical":1,"total":7}
+  @grpc/grpc-js high - @grpc/grpc-js: In certain configurations, getAuthContext can return unauthorized certificates as though they were authorized; @grpc/grpc-js: The server transmit
+  baseline-browser-mapping moderate - baseline-browser-mapping process termination on invalid input causes denial of service
+  nanoid high - nanoid: custom generators can loop indefinitely when size is zero
+  next critical - Next.js: Middleware / Proxy bypass in App Router applications using Turbopack and single locale; Next.js: Denial of Service in App Router using Server Actions; 
+  postcss high - PostCSS has XSS via Unescaped </style> in its CSS Stringify Output; PostCSS: Arbitrary file read and information disclosure via attacker-controlled sourceMappin
+  sharp high - sharp inherited vulnerabilities in libvips: CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591; sharp: Vulnerabilities in libheif: GHSA-g89c-p67h-r4
+  source-map-js high - source-map-js allows event-loop denial of service through indexed source-map section offsets
+
+$ npm audit --omit=dev   # codex/next-security-upgrade (next 16.4.2)
+{"info":0,"low":0,"moderate":1,"high":3,"critical":0,"total":4}
+  @grpc/grpc-js high - @grpc/grpc-js: In certain configurations, getAuthContext can return unauthorized certificates as though they were authorized; @grpc/grpc-js: The server transmit
+  baseline-browser-mapping moderate - baseline-browser-mapping process termination on invalid input causes denial of service
+  nanoid high - nanoid: custom generators can loop indefinitely when size is zero
+  source-map-js high - source-map-js allows event-loop denial of service through indexed source-map section offsets
+
+$ npm run lint / npx tsc --noEmit / npm run build / docker build
+/tmp/next-lint.log:lint rc=0
+/tmp/next-tsc.log:tsc rc=0
+/tmp/next-build.log:build rc=0
+/tmp/next-docker-build.log:rc=0
