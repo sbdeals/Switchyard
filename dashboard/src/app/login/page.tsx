@@ -7,12 +7,17 @@ import { LoginForm } from "./LoginForm";
 // Reads the session cookie, so it must render per request.
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ expired?: string | string[] }>;
+}) {
   // Already signed in? Skip the form.
   const store = await cookies();
   if (openSession(store.get(SESSION_COOKIE)?.value)) {
     redirect("/");
   }
+  const expired = (await searchParams).expired === "1";
 
   return (
     <main className="flex min-h-full items-center justify-center px-6 py-16">
@@ -30,7 +35,7 @@ export default async function LoginPage() {
           </div>
           <h1 className="text-xl font-semibold tracking-tight">Sign in to Switchyard</h1>
           <p className="mt-1.5 text-sm text-[var(--color-fg-muted)]">
-            Use your Dokploy account.
+            {expired ? "Your session expired. Sign in again." : "Use your Dokploy account."}
           </p>
         </div>
         <LoginForm />
