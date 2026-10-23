@@ -18,7 +18,7 @@ export async function downCommand(flags: DownFlags): Promise<void> {
 
   if (!flags.yes && process.stdin.isTTY) {
     const message = flags.purge
-      ? "Stop the stack AND DELETE the network, secrets, and data volumes (all Dokploy data)?"
+      ? "Stop the stack AND DELETE the network, secrets, and data volumes (Dokploy and dashboard data)?"
       : "Stop the Dokploy services and remove the Switchyard container? (Data volumes survive.)";
     if (!(await askConfirm({ message, initialValue: !flags.purge }))) {
       p.cancel("Nothing changed.");

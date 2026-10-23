@@ -23,6 +23,7 @@ export {
   type EngineCandidate,
 } from "./core/docker.js";
 export { UserError } from "./core/errors.js";
+export { agentKeyMigrationPath, migrateAgentKey } from "./core/agent-key-migration.js";
 export { LOCAL_INGRESS_CONTAINER, renderLocalIngress } from "./core/local-ingress.js";
 export { nextFreePort, portFree } from "./core/ports.js";
 export {
@@ -32,6 +33,7 @@ export {
   type ContainerRow,
   type RepairResult,
 } from "./core/repair.js";
-export { renderContainer } from "./core/switchyard-container.js";
+export { MIGRATION_INSPECT_FORMAT, renderContainer } from "./core/switchyard-container.js";
+export { removeSwitchyardDataVolume } from "./core/switchyard-data.js";
 export { generatePassword, isValidEmail, parsePort, randomSecret, sha256 } from "./core/util.js";
 export { CLI_VERSION } from "./version.js";

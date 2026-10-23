@@ -76,20 +76,39 @@ Re-running `up` converges: same config → no-op; changed config or a newer CLI
 version → the container is recreated (that's also the upgrade path:
 `npx switchyard-cli@latest up`).
 
+The CLI mounts the named Docker volume `switchyard-data` at `/app/data` and
+sets `SWITCHYARD_AGENT_KEY_FILE=/app/data/agent-key.json`. This explicit setting
+keeps the dashboard's development default unchanged. Saved agent provider,
+API key, and OAuth state, plus other files written under `/app/data` (including
+dashboard backups), survive container replacements. The desktop app calls the
+same launcher and inherits this storage.
+
+On the first replacement of an older container without this volume, the
+launcher migrates its saved agent key file before removing the old container.
+If migration fails, replacement aborts and the old container is retained so
+the settings can be recovered. An identical file already in the volume is safe
+to retry; conflicting contents abort instead of overwriting either copy.
+This migration does not recover files from a container that has already been
+deleted or copy other legacy files outside the agent key file.
+
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `switchyard up` | Install/converge/upgrade the whole stack (idempotent) |
 | `switchyard status` | Services, container health, URLs, config path |
-| `switchyard down` | Stop the stack; data volumes survive |
-| `switchyard down --purge` | Also delete network, secrets, and volumes (fresh slate; clears stored admin creds) |
+| `switchyard down` | Stop the stack; data volumes survive, including `switchyard-data` |
+| `switchyard down --purge` | Also delete network, secrets, and volumes, including saved agent settings/backups in `switchyard-data` (fresh slate; clears stored admin creds) |
 | `switchyard config list \| get <k> \| set <k> <v>` | Read/change persisted settings; `set` recreates the container |
 | `switchyard local-ingress up \| down` | Opt-in demo Traefik on alternate ports so domains route locally over **HTTP** (see below) |
 | `switchyard doctor` | Read-only prerequisite + health check |
 | `switchyard logs [switchyard\|dokploy] [-f]` | Tail the dashboard container or the Dokploy service logs |
 | `switchyard open` | Open the dashboard in a browser |
 | `switchyard claude [args...]` | Launch Claude Code (installs it first if needed) |
+
+`down --purge` verifies that `switchyard-data` was removed and reports a failure
+if Docker cannot remove it (for example, another container still uses it).
+Plain `down` preserves the volume for the next `up`.
 
 ### `up` flags
 
