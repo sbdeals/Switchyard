@@ -1,7 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { defaultConfig, metricsStoreUrl, renderContainer } from "../dist/lib.js";
+import { defaultConfig, metricsStoreUrl, MIGRATION_INSPECT_FORMAT, renderContainer, sha256 } from "../dist/lib.js";
+
+test("migration inspect format renders a complete JSON object", () => {
+  const inspected = {
+    State: { Running: true },
+    Mounts: [{ Type: "bind", Source: "/var/run/docker.sock", Destination: "/var/run/docker.sock", RW: true }],
+    Config: { Env: ["HOME=/root"], User: "", WorkingDir: "/app" },
+  };
+  const rendered = MIGRATION_INSPECT_FORMAT.replace(/\{\{json (\.[\w.]+)\}\}/g, (_, field) =>
+    JSON.stringify(field.slice(1).split(".").reduce((value, key) => value[key], inspected)),
+  );
+  assert.deepEqual(JSON.parse(rendered), {
+    Running: inspected.State.Running,
+    Mounts: inspected.Mounts,
+    Config: inspected.Config,
+  });
+});
 
 test("hash is stable for identical config", () => {
   const a = renderContainer(defaultConfig("linux"), "1.0.0");
@@ -53,6 +69,38 @@ test("run args carry the BFF env and labels", () => {
   assert.ok(plan.runArgs.includes("DOKPLOY_URL=http://dokploy:3000"));
   assert.ok(plan.runArgs.includes(`switchyard.config-hash=${plan.hash}`));
   assert.equal(plan.runArgs.at(-1), plan.image);
+});
+
+test("dashboard data mount and agent key location are rendered and fingerprinted", () => {
+  const plan = renderContainer(defaultConfig("linux"), "1.0.0");
+  const values = (flag) => plan.runArgs.flatMap((arg, index) =>
+    arg === flag ? [plan.runArgs[index + 1]] : [],
+  );
+  assert.deepEqual(values("-v"), [
+    "/var/run/docker.sock:/var/run/docker.sock",
+    "switchyard-data:/app/data",
+  ]);
+  assert.ok(values("-e").includes("SWITCHYARD_AGENT_KEY_FILE=/app/data/agent-key.json"));
+
+  const env = Object.fromEntries(values("-e").map((entry) => {
+    const separator = entry.indexOf("=");
+    return [entry.slice(0, separator), entry.slice(separator + 1)];
+  }));
+  const spec = {
+    image: plan.image,
+    network: values("--network")[0],
+    publish: values("-p")[0],
+    socket: values("-v")[0],
+    data: values("-v")[1],
+    env,
+    restart: values("--restart")[0],
+  };
+  assert.equal(plan.hash, sha256(JSON.stringify(spec)));
+  const { data, ...withoutData } = spec;
+  assert.notEqual(plan.hash, sha256(JSON.stringify(withoutData)));
+  const withoutKeyLocation = { ...spec, env: { ...env } };
+  delete withoutKeyLocation.env.SWITCHYARD_AGENT_KEY_FILE;
+  assert.notEqual(plan.hash, sha256(JSON.stringify(withoutKeyLocation)));
 });
 
 test("session secret is passed to the dashboard and folds into the hash", () => {
