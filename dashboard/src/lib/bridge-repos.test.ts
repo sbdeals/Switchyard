@@ -8,6 +8,7 @@ vi.mock("./session", () => ({
   openSession: () => ({ dokployCookie: "dokploy-session=test" }),
 }));
 vi.mock("./docker", () => ({ inspectImageExposedPorts: vi.fn() }));
+vi.mock("./repo-port", () => ({ fetchRepoExposedPorts: async () => [] }));
 
 import {
   composeLifecycleAction,

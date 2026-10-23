@@ -20,12 +20,14 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomPassword, randomServiceName } from "./names";
 import { ENGINE_META } from "./engines";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
 import { resolveAppPort } from "./app-port";
+import { fetchRepoExposedPorts } from "./repo-port";
 import {
   bridgeImageDomain,
   databaseStack,
@@ -1923,6 +1925,7 @@ export async function deployBridgeRepo(
     composeFile: repoStack({ ...source, appName }),
   }));
   await deployBridgeApp(id);
+  watchBridgeRepoPort(id);
   return id;
 }
 
@@ -1952,7 +1955,14 @@ export async function ensureBridgeAutoDomain(composeId: string): Promise<string 
     return existing.host;
   }
   // Repo images only exist after the build; never try pulling their local tag.
-  const port = await resolveImagePort(managed.image, detail.env, managed.kind === "image");
+  let port: number;
+  if (managed.kind === "repo") {
+    const localPorts = await inspectImageExposedPorts(managed.image);
+    port = resolveAppPort({ image: managed.image, env: detail.env,
+      exposedPorts: localPorts.length ? localPorts : await fetchRepoExposedPorts(managed) });
+  } else {
+    port = await resolveImagePort(managed.image, detail.env, true);
+  }
   const domain = bridgeImageDomain({
     appName: detail.appName,
     hostIp,
@@ -1973,30 +1983,119 @@ async function resolveImagePort(image: string, env?: string | null, pullIfMissin
 }
 
 /**
- * compose.deploy only queues work; there is no server-side completion hook.
- * On the next requested deploy (or ensure), use the successfully built/pulled
- * local image to correct an untouched auto-domain. That deploy applies labels
- * once, without starting deployments as a side effect of status polling.
+ * Use the successfully built/pulled local image to correct an untouched URL.
+ * The caller deploys only when needed to apply the updated labels.
  */
-async function reconcileBridgeAutoDomain(composeId: string, detail: RawComposeDetail): Promise<void> {
+async function reconcileBridgeAutoDomain(
+  composeId: string,
+  detail: RawComposeDetail,
+  canApply: () => boolean | Promise<boolean> = () => true,
+): Promise<boolean> {
   const managed = parseManaged(detail.composeFile);
-  if (managed?.kind !== "image" && managed?.kind !== "repo") return;
+  if (managed?.kind !== "image" && managed?.kind !== "repo") return false;
   const auto = managed.autoDomain;
-  if (!auto || detail.composeStatus !== "done" || /^\s*(?:export\s+)?PORT\s*=/m.test(detail.env ?? "")) return;
+  if (!auto || detail.composeStatus !== "done" || /^\s*(?:export\s+)?PORT\s*=/m.test(detail.env ?? "")) return false;
   const domains = (detail.domains ?? []).filter((d) => d.serviceName === "app");
   const domain = domains[0];
-  if (domains.length !== 1 || domain.host !== auto.host || domain.port !== auto.port || !isAutoDomainHost(domain.host)) return;
+  if (domains.length !== 1 || domain.host !== auto.host || domain.port !== auto.port || !isAutoDomainHost(domain.host)) return false;
   // Rollback snapshots are local-only: reconciliation must never pull their tag.
   const exposedPorts = await inspectImageExposedPorts(managed.image);
   // A missing image/socket (or no exposed TCP port) is not evidence to change a URL.
-  if (!exposedPorts.some((key) => /^\d+\/tcp$/.test(key) && Number(key.split("/")[0]) >= 1 && Number(key.split("/")[0]) <= 65535)) return;
+  if (!exposedPorts.some((key) => /^\d+\/tcp$/.test(key) && Number(key.split("/")[0]) >= 1 && Number(key.split("/")[0]) <= 65535)) return false;
   const port = resolveAppPort({ image: managed.image, exposedPorts, env: detail.env });
-  if (port === domain.port) return;
+  if (port === domain.port || !await canApply()) return false;
   await updateDomain(domain.domainId, {
     host: domain.host, port, https: domain.https ?? false,
     certificateType: domain.certificateType ?? "none", path: domain.path ?? "/",
   });
   await updateComposeFile(composeId, withManagedAutoDomain(detail.composeFile!, { host: domain.host, port }));
+  return true;
+}
+
+type RepoPortWatch = { cancelled: boolean; applying?: Promise<void> };
+const repoPortWatches = new Map<string, RepoPortWatch>();
+
+async function cancelRepoPortWatch(composeId: string): Promise<void> {
+  const watch = repoPortWatches.get(composeId);
+  if (!watch) return;
+  watch.cancelled = true;
+  // Finish any in-flight automatic write before a manual deployment/edit.
+  await watch.applying?.catch(() => {});
+}
+
+/** Networking edits opt out before writing, so a watcher cannot overwrite them. */
+export async function stopBridgeRepoPortWatch(composeId: string): Promise<void> {
+  if (!repoPortWatches.has(composeId)) return;
+  // Authorize as the current user before cancelling another request's work.
+  await request<RawComposeDetail>(`compose.one?composeId=${encodeURIComponent(composeId)}`);
+  await cancelRepoPortWatch(composeId);
+}
+
+/** Only the first deploy of a newly-created repo is watched; no recursive jobs. */
+function watchBridgeRepoPort(composeId: string): void {
+  if (repoPortWatches.has(composeId)) return;
+  const watch: RepoPortWatch = { cancelled: false };
+  repoPortWatches.set(composeId, watch);
+  const timeout = Number(process.env.BRIDGE_REPO_PORT_TIMEOUT_MS);
+  const poll = Number(process.env.BRIDGE_REPO_PORT_POLL_MS);
+  const interval = Number.isFinite(poll) && poll > 0 ? poll : 5_000;
+  const deadline = Date.now() + (Number.isFinite(timeout) && timeout > 0 ? timeout : 15 * 60_000);
+  const isCurrent = () => !watch.cancelled && Date.now() < deadline;
+  let started = false;
+  try {
+    // after() retains the initiating Server Action's request context/cookies.
+    after(async () => {
+      if (started) return;
+      started = true;
+      try {
+        let deploymentId: string | undefined;
+        while (isCurrent()) {
+          await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(1, interval), deadline - Date.now())));
+          if (!isCurrent()) return;
+          const detail = await request<RawComposeDetail>(`compose.one?composeId=${encodeURIComponent(composeId)}`);
+          const managed = parseManaged(detail.composeFile);
+          if (managed?.kind !== "repo" || !managed.autoDomain || !isCurrent()) return;
+          const deployments = detail.deployments ?? [];
+          // This stack was just created. A second record means someone else
+          // deployed it; never act on that deploy or on stale composeStatus.
+          if (deployments.length > 1) return;
+          const deployment = deployments[0];
+          if (!deployment) continue;
+          if (deploymentId && deploymentId !== deployment.deploymentId) return;
+          deploymentId = deployment.deploymentId;
+          if (deployment.status === "error" || detail.composeStatus === "error") return;
+          if (deployment.status !== "done" || detail.composeStatus !== "done") continue;
+          watch.applying = (async () => {
+            const changed = await reconcileBridgeAutoDomain(composeId, detail, async () => {
+              if (!isCurrent()) return false;
+              // Inspection can take time. Recheck edits/deploys made directly
+              // in Dokploy too, before writing from our earlier snapshot.
+              const current = await request<RawComposeDetail>(`compose.one?composeId=${encodeURIComponent(composeId)}`);
+              return isCurrent() && current.composeStatus === "done" &&
+                current.deployments?.length === 1 && current.deployments[0].deploymentId === deploymentId &&
+                current.deployments[0].status === "done" && current.composeFile === detail.composeFile &&
+                current.env === detail.env && JSON.stringify(current.domains) === JSON.stringify(detail.domains);
+            });
+            if (changed && !watch.cancelled) {
+              // Exactly one follow-up; skip watcher registration and predeploy
+              // reconciliation, which just succeeded. Finish applying accepted
+              // writes even if they crossed the polling deadline.
+              await request("compose.deploy", { method: "POST", body: { composeId } });
+            }
+          })();
+          await watch.applying;
+          return;
+        }
+      } catch {
+        // Expired session, deleted stack, timeout, or provisioning failure:
+        // the initial deployment is unaffected; next-deploy repair still works.
+      } finally {
+        if (repoPortWatches.get(composeId) === watch) repoPortWatches.delete(composeId);
+      }
+    });
+  } catch {
+    repoPortWatches.delete(composeId);
+  }
 }
 
 /** Compose label changes take effect on deploy; apply Networking edits to managed apps. */
@@ -2184,6 +2283,7 @@ async function deployCompose(id: string, preservePinned = false, rollbackTimesta
  * `compose.saveEnvironment` procedure (mirrors application/database env saves).
  */
 export async function saveComposeEnvironment(id: string, env: string): Promise<void> {
+  await stopBridgeRepoPortWatch(id);
   await request("compose.saveEnvironment", {
     method: "POST",
     body: { composeId: id, env },
@@ -2194,8 +2294,11 @@ export async function composeAction(id: string, action: Action, preservePinned =
   // compose uses delete instead of remove.
   const proc = action === "remove" ? "delete" : action;
   if (action === "deploy") {
+    await cancelRepoPortWatch(id);
     await withComposeMutation(id, () => deployCompose(id, preservePinned));
     return;
+  } else {
+    await stopBridgeRepoPortWatch(id);
   }
   await request(`compose.${proc}`, { method: "POST", body: { composeId: id } });
 }

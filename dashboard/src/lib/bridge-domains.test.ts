@@ -13,6 +13,7 @@ vi.mock("./docker", () => ({
   verifyComposeAppImage: vi.fn(),
   pruneComposeAppImages: vi.fn(),
 }));
+vi.mock("./repo-port", () => ({ fetchRepoExposedPorts: async () => [] }));
 
 import { inspectImageExposedPorts } from "./docker";
 import { composeAction, deployBridgeImage, deployBridgeRepo, ensureAutoDomain, ensureBridgeAutoDomain, redeployManagedImage } from "./dokploy";
