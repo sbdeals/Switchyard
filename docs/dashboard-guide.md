@@ -61,7 +61,7 @@ The page renders from live Dokploy state on every load, and every action (deploy
 
 Click **New service** to open the creation menu. Everything here is one click (or one field) away from a deployed service; all details are editable afterward in the drawer.
 
-![New service menu: Application section with docker image input, git repo input and Compose stack row; Database section listing PostgreSQL, MySQL, MariaDB, MongoDB and Redis with version tags](images/new-service-menu.png)
+![New service menu: Application section with docker image input, git repo input, From GitHub and Compose stack rows; Templates section with the App catalog; Database section listing PostgreSQL, MySQL, MariaDB, MongoDB and Redis with version tags](images/new-service-menu.png)
 
 The **Application** section offers four ways in: deploy from a Docker image, deploy from a public Git URL, deploy through a GitHub App (including private repositories), or create a Compose stack. The **Database** section lists the five managed engines with the exact image each would deploy: `postgres:18`, `mysql:8.4`, `mariadb:11`, `mongo:8`, `redis:7`.
 
@@ -101,7 +101,7 @@ If no GitHub App is connected, the modal shows **Connect GitHub App**, linking t
 
 Click **Compose stack** and Switchyard immediately creates the service — again, no form. It appears on the canvas as **Idle** (nothing is running yet) and its drawer opens. On the **Compose** tab you'll find the editor seeded with a starter `docker-compose.yml`:
 
-![Compose stack drawer for compose-sgzh in Idle state, showing the Compose tab's YAML editor with the nginx:alpine starter template and the Save and Save & deploy buttons](images/compose-editor.png)
+![Compose stack drawer for compose-iduw in Idle state, showing the Compose tab's YAML editor with the nginx:alpine starter template and the Save and Save & deploy buttons](images/compose-editor.png)
 
 The starter file runs nginx and publishes it on port 8080:
 
