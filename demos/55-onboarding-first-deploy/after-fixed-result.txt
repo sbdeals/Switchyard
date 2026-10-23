@@ -1,0 +1,7 @@
+## [after-fixed] first-run empty workspace (Dokploy member with no projects)
+heading: Deploy your first service
+Git dialog bridge hint visible: true
+public URL in drawer: http://whoami-th2y-syaroq-92c3b4-140-248-50-52.sslip.io
+copied: http://whoami-th2y-syaroq-92c3b4-140-248-50-52.sslip.io
+t+0s curl -H "Host: whoami-th2y-syaroq-92c3b4-140-248-50-52.sslip.io" http://127.0.0.1/ -> 200
+container /whoami-th2y-syaroq-app-1: traefik.http.services.whoami-th2y-syaroq-22-web.loadbalancer.server.port=80
