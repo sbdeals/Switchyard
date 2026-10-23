@@ -1,0 +1,7 @@
+## [after-local] first deploy of Dockerfile repo http://127.0.0.1:8765/repo-port.git (no manual Redeploy) — 07:43:06 EDT
+image: switchyard-dash:integration-52port
+app: repo-port-mdj6-4gvdft
+t+2s curl repo-port-mdj6-4gvdft-61fb2e-140-248-50-52.sslip.io -> 502 server.port=3000 containers:1
+t+10s curl repo-port-mdj6-4gvdft-61fb2e-140-248-50-52.sslip.io -> 200 server.port=80 containers:1
+RESULT: 200 at t+10s with server.port=80 and NO manual Redeploy
+deployments recorded by Dokploy for repo-port-mdj6-4gvdft: 2

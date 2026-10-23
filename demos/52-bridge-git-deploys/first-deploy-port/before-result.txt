@@ -1,0 +1,7 @@
+## [before] first deploy of Dockerfile repo https://github.com/mccutchen/go-httpbin.git (no manual Redeploy) — 07:31:28 EDT
+image: switchyard-dash:integration-52fix-53-54-55
+app: go-httpbin-cc76-6igbpu
+t+2s curl go-httpbin-cc76-6igbpu-ccd342-140-248-50-52.sslip.io -> 404 server.port=3000 containers:0
+t+32s curl go-httpbin-cc76-6igbpu-ccd342-140-248-50-52.sslip.io -> 502 server.port=3000 containers:1
+RESULT: no 200 within 420s (last: 502 server.port=3000 containers:1) and NO manual Redeploy
+deployments recorded by Dokploy for go-httpbin-cc76-6igbpu: 1

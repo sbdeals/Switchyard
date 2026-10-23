@@ -1,0 +1,7 @@
+## [after] first deploy of Dockerfile repo https://github.com/mccutchen/go-httpbin.git (no manual Redeploy) — 07:47:15 EDT
+image: switchyard-dash:integration-52port
+app: go-httpbin-cr6r-6bqx9w
+t+2s curl go-httpbin-cr6r-6bqx9w-c12509-140-248-50-52.sslip.io -> 404 server.port=8080 containers:0
+t+7s curl go-httpbin-cr6r-6bqx9w-c12509-140-248-50-52.sslip.io -> 200 server.port=8080 containers:1
+RESULT: 200 at t+7s with server.port=8080 and NO manual Redeploy
+deployments recorded by Dokploy for go-httpbin-cr6r-6bqx9w: 1
