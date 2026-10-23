@@ -2,6 +2,7 @@ import { STORE_SERVICE, STORE_VOLUME } from "../core/config.js";
 import { docker, dockerInherit, dockerOk } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { ensureLocalIngress, removeLocalIngress } from "../core/local-ingress.js";
+import { inspectPurgeResources } from "../core/purge.js";
 import { serviceExists, waitServicesConverged } from "../core/swarm.js";
 import { randomSecret, sleep } from "../core/util.js";
 import type { PlatformModule } from "./types.js";
@@ -219,6 +220,7 @@ export const dockerDesktopPlatform: PlatformModule = {
       // stack's containers to drain (bounded), then retry the removals.
       const deadline = Date.now() + 60_000;
       for (;;) {
+        const services = await docker(["service", "ls", "--format", "{{.Name}}"]);
         const ps = await docker([
           "ps",
           "--all",
@@ -228,8 +230,16 @@ export const dockerDesktopPlatform: PlatformModule = {
           "{{.Label \"com.docker.swarm.service.name\"}}",
         ]);
         const draining = [...SERVICES, STORE_SERVICE];
-        const busy = ps.stdout.split(/\r?\n/).some((n) => draining.includes(n.trim()));
-        if (!busy || Date.now() > deadline) break;
+        const busy = `${services.stdout}\n${ps.stdout}`.split(/\r?\n/).some((n) => draining.includes(n.trim()));
+        if (services.code !== 0 || ps.code !== 0) {
+          log("Could not check task drain; attempting removal and verifying the remaining resources.");
+          break;
+        }
+        if (!busy) break;
+        if (Date.now() >= deadline) {
+          log("Timed out waiting for tasks to drain; attempting removal and verifying the remaining resources.");
+          break;
+        }
         await sleep(2000);
       }
       const removals: string[][] = [
@@ -247,6 +257,8 @@ export const dockerDesktopPlatform: PlatformModule = {
           log(`  warning: ${args.join(" ")} failed: ${res.stderr.trim().split("\n")[0]}`);
         }
       }
+      const result = await inspectPurgeResources();
+      if (result.error) throw new UserError(result.error);
     }
   },
 };
