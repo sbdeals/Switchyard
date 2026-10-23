@@ -48,6 +48,7 @@ import {
   deployBridgeImage,
   deployBridgeRepo,
   redeployManagedImage,
+  stopBridgeRepoPortWatch,
   composeAction,
   updateComposeFile,
   listTemplates,
@@ -462,6 +463,7 @@ export async function updateDomainAction(
   composeId?: string
 ): Promise<ActionResult> {
   return wrap(async () => {
+    if (composeId) await stopBridgeRepoPortWatch(composeId);
     const domain = { ...input, host: input.host.trim() };
     if (composeId && /\.traefik\.me$/i.test(domain.host)) {
       domain.https = false;
@@ -474,6 +476,7 @@ export async function updateDomainAction(
 
 export async function deleteDomainAction(domainId: string, composeId?: string): Promise<ActionResult> {
   return wrap(async () => {
+    if (composeId) await stopBridgeRepoPortWatch(composeId);
     await deleteDomain(domainId);
     if (composeId) await redeployManagedImage(composeId);
   });
@@ -511,6 +514,7 @@ export async function createComposeDomainAction(
   port?: number
 ): Promise<ActionResult> {
   return wrap(async () => {
+    await stopBridgeRepoPortWatch(composeId);
     await createComposeDomain(composeId, serviceName.trim(), host.trim(), port);
     await redeployManagedImage(composeId);
   });
@@ -528,6 +532,7 @@ export async function generateComposeDomainAction(
   port?: number
 ): Promise<GenerateUrlResult> {
   return wrapHost(async () => {
+    await stopBridgeRepoPortWatch(composeId);
     const g = await generateHostFor(labelName || serviceName);
     await createComposeDomain(composeId, serviceName.trim(), g.host, port, {
       https: g.https,
@@ -685,6 +690,7 @@ export async function saveComposeFileAction(
   redeploy = false
 ): Promise<ActionResult> {
   return wrap(async () => {
+    await stopBridgeRepoPortWatch(id);
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");
   });
