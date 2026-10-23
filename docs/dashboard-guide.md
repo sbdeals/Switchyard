@@ -176,7 +176,7 @@ Two prerequisites, both outside Switchyard:
 
 Attached domains appear as clickable rows above the form, and the first one becomes the Public URL on the Overview tab.
 
-**Auto-URL.** On the Linux path you usually don't add anything here: deploying an app mints a public URL automatically (a Dokploy `*.traefik.me` host, or `<app-name>.<server-ip>.sslip.io` — both resolve to the server with no DNS to configure) and it shows up as the Public URL on the Overview tab. It routes to container port `3000` by default; if your app listens on a different port, add a domain here with the right port. Auto-URL is **off on Docker Desktop and in dev mode** — there the Dokploy Traefik proxy isn't managed, so nothing would route, and you add domains by hand as above.
+**Auto-URL.** On the Linux path you usually don't add anything here: deploying an app mints a public URL automatically (a Dokploy `*.traefik.me` host, or `<app-name>.<server-ip>.sslip.io` — both resolve to the server with no DNS to configure) and it shows up as the Public URL on the Overview tab. Docker image quick deploy accepts an optional **Port**; leave it blank to use the app's `PORT` environment variable, then the lowest exposed TCP port when the image is already available locally, then the known image default (`nginx`/`httpd`: `80`), then `3000`. If the inferred port is wrong, edit the domain's port here. Auto-URL is **off on Docker Desktop and in dev mode** — there the Dokploy Traefik proxy isn't managed, so nothing would route, and you add domains by hand as above.
 
 ### Deployment history
 
