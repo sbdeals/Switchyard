@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2, RotateCcw } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { repoReleaseTiming } from "@/lib/bridge-repo-release";
 import { ENGINE_META } from "@/lib/engines";
 import { isStopped, serviceLabel } from "@/lib/service-meta";
 import { BRIDGE_NETWORK, managedConnectionString, type ManagedMeta } from "@/lib/managed-compose";
@@ -100,10 +101,10 @@ function PreviousDeploys({ compose, managed, pending, error, rollback }: {
   const history = managed.history ?? [];
   const currentImage = managed.kind === "repo" ? managed.pinnedTag ?? managed.image : managed.image;
   const currentIndex = history.findIndex((entry) => entry.image === currentImage);
-  const latestDeploy = [...compose.deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  const { timestamp, includesPortFixup } = repoReleaseTiming(compose.deployments);
   const rows = history.map((entry, index) => ({ ...entry, current: index === currentIndex, saved: true }));
   if (managed.kind === "repo" && currentIndex === -1) {
-    rows.unshift({ image: currentImage, timestamp: latestDeploy?.createdAt ?? "", current: true, saved: false });
+    rows.unshift({ image: currentImage, timestamp, current: true, saved: false });
   }
 
   return (
@@ -136,6 +137,11 @@ function PreviousDeploys({ compose, managed, pending, error, rollback }: {
           ? " Pinned to a saved image. Redeploy latest rebuilds from the branch head."
           : " The running image is saved before the next redeploy.")}
       </p>
+      {managed.kind === "repo" && includesPortFixup && (
+        <p className="text-[11px] leading-relaxed text-[var(--color-fg-subtle)]">
+          Includes an automatic port fix-up (same release).
+        </p>
+      )}
       {managed.rollbackUnavailable && (
         <p role="status" className="text-xs text-[var(--color-warn)]">
           The previous running image could not be saved. Rollback is unavailable for that deploy.

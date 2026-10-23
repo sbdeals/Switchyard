@@ -28,6 +28,7 @@ import { ENGINE_META } from "./engines";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
 import { resolveAppPort } from "./app-port";
 import { fetchRepoExposedPorts } from "./repo-port";
+import { AUTOMATIC_PORT_FIXUP_TITLE } from "./bridge-repo-release";
 import {
   bridgeImageDomain,
   databaseStack,
@@ -1984,32 +1985,32 @@ async function resolveImagePort(image: string, env?: string | null, pullIfMissin
 
 /**
  * Use the successfully built/pulled local image to correct an untouched URL.
- * The caller deploys only when needed to apply the updated labels.
+ * Return the corrected port, or null if unchanged; the caller deploys to apply the labels.
  */
 async function reconcileBridgeAutoDomain(
   composeId: string,
   detail: RawComposeDetail,
   canApply: () => boolean | Promise<boolean> = () => true,
-): Promise<boolean> {
+): Promise<number | null> {
   const managed = parseManaged(detail.composeFile);
-  if (managed?.kind !== "image" && managed?.kind !== "repo") return false;
+  if (managed?.kind !== "image" && managed?.kind !== "repo") return null;
   const auto = managed.autoDomain;
-  if (!auto || detail.composeStatus !== "done" || /^\s*(?:export\s+)?PORT\s*=/m.test(detail.env ?? "")) return false;
+  if (!auto || detail.composeStatus !== "done" || /^\s*(?:export\s+)?PORT\s*=/m.test(detail.env ?? "")) return null;
   const domains = (detail.domains ?? []).filter((d) => d.serviceName === "app");
   const domain = domains[0];
-  if (domains.length !== 1 || domain.host !== auto.host || domain.port !== auto.port || !isAutoDomainHost(domain.host)) return false;
+  if (domains.length !== 1 || domain.host !== auto.host || domain.port !== auto.port || !isAutoDomainHost(domain.host)) return null;
   // Rollback snapshots are local-only: reconciliation must never pull their tag.
   const exposedPorts = await inspectImageExposedPorts(managed.image);
   // A missing image/socket (or no exposed TCP port) is not evidence to change a URL.
-  if (!exposedPorts.some((key) => /^\d+\/tcp$/.test(key) && Number(key.split("/")[0]) >= 1 && Number(key.split("/")[0]) <= 65535)) return false;
+  if (!exposedPorts.some((key) => /^\d+\/tcp$/.test(key) && Number(key.split("/")[0]) >= 1 && Number(key.split("/")[0]) <= 65535)) return null;
   const port = resolveAppPort({ image: managed.image, exposedPorts, env: detail.env });
-  if (port === domain.port || !await canApply()) return false;
+  if (port === domain.port || !await canApply()) return null;
   await updateDomain(domain.domainId, {
     host: domain.host, port, https: domain.https ?? false,
     certificateType: domain.certificateType ?? "none", path: domain.path ?? "/",
   });
   await updateComposeFile(composeId, withManagedAutoDomain(detail.composeFile!, { host: domain.host, port }));
-  return true;
+  return port;
 }
 
 type RepoPortWatch = { cancelled: boolean; applying?: Promise<void> };
@@ -2066,7 +2067,7 @@ function watchBridgeRepoPort(composeId: string): void {
           if (deployment.status === "error" || detail.composeStatus === "error") return;
           if (deployment.status !== "done" || detail.composeStatus !== "done") continue;
           watch.applying = (async () => {
-            const changed = await reconcileBridgeAutoDomain(composeId, detail, async () => {
+            const port = await reconcileBridgeAutoDomain(composeId, detail, async () => {
               if (!isCurrent()) return false;
               // Inspection can take time. Recheck edits/deploys made directly
               // in Dokploy too, before writing from our earlier snapshot.
@@ -2076,11 +2077,20 @@ function watchBridgeRepoPort(composeId: string): void {
                 current.deployments[0].status === "done" && current.composeFile === detail.composeFile &&
                 current.env === detail.env && JSON.stringify(current.domains) === JSON.stringify(detail.domains);
             });
-            if (changed && !watch.cancelled) {
+            if (port !== null && !watch.cancelled) {
               // Exactly one follow-up; skip watcher registration and predeploy
               // reconciliation, which just succeeded. Finish applying accepted
               // writes even if they crossed the polling deadline.
-              await request("compose.deploy", { method: "POST", body: { composeId } });
+              // This is the same release: bypass snapshots/history so rollback
+              // cannot offer a duplicate of the first build with the wrong URL port.
+              await request("compose.deploy", {
+                method: "POST",
+                body: {
+                  composeId,
+                  title: AUTOMATIC_PORT_FIXUP_TITLE,
+                  description: `Same release as the first deploy: applies the detected port ${port} to the public URL. No rollback entry is recorded.`,
+                },
+              });
             }
           })();
           await watch.applying;

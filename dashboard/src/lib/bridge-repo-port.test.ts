@@ -12,8 +12,9 @@ vi.mock("./session", () => ({
 vi.mock("./docker", () => ({ inspectImageExposedPorts: vi.fn(), snapshotComposeAppImage: vi.fn(), verifyComposeAppImage: vi.fn(), pruneComposeAppImages: vi.fn() }));
 
 import { composeAction, deployBridgeRepo, saveServiceEnv } from "./dokploy";
-import { inspectImageExposedPorts } from "./docker";
+import { inspectImageExposedPorts, snapshotComposeAppImage } from "./docker";
 import { parseManaged } from "./managed-compose";
+import { AUTOMATIC_PORT_FIXUP_TITLE } from "./bridge-repo-release";
 import { saveComposeFileAction, updateDomainAction } from "@/app/actions";
 
 const host = "repo-test.203.0.113.10.traefik.me";
@@ -81,10 +82,10 @@ afterEach(async () => {
 
 const deployments = () => requests.filter(({ procedure }) => procedure === "compose.deploy");
 const updates = () => requests.filter(({ procedure }) => procedure === "domain.update");
-function finishBuild() {
+function finishBuild(port = 80) {
   detail.composeStatus = "done";
   detail.deployments[0].status = "done";
-  vi.mocked(inspectImageExposedPorts).mockResolvedValue(["80/tcp"]);
+  vi.mocked(inspectImageExposedPorts).mockResolvedValue([`${port}/tcp`]);
 }
 async function runWatcher() {
   const pending = background[0]();
@@ -103,21 +104,37 @@ describe("first repo deployment port", () => {
     expect(deployments()).toHaveLength(1);
   });
 
-  it("automatically corrects a local HTTP repo to port 80 with one follow-up and no user action", async () => {
+  it.each([80, 8080])("treats the automatic port %i fix-up as the same release, saving it only before an explicit redeploy", async (port) => {
     await deployBridgeRepo("repo", source, "env-1");
     expect(detail.domains[0].port).toBe(3000);
     expect(background).toHaveLength(1);
-    finishBuild();
+    finishBuild(port);
     await runWatcher();
-    expect(detail.domains[0].port).toBe(80);
+    expect(detail.domains[0].port).toBe(port);
     expect(updates()).toHaveLength(1);
     expect(deployments()).toHaveLength(2);
-    expect(parseManaged(detail.composeFile)).toMatchObject({ autoDomain: { host, port: 80 } });
+    expect(deployments()[0].body).toEqual({ composeId: "compose-1" });
+    expect(deployments()[1].body).toEqual({
+      composeId: "compose-1",
+      title: AUTOMATIC_PORT_FIXUP_TITLE,
+      description: `Same release as the first deploy: applies the detected port ${port} to the public URL. No rollback entry is recorded.`,
+    });
+    const fixed = parseManaged(detail.composeFile);
+    expect(fixed).toMatchObject({ kind: "repo", autoDomain: { host, port } });
+    if (fixed?.kind !== "repo") throw new Error("Expected managed repo metadata");
+    expect(fixed.history ?? []).toEqual([]);
+    expect(snapshotComposeAppImage).not.toHaveBeenCalled();
     await background[0](); // duplicate callback cannot submit another deployment
     detail.composeStatus = "done"; detail.deployments.forEach((d) => { d.status = "done"; }); // integration (#53): explicit deploys wait for the follow-up
     await composeAction("compose-1", "deploy");
     expect(updates()).toHaveLength(1);
     expect(deployments()).toHaveLength(3); // only the explicit user request
+    expect(deployments()[2].body).toEqual({ composeId: "compose-1" });
+    const redeployed = parseManaged(detail.composeFile);
+    expect(redeployed).toMatchObject({ kind: "repo", autoDomain: { host, port } });
+    if (redeployed?.kind !== "repo") throw new Error("Expected managed repo metadata");
+    expect(redeployed.history).toHaveLength(1);
+    expect(snapshotComposeAppImage).toHaveBeenCalledExactlyOnceWith(detail.appName, redeployed.history![0].image);
   });
 
   it("still deploys and repairs the port when fetching the public Dockerfile fails", async () => {
