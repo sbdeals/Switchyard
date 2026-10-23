@@ -1,0 +1,5 @@
+## [before] bridge managed Postgres backup/restore
+new database stack: postgres-cu4t-gu6xa3
+rows before backup: v1-precious
+drawer tabs: Overview, Data, Variables, Networking, Deploys, Compose, Volumes, Metrics, Logs, Console, Settings
+no Backups tab for this bridge database; Dokploy native backups do not cover compose stacks

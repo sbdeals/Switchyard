@@ -1,0 +1,10 @@
+## [after] bridge managed Postgres backup/restore
+new database stack: postgres-yzc3-br5dki
+rows before backup: v1-precious
+drawer tabs: Overview, Data, Variables, Networking, Deploys, Compose, Volumes, Metrics, Logs, Console, Backups, Settings
+backup files in dashboard container:
+  total 4
+  -rw-------    1 root     root          1314 Oct 23 10:02 2026-10-23T10-02-45.390Z.dump
+rows after accidental change: v2-oops
+rows after Restore: v1-precious
+downloaded 2026-10-23T10-02-45.390Z.dump: 1314 bytes, magic=PGDMP
