@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bridgeImageDomain, imageStack, parseManaged, repoStack, validateRepoSource, withImageEnvFile } from "./managed-compose";
+import { bridgeImageDomain, imageStack, parseManaged, repoStack, validateRepoSource, withImageEnvFile, withManagedAutoDomain } from "./managed-compose";
 
 const repoInput = { appName: "web-x1", repoUrl: "https://github.com/docker/welcome-to-docker", branch: "main" };
 
@@ -43,6 +43,83 @@ describe("imageStack", () => {
     expect(compose).toContain("    env_file:\n      - .env\n");
     expect(compose).toContain("    networks:\n      dokploy-network:\n        aliases:\n          - web-x1\n");
     expect(compose).toContain("\nnetworks:\n  dokploy-network:\n    external: true\n");
+  });
+});
+
+describe("managed automatic domain metadata", () => {
+  const domain = { host: "web-x1.203.0.113.10.sslip.io", port: 3000 };
+
+  it.each([imageStack({ appName: "web-x1", image: "nginx:alpine" }), repoStack(repoInput)])(
+    "records and replaces the automatic choice without changing the compose configuration",
+    (compose) => {
+      const tagged = withManagedAutoDomain(compose, domain);
+      expect(parseManaged(tagged)).toEqual({ ...parseManaged(compose), autoDomain: domain });
+      expect(withManagedAutoDomain(tagged, domain)).toBe(tagged);
+      const updated = withManagedAutoDomain(tagged, { ...domain, port: 8080 });
+      expect(parseManaged(updated)).toEqual({ ...parseManaged(compose), autoDomain: { ...domain, port: 8080 } });
+      expect(updated.match(/autoDomainHost:/g)).toHaveLength(1);
+      expect(updated.match(/autoDomainPort:/g)).toHaveLength(1);
+      expect(withManagedAutoDomain(updated, null)).toBe(compose);
+      expect(withManagedAutoDomain(compose, null)).toBe(compose);
+    }
+  );
+
+  it.each(["\n", "\r\n"])("preserves %j line endings and an unterminated final line", (newline) => {
+    const compose = ["x-switchyard:", "  kind: image", "  image: nginx:alpine"].join(newline);
+    const tagged = withManagedAutoDomain(compose, domain);
+    expect(parseManaged(tagged)).toEqual({ kind: "image", image: "nginx:alpine", autoDomain: domain });
+    expect(tagged.endsWith(newline)).toBe(false);
+    expect(withManagedAutoDomain(tagged, null)).toBe(compose);
+    if (newline === "\r\n") expect(tagged.replaceAll("\r\n", "")).not.toContain("\n");
+  });
+
+  it("leaves unrelated extension fields and identical service field names untouched", () => {
+    const compose = imageStack({ appName: "web-x1", image: "nginx:alpine" })
+      .replace("  kind: image", "  owner: unchanged\n  custom:\n    autoDomainHost: untouched.example\n    autoDomainPort: 1234\n  kind: image")
+      .replace("    restart: unless-stopped", "    labels:\n      autoDomainHost: preserved.example\n    restart: unless-stopped");
+    expect(parseManaged(compose)).not.toHaveProperty("autoDomain");
+    const tagged = withManagedAutoDomain(compose, domain);
+    expect(parseManaged(tagged)).toHaveProperty("autoDomain", domain);
+    expect(tagged).toContain("  owner: unchanged\n");
+    expect(tagged).toContain("      autoDomainHost: preserved.example\n");
+    expect(withManagedAutoDomain(tagged, null)).toBe(compose);
+  });
+
+  it("reads single-quoted hostname and port after YAML re-serialization", () => {
+    const compose = `x-switchyard:\n  kind: image\n  image: nginx\n  autoDomainHost: '${domain.host}'\n  autoDomainPort: '8080'`;
+    expect(parseManaged(compose)).toEqual({ kind: "image", image: "nginx", autoDomain: { ...domain, port: 8080 } });
+  });
+
+  it.each([
+    "  autoDomainPort: 80\n",
+    "  autoDomainHost: app.example\n",
+    "  autoDomainHost: ${HOST}\n  autoDomainPort: 80\n",
+    "  autoDomainHost: app example\n  autoDomainPort: 80\n",
+    "  autoDomainHost: app.example\n  autoDomainPort: 0\n",
+    "  autoDomainHost: app.example\n  autoDomainPort: 65536\n",
+    "  autoDomainHost: app.example\n  autoDomainPort: 1e3\n",
+    "  autoDomainHost: app.example\n  autoDomainPort: 80.5\n",
+  ])("ignores invalid or incomplete automatic choices: %s", (marker) => {
+    const compose = `x-switchyard:\n  kind: image\n  image: nginx\n${marker}`;
+    expect(parseManaged(compose)).toEqual({ kind: "image", image: "nginx" });
+  });
+
+  it.each([
+    { host: "${HOST}", port: 80 }, { host: "app.example\n  injected: true", port: 80 },
+    { host: "app.example/path", port: 80 }, { host: "", port: 80 },
+    { host: "app.example", port: 0 }, { host: "app.example", port: 65536 },
+    { host: "app.example", port: 80.5 }, { host: "app.example", port: NaN },
+  ])("rejects unsafe marker input before changing YAML: %o", (marker) => {
+    expect(() => withManagedAutoDomain(imageStack({ appName: "web-x1", image: "nginx" }), marker))
+      .toThrow("Invalid automatic domain metadata");
+  });
+
+  it.each([
+    "services:\n  app:\n    image: nginx\n",
+    "x-switchyard:\n  kind: database\n  engine: redis\n  image: redis:7\n",
+  ])("leaves raw stacks and databases unchanged", (compose) => {
+    expect(withManagedAutoDomain(compose, domain)).toBe(compose);
+    expect(withManagedAutoDomain(compose, null)).toBe(compose);
   });
 });
 

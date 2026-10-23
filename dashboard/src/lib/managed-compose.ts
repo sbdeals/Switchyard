@@ -15,22 +15,35 @@ import { ENGINE_META } from "@/lib/engines";
 /** Shared bridge network every Dokploy-managed container joins (Traefik lives here). */
 export const BRIDGE_NETWORK = "dokploy-network";
 
+export interface ManagedAutoDomain {
+  host: string;
+  port: number;
+}
+
 export type ManagedMeta =
   | { kind: "database"; engine: Engine; image: string }
-  | { kind: "image"; image: string }
-  | { kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string };
+  | { kind: "image"; image: string; autoDomain?: ManagedAutoDomain }
+  | { kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string; autoDomain?: ManagedAutoDomain };
 
 const ENGINES = new Set<string>(Object.keys(ENGINE_META));
+const MANAGED_BLOCK = /^x-switchyard:[ \t]*\r?\n((?:[ \t]+\S.*(?:\r?\n|$))+)/m;
+
+function validManagedAutoDomain(domain: ManagedAutoDomain): boolean {
+  return typeof domain.host === "string" && /^[A-Za-z0-9.-]+$/.test(domain.host) &&
+    Number.isInteger(domain.port) && domain.port >= 1 && domain.port <= 65535;
+}
 
 /** Read the `x-switchyard` block from a compose file, or null for ordinary stacks. */
 export function parseManaged(composeFile: string | null | undefined): ManagedMeta | null {
   if (!composeFile) return null;
-  const block = composeFile.match(/^x-switchyard:[ \t]*\r?\n((?:[ \t]+\S.*(?:\r?\n|$))+)/m);
+  const block = composeFile.match(MANAGED_BLOCK);
   if (!block) return null;
+  const indent = block[1].match(/^[ \t]+/)![0];
   const fields: Record<string, string> = {};
   for (const line of block[1].split("\n")) {
     const m = line.match(/^[ \t]+([\w-]+):[ \t]*(.*?)[ \t\r]*$/);
     if (!m) continue;
+    if ((m[1] === "autoDomainHost" || m[1] === "autoDomainPort") && !line.startsWith(`${indent}${m[1]}:`)) continue;
     const value = m[2];
     if (value.startsWith('"')) {
       try {
@@ -46,15 +59,37 @@ export function parseManaged(composeFile: string | null | undefined): ManagedMet
   if (fields.kind === "database" && ENGINES.has(fields.engine) && fields.image) {
     return { kind: "database", engine: fields.engine as Engine, image: fields.image };
   }
-  if (fields.kind === "image" && fields.image) return { kind: "image", image: fields.image };
+  const marker = { host: fields.autoDomainHost, port: Number(fields.autoDomainPort) };
+  const autoDomain = /^\d+$/.test(fields.autoDomainPort ?? "") && validManagedAutoDomain(marker)
+    ? { autoDomain: marker } : {};
+  if (fields.kind === "image" && fields.image) return { kind: "image", image: fields.image, ...autoDomain };
   if (fields.kind === "repo" && fields.image && fields.repoUrl && fields.branch) {
     return {
       kind: "repo", image: fields.image, repoUrl: fields.repoUrl, branch: fields.branch,
       ...(fields.subdirectory ? { subdirectory: fields.subdirectory } : {}),
       ...(fields.dockerfile ? { dockerfile: fields.dockerfile } : {}),
+      ...autoDomain,
     };
   }
   return null;
+}
+
+/** Record the last automatic routing choice; clearing it preserves explicit Networking edits. */
+export function withManagedAutoDomain(composeFile: string, domain: ManagedAutoDomain | null): string {
+  const kind = parseManaged(composeFile)?.kind;
+  if (kind !== "image" && kind !== "repo") return composeFile;
+  if (domain && !validManagedAutoDomain(domain)) throw new Error("Invalid automatic domain metadata.");
+  return composeFile.replace(MANAGED_BLOCK, (block: string, fields: string) => {
+    const indent = fields.match(/^[ \t]+/)![0];
+    const newline = block.includes("\r\n") ? "\r\n" : "\n";
+    const markerFields = new RegExp(`^${indent}(?:autoDomainHost|autoDomainPort):[^\\r\\n]*(?:\\r?\\n|$)`, "gm");
+    const updated = block.replace(markerFields, "");
+    if (!domain) return updated;
+    const headerEnd = updated.indexOf("\n") + 1;
+    return updated.slice(0, headerEnd) +
+      `${indent}autoDomainHost: ${JSON.stringify(domain.host)}${newline}` +
+      `${indent}autoDomainPort: ${domain.port}${newline}` + updated.slice(headerEnd);
+  });
 }
 
 /** Parse a "KEY=value" env block (comments and blanks skipped). */

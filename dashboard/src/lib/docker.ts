@@ -8,7 +8,7 @@
  */
 import "server-only";
 import Docker from "dockerode";
-import type { Duplex } from "node:stream";
+import type { Duplex, Readable } from "node:stream";
 
 const socketPath = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
 const docker = new Docker({ socketPath });
@@ -21,6 +21,7 @@ const docker = new Docker({ socketPath });
  * loop, which awaits each tool inline. Overridable via DOCKER_OP_TIMEOUT_MS.
  */
 const DOCKER_OP_TIMEOUT_MS = Number(process.env.DOCKER_OP_TIMEOUT_MS) || 12_000;
+const DOCKER_PULL_TIMEOUT_MS = Number(process.env.DOCKER_PULL_TIMEOUT_MS) || 120_000;
 
 /** Thrown when a bounded Docker call exceeds its deadline. */
 export class DockerTimeoutError extends Error {
@@ -74,17 +75,62 @@ export async function inspectNetwork(
   }
 }
 
-/** Local image metadata only: a missing image/socket leaves port selection to defaults. */
-export async function inspectImageExposedPorts(image: string): Promise<string[]> {
+const IMAGE_COMPONENT = "[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*";
+const REGISTRY_COMPONENT = "[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?";
+const IMAGE_REFERENCE = new RegExp(
+  `^((?:(?:${REGISTRY_COMPONENT}(?:\\.${REGISTRY_COMPONENT})*|\\[[a-fA-F0-9:]+\\])(?::[0-9]+)?/)?` +
+  `${IMAGE_COMPONENT}(?:/${IMAGE_COMPONENT})*)(?::[\\w][\\w.-]{0,127})?` +
+  "(?:@[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*:[a-fA-F0-9]{32,})?$",
+);
+
+/** Best-effort image metadata; optionally pull missing public images before inspecting. */
+export async function inspectImageExposedPorts(
+  image: string,
+  options: { pullIfMissing?: boolean } = {},
+): Promise<string[]> {
+  // dockerode embeds image names in API paths/query strings. Only accept image
+  // references, never URLs, credentials, or Compose interpolation expressions.
+  const reference = image.match(IMAGE_REFERENCE);
+  if (!reference || reference[1].length > 255) return [];
+  const inspect = () => withTimeout(
+    docker.getImage(image).inspect(),
+    DOCKER_OP_TIMEOUT_MS,
+    "Inspecting image",
+  );
   try {
-    const info = await withTimeout(
-      docker.getImage(image).inspect(),
-      DOCKER_OP_TIMEOUT_MS,
-      `Inspecting image ${image}`,
-    );
+    let info;
+    try {
+      info = await inspect();
+    } catch (e) {
+      if (!options.pullIfMissing || (e as { statusCode?: number }).statusCode !== 404) return [];
+      await pullImage(image);
+      info = await inspect();
+    }
     return Object.keys(info.Config?.ExposedPorts ?? {});
   } catch {
     return [];
+  }
+}
+
+/** Bound both the pull request setup and the progress stream with one deadline. */
+async function pullImage(image: string): Promise<void> {
+  let stream: Readable | undefined;
+  let stopped = false;
+  try {
+    await withTimeout((async () => {
+      stream = await docker.pull(image) as Readable;
+      // The request can resolve after the deadline, before a stream was available to close.
+      if (stopped) {
+        stream.destroy();
+        return;
+      }
+      await new Promise<void>((resolve, reject) => {
+        docker.modem.followProgress(stream!, (error) => error ? reject(error) : resolve());
+      });
+    })(), DOCKER_PULL_TIMEOUT_MS, "Pulling image");
+  } finally {
+    stopped = true;
+    stream?.destroy();
   }
 }
 
