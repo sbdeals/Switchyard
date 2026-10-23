@@ -74,6 +74,20 @@ export async function inspectNetwork(
   }
 }
 
+/** Local image metadata only: a missing image/socket leaves port selection to defaults. */
+export async function inspectImageExposedPorts(image: string): Promise<string[]> {
+  try {
+    const info = await withTimeout(
+      docker.getImage(image).inspect(),
+      DOCKER_OP_TIMEOUT_MS,
+      `Inspecting image ${image}`,
+    );
+    return Object.keys(info.Config?.ExposedPorts ?? {});
+  } catch {
+    return [];
+  }
+}
+
 // --- runtime truth ----------------------------------------------------------
 // Dokploy's applicationStatus/composeStatus is the LAST DEPLOY result — it
 // stays "done" (shown as Running) even when the containers no longer exist

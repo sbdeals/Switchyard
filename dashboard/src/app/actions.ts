@@ -46,6 +46,7 @@ import {
   saveServiceEnv,
   deployBridgeDatabase,
   deployBridgeImage,
+  redeployManagedImage,
   composeAction,
   updateComposeFile,
   listTemplates,
@@ -440,13 +441,25 @@ export async function createDomainAction(
 
 export async function updateDomainAction(
   domainId: string,
-  input: DomainInput
+  input: DomainInput,
+  composeId?: string
 ): Promise<ActionResult> {
-  return wrap(() => updateDomain(domainId, { ...input, host: input.host.trim() }));
+  return wrap(async () => {
+    const domain = { ...input, host: input.host.trim() };
+    if (composeId && /\.traefik\.me$/i.test(domain.host)) {
+      domain.https = false;
+      domain.certificateType = "none";
+    }
+    await updateDomain(domainId, domain);
+    if (composeId) await redeployManagedImage(composeId);
+  });
 }
 
-export async function deleteDomainAction(domainId: string): Promise<ActionResult> {
-  return wrap(() => deleteDomain(domainId));
+export async function deleteDomainAction(domainId: string, composeId?: string): Promise<ActionResult> {
+  return wrap(async () => {
+    await deleteDomain(domainId);
+    if (composeId) await redeployManagedImage(composeId);
+  });
 }
 
 /**
@@ -478,9 +491,12 @@ export async function createComposeDomainAction(
   composeId: string,
   serviceName: string,
   host: string,
-  port: number
+  port?: number
 ): Promise<ActionResult> {
-  return wrap(() => createComposeDomain(composeId, serviceName.trim(), host.trim(), port));
+  return wrap(async () => {
+    await createComposeDomain(composeId, serviceName.trim(), host.trim(), port);
+    await redeployManagedImage(composeId);
+  });
 }
 
 /**
@@ -492,7 +508,7 @@ export async function generateComposeDomainAction(
   composeId: string,
   serviceName: string,
   labelName: string,
-  port: number
+  port?: number
 ): Promise<GenerateUrlResult> {
   return wrapHost(async () => {
     const g = await generateHostFor(labelName || serviceName);
@@ -500,6 +516,7 @@ export async function generateComposeDomainAction(
       https: g.https,
       certificateType: g.certificateType,
     });
+    await redeployManagedImage(composeId);
     return g.host;
   });
 }
