@@ -1,0 +1,4 @@
+## [before] first-run empty workspace (Dokploy member with no projects)
+heading: No services yet
+buttons: Sign out, Canvas, Grid, Projects, Refresh, New service, New service, Agent
+no samples, no per-path guidance: one generic "New service" menu

@@ -1,0 +1,6 @@
+## [after] first-run empty workspace (Dokploy member with no projects)
+heading: Deploy your first service
+Git dialog bridge hint visible: true
+public URL in drawer: http://whoami-g6vu-5djlpd-09c753-140-248-50-52.sslip.io
+copied: http://whoami-g6vu-5djlpd-09c753-140-248-50-52.sslip.io
+curl -H "Host: whoami-g6vu-5djlpd-09c753-140-248-50-52.sslip.io" http://127.0.0.1/ -> 502
