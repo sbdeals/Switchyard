@@ -8,6 +8,7 @@
 # The container needs, at run time:
 #   --network dokploy-network                          reach Dokploy by service DNS
 #   -v /var/run/docker.sock:/var/run/docker.sock       live logs/metrics (dockerode)
+#   -v switchyard-data:/app/data                     persist bridge DB backups
 #   -e DOKPLOY_URL / DOKPLOY_EMAIL / DOKPLOY_PASSWORD  BFF sign-in
 #
 # Runs as root deliberately: it drives the mounted Docker socket, and it is an

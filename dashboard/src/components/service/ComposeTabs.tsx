@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { Archive, Download, Globe, ExternalLink, Plus, Loader2, RefreshCw, RotateCcw } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { isStopped, serviceLabel } from "@/lib/service-meta";
@@ -12,8 +12,12 @@ import {
   saveComposeFileAction,
   createComposeDomainAction,
   generateComposeDomainAction,
+  listBridgeDatabaseBackupsAction,
+  createBridgeDatabaseBackupAction,
+  restoreBridgeDatabaseBackupAction,
 } from "@/app/actions";
 import {
+  Btn,
   inputCls,
   Field,
   Info,
@@ -106,6 +110,169 @@ function ManagedOverview({ compose, managed }: { compose: ComposeService; manage
         {managed.kind === "repo" && " Redeploy rebuilds from the current branch head; pushes do not deploy automatically."}
       </p>
     </div>
+  );
+}
+
+/** Local, on-demand backups for databases running as managed compose stacks. */
+export function ComposeBackupsTab({ compose }: { compose: ComposeService }) {
+  if (compose.managed?.kind !== "database") return null;
+  if (compose.managed.engine === "redis") {
+    return (
+      <p className="text-xs text-[var(--color-fg-subtle)]">
+        Backups and restore aren&apos;t supported for bridge-mode Redis yet. Use an external
+        Redis backup tool to protect this database.
+      </p>
+    );
+  }
+  // Remount when switching databases so a previous database's files and pending
+  // requests cannot appear in the new database's panel.
+  return <ComposeBackupsPanel key={compose.id} compose={compose} />;
+}
+
+type BridgeBackup = { filename: string; createdAt: string; size: number };
+
+function backupSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
+}
+
+function ComposeBackupsPanel({ compose }: { compose: ComposeService }) {
+  const [backups, setBackups] = useState<BridgeBackup[]>([]);
+  const [initialised, setInitialised] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [loading, startLoad] = useTransition();
+  const [pending, start] = useTransition();
+  const [working, setWorking] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const busy = loading || pending;
+
+  useEffect(() => {
+    let active = true;
+    startLoad(async () => {
+      try {
+        const res = await listBridgeDatabaseBackupsAction(compose.id);
+        if (!active) return;
+        if (res.ok) {
+          setBackups(res.backups);
+          setLoadError(null);
+        } else setLoadError(res.error);
+      } catch {
+        if (active) setLoadError("Could not load backups. Check your connection and refresh.");
+      } finally {
+        if (active) setInitialised(true);
+      }
+    });
+    return () => { active = false; };
+  }, [compose.id, reload]);
+
+  function createBackup() {
+    setError(null);
+    setMessage(null);
+    setWorking("backup");
+    start(async () => {
+      try {
+        const res = await createBridgeDatabaseBackupAction(compose.id);
+        if (res.ok) {
+          setMessage("Backup created. Download a copy to keep it off this host.");
+          setReload((n) => n + 1);
+        } else setError(res.error);
+      } catch {
+        setError("The backup request was interrupted. Refresh the list to check whether it completed.");
+      }
+    });
+  }
+
+  function restore(backup: BridgeBackup) {
+    if (!confirm(
+      `Restore the backup from ${new Date(backup.createdAt).toLocaleString()} into "${compose.name}"? ` +
+      "This overwrites current database data and cannot be undone. Stop application writes and make a fresh backup before restoring."
+    )) return;
+    setError(null);
+    setMessage(null);
+    setWorking(backup.filename);
+    start(async () => {
+      try {
+        const res = await restoreBridgeDatabaseBackupAction(compose.id, backup.filename);
+        if (res.ok) setMessage("Restore finished. Verify your data before resuming application writes.");
+        else setError(res.error);
+      } catch {
+        setError("The restore request was interrupted. Check the database before retrying or resuming application writes.");
+      }
+    });
+  }
+
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-xs font-medium text-[var(--color-fg-muted)]">
+          <Archive className="size-3.5" /> Backups
+        </h3>
+        <div className="flex items-center gap-2">
+          <Btn onClick={() => setReload((n) => n + 1)} disabled={busy}>
+            <RefreshCw className={`size-3.5${loading ? " animate-spin" : ""}`} /> Refresh
+          </Btn>
+          <Btn primary onClick={createBackup} disabled={busy || !initialised}>
+            {pending && working === "backup"
+              ? <Loader2 className="size-3.5 animate-spin" />
+              : <Archive className="size-3.5" />}
+            Back up now
+          </Btn>
+        </div>
+      </div>
+      <p className="text-xs leading-relaxed text-[var(--color-fg-subtle)]">
+        The latest 10 backups are kept on this host. Download a copy for off-host storage.
+        Your administrator must mount persistent storage for backups to survive dashboard replacement.
+      </p>
+      {compose.managed?.kind === "database" && compose.managed.engine === "mongo" && (
+        <p className="text-xs text-[var(--color-fg-subtle)]">
+          Restores cover application databases and preserve MongoDB&apos;s internal databases and current login credentials.
+        </p>
+      )}
+      {loadError && <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>}
+      {error && <p role="alert" className="whitespace-pre-wrap break-words text-xs text-[var(--color-danger)]">{error}</p>}
+      {message && <p role="status" className="text-xs text-[var(--color-ok)]">{message}</p>}
+      {!initialised ? (
+        <p className="flex items-center gap-2 text-xs text-[var(--color-fg-subtle)]">
+          <Loader2 className="size-4 animate-spin" /> Loading backups…
+        </p>
+      ) : backups.length > 0 ? (
+        <ul className="space-y-2">
+          {backups.map((backup) => (
+            <li key={backup.filename} className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+              <div className="min-w-0 flex-1">
+                <time dateTime={backup.createdAt} title={backup.createdAt} className="text-xs text-[var(--color-fg)]">
+                  {new Date(backup.createdAt).toLocaleString()}
+                </time>
+                <p className="mt-0.5 text-[11px] text-[var(--color-fg-subtle)]">{backupSize(backup.size)}</p>
+              </div>
+              <a
+                href={`/api/services/backups?composeId=${encodeURIComponent(compose.id)}&filename=${encodeURIComponent(backup.filename)}`}
+                download
+                aria-label={`Download backup from ${new Date(backup.createdAt).toLocaleString()}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
+              >
+                <Download className="size-3.5" /> Download
+              </a>
+              <Btn onClick={() => restore(backup)} disabled={busy}>
+                {pending && working === backup.filename
+                  ? <Loader2 className="size-3.5 animate-spin" />
+                  : <RotateCcw className="size-3.5" />}
+                Restore
+              </Btn>
+            </li>
+          ))}
+        </ul>
+      ) : !loadError && (
+        <p className="text-xs text-[var(--color-fg-subtle)]">No backups yet. Create your first backup with Back up now.</p>
+      )}
+      <p className="text-[11px] text-[var(--color-fg-subtle)]">
+        Scheduled backups and S3 storage are not available for bridge databases yet.
+      </p>
+    </section>
   );
 }
 

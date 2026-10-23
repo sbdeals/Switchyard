@@ -20,6 +20,9 @@
 # production
 /build
 
+# Local bridge database backups contain private database contents.
+/data/
+
 # misc
 .DS_Store
 *.pem
