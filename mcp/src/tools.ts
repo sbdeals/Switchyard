@@ -107,10 +107,25 @@ export const TOOLS: ToolDef[] = [
     name: "list_services",
     title: "List services",
     description:
-      "List every service (database, application, compose) across the workspace with id, name, appName, kind, status, and project/environment scope.",
+      "List every service (database, application, compose) across the workspace with metadata only: id, name, appName, kind, status, database engine, and project/environment IDs and names. Excludes env and credentials; use manage_env to read a single service's env.",
     inputSchema: {},
     annotations: { readOnlyHint: true },
-    handler: guard(async () => text(await listServices())),
+    handler: guard(async () => {
+      const services = await listServices();
+      // Allowlist discovery metadata so new internal service fields cannot leak secrets.
+      return text(services.map((svc) => ({
+        id: svc.id,
+        name: svc.name,
+        appName: svc.appName,
+        kind: svc.kind,
+        status: svc.status,
+        engine: svc.engine,
+        projectId: svc.projectId,
+        projectName: svc.projectName,
+        environmentId: svc.environmentId,
+        environmentName: svc.environmentName,
+      })));
+    }),
   },
   {
     name: "deploy_image",
