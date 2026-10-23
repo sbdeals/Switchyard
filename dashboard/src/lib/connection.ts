@@ -10,9 +10,9 @@ export function connectionString(db: Database): string | null {
   const meta = ENGINE_META[db.engine];
   const host = db.appName || db.name;
   const port = meta.defaultPort;
-  const user = db.databaseUser ?? "";
-  const pass = db.databasePassword ?? "";
-  const name = db.databaseName ?? "";
+  const user = encodeURIComponent(db.databaseUser ?? "");
+  const pass = encodeURIComponent(db.databasePassword ?? "");
+  const name = encodeURIComponent(db.databaseName ?? "");
   switch (db.engine) {
     case "postgres":
       return `postgresql://${user}:${pass}@${host}:${port}/${name}`;
