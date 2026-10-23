@@ -1,0 +1,235 @@
+CLI: /workspace/wt-purge-honesty/cli/dist/cli.js
+Using Linux config, fake docker/id/sudo on PATH, and accelerated shell sleeps.
+The CLI must resolve its matching bundled/repository scripts. No root or real Docker needed.
+
+=== Permanent in-use postgres and metrics volumes: expect failure and all credentials kept ===
+┌  switchyard v0.1.3 — down --purge
+│
+◇  Removing the Switchyard container ...
+│
+◇  Stopping the Dokploy stack via /tmp/purge-honesty-demo.6FWEe5/scripts/dokploy-down.sh ...
+[0;34m[dokploy][0m Removing Dokploy services and Traefik...
+[0;34m[dokploy][0m Removing the Switchyard metrics store...
+[0;34m[dokploy][0m Waiting for Swarm tasks to drain (up to 60 seconds)...
+[1;33m[dokploy][0m Purging network, secrets, and data volumes...
+[1;33m[dokploy][0m Still present: volume dokploy-postgres
+[1;33m[dokploy][0m Still present: volume switchyard-metrics
+[0;31m[dokploy][0m Purge incomplete. Release resources still in use, then retry with --purge.
+│
+●  Kept stored credentials for volumes still present or whose removal could not be verified.
+
+✗ Purge incomplete.
+Resources still present:
+  volume: dokploy-postgres
+  volume: switchyard-metrics
+Resolve the Docker errors and retry `switchyard down --purge --yes`.
+
+Exit code: 1
+Config after scenario (synthetic credentials only):
+{
+  "schemaVersion": 1,
+  "platform": "linux",
+  "dokployPort": 3000,
+  "dashboardPort": 3001,
+  "expose": false,
+  "skipTraefik": false,
+  "localIngress": false,
+  "localIngressHttpPort": 8080,
+  "localIngressHttpsPort": 8443,
+  "adminName": "Admin",
+  "adminEmail": "admin@example.test",
+  "adminPassword": "synthetic-admin-password",
+  "sessionSecret": "",
+  "image": "ghcr.io/sbdeals/switchyard",
+  "imageTag": "",
+  "dokployUrlInContainer": "http://dokploy:3000",
+  "hostIp": "",
+  "store": true,
+  "storePassword": "synthetic-store-password"
+}
+Fake Docker survivors: {"network":[],"secret":[],"volume":["dokploy-postgres","switchyard-metrics"]}
+Removal attempts: {"network/dokploy-network":1,"secret/dokploy_postgres_password":1,"secret/dokploy_auth_secret":1,"volume/dokploy":1,"volume/dokploy-postgres":10,"volume/dokploy-redis":1,"volume/switchyard-metrics":10}
+
+=== Partial removal, dokploy volume stuck: expect failure, admin credentials kept, store password cleared ===
+┌  switchyard v0.1.3 — down --purge
+│
+◇  Removing the Switchyard container ...
+│
+◇  Stopping the Dokploy stack via /tmp/purge-honesty-demo.6FWEe5/scripts/dokploy-down.sh ...
+[0;34m[dokploy][0m Removing Dokploy services and Traefik...
+[0;34m[dokploy][0m Removing the Switchyard metrics store...
+[0;34m[dokploy][0m Waiting for Swarm tasks to drain (up to 60 seconds)...
+[1;33m[dokploy][0m Purging network, secrets, and data volumes...
+[1;33m[dokploy][0m Still present: volume dokploy
+[0;31m[dokploy][0m Purge incomplete. Release resources still in use, then retry with --purge.
+│
+●  Cleared the stored metrics password (the metrics data was removed).
+│
+●  Kept stored credentials for volumes still present or whose removal could not be verified.
+
+✗ Purge incomplete.
+Resources still present:
+  volume: dokploy
+Resolve the Docker errors and retry `switchyard down --purge --yes`.
+
+Exit code: 1
+Config after scenario (synthetic credentials only):
+{
+  "schemaVersion": 1,
+  "platform": "linux",
+  "dokployPort": 3000,
+  "dashboardPort": 3001,
+  "expose": false,
+  "skipTraefik": false,
+  "localIngress": false,
+  "localIngressHttpPort": 8080,
+  "localIngressHttpsPort": 8443,
+  "adminName": "Admin",
+  "adminEmail": "admin@example.test",
+  "adminPassword": "synthetic-admin-password",
+  "sessionSecret": "",
+  "image": "ghcr.io/sbdeals/switchyard",
+  "imageTag": "",
+  "dokployUrlInContainer": "http://dokploy:3000",
+  "hostIp": "",
+  "store": true,
+  "storePassword": ""
+}
+Fake Docker survivors: {"network":[],"secret":[],"volume":["dokploy"]}
+Removal attempts: {"network/dokploy-network":1,"secret/dokploy_postgres_password":1,"secret/dokploy_auth_secret":1,"volume/dokploy":10,"volume/dokploy-postgres":1,"volume/dokploy-redis":1,"volume/switchyard-metrics":1}
+
+=== Dokploy volume in use for first two attempts: expect third-attempt success and cleared credentials ===
+┌  switchyard v0.1.3 — down --purge
+│
+◇  Removing the Switchyard container ...
+│
+◇  Stopping the Dokploy stack via /tmp/purge-honesty-demo.6FWEe5/scripts/dokploy-down.sh ...
+[0;34m[dokploy][0m Removing Dokploy services and Traefik...
+[0;34m[dokploy][0m Removing the Switchyard metrics store...
+[0;34m[dokploy][0m Waiting for Swarm tasks to drain (up to 60 seconds)...
+[1;33m[dokploy][0m Purging network, secrets, and data volumes...
+[0;32m[dokploy][0m Dokploy stack stopped.
+│
+●  Cleared the stored admin credentials (the account was deleted with the data).
+│
+●  Cleared the stored metrics password (the metrics data was removed).
+│
+└  Stack removed — a fresh slate.
+
+
+Exit code: 0
+Config after scenario (synthetic credentials only):
+{
+  "schemaVersion": 1,
+  "platform": "linux",
+  "dokployPort": 3000,
+  "dashboardPort": 3001,
+  "expose": false,
+  "skipTraefik": false,
+  "localIngress": false,
+  "localIngressHttpPort": 8080,
+  "localIngressHttpsPort": 8443,
+  "adminName": "Admin",
+  "adminEmail": "",
+  "adminPassword": "",
+  "sessionSecret": "",
+  "image": "ghcr.io/sbdeals/switchyard",
+  "imageTag": "",
+  "dokployUrlInContainer": "http://dokploy:3000",
+  "hostIp": "",
+  "store": true,
+  "storePassword": ""
+}
+Fake Docker survivors: {"network":[],"secret":[],"volume":[]}
+Removal attempts: {"network/dokploy-network":1,"secret/dokploy_postgres_password":1,"secret/dokploy_auth_secret":1,"volume/dokploy":3,"volume/dokploy-postgres":1,"volume/dokploy-redis":1,"volume/switchyard-metrics":1}
+
+=== Full removal: expect success and cleared credentials ===
+┌  switchyard v0.1.3 — down --purge
+│
+◇  Removing the Switchyard container ...
+│
+◇  Stopping the Dokploy stack via /tmp/purge-honesty-demo.6FWEe5/scripts/dokploy-down.sh ...
+[0;34m[dokploy][0m Removing Dokploy services and Traefik...
+[0;34m[dokploy][0m Removing the Switchyard metrics store...
+[0;34m[dokploy][0m Waiting for Swarm tasks to drain (up to 60 seconds)...
+[1;33m[dokploy][0m Purging network, secrets, and data volumes...
+[0;32m[dokploy][0m Dokploy stack stopped.
+│
+●  Cleared the stored admin credentials (the account was deleted with the data).
+│
+●  Cleared the stored metrics password (the metrics data was removed).
+│
+└  Stack removed — a fresh slate.
+
+
+Exit code: 0
+Config after scenario (synthetic credentials only):
+{
+  "schemaVersion": 1,
+  "platform": "linux",
+  "dokployPort": 3000,
+  "dashboardPort": 3001,
+  "expose": false,
+  "skipTraefik": false,
+  "localIngress": false,
+  "localIngressHttpPort": 8080,
+  "localIngressHttpsPort": 8443,
+  "adminName": "Admin",
+  "adminEmail": "",
+  "adminPassword": "",
+  "sessionSecret": "",
+  "image": "ghcr.io/sbdeals/switchyard",
+  "imageTag": "",
+  "dokployUrlInContainer": "http://dokploy:3000",
+  "hostIp": "",
+  "store": true,
+  "storePassword": ""
+}
+Fake Docker survivors: {"network":[],"secret":[],"volume":[]}
+Removal attempts: {"network/dokploy-network":1,"secret/dokploy_postgres_password":1,"secret/dokploy_auth_secret":1,"volume/dokploy":1,"volume/dokploy-postgres":1,"volume/dokploy-redis":1,"volume/switchyard-metrics":1}
+
+=== Already absent: expect idempotent success ===
+┌  switchyard v0.1.3 — down --purge
+│
+◇  Removing the Switchyard container ...
+│
+◇  Stopping the Dokploy stack via /tmp/purge-honesty-demo.6FWEe5/scripts/dokploy-down.sh ...
+[0;34m[dokploy][0m Removing Dokploy services and Traefik...
+[0;34m[dokploy][0m Removing the Switchyard metrics store...
+[0;34m[dokploy][0m Waiting for Swarm tasks to drain (up to 60 seconds)...
+[1;33m[dokploy][0m Purging network, secrets, and data volumes...
+[0;32m[dokploy][0m Dokploy stack stopped.
+│
+●  Cleared the stored admin credentials (the account was deleted with the data).
+│
+●  Cleared the stored metrics password (the metrics data was removed).
+│
+└  Stack removed — a fresh slate.
+
+
+Exit code: 0
+Config after scenario (synthetic credentials only):
+{
+  "schemaVersion": 1,
+  "platform": "linux",
+  "dokployPort": 3000,
+  "dashboardPort": 3001,
+  "expose": false,
+  "skipTraefik": false,
+  "localIngress": false,
+  "localIngressHttpPort": 8080,
+  "localIngressHttpsPort": 8443,
+  "adminName": "Admin",
+  "adminEmail": "",
+  "adminPassword": "",
+  "sessionSecret": "",
+  "image": "ghcr.io/sbdeals/switchyard",
+  "imageTag": "",
+  "dokployUrlInContainer": "http://dokploy:3000",
+  "hostIp": "",
+  "store": true,
+  "storePassword": ""
+}
+Fake Docker survivors: {"network":[],"secret":[],"volume":[]}
+Removal attempts: {"network/dokploy-network":2,"secret/dokploy_postgres_password":2,"secret/dokploy_auth_secret":2,"volume/dokploy":2,"volume/dokploy-postgres":2,"volume/dokploy-redis":2,"volume/switchyard-metrics":2}
+exit=0
