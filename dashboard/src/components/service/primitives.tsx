@@ -232,7 +232,7 @@ export function RemoveBtn({
 
 /**
  * Railway-style Overview header: the primary public URL (first https domain,
- * else first domain) as a clickable link, plus the health badge. Shared by
+ * else first domain) as a clickable link with copy, plus the health badge. Shared by
  * applications and compose (both carry `domains`).
  */
 export function PublicUrlBar({
@@ -251,16 +251,19 @@ export function PublicUrlBar({
           Public URL
         </div>
         {url && primary ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex max-w-full items-center gap-1.5 text-sm font-medium text-[var(--color-brand)] hover:underline"
-          >
-            <Globe className="size-3.5 shrink-0" />
-            <span className="truncate">{primary.host}</span>
-            <ExternalLink className="size-3 shrink-0" />
-          </a>
+          <div className="flex items-center gap-1.5">
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium text-[var(--color-brand)] hover:underline"
+            >
+              <Globe className="size-3.5 shrink-0" />
+              <span className="truncate">{primary.host}</span>
+              <ExternalLink className="size-3 shrink-0" />
+            </a>
+            <CopyButton text={url} />
+          </div>
         ) : (
           <p className="text-xs text-[var(--color-fg-subtle)]">
             No domain yet — add one under Networking.

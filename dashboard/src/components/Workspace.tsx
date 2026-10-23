@@ -5,6 +5,7 @@ import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
+import type { DeployTarget } from "@/lib/deploy-target";
 import { ServiceCard } from "@/components/ServiceCard";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
@@ -19,10 +20,12 @@ export function Workspace({
   services,
   projects,
   edges,
+  deployTarget,
 }: {
   services: Service[];
   projects: ProjectNode[];
   edges: ServiceEdge[];
+  deployTarget: DeployTarget;
 }) {
   const [view, setView] = useState<View>("canvas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -80,12 +83,12 @@ export function Workspace({
             <RefreshCw className={cn("size-3.5", refreshing.pending && "animate-spin")} />
             {deploying ? "Deploying…" : "Refresh"}
           </button>
-          <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
+          <QuickDeployMenu projects={projects} deployTarget={deployTarget} onDeployed={onDeployed} />
         </div>
       </header>
 
       {services.length === 0 ? (
-        <EmptyState projects={projects} onDeployed={onDeployed} />
+        <EmptyState projects={projects} deployTarget={deployTarget} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
         <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
       ) : (
@@ -167,25 +170,27 @@ function ViewToggle({
 
 function EmptyState({
   projects,
+  deployTarget,
   onDeployed,
 }: {
   projects: ProjectNode[];
+  deployTarget: DeployTarget;
   onDeployed: (id: string) => void;
 }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-border-strong)] py-20 text-center"
+      className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-border-strong)] px-5 py-12 text-center"
     >
       <div className="flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
         <Boxes className="size-7" />
       </div>
-      <h2 className="mt-4 font-medium">No services yet</h2>
+      <h2 className="mt-4 font-medium">Deploy your first service</h2>
       <p className="mb-5 mt-1 max-w-sm text-sm text-[var(--color-fg-muted)]">
-        Deploy an app from a Docker image, or spin up a managed database in one click.
+        Start with your code, a container image, or a managed database. Try a sample to see it live.
       </p>
-      <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
+      <QuickDeployMenu projects={projects} deployTarget={deployTarget} onDeployed={onDeployed} onboarding />
     </motion.div>
   );
 }

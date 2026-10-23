@@ -2,6 +2,7 @@ import { unstable_rethrow } from "next/navigation";
 
 import { loadWorkspace, inferEdges } from "@/lib/dokploy";
 import { ensureCollector } from "@/lib/collector";
+import { deployTarget } from "@/lib/deploy-target";
 import { Workspace } from "@/components/Workspace";
 import { LogoutButton } from "@/components/LogoutButton";
 
@@ -32,6 +33,7 @@ export default async function Page() {
           services={result.services}
           projects={result.projects}
           edges={inferEdges(result.services)}
+          deployTarget={await deployTarget()}
         />
       </>
     );
