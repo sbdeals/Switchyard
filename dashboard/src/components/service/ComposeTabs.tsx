@@ -6,6 +6,7 @@ import type { ComposeService } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { isStopped } from "@/lib/service-meta";
 import { BRIDGE_NETWORK, managedConnectionString, type ManagedMeta } from "@/lib/managed-compose";
+import { DomainRow } from "@/components/service/AppTabs";
 import {
   composeLifecycleAction,
   saveComposeFileAction,
@@ -166,10 +167,13 @@ function composeServiceNames(file: string | null): string[] {
 }
 
 export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
+  const managedImage = compose.managed?.kind === "image" ? compose.managed : null;
   const services = composeServiceNames(compose.composeFile);
-  const [serviceName, setServiceName] = useState(services[0] ?? "");
+  const [serviceName, setServiceName] = useState(managedImage ? "app" : services[0] ?? "");
   const [host, setHost] = useState("");
-  const [port, setPort] = useState("80");
+  // Blank means the server detects PORT / local image EXPOSE metadata for image apps.
+  const [port, setPort] = useState(managedImage ? "" : "80");
+  const targetPort = managedImage ? (port ? Number(port) : undefined) : Number(port) || 80;
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
@@ -183,7 +187,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
         compose.id,
         serviceName,
         host,
-        Number(port) || 80
+        targetPort
       );
       if (res.ok) setHost("");
       else setError(res.error);
@@ -199,8 +203,8 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
       const res = await generateComposeDomainAction(
         compose.id,
         serviceName,
-        serviceName,
-        Number(port) || 80
+        managedImage ? compose.appName : serviceName,
+        targetPort
       );
       if (res.ok) setGenerated(res.host);
       else setError(res.error);
@@ -216,7 +220,9 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
 
       {compose.domains.length > 0 ? (
         <div className="space-y-2">
-          {compose.domains.map((d) => (
+          {compose.domains.map((d) => managedImage ? (
+            <DomainRow key={d.domainId} d={d} composeId={compose.id} />
+          ) : (
             <a
               key={d.domainId}
               href={`${d.https ? "https" : "http"}://${d.host}`}
@@ -244,6 +250,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
             <input
               value={serviceName}
               onChange={(e) => setServiceName(e.target.value)}
+              readOnly={!!managedImage}
               placeholder="web"
               list="compose-services"
               className={inputCls}
@@ -269,6 +276,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
           <Field label="Port">
             <input
               value={port}
+              placeholder={managedImage ? "Auto" : "80"}
               onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ""))}
               className={inputCls}
             />

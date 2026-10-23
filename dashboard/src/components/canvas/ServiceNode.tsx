@@ -2,7 +2,7 @@
 
 import { memo, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Database as DatabaseIcon, Box, Layers } from "lucide-react";
+import { Database as DatabaseIcon, Box, Layers, ExternalLink } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import { presentedKind, resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 
@@ -17,6 +17,9 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
   const { service, logo, onSelect } = data;
   const accent = serviceAccent(service);
   const status = resolveServiceDisplay(service.status, service.runtime);
+  const domains = service.kind === "application" ||
+    (service.kind === "compose" && service.managed?.kind === "image") ? service.domains : [];
+  const publicDomain = domains.find((d) => d.https) ?? domains[0];
 
   return (
     <div
@@ -68,6 +71,19 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
           />
         )}
       </div>
+      {publicDomain && (
+        <a
+          href={`${publicDomain.https ? "https" : "http"}://${publicDomain.host}`}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          className="nodrag nopan mt-2 flex items-center gap-1.5 text-[11px] text-[var(--color-brand)] hover:underline"
+        >
+          <span className="truncate">{publicDomain.host}</span>
+          <ExternalLink className="size-3 shrink-0" />
+        </a>
+      )}
     </div>
   );
 }

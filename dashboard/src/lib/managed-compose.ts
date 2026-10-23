@@ -9,7 +9,7 @@
  * dashboard can present it as "Redis" or "Docker image" rather than a raw
  * compose stack. Client-safe: pure string work, no server imports.
  */
-import type { Engine } from "@/lib/dokploy";
+import type { DomainInput, Engine } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 
 /** Shared bridge network every Dokploy-managed container joins (Traefik lives here). */
@@ -190,6 +190,26 @@ export function imageStack(input: { appName: string; image: string }): string {
     networkBlock(input.appName),
     FOOTER,
   ].join("\n");
+}
+
+/**
+ * Native compose domains inject Traefik labels even with isolatedDeployment:false,
+ * preserving our shared network alias. Keeping the domain in Dokploy also keeps
+ * Networking CRUD and the dashboard's domain list in sync.
+ */
+export function bridgeImageDomain(input: {
+  appName: string;
+  hostIp: string;
+  generatedHost: string | null;
+  port: number;
+}): DomainInput {
+  return {
+    host: input.generatedHost ?? `${input.appName}.${input.hostIp}.sslip.io`,
+    port: input.port,
+    https: input.generatedHost === null,
+    certificateType: input.generatedHost === null ? "letsencrypt" : "none",
+    path: "/",
+  };
 }
 
 /**

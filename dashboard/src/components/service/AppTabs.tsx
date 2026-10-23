@@ -185,7 +185,7 @@ function toInput(d: AppDomain): DomainInput {
 }
 
 /** One attached domain: display row that expands into an inline editor. */
-function DomainRow({ d }: { d: AppDomain }) {
+export function DomainRow({ d, composeId }: { d: AppDomain; composeId?: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<DomainInput>(() => toInput(d));
   const [pending, start] = useTransition();
@@ -195,7 +195,7 @@ function DomainRow({ d }: { d: AppDomain }) {
     if (!draft.host.trim()) return;
     setError(null);
     start(async () => {
-      const res = await updateDomainAction(d.domainId, draft);
+      const res = await updateDomainAction(d.domainId, draft, composeId);
       if (res.ok) setEditing(false);
       else setError(res.error);
     });
@@ -205,7 +205,7 @@ function DomainRow({ d }: { d: AppDomain }) {
     if (!confirm(`Remove domain "${d.host}"?`)) return;
     setError(null);
     start(async () => {
-      const res = await deleteDomainAction(d.domainId);
+      const res = await deleteDomainAction(d.domainId, composeId);
       if (!res.ok) setError(res.error);
     });
   }

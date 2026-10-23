@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
-import { Rocket, ChevronRight } from "lucide-react";
+import { Rocket, ChevronRight, ExternalLink } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import { lifecycleAction, appLifecycleAction, composeLifecycleAction } from "@/app/actions";
 import { serviceAccent, serviceSubtitle } from "@/lib/service-meta";
@@ -17,6 +17,9 @@ import { StatusBadge } from "@/components/StatusBadge";
  */
 export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: () => void }) {
   const accent = serviceAccent(service);
+  const domains = service.kind === "application" ||
+    (service.kind === "compose" && service.managed?.kind === "image") ? service.domains : [];
+  const publicDomain = domains.find((d) => d.https) ?? domains[0];
   const logos = useTemplateLogos();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +75,18 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
         </div>
         <StatusBadge status={service.status} />
       </div>
+
+      {publicDomain && (
+        <a
+          href={`${publicDomain.https ? "https" : "http"}://${publicDomain.host}`}
+          target="_blank"
+          rel="noreferrer"
+          className="relative z-10 mt-3 flex items-center gap-1.5 text-xs text-[var(--color-brand)] hover:underline"
+        >
+          <span className="truncate">{publicDomain.host}</span>
+          <ExternalLink className="size-3 shrink-0" />
+        </a>
+      )}
 
       <div className="mt-3 flex items-center justify-between">
         <span className="truncate text-xs text-[var(--color-fg-subtle)]">

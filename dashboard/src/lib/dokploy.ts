@@ -25,7 +25,9 @@ import { SESSION_COOKIE, openSession } from "./session";
 import { randomPassword, randomServiceName } from "./names";
 import { ENGINE_META } from "./engines";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
+import { resolveAppPort } from "./app-port";
 import {
+  bridgeImageDomain,
   databaseStack,
   imageStack,
   parseManaged,
@@ -45,6 +47,7 @@ import { referenceTargets } from "./reference-vars";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
+  inspectImageExposedPorts,
   listRuntimeStates,
   type ServiceRuntime,
 } from "./docker";
@@ -1343,9 +1346,20 @@ export async function createComposeDomain(
   composeId: string,
   serviceName: string,
   host: string,
-  port = 80,
+  port?: number,
   opts?: { https?: boolean; certificateType?: CertificateType }
 ): Promise<void> {
+  if (port === undefined) {
+    const detail = await request<RawComposeDetail>(
+      `compose.one?composeId=${encodeURIComponent(composeId)}`
+    );
+    const managed = parseManaged(detail.composeFile);
+    port = managed?.kind === "image"
+      ? await resolveImagePort(managed.image, detail.env)
+      : 80;
+  }
+  // Plain-container Traefik serves traefik.me over HTTP; never request a cert for it.
+  const traefikMe = /\.traefik\.me$/i.test(host);
   await request("domain.create", {
     method: "POST",
     body: {
@@ -1353,8 +1367,8 @@ export async function createComposeDomain(
       serviceName,
       host,
       port,
-      https: opts?.https ?? true,
-      certificateType: opts?.certificateType ?? "letsencrypt",
+      https: traefikMe ? false : opts?.https ?? true,
+      certificateType: traefikMe ? "none" : opts?.certificateType ?? "letsencrypt",
       domainType: "compose",
     },
   });
@@ -1877,8 +1891,51 @@ export async function deployBridgeImage(
   const id = await createManagedCompose(name, environmentId, (appName) => ({
     composeFile: imageStack({ appName, image }),
   }));
+  // Compose domains become labels during deploy, so persist the URL first.
+  try {
+    await ensureBridgeAutoDomain(id);
+  } catch {
+    // Like Swarm quick deploys, URL provisioning must not prevent deployment.
+    // Networking can retry with Generate URL if the engine rejected the domain.
+  }
   await composeAction(id, "deploy");
   return id;
+}
+
+/** Mint an automatic URL for a managed image, leaving databases/raw stacks alone. */
+export async function ensureBridgeAutoDomain(composeId: string): Promise<string | null> {
+  const hostIp = process.env.SWITCHYARD_HOST_IP?.trim();
+  if (!hostIp) return null;
+  const detail = await request<RawComposeDetail>(
+    `compose.one?composeId=${encodeURIComponent(composeId)}`
+  );
+  const managed = parseManaged(detail.composeFile);
+  if (managed?.kind !== "image" || !detail.appName) return null;
+  const existing = (detail.domains ?? []).find(
+    (d) => d.serviceName === "app" && isAutoDomainHost(d.host)
+  );
+  if (existing) return existing.host;
+  const port = await resolveImagePort(managed.image, detail.env);
+  const domain = bridgeImageDomain({
+    appName: detail.appName,
+    hostIp,
+    generatedHost: await generateTraefikMeHost(detail.appName),
+    port,
+  });
+  await createComposeDomain(composeId, "app", domain.host, domain.port, domain);
+  return domain.host;
+}
+
+async function resolveImagePort(image: string, env?: string | null): Promise<number> {
+  return resolveAppPort({ image, env, exposedPorts: await inspectImageExposedPorts(image) });
+}
+
+/** Compose label changes take effect on deploy; apply Networking edits to image apps. */
+export async function redeployManagedImage(composeId: string): Promise<void> {
+  const detail = await request<RawComposeDetail>(
+    `compose.one?composeId=${encodeURIComponent(composeId)}`
+  );
+  if (parseManaged(detail.composeFile)?.kind === "image") await composeAction(composeId, "deploy");
 }
 
 export async function updateComposeFile(id: string, composeFile: string): Promise<void> {
