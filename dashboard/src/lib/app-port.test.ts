@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseAppPort, resolveAppPort } from "./app-port";
+import { parseManaged, repoStack } from "./managed-compose";
 
 describe("parseAppPort", () => {
   it("accepts whole ports and treats blank overrides as absent", () => {
@@ -15,6 +16,17 @@ describe("parseAppPort", () => {
 });
 
 describe("resolveAppPort", () => {
+  it("resolves repo ports from PORT, then the built image's EXPOSE, then 3000 before the first build", () => {
+    const managed = parseManaged(repoStack({
+      appName: "welcome-x1", repoUrl: "https://github.com/docker/welcome-to-docker", branch: "main",
+    }));
+    expect(managed?.image).toBe("welcome-x1-app:latest");
+    const image = managed?.image;
+    expect(resolveAppPort({ image })).toBe(3000);
+    expect(resolveAppPort({ image, exposedPorts: ["8080/tcp"] })).toBe(8080);
+    expect(resolveAppPort({ image, exposedPorts: ["8080/tcp"], env: "PORT=5000" })).toBe(5000);
+  });
+
   it("prefers an explicit port over app variables and image metadata", () => {
     expect(resolveAppPort({ port: 8080, env: "PORT=5000", exposedPorts: ["80/tcp"], image: "nginx" })).toBe(8080);
   });

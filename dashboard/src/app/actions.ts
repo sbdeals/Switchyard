@@ -46,7 +46,9 @@ import {
   saveServiceEnv,
   deployBridgeDatabase,
   deployBridgeImage,
+  deployBridgeRepo,
   redeployManagedImage,
+  stopBridgeRepoPortWatch,
   composeAction,
   updateComposeFile,
   listTemplates,
@@ -101,6 +103,7 @@ import {
 import { ENGINE_META } from "@/lib/engines";
 import { friendlyEngineError } from "@/lib/deploy-errors";
 import { deployTarget } from "@/lib/deploy-target";
+import { validateRepoSource } from "@/lib/managed-compose";
 import { randomPassword, randomServiceName } from "@/lib/names";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -279,17 +282,27 @@ export async function quickDeployImageAction(
   });
 }
 
-/** Deploy an application from a public Git repository (Nixpacks build). */
+/** Deploy a public Git repo: Dockerfile on bridge hosts, Nixpacks on Swarm. */
 export async function quickDeployRepoAction(
   repoUrl: string,
   branch?: string,
-  environmentId?: string
+  environmentId?: string,
+  options?: { subdirectory?: string; dockerfile?: string }
 ): Promise<QuickDeployResult> {
   return wrapId(async () => {
     const url = repoUrl.trim();
     if (!url) throw new Error("Repository URL is required.");
     // Derive a name from the repo (".../my-app.git" -> "my-app").
     const derived = url.replace(/\.git$/, "").split("/").filter(Boolean).pop() || "app";
+    if ((await deployTarget()) === "bridge") {
+      const source = { ...options, repoUrl: url, branch: branch?.trim() || "main" };
+      validateRepoSource(source);
+      return deployBridgeRepo(
+        randomServiceName(derived),
+        source,
+        await resolveTargetEnv(environmentId)
+      );
+    }
     const id = await createApplication(
       randomServiceName(derived),
       await resolveTargetEnv(environmentId)
@@ -371,6 +384,11 @@ export async function quickDeployGithubAction(input: {
     const { githubId, owner, repository, branch } = input;
     if (!githubId || !owner || !repository || !branch)
       throw new Error("Installation, repository and branch are required.");
+    if ((await deployTarget()) === "bridge") {
+      throw new Error(
+        "GitHub App deploys need Swarm. On this host, deploy a public repo URL with a Dockerfile, or push an image to a registry and deploy the image."
+      );
+    }
     const id = await createApplication(
       randomServiceName(repository),
       await resolveTargetEnv(input.environmentId)
@@ -445,6 +463,7 @@ export async function updateDomainAction(
   composeId?: string
 ): Promise<ActionResult> {
   return wrap(async () => {
+    if (composeId) await stopBridgeRepoPortWatch(composeId);
     const domain = { ...input, host: input.host.trim() };
     if (composeId && /\.traefik\.me$/i.test(domain.host)) {
       domain.https = false;
@@ -457,6 +476,7 @@ export async function updateDomainAction(
 
 export async function deleteDomainAction(domainId: string, composeId?: string): Promise<ActionResult> {
   return wrap(async () => {
+    if (composeId) await stopBridgeRepoPortWatch(composeId);
     await deleteDomain(domainId);
     if (composeId) await redeployManagedImage(composeId);
   });
@@ -494,6 +514,7 @@ export async function createComposeDomainAction(
   port?: number
 ): Promise<ActionResult> {
   return wrap(async () => {
+    await stopBridgeRepoPortWatch(composeId);
     await createComposeDomain(composeId, serviceName.trim(), host.trim(), port);
     await redeployManagedImage(composeId);
   });
@@ -511,6 +532,7 @@ export async function generateComposeDomainAction(
   port?: number
 ): Promise<GenerateUrlResult> {
   return wrapHost(async () => {
+    await stopBridgeRepoPortWatch(composeId);
     const g = await generateHostFor(labelName || serviceName);
     await createComposeDomain(composeId, serviceName.trim(), g.host, port, {
       https: g.https,
@@ -668,6 +690,7 @@ export async function saveComposeFileAction(
   redeploy = false
 ): Promise<ActionResult> {
   return wrap(async () => {
+    await stopBridgeRepoPortWatch(id);
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");
   });
