@@ -1,0 +1,5 @@
+ ✓ src/lib/app-port.test.ts (33 tests) 9ms
+ ✓ src/lib/managed-compose.test.ts (3 tests) 4ms
+ ✓ src/lib/references.test.ts (22 tests) 13ms
+ ✓ src/lib/bridge-domains.test.ts (22 tests) 85ms
+      Tests  80 passed (80)

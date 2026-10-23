@@ -1,0 +1,3 @@
+new container: nginx-bkby-pj3nj6-app-1
+  (no traefik.* labels)
+no public hostname to open

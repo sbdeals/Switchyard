@@ -1,0 +1,8 @@
+new container: nginx-n3ib-jfopdx-app-1
+  traefik.docker.network=dokploy-network
+  traefik.enable=true
+  traefik.http.routers.nginx-n3ib-jfopdx-6-web.entrypoints=web
+  traefik.http.routers.nginx-n3ib-jfopdx-6-web.rule=Host(`nginx-n3ib-jfopdx-9b7ef3-140-248-50-52.sslip.io`)
+  traefik.http.routers.nginx-n3ib-jfopdx-6-web.service=nginx-n3ib-jfopdx-6-web
+  traefik.http.services.nginx-n3ib-jfopdx-6-web.loadbalancer.server.port=80
+curl -H "Host: nginx-n3ib-jfopdx-9b7ef3-140-248-50-52.sslip.io" http://127.0.0.1/ -> 200

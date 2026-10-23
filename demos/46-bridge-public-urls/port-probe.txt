@@ -1,0 +1,8 @@
+# Port inference: local image with EXPOSE 9090/tcp 8080/tcp 53/udp (switchyard-port-probe:local), quick-deployed with the after image
+container: switchyard-port-probe-wesx-lifjej-app-1
+"traefik.http.routers.switchyard-port-probe-wesx-lifjej-5-web.entrypoints":"web"
+"traefik.http.routers.switchyard-port-probe-wesx-lifjej-5-web.rule":"Host(`switchyard-port-probe-wesx-lifjej-7b7a50-140-248-50-52.sslip.io`)"
+"traefik.http.routers.switchyard-port-probe-wesx-lifjej-5-web.service":"switchyard-port-probe-wesx-lifjej-5-web"
+"traefik.http.services.switchyard-port-probe-wesx-lifjej-5-web.loadbalancer.server.port":"8080"}
+$ curl -H 'Host: switchyard-port-probe-wesx-lifjej-7b7a50-140-248-50-52.sslip.io' http://127.0.0.1/
+bridge port probe on 8080
