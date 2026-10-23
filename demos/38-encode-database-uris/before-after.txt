@@ -1,0 +1,20 @@
+
+########## BEFORE main ##########
+
+[1;35m$ dashboard connection string[0m
+postgresql://app:p@ss:w/rd#1@pgdemo:5432/appdb
+
+[1;35m$ psql "$url" -c 'select current_user, current_database()'[0m
+  psql: error: invalid integer value "w" for connection option "port"
+
+########## AFTER codex/encode-database-uris ##########
+
+[1;35m$ dashboard connection string[0m
+postgresql://app:p%40ss%3Aw%2Frd%231@pgdemo:5432/appdb
+
+[1;35m$ psql "$url" -c 'select current_user, current_database()'[0m
+   current_user | current_database 
+  --------------+------------------
+   app          | appdb
+  (1 row)
+  

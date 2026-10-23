@@ -1,0 +1,14 @@
+### [after] 2026-10-23 04:46:32 EDT  MCP build: /workspace/wt-mcp-application-delete/mcp
+$ dokploy application.create name=scratch-after (throwaway app)
+created t9oYYxTA-2nEldlJ-Xb1M app-program-digital-feed-656ejy
+apps in demo/production: ['api', 'scratch-after', 'scratch-before', 'web']
+$ mcp tools/call service_action {"service":"scratch-after","action":"remove"}
+isError=false
+{
+  "ok": true,
+  "service": "scratch-after",
+  "kind": "application",
+  "action": "remove"
+}
+apps in demo/production: ['api', 'scratch-before', 'web']
+

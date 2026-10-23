@@ -1,0 +1,11 @@
+{
+  "revokeResponse": "{\"status\":true}",
+  "navigationChain": [
+    "307 /",
+    "307 /api/session/expired",
+    "200 /login?expired=1"
+  ],
+  "gotoError": "",
+  "cookiesAfter": [],
+  "page": "Sign in to Switchyard\n\nYour session expired. Sign in again.\n\nEmail\nPassword\nSign in\nNo account yet? Create one — on a fresh install it becomes the admin"
+}

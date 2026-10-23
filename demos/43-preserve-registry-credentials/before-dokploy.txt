@@ -1,0 +1,5 @@
+### [before] 2026-10-23 04:48:54 EDT dashboard image switchyard-dash:main
+Dokploy application.one BEFORE the UI save:
+  dockerImage=ghcr.io/acme/private-api:1.0 username=acme-bot password=<set, 14 chars> registryUrl=ghcr.io
+Dokploy application.one AFTER changing only the tag in the Build tab and saving:
+  dockerImage=ghcr.io/acme/private-api:1.1 username= password= registryUrl=ghcr.io

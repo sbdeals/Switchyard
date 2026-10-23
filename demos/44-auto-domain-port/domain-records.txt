@@ -1,0 +1,4 @@
+# Dokploy application.one → domains, after each Quick deploy (times in UTC as returned by Dokploy; 04:50–04:51 EDT)
+[before]         nginx-nqpj nginx:alpine 2026-10-23T08:50:58Z  host=app-back-up-solid-state-matrix-jst8dx-d5af6a-140-248-50-52.sslip.io  port=3000
+[after]          nginx-wyjy nginx:alpine 2026-10-23T08:51:33Z  host=app-transmit-open-source-circuit-n2tjti-88d709-140-248-50-52.sslip.io  port=80
+[after-explicit] nginx-abwq nginx:alpine 2026-10-23T08:51:54Z  host=app-generate-digital-bus-8ynuys-8a449b-140-248-50-52.sslip.io  port=8081  (Port field = 8081)

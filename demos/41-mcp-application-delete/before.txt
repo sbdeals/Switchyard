@@ -1,0 +1,9 @@
+### [before] 2026-10-23 04:46:31 EDT  MCP build: /tmp/mcp-before
+$ dokploy application.create name=scratch-before (throwaway app)
+created bLKb7eJqH8vQUUfmZyGJQ app-index-primary-protocol-nyohyc
+apps in demo/production: ['api', 'scratch-before', 'web']
+$ mcp tools/call service_action {"service":"scratch-before","action":"remove"}
+isError=true
+Error: Dokploy application.remove failed (404): {"message":"Not found","code":"NOT_FOUND","data":{"code":"NOT_FOUND","httpStatus":404,"zodError":null}}
+apps in demo/production: ['api', 'scratch-before', 'web']
+

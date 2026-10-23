@@ -1,0 +1,16 @@
+### [after] 2026-10-23 04:47:48 EDT  CLI build: /workspace/wt-config-secret-redaction/cli  (SWITCHYARD_CONFIG=/tmp/sy-demo-after.json)
+$ switchyard config set adminPassword Adm1n-demo-pass --no-restart
+◆  adminPassword = ******** (saved to /tmp/sy-demo-after.json)
+●  Skipped container restart (--no-restart). Apply later with `switchyard up`.
+$ switchyard config set storePassword St0re-demo-pass --no-restart
+◆  storePassword = ******** (saved to /tmp/sy-demo-after.json)
+●  Skipped container restart (--no-restart). Apply later with `switchyard up`.
+$ switchyard config list
+# /tmp/sy-demo-after.json
+adminPassword = ********  (use --show-secrets)
+storePassword = ********  (use --show-secrets)
+$ switchyard config list --show-secrets
+# /tmp/sy-demo-after.json
+adminPassword = Adm1n-demo-pass
+storePassword = St0re-demo-pass
+

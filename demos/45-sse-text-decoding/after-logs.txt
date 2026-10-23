@@ -1,0 +1,24 @@
+4:55:26 AM
+=== container started 08:55:26 ===
+4:55:26 AM
+tick 1 ✅ café 日本語
+4:55:27 AM
+tick 2 ✅ café 日本語
+4:55:28 AM
+tick 3 ✅ café 日本語
+4:55:29 AM
+tick 4 ✅ café 日本語
+4:55:30 AM
+tick 5 ✅ café 日本語
+4:55:47 AM
+=== container started 08:55:47 ===
+4:55:47 AM
+tick 1 ✅ café 日本語
+4:55:48 AM
+tick 2 ✅ café 日本語
+4:55:49 AM
+tick 3 ✅ café 日本語
+4:55:50 AM
+tick 4 ✅ café 日本語
+4:55:51 AM
+tick 5 ✅ café 日本語

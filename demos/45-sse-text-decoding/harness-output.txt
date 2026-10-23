@@ -1,0 +1,5 @@
+PASS runtime reset is sent before log data and reconnect replaces the client buffer
+PASS runtime long-line fragments preserve numeric words and emoji across the buffer bound
+PASS a timestamp-shaped continuation stays text and the next fresh line parses its timestamp
+PASS the no-container response also resets old client logs before its placeholder
+15/15 verification checks passed

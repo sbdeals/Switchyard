@@ -1,0 +1,20 @@
+== SELECT INTO ==
+
+0 rows · 94 ms
+Run
+#	
+SELECT 3
+Agent
+== tables ==
+
+2 rows · 89 ms
+Run
+#	
+tablename
+
+1	
+todos
+
+2	
+todos_backup
+Agent

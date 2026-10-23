@@ -1,0 +1,16 @@
+### [before] 2026-10-23 04:47:47 EDT  CLI build: /tmp/cli-before  (SWITCHYARD_CONFIG=/tmp/sy-demo-before.json)
+$ switchyard config set adminPassword Adm1n-demo-pass --no-restart
+◆  adminPassword = ******** (saved to /tmp/sy-demo-before.json)
+●  Skipped container restart (--no-restart). Apply later with `switchyard up`.
+$ switchyard config set storePassword St0re-demo-pass --no-restart
+◆  storePassword = St0re-demo-pass (saved to /tmp/sy-demo-before.json)
+●  Skipped container restart (--no-restart). Apply later with `switchyard up`.
+$ switchyard config list
+# /tmp/sy-demo-before.json
+adminPassword = ********  (use --show-secrets)
+storePassword = St0re-demo-pass
+$ switchyard config list --show-secrets
+# /tmp/sy-demo-before.json
+adminPassword = Adm1n-demo-pass
+storePassword = St0re-demo-pass
+

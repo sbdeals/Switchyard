@@ -1,0 +1,7 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1792744533, "env": {"SHELL": null, "TERM": "dumb"}}
+[0.007782, "o", "\r\n########## BEFORE main ##########\r\n"]
+[0.32257, "o", "\r\n\u001b[1;35m$ dashboard connection string\u001b[0m\r\npostgresql://app:p@ss:w/rd#1@pgdemo:5432/appdb\r\n\r\n\u001b[1;35m$ psql \"$url\" -c 'select current_user, current_database()'\u001b[0m\r\n"]
+[0.529399, "o", "  psql: error: invalid integer value \"w\" for connection option \"port\"\r\n"]
+[0.626203, "o", "\r\n########## AFTER codex/encode-database-uris ##########\r\n"]
+[0.967211, "o", "\r\n\u001b[1;35m$ dashboard connection string\u001b[0m\r\npostgresql://app:p%40ss%3Aw%2Frd%231@pgdemo:5432/appdb\r\n\r\n\u001b[1;35m$ psql \"$url\" -c 'select current_user, current_database()'\u001b[0m\r\n"]
+[1.186659, "o", "   current_user | current_database \r\n  --------------+------------------\r\n   app          | appdb\r\n  (1 row)\r\n  \r\n"]

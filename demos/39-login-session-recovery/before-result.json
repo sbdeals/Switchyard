@@ -1,0 +1,23 @@
+{
+  "revokeResponse": "{\"status\":true}",
+  "navigationChain": [
+    "307 /",
+    "307 /login",
+    "307 /",
+    "307 /login",
+    "307 /",
+    "307 /login",
+    "307 /",
+    "307 /login",
+    "307 /",
+    "307 /login",
+    "307 /",
+    "307 /login",
+    "... (38 navigations total)"
+  ],
+  "gotoError": "page.goto: net::ERR_TOO_MANY_REDIRECTS at http://127.0.0.1:3001/",
+  "cookiesAfter": [
+    "switchyard_session"
+  ],
+  "page": "This page isn’t working\n\n127.0.0.1 redirected you too many times.\n\nTry deleting your cookies.\nERR_TOO_MANY_REDIRECTS\nReload"
+}

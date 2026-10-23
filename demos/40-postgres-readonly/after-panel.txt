@@ -1,0 +1,15 @@
+== SELECT INTO ==
+
+Run
+ERROR:  cannot execute SELECT INTO in a read-only transaction
+Agent
+== tables ==
+
+1 row · 94 ms
+Run
+#	
+tablename
+
+1	
+todos
+Agent

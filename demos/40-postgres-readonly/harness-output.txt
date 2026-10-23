@@ -1,0 +1,18 @@
+PASS classifier accepts ordinary SQL and safely quoted comment/semicolon tokens
+PASS classifier rejects hidden batches, transaction changes, and unclosed tokens
+PASS classifier rejects leading, indented, and inline psql meta-commands
+PASS CSV preserves NULL, empty text, quoted markers, commas, and multiline values
+PASS normal read-only query uses server settings without SQL command tags
+PASS BEGIN/ROLLBACK/SET result headers and values survive unchanged
+PASS SELECT INTO reaches PostgreSQL read-only enforcement and returns its error
+PASS rejected SQL never reaches Docker
+PASS low-level psql defaults to read-only and sends backslashes as SQL
+PASS catalog browsing and paginated rows default to read-only
+PASS explicit writes preserve argv, environment, stdin terminator, and command tags
+PASS 11 verification groups; actual TypeScript modules loaded with fake Docker transport.
+PASS: SELECT and SHOW run with transaction_read_only=on
+PASS: PostgreSQL rejects SELECT INTO and sequence writes
+PASS: hidden statement batches and psql commands cannot mutate data or run shell commands
+PASS: CSV, NULL, multiline cells, catalog listing, and row browsing remain intact
+PASS: explicit write mode still updates data and reports command tags
+All live postgres:16 checks passed.
