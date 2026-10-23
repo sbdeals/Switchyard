@@ -1,0 +1,13 @@
+$ docker run -d --name switchyard -v /var/run/docker.sock:/var/run/docker.sock …:before   # same layout main renderContainer() produces (socket mount only)
+$ docker inspect switchyard mounts:
+bind:/var/run/docker.sock 
+# user saves an agent key in the dashboard (fixture: dummy key written in-container)
+$ key file present? yes
+$ switchyard config set imageTag after    # upgrade => container recreated
+Error response from daemon: Get "http://localhost/v2/": dial tcp [::1]:80: connect: connection refused
+◇  Pull failed; using the local localhost/switchyard-cp25-live:after image.
+▲  Container recreated but not answering yet — check `docker logs switchyard`.
+$ key file present after recreate? NO — saved agent key lost (C-P2-5)
+$ switchyard down --yes
+switchyard-data volumes: 0
+EXIT 0

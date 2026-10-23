@@ -1,0 +1,152 @@
+
+===== step 1
+         to the 'Docker daemon attack surface' section in the documentation for
+
+> switchyard-cli@0.1.3 build
+> tsup
+
+CLI Building entry: {"cli":"src/cli.ts","lib":"src/lib.ts"}
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /workspace/wt-launcher-data-volume/cli/tsup.config.ts
+CLI Target: node20
+CLI Cleaning output folder
+ESM Build start
+ESM dist/lib.js            1.32 KB
+ESM dist/chunk-GNKJM6GJ.js 31.28 KB
+ESM dist/cli.js            239.83 KB
+ESM ⚡️ Build success in 35ms
+
+===== step 2
+PASS: migration failure preserved and restarted the old container.
+
+===== step 3
+│
+◆  imageTag = after (saved to /tmp/tmp.t02wmcJxNG/config.json)
+│
+◇  Pulling localhost/switchyard-cp25-live:after ...
+Error response from daemon: Get "http://localhost/v2/": dial tcp [::1]:80: connect: connection refused
+│
+◇  Pull failed; using the local localhost/switchyard-cp25-live:after image.
+│
+◇  Migrated saved agent settings into switchyard-data.
+│
+▲  Container recreated but not answering yet — check `docker logs switchyard`.
+PASS: legacy settings migrated byte-for-byte with mode 0600.
+
+===== step 4
+│
+◆  imageTag = after (saved to /tmp/tmp.t02wmcJxNG/config.json)
+│
+●  Container spec unchanged — nothing to restart.
+│
+◆  imageTag = before (saved to /tmp/tmp.t02wmcJxNG/config.json)
+│
+◇  Pulling localhost/switchyard-cp25-live:before ...
+Error response from daemon: Get "http://localhost/v2/": dial tcp [::1]:80: connect: connection refused
+│
+◇  Pull failed; using the local localhost/switchyard-cp25-live:before image.
+│
+▲  Container recreated but not answering yet — check `docker logs switchyard`.
+PASS: unchanged config is idempotent; settings and backup files survive replacement.
+
+===== step 5
+┌  switchyard v0.1.3 — down
+│
+◇  Removing the Switchyard container ...
+│
+◇  Removing service dokploy-postgres ...
+│
+◇  Removing service dokploy-redis ...
+│
+◇  Removing service dokploy ...
+│
+◇  Removing service switchyard-metrics (metrics store) ...
+│
+└  Stack stopped. Data volumes survive; `switchyard up` brings it back.
+
+PASS: plain down kept dashboard data.
+┌  switchyard v0.1.3 — down --purge
+│
+◇  Removing the Switchyard container ...
+│
+◇  Removing service dokploy-postgres ...
+│
+◇  Removing service dokploy-redis ...
+│
+◇  Removing service dokploy ...
+│
+◇  Removing service switchyard-metrics (metrics store) ...
+│
+◇  Purging network, secrets, and volumes ...
+│
+◇  Removing dashboard data volume switchyard-data ...
+│
+●  Cleared the stored admin credentials (the account was deleted with the data).
+│
+└  Stack removed — a fresh slate.
+
+┌  switchyard v0.1.3 — down --purge
+│
+◇  Removing the Switchyard container ...
+│
+◇  Removing service dokploy-postgres ...
+│
+◇  Removing service dokploy-redis ...
+│
+◇  Removing service dokploy ...
+│
+◇  Removing service switchyard-metrics (metrics store) ...
+│
+◇  Purging network, secrets, and volumes ...
+│
+◇  Removing dashboard data volume switchyard-data ...
+│
+●  Cleared the stored admin credentials (the account was deleted with the data).
+│
+└  Stack removed — a fresh slate.
+
+PASS: purge removed switchyard-data and repeated purge is idempotent.
+
+===== step 6
+┌  switchyard v0.1.3 — down --purge
+│
+◇  Removing the Switchyard container ...
+│
+◇  Removing service dokploy-postgres ...
+│
+◇  Removing service dokploy-redis ...
+│
+◇  Removing service dokploy ...
+│
+◇  Removing service switchyard-metrics (metrics store) ...
+│
+◇  Purging network, secrets, and volumes ...
+│
+◇  Removing dashboard data volume switchyard-data ...
+
+✗ Purge incomplete: dashboard data volume switchyard-data still exists. Remove any containers using it, then re-run `switchyard down --purge --yes`.
+┌  switchyard v0.1.3 — down --purge
+│
+◇  Removing the Switchyard container ...
+│
+◇  Removing service dokploy-postgres ...
+│
+◇  Removing service dokploy-redis ...
+│
+◇  Removing service dokploy ...
+│
+◇  Removing service switchyard-metrics (metrics store) ...
+│
+◇  Purging network, secrets, and volumes ...
+│
+◇  Removing dashboard data volume switchyard-data ...
+│
+●  Cleared the stored admin credentials (the account was deleted with the data).
+│
+└  Stack removed — a fresh slate.
+
+PASS: blocked purge failed explicitly, retained config, and succeeded after release.
+
+ALL STEPS PASSED
+EXIT 0
