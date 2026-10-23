@@ -1,0 +1,25 @@
+$ git show origin/main:docs/dashboard-guide.md | grep -nE "applications only|applications and databases|Public sources only|must be public|three ways"
+66:The **Application** section offers three ways in: deploy from a Docker image, deploy from a Git repository, or create a Compose stack. The **Database** section lists the five managed engines with the exact image each would deploy: `postgres:18`, `mysql:8.4`, `mariadb:11`, `mongo:8`, `redis:7`.
+84:Switchyard creates an application named after the image plus a random suffix (`traefik/whoami` became `whoami-snim`), points it at the image, and deploys it. The drawer opens on the new service. There are no registry-credential fields in this menu, so the image must be publicly pullable.
+90:No OAuth or deploy keys are involved — the URL is cloned directly, so the repository must be public. Builds take longer than image deploys; the service shows **Deploying** while Nixpacks works, and the [Deploys tab](#deployment-history) records the attempt. Branch and build path are editable in Dokploy itself if you need something other than `main` at `/`.
+160:The **Variables** tab (applications and databases) is a plain-text editor: one `KEY=value` per line, with `#` lines treated as comments. The counter under the editor tallies the real variables, and **Save variables** stays disabled until you change something. As the hint says, redeploy the service for changes to take effect.
+168:The **Domains** tab (applications only) attaches public hostnames. Enter the **Host** (for example `app.example.com`), the container **Port** your app listens on (default 80), and click **Add**. Certificates are automatic — domains are created with HTTPS and Let's Encrypt.
+183:The **Deploys** tab (applications only) lists every deployment, newest first. Each row shows a status dot (green done, red error, amber in progress), the deployment title, its timestamp, and the status as text — so after a few redeploys you can see at a glance when the app last shipped cleanly and whether anything failed. A never-deployed app shows "No deployments yet."
+258:- **Public sources only.** The New service menu takes public Docker images and public Git URLs; there are no fields for registry credentials or deploy keys.
+
+$ git show origin/main:docs/architecture.md | grep -n "^| Compose |"
+178:| Compose | Overview · Compose (YAML editor with save & deploy) · Logs · Settings |
+
+$ sed -n 128,139p dashboard/src/components/service/ServiceDrawer.tsx   # what main actually renders for compose
+const COMPOSE_TABS: TabId[] = [
+  "overview",
+  "variables",
+  "domains",
+  "deployments",
+  "editor",
+  "volumes",
+  "metrics",
+  "logs",
+  "console",
+  "settings",
+];

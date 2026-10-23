@@ -1,0 +1,452 @@
+Compose variables and current tab sets
+
+BEFORE — origin/main:docs/dashboard-guide.md
+108:Replace it with your own stack, then click **Save & deploy** to store the file and deploy it in one step (**Save** stores it without deploying). Until you deploy, the stack stays Idle — if you close the drawer without saving, the idle service still exists and can be deployed or destroyed later. Compose stacks have no Variables tab; define environment variables inside the YAML.
+118:| Application | Overview · Variables · Domains · Deploys · Metrics · Logs · Settings |
+119:| Database | Overview · Variables · Metrics · Logs · Settings |
+120:| Compose stack | Overview · Compose · Logs · Settings |
+160:The **Variables** tab (applications and databases) is a plain-text editor: one `KEY=value` per line, with `#` lines treated as comments. The counter under the editor tallies the real variables, and **Save variables** stays disabled until you change something. As the hint says, redeploy the service for changes to take effect.
+168:The **Domains** tab (applications only) attaches public hostnames. Enter the **Host** (for example `app.example.com`), the container **Port** your app listens on (default 80), and click **Add**. Certificates are automatic — domains are created with HTTPS and Let's Encrypt.
+183:The **Deploys** tab (applications only) lists every deployment, newest first. Each row shows a status dot (green done, red error, amber in progress), the deployment title, its timestamp, and the status as text — so after a few redeploys you can see at a glance when the app last shipped cleanly and whether anything failed. A never-deployed app shows "No deployments yet."
+
+AFTER — docs/dashboard-guide.md
+116:Replace it with your own stack, then click **Save & deploy** to store the file and deploy it in one step (**Save** stores it without deploying). Until you deploy, the stack stays Idle — if you close the drawer without saving, the idle service still exists and can be deployed or destroyed later. Compose stacks have a **Variables** tab for their environment variables; save there and redeploy for changes to take effect.
+126:| Application | Overview · Variables · Deploy · Build · Networking · Deploys · Schedules · Volumes · Metrics · Logs · Console · Settings |
+127:| Database (PostgreSQL, MySQL, MariaDB, MongoDB, Redis) | Overview · Variables · Volumes · Metrics · Logs · Console · Backups · Settings |
+128:| Compose stack | Overview · Variables · Networking · Deploys · Compose · Volumes · Metrics · Logs · Console · Settings |
+130:**Data** also appears immediately after **Overview** for databases whose engine is `postgres` or whose image contains `postgres`, and for compose stacks with an `image:` value containing `postgres` (case-insensitive).
+170:The **Variables** tab (applications, databases, and compose stacks) is a plain-text editor: one `KEY=value` per line, with `#` lines treated as comments. The counter under the editor tallies the real variables, and **Save variables** stays disabled until you change something. As the hint says, redeploy the service for changes to take effect.
+178:The **Networking** tab (applications and compose stacks) attaches hostnames. Enter the **Host** (for example `app.example.com`), the container **Port** your app listens on (default 80), and click **Add**. For compose stacks, also choose the target **Service** within the stack. Custom domains default to HTTPS and Let's Encrypt; the application form lets you change these options.
+195:The **Deploys** tab (applications and compose stacks) lists every deployment, newest first. Each row shows a status dot (green done, red error, amber in progress), the deployment title, its timestamp, and the status as text — so after a few redeploys you can see at a glance when the app last shipped cleanly and whether anything failed. A never-deployed app shows "No deployments yet."
+
+BEFORE — origin/main:docs/architecture.md
+81:| Env vars | `saveEnvironmentAction` (databases), `saveApplicationEnvAction` |
+176:| Database | Overview (lifecycle, connection string, facts) · Variables · Metrics · Logs · Settings (name, version, external port, CPU/mem, password reveal, danger zone) |
+177:| Application | Overview · Variables · Domains (attach host, auto-SSL) · Deploys (history) · Metrics · Logs · Settings |
+178:| Compose | Overview · Compose (YAML editor with save & deploy) · Logs · Settings |
+
+AFTER — docs/architecture.md
+81:| Env vars | `saveEnvironmentAction` (databases), `saveApplicationEnvAction`, `saveComposeEnvAction` |
+178:| Database | Overview · Variables · Volumes · Metrics · Logs · Console · Backups · Settings |
+179:| Application | Overview · Variables · Deploy · Build · Networking · Deploys · Schedules · Volumes · Metrics · Logs · Console · Settings |
+180:| Compose | Overview · Variables · Networking · Deploys · Compose · Volumes · Metrics · Logs · Console · Settings |
+182:**Data** is inserted after **Overview** for databases whose engine is `postgres` or whose image contains `postgres`, and compose stacks with an `image:` value containing `postgres` (case-insensitive).
+
+CODE — dashboard/src/lib/dokploy.ts
+dashboard/src/lib/dokploy.ts:84:export type ServiceKind = "database" | "application" | "compose";
+
+CODE — dashboard/src/components/service/ServiceDrawer.tsx
+dashboard/src/components/service/ServiceDrawer.tsx:87:const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
+dashboard/src/components/service/ServiceDrawer.tsx-88-  overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-89-  variables: { label: "Variables", icon: <KeyRound className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-90-  data: { label: "Data", icon: <Table2 className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-91-  deploy: { label: "Deploy", icon: <Server className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-92-  build: { label: "Build", icon: <Hammer className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-93-  domains: { label: "Networking", icon: <Globe className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-94-  deployments: { label: "Deploys", icon: <Rocket className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-95-  schedules: { label: "Schedules", icon: <Clock className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-96-  editor: { label: "Compose", icon: <FileCode className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-97-  volumes: { label: "Volumes", icon: <HardDrive className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-98-  metrics: { label: "Metrics", icon: <Cpu className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-99-  logs: { label: "Logs", icon: <ScrollText className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-100-  console: { label: "Console", icon: <TerminalSquare className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-101-  backups: { label: "Backups", icon: <Archive className="size-4" /> },
+dashboard/src/components/service/ServiceDrawer.tsx-102-  settings: { label: "Settings", icon: <Settings2 className="size-4" /> },
+--
+dashboard/src/components/service/ServiceDrawer.tsx:104:const DB_TABS: TabId[] = [
+dashboard/src/components/service/ServiceDrawer.tsx-105-  "overview",
+dashboard/src/components/service/ServiceDrawer.tsx-106-  "variables",
+dashboard/src/components/service/ServiceDrawer.tsx-107-  "volumes",
+dashboard/src/components/service/ServiceDrawer.tsx-108-  "metrics",
+dashboard/src/components/service/ServiceDrawer.tsx-109-  "logs",
+dashboard/src/components/service/ServiceDrawer.tsx-110-  "console",
+dashboard/src/components/service/ServiceDrawer.tsx-111-  "backups",
+dashboard/src/components/service/ServiceDrawer.tsx-112-  "settings",
+dashboard/src/components/service/ServiceDrawer.tsx-113-];
+dashboard/src/components/service/ServiceDrawer.tsx:114:const APP_TABS: TabId[] = [
+dashboard/src/components/service/ServiceDrawer.tsx-115-  "overview",
+dashboard/src/components/service/ServiceDrawer.tsx-116-  "variables",
+dashboard/src/components/service/ServiceDrawer.tsx-117-  "deploy",
+dashboard/src/components/service/ServiceDrawer.tsx-118-  "build",
+dashboard/src/components/service/ServiceDrawer.tsx-119-  "domains",
+dashboard/src/components/service/ServiceDrawer.tsx-120-  "deployments",
+dashboard/src/components/service/ServiceDrawer.tsx-121-  "schedules",
+dashboard/src/components/service/ServiceDrawer.tsx-122-  "volumes",
+dashboard/src/components/service/ServiceDrawer.tsx-123-  "metrics",
+dashboard/src/components/service/ServiceDrawer.tsx-124-  "logs",
+dashboard/src/components/service/ServiceDrawer.tsx-125-  "console",
+dashboard/src/components/service/ServiceDrawer.tsx-126-  "settings",
+dashboard/src/components/service/ServiceDrawer.tsx-127-];
+dashboard/src/components/service/ServiceDrawer.tsx:128:const COMPOSE_TABS: TabId[] = [
+dashboard/src/components/service/ServiceDrawer.tsx-129-  "overview",
+dashboard/src/components/service/ServiceDrawer.tsx-130-  "variables",
+dashboard/src/components/service/ServiceDrawer.tsx-131-  "domains",
+dashboard/src/components/service/ServiceDrawer.tsx-132-  "deployments",
+dashboard/src/components/service/ServiceDrawer.tsx-133-  "editor",
+dashboard/src/components/service/ServiceDrawer.tsx-134-  "volumes",
+dashboard/src/components/service/ServiceDrawer.tsx-135-  "metrics",
+dashboard/src/components/service/ServiceDrawer.tsx-136-  "logs",
+dashboard/src/components/service/ServiceDrawer.tsx-137-  "console",
+dashboard/src/components/service/ServiceDrawer.tsx-138-  "settings",
+dashboard/src/components/service/ServiceDrawer.tsx-139-];
+dashboard/src/components/service/ServiceDrawer.tsx-140-
+dashboard/src/components/service/ServiceDrawer.tsx-141-/**
+dashboard/src/components/service/ServiceDrawer.tsx-142- * Whether to show the Postgres "Data" tab for a service. Covers the two data
+dashboard/src/components/service/ServiceDrawer.tsx-143- * models the tab supports: a Dokploy-managed Postgres database, and a compose
+
+CODE — dashboard/src/components/service/ServiceDrawer.tsx
+dashboard/src/components/service/ServiceDrawer.tsx:148:function isPostgresService(s: Service): boolean {
+dashboard/src/components/service/ServiceDrawer.tsx-149-  if (s.kind === "database") return s.engine === "postgres" || /postgres/i.test(s.dockerImage ?? "");
+dashboard/src/components/service/ServiceDrawer.tsx-150-  if (s.kind === "compose") return composeMentionsPostgres(s.composeFile);
+dashboard/src/components/service/ServiceDrawer.tsx-151-  return false;
+dashboard/src/components/service/ServiceDrawer.tsx-152-}
+dashboard/src/components/service/ServiceDrawer.tsx-153-
+dashboard/src/components/service/ServiceDrawer.tsx-154-/** True when a compose file has a service whose `image:` references postgres. */
+dashboard/src/components/service/ServiceDrawer.tsx:155:function composeMentionsPostgres(file: string | null): boolean {
+dashboard/src/components/service/ServiceDrawer.tsx-156-  if (!file) return false;
+dashboard/src/components/service/ServiceDrawer.tsx-157-  return /^[ \t]*image:[ \t]*["']?[^\n#"']*postgres/im.test(file);
+dashboard/src/components/service/ServiceDrawer.tsx-158-}
+dashboard/src/components/service/ServiceDrawer.tsx-159-
+dashboard/src/components/service/ServiceDrawer.tsx-160-/** Insert the Data tab right after Overview. */
+dashboard/src/components/service/ServiceDrawer.tsx:161:function withDataTab(base: TabId[]): TabId[] {
+dashboard/src/components/service/ServiceDrawer.tsx-162-  const out = [...base];
+dashboard/src/components/service/ServiceDrawer.tsx-163-  const i = out.indexOf("overview");
+dashboard/src/components/service/ServiceDrawer.tsx-164-  out.splice(i + 1, 0, "data");
+dashboard/src/components/service/ServiceDrawer.tsx-165-  return out;
+dashboard/src/components/service/ServiceDrawer.tsx-166-}
+dashboard/src/components/service/ServiceDrawer.tsx-167-
+
+CODE — dashboard/src/components/service/ServiceDrawer.tsx
+dashboard/src/components/service/ServiceDrawer.tsx:463:              {tab === "deployments" && service.kind === "application" && (
+dashboard/src/components/service/ServiceDrawer.tsx-464-                <DeploymentsTab app={service} />
+dashboard/src/components/service/ServiceDrawer.tsx-465-              )}
+dashboard/src/components/service/ServiceDrawer.tsx:466:              {tab === "deployments" && service.kind === "compose" && (
+dashboard/src/components/service/ServiceDrawer.tsx-467-                <DeploymentHistory deployments={service.deployments} />
+dashboard/src/components/service/ServiceDrawer.tsx-468-              )}
+
+CODE — dashboard/src/components/service/VariablesTab.tsx
+dashboard/src/components/service/VariablesTab.tsx:27:          : service.kind === "compose"
+dashboard/src/components/service/VariablesTab.tsx-28-            ? await saveComposeEnvAction(service.id, value)
+dashboard/src/components/service/VariablesTab.tsx-29-            : await saveApplicationEnvAction(service.id, value);
+--
+dashboard/src/components/service/VariablesTab.tsx:38:        One <code className="font-mono">KEY=value</code> per line. Redeploy the service for
+dashboard/src/components/service/VariablesTab.tsx-39-        changes to take effect.
+dashboard/src/components/service/VariablesTab.tsx-40-      </p>
+
+CODE — dashboard/src/lib/dokploy.ts
+dashboard/src/lib/dokploy.ts:1704:export async function saveComposeEnvironment(id: string, env: string): Promise<void> {
+dashboard/src/lib/dokploy.ts-1705-  await request("compose.saveEnvironment", {
+dashboard/src/lib/dokploy.ts-1706-    method: "POST",
+dashboard/src/lib/dokploy.ts-1707-    body: { composeId: id, env },
+dashboard/src/lib/dokploy.ts-1708-  });
+dashboard/src/lib/dokploy.ts-1709-}
+
+CODE — dashboard/src/components/service/ComposeTabs.tsx
+dashboard/src/components/service/ComposeTabs.tsx:121:  function add() {
+dashboard/src/components/service/ComposeTabs.tsx-122-    if (!host.trim() || !serviceName.trim()) return;
+dashboard/src/components/service/ComposeTabs.tsx-123-    setError(null);
+dashboard/src/components/service/ComposeTabs.tsx-124-    setGenerated(null);
+dashboard/src/components/service/ComposeTabs.tsx-125-    start(async () => {
+dashboard/src/components/service/ComposeTabs.tsx-126-      const res = await createComposeDomainAction(
+dashboard/src/components/service/ComposeTabs.tsx-127-        compose.id,
+dashboard/src/components/service/ComposeTabs.tsx-128-        serviceName,
+dashboard/src/components/service/ComposeTabs.tsx-129-        host,
+dashboard/src/components/service/ComposeTabs.tsx-130-        Number(port) || 80
+dashboard/src/components/service/ComposeTabs.tsx-131-      );
+dashboard/src/components/service/ComposeTabs.tsx-132-      if (res.ok) setHost("");
+
+CODE — dashboard/src/components/service/AppTabs.tsx
+dashboard/src/components/service/AppTabs.tsx:217:        <DomainFields value={draft} onChange={(patch) => setDraft((v) => ({ ...v, ...patch }))} />
+dashboard/src/components/service/AppTabs.tsx-218-        {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
+dashboard/src/components/service/AppTabs.tsx-219-        <div className="flex items-center justify-end gap-2">
+dashboard/src/components/service/AppTabs.tsx-220-          <button
+dashboard/src/components/service/AppTabs.tsx-221-            onClick={() => {
+dashboard/src/components/service/AppTabs.tsx-222-              setDraft(toInput(d));
+dashboard/src/components/service/AppTabs.tsx-223-              setEditing(false);
+--
+dashboard/src/components/service/AppTabs.tsx:287:const NEW_DOMAIN: DomainInput = {
+dashboard/src/components/service/AppTabs.tsx-288-  host: "",
+dashboard/src/components/service/AppTabs.tsx-289-  port: 80,
+dashboard/src/components/service/AppTabs.tsx-290-  https: true,
+dashboard/src/components/service/AppTabs.tsx-291-  certificateType: "letsencrypt",
+dashboard/src/components/service/AppTabs.tsx-292-  path: "/",
+dashboard/src/components/service/AppTabs.tsx-293-};
+--
+dashboard/src/components/service/AppTabs.tsx:343:        <DomainFields value={draft} onChange={(patch) => setDraft((v) => ({ ...v, ...patch }))} />
+dashboard/src/components/service/AppTabs.tsx-344-        <div className="flex items-center justify-between gap-2">
+dashboard/src/components/service/AppTabs.tsx-345-          <GenerateUrlBtn pending={pending} onClick={generate} />
+dashboard/src/components/service/AppTabs.tsx-346-          <button
+dashboard/src/components/service/AppTabs.tsx-347-            onClick={add}
+dashboard/src/components/service/AppTabs.tsx-348-            disabled={pending || !draft.host.trim()}
+dashboard/src/components/service/AppTabs.tsx-349-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
+--
+dashboard/src/components/service/AppTabs.tsx:372:      {app.sourceType === "git" && <AutoDeployPanel app={app} />}
+dashboard/src/components/service/AppTabs.tsx-373-      <DeploymentHistory deployments={app.deployments} />
+dashboard/src/components/service/AppTabs.tsx-374-    </div>
+dashboard/src/components/service/AppTabs.tsx-375-  );
+dashboard/src/components/service/AppTabs.tsx-376-}
+dashboard/src/components/service/AppTabs.tsx-377-
+dashboard/src/components/service/AppTabs.tsx-378-/**
+
+CODE — dashboard/src/lib/dokploy.ts
+dashboard/src/lib/dokploy.ts:1244:      https: opts?.https ?? true,
+dashboard/src/lib/dokploy.ts:1245:      certificateType: opts?.certificateType ?? "letsencrypt",
+
+CODE — dashboard/src/components/service/primitives.tsx
+dashboard/src/components/service/primitives.tsx:245:  const primary = domains.find((d) => d.https) ?? domains[0];
+--
+dashboard/src/components/service/primitives.tsx:266:            No domain yet — add one under Networking.
+
+GitHub App deployment and public clone-URL fallback
+
+BEFORE — origin/main:docs/dashboard-guide.md
+66:The **Application** section offers three ways in: deploy from a Docker image, deploy from a Git repository, or create a Compose stack. The **Database** section lists the five managed engines with the exact image each would deploy: `postgres:18`, `mysql:8.4`, `mariadb:11`, `mongo:8`, `redis:7`.
+90:No OAuth or deploy keys are involved — the URL is cloned directly, so the repository must be public. Builds take longer than image deploys; the service shows **Deploying** while Nixpacks works, and the [Deploys tab](#deployment-history) records the attempt. Branch and build path are editable in Dokploy itself if you need something other than `main` at `/`.
+258:- **Public sources only.** The New service menu takes public Docker images and public Git URLs; there are no fields for registry credentials or deploy keys.
+
+AFTER — docs/dashboard-guide.md
+66:The **Application** section offers four ways in: deploy from a Docker image, deploy from a public Git URL, deploy through a GitHub App (including private repositories), or create a Compose stack. The **Database** section lists the five managed engines with the exact image each would deploy: `postgres:18`, `mysql:8.4`, `mariadb:11`, `mongo:8`, `redis:7`.
+90:The clone-URL field uses a direct public clone without a GitHub App. Builds take longer than image deploys; the service shows **Deploying** while Nixpacks works, and the [Deploys tab](#deployment-history) records the attempt and lets you change the branch.
+92:For **private GitHub repositories**, use **New service → From GitHub**. This requires a GitHub App created and installed in Dokploy with access to the repository. App creation happens in Dokploy's Git-provider settings and requires a public callback URL.
+94:1. Choose an **Installation** (selected automatically if there is only one).
+95:2. Choose a **Repository** and **Branch**. Private repositories are marked `(private)`; the repository's default branch is preselected when available.
+96:3. Click **Deploy**. Switchyard creates an application, configures the GitHub source at the repository root, and deploys it. Push auto-deploy is enabled for the selected branch through the App's webhook.
+98:If no GitHub App is connected, the modal shows **Connect GitHub App**, linking to Dokploy's settings. Create and install the App there, then return and click **Refresh**. The public clone-URL field remains available without an App.
+197:The tab also carries the **push-to-deploy** controls for apps created from a public clone URL (`git` source): the branch, an auto-deploy toggle, watch paths, and the app's copyable Dokploy webhook URL — add it as a push webhook on your Git host and every push to the configured branch redeploys. GitHub App deployments use the App's webhook instead. Rows whose deployment produced a registry image snapshot show a **Roll back** button (Dokploy records these only when the app deploys to a registry with rollbacks enabled).
+270:- **Source access.** The New service image and clone-URL fields take public sources; **From GitHub** supports private repositories through an installed GitHub App. The quick-deploy fields have no registry-credential or deploy-key inputs.
+
+BEFORE — origin/main:docs/architecture.md
+78:| Quick deploy | `quickDeployDatabaseAction` (random name + password, latest engine version, then deploy), `quickDeployImageAction` (Docker image), `quickDeployRepoAction` (public Git repo, Nixpacks build), `createComposeAction` (starter YAML) |
+
+AFTER — docs/architecture.md
+78:| Quick deploy | `quickDeployDatabaseAction` (random name + password, latest engine version, then deploy), `quickDeployImageAction` (Docker image), `quickDeployRepoAction` (public Git repo, Nixpacks build), `quickDeployGithubAction` (GitHub App, including private repos), `createComposeAction` (starter YAML) |
+87:**GitHub App sources.** `GithubDeployModal` lists Dokploy's installed GitHub providers, their accessible repositories (including private ones), and branches. `quickDeployGithubAction` creates an application and calls `application.saveGithubProvider` with the chosen installation/repository/branch, root build path, and push trigger, then enables auto-deploy and deploys. Without an App, the modal links to Dokploy's Git-provider settings for creation/installation (requires a public callback), then offers Refresh. The separate public clone-URL flow needs no App; see the [operator flow](dashboard-guide.md#deploy-from-a-git-repository).
+
+CODE — dashboard/src/components/QuickDeployMenu.tsx
+dashboard/src/components/QuickDeployMenu.tsx:213:                  setGithubOpen(true);
+--
+dashboard/src/components/QuickDeployMenu.tsx:220:                <span className="flex-1">From GitHub</span>
+dashboard/src/components/QuickDeployMenu.tsx:221:                <span className="text-[11px] text-[var(--color-fg-subtle)]">private repos</span>
+--
+dashboard/src/components/QuickDeployMenu.tsx:352:      <GithubDeployModal
+
+CODE — dashboard/src/components/GithubDeployModal.tsx
+dashboard/src/components/GithubDeployModal.tsx:94:        const fallback = repo.defaultBranch ?? res.data[0]?.name ?? "";
+dashboard/src/components/GithubDeployModal.tsx:95:        setBranch(res.data.some((b) => b.name === fallback) ? fallback : res.data[0]?.name ?? "");
+dashboard/src/components/GithubDeployModal.tsx-96-      } else setError(res.error);
+--
+dashboard/src/components/GithubDeployModal.tsx:105:      if (res.data.providers.length === 1) selectInstallation(res.data.providers[0].githubId);
+dashboard/src/components/GithubDeployModal.tsx-106-    } else {
+--
+dashboard/src/components/GithubDeployModal.tsx:214:                  No GitHub App is connected yet. Create and install one in Dokploy, then come back
+dashboard/src/components/GithubDeployModal.tsx-215-                  and refresh — your installations will appear here.
+--
+dashboard/src/components/GithubDeployModal.tsx:224:                    <GitFork className="size-4" /> Connect GitHub App
+dashboard/src/components/GithubDeployModal.tsx-225-                    <ExternalLink className="size-3" />
+--
+dashboard/src/components/GithubDeployModal.tsx:231:                    <RefreshCw className="size-3.5" /> Refresh
+dashboard/src/components/GithubDeployModal.tsx-232-                  </button>
+--
+dashboard/src/components/GithubDeployModal.tsx:237:                <Labeled label="Installation">
+dashboard/src/components/GithubDeployModal.tsx-238-                  <select
+--
+dashboard/src/components/GithubDeployModal.tsx:253:                  label="Repository"
+dashboard/src/components/GithubDeployModal.tsx-254-                  hint={loadingRepos ? "loading…" : undefined}
+--
+dashboard/src/components/GithubDeployModal.tsx:266:                        {r.isPrivate ? " (private)" : ""}
+dashboard/src/components/GithubDeployModal.tsx-267-                      </option>
+--
+dashboard/src/components/GithubDeployModal.tsx:272:                <Labeled label="Branch" hint={loadingBranches ? "loading…" : undefined}>
+dashboard/src/components/GithubDeployModal.tsx-273-                  <select
+--
+dashboard/src/components/GithubDeployModal.tsx:293:                    onClick={deploy}
+dashboard/src/components/GithubDeployModal.tsx-294-                    disabled={!selectedRepo || !branch || deploying}
+
+CODE — dashboard/src/app/actions.ts
+dashboard/src/app/actions.ts:284:    await setAppGitSource(id, url, branch?.trim() || "main");
+dashboard/src/app/actions.ts-285-    await applicationAction(id, "deploy");
+dashboard/src/app/actions.ts-286-    await mintAutoDomain(id);
+dashboard/src/app/actions.ts-287-    return id;
+--
+dashboard/src/app/actions.ts:365:    await setAppGithubSource(id, { githubId, owner, repository, branch });
+dashboard/src/app/actions.ts-366-    await applicationAction(id, "deploy");
+dashboard/src/app/actions.ts-367-    await mintAutoDomain(id);
+dashboard/src/app/actions.ts-368-    return id;
+--
+dashboard/src/app/actions.ts:565:      await setAppGitSource(
+dashboard/src/app/actions.ts-566-        applicationId,
+dashboard/src/app/actions.ts-567-        config.gitUrl,
+dashboard/src/app/actions.ts-568-        config.branch?.trim() || "main",
+
+CODE — dashboard/src/lib/dokploy.ts
+dashboard/src/lib/dokploy.ts:1069:  await request("application.saveGithubProvider", {
+dashboard/src/lib/dokploy.ts-1070-    method: "POST",
+dashboard/src/lib/dokploy.ts-1071-    body: {
+dashboard/src/lib/dokploy.ts-1072-      applicationId,
+dashboard/src/lib/dokploy.ts-1073-      githubId: input.githubId,
+dashboard/src/lib/dokploy.ts-1074-      owner: input.owner,
+dashboard/src/lib/dokploy.ts-1075-      repository: input.repository,
+dashboard/src/lib/dokploy.ts-1076-      branch: input.branch,
+dashboard/src/lib/dokploy.ts-1077-      buildPath: input.buildPath ?? "/",
+dashboard/src/lib/dokploy.ts-1078-      triggerType: "push",
+dashboard/src/lib/dokploy.ts-1079-      enableSubmodules: false,
+dashboard/src/lib/dokploy.ts-1080-      watchPaths: [],
+dashboard/src/lib/dokploy.ts-1081-    },
+dashboard/src/lib/dokploy.ts-1082-  });
+dashboard/src/lib/dokploy.ts-1083-  await request("application.update", {
+dashboard/src/lib/dokploy.ts-1084-    method: "POST",
+dashboard/src/lib/dokploy.ts-1085-    body: { applicationId, autoDeploy: true },
+dashboard/src/lib/dokploy.ts-1086-  });
+
+CODE — dashboard/src/lib/dokploy.ts
+dashboard/src/lib/dokploy.ts:1091: * exchange that needs a public callback — not something the BFF can proxy).
+dashboard/src/lib/dokploy.ts-1092- * Surface a deep link to that settings page so the user completes it there,
+dashboard/src/lib/dokploy.ts-1093- * then returns to pick an installation. Uses HOST_ORIGIN — the link opens in
+--
+dashboard/src/lib/dokploy.ts:1096:export function githubConnectUrl(): string {
+dashboard/src/lib/dokploy.ts-1097-  return `${HOST_ORIGIN}/dashboard/settings/git-providers`;
+dashboard/src/lib/dokploy.ts-1098-}
+
+CODE — dashboard/src/lib/dokploy.ts
+dashboard/src/lib/dokploy.ts:909:export async function setAppGitSource(
+dashboard/src/lib/dokploy.ts-910-  applicationId: string,
+dashboard/src/lib/dokploy.ts-911-  url: string,
+dashboard/src/lib/dokploy.ts-912-  branch = "main",
+dashboard/src/lib/dokploy.ts-913-  buildPath = "/",
+dashboard/src/lib/dokploy.ts-914-  watchPaths: string[] = []
+dashboard/src/lib/dokploy.ts-915-): Promise<void> {
+dashboard/src/lib/dokploy.ts-916-  await request("application.saveGitProvider", {
+dashboard/src/lib/dokploy.ts-917-    method: "POST",
+dashboard/src/lib/dokploy.ts-918-    body: {
+dashboard/src/lib/dokploy.ts-919-      applicationId,
+dashboard/src/lib/dokploy.ts-920-      customGitUrl: url,
+dashboard/src/lib/dokploy.ts-921-      customGitBranch: branch,
+dashboard/src/lib/dokploy.ts-922-      customGitBuildPath: buildPath,
+dashboard/src/lib/dokploy.ts-923-      watchPaths,
+dashboard/src/lib/dokploy.ts-924-    },
+dashboard/src/lib/dokploy.ts-925-  });
+
+Managed installs versus manual/dev configuration
+
+BEFORE — origin/main:docs/dashboard-guide.md
+175:- **Traefik** — routing is done by the Dokploy stack's Traefik proxy. The Linux installer (getting-started Path A) runs it automatically; on the Windows path it's an [optional step](getting-started.md#5-traefik-optional), and without it attached domains simply won't route.
+179:**Auto-URL.** On the Linux path you usually don't add anything here: deploying an app mints a public URL automatically (a Dokploy `*.traefik.me` host, or `<app-name>.<server-ip>.sslip.io` — both resolve to the server with no DNS to configure) and it shows up as the Public URL on the Overview tab. It routes to container port `3000` by default; if your app listens on a different port, add a domain here with the right port. Auto-URL is **off on Docker Desktop and in dev mode** — there the Dokploy Traefik proxy isn't managed, so nothing would route, and you add domains by hand as above.
+200:If the service isn't running you'll get a placeholder line instead of a stream. On Windows, empty Logs and Metrics tabs usually mean the Docker socket isn't configured — see [troubleshooting](troubleshooting.md#logs-and-metrics-tabs-are-empty-on-windows).
+
+AFTER — docs/dashboard-guide.md
+185:- **Traefik** — routing requires a proxy. The Linux installer (getting-started Path A) runs Dokploy's Traefik automatically; on the manual Windows path it's an [optional step](getting-started.md#5-traefik-optional). CLI/desktop local ingress is described below.
+189:**Auto-URL.** When `SWITCHYARD_HOST_IP` is set (the CLI detects it on Linux), quick-deploying an app attempts to mint a public URL automatically (a Dokploy `*.traefik.me` host, or `<app-name>.<server-ip>.sslip.io` — both resolve to the server with no DNS to configure) and it shows up as the Public URL on the Overview tab. It routes to container port `3000` by default; if your app listens on a different port, add a domain here with the right port.
+191:Without `SWITCHYARD_HOST_IP` (Docker Desktop and a default manual/dev setup), deploy-time auto-URL is disabled. **Generate URL** in Networking can still attach an HTTP `.localhost` domain on the form's selected port. Routing requires a proxy: CLI/desktop installs support opt-in local ingress (`switchyard local-ingress up`, default HTTP port `8080`; open `http://<generated-host>:8080`). A manually run dashboard needs a separately configured proxy or that same local ingress.
+212:If the service isn't running you'll get a placeholder line instead of a stream. For a dashboard run manually/from source on Windows, check the Docker socket configuration if Logs and Metrics are empty — see [troubleshooting](troubleshooting.md#logs-and-metrics-tabs-are-empty-on-windows). CLI/desktop-managed dashboard containers mount the Docker socket automatically.
+
+BEFORE — origin/main:docs/architecture.md
+94:It is idempotent — if the app already carries a `*.traefik.me`/`*.sslip.io` domain it returns that host instead of creating a second one — and best-effort: a failure to mint the URL never fails the deploy (the app is just left domain-less). The minted domain is created with HTTPS, so the Overview tab elects it as the Public URL. On **Docker Desktop and in dev mode `SWITCHYARD_HOST_IP` is unset**, so auto-URL is a documented no-op (Traefik is unmanaged there and domains wouldn't route); add a domain by hand in the Domains tab if needed.
+110:**`DOCKER_SOCKET`.** The socket path defaults to `/var/run/docker.sock` and can be overridden with the `DOCKER_SOCKET` env var. On Windows, Docker Desktop exposes the engine on a named pipe instead — set:
+210:| `SWITCHYARD_HOST_IP` | — | Host public/advertise IP. When set, app deploys mint an auto-URL (traefik.me / sslip.io) with no DNS. Unset = auto-URL disabled (dev / Docker Desktop). The CLI sets it on Linux. |
+
+AFTER — docs/architecture.md
+96:It is idempotent — if the app already carries a `*.traefik.me`/`*.sslip.io` domain it returns that host instead of creating a second one — and best-effort: a failure to mint the URL never fails the deploy (the app is just left domain-less). The minted domain is created with HTTPS, so the Overview tab elects it as the Public URL. Without `SWITCHYARD_HOST_IP` (Docker Desktop and a default manual/dev setup), deploy-time auto-URL is a no-op. The separate **Generate URL** action in Networking uses `generateHostFor()` to attach an HTTP `.localhost` domain on the selected port instead. Routing still needs a proxy; CLI/desktop installs support opt-in local ingress (`switchyard local-ingress up`, default HTTP port `8080`).
+112:**`DOCKER_SOCKET`.** The socket path defaults to `/var/run/docker.sock` and can be overridden with the `DOCKER_SOCKET` env var. CLI/desktop-managed dashboard containers mount this socket automatically. For a dashboard run manually/from source on Windows, Docker Desktop exposes the engine on a named pipe instead — set:
+214:| `SWITCHYARD_HOST_IP` | — | Host public/advertise IP. When set, app quick-deploys attempt an auto-URL (traefik.me / sslip.io) with no DNS. Unset = deploy-time auto-URL disabled; Generate URL uses HTTP `.localhost`. The CLI detects it on Linux. |
+
+CODE — dashboard/src/lib/dokploy.ts
+dashboard/src/lib/dokploy.ts:1314:const AUTO_DOMAIN_PORT = 3000;
+dashboard/src/lib/dokploy.ts-1315-
+dashboard/src/lib/dokploy.ts-1316-/** True for hosts we mint automatically (traefik.me / sslip.io wildcards). */
+dashboard/src/lib/dokploy.ts-1317-export function isAutoDomainHost(host: string): boolean {
+--
+dashboard/src/lib/dokploy.ts:1361:    body: { applicationId, host, port: AUTO_DOMAIN_PORT, https: true, certificateType },
+dashboard/src/lib/dokploy.ts-1362-  });
+dashboard/src/lib/dokploy.ts-1363-}
+dashboard/src/lib/dokploy.ts-1364-
+--
+dashboard/src/lib/dokploy.ts:1371:export async function ensureAutoDomain(applicationId: string): Promise<string | null> {
+dashboard/src/lib/dokploy.ts-1372-  const hostIp = process.env.SWITCHYARD_HOST_IP?.trim();
+dashboard/src/lib/dokploy.ts-1373-  if (!hostIp) return null; // Docker Desktop / dev: Traefik unmanaged, no-op.
+dashboard/src/lib/dokploy.ts-1374-
+
+CODE — dashboard/src/lib/dokploy.ts
+dashboard/src/lib/dokploy.ts:1423:export async function generateHostFor(name: string): Promise<GeneratedHost> {
+dashboard/src/lib/dokploy.ts-1424-  const slug = domainSlug(name);
+dashboard/src/lib/dokploy.ts-1425-  const hostIp = process.env.SWITCHYARD_HOST_IP?.trim();
+dashboard/src/lib/dokploy.ts-1426-  if (!hostIp) {
+dashboard/src/lib/dokploy.ts-1427-    // randomServiceName(slug) → "<slug>-<4 chars>"; append the routable suffix.
+dashboard/src/lib/dokploy.ts-1428-    return { host: `${randomServiceName(slug)}.localhost`, https: false, certificateType: "none" };
+dashboard/src/lib/dokploy.ts-1429-  }
+dashboard/src/lib/dokploy.ts-1430-  const generated = await generateTraefikMeHost(slug);
+dashboard/src/lib/dokploy.ts-1431-  if (generated) return { host: generated, https: true, certificateType: "none" };
+dashboard/src/lib/dokploy.ts-1432-  return { host: `${slug}.${hostIp}.sslip.io`, https: true, certificateType: "letsencrypt" };
+dashboard/src/lib/dokploy.ts-1433-}
+
+CODE — dashboard/src/app/actions.ts
+dashboard/src/app/actions.ts:452:    const g = await generateHostFor(serviceName);
+dashboard/src/app/actions.ts-453-    await createDomain(applicationId, {
+dashboard/src/app/actions.ts-454-      host: g.host,
+dashboard/src/app/actions.ts-455-      port,
+dashboard/src/app/actions.ts-456-      https: g.https,
+dashboard/src/app/actions.ts-457-      certificateType: g.certificateType,
+dashboard/src/app/actions.ts-458-      path: "/",
+dashboard/src/app/actions.ts-459-    });
+dashboard/src/app/actions.ts-460-    return g.host;
+--
+dashboard/src/app/actions.ts:486:    const g = await generateHostFor(labelName || serviceName);
+dashboard/src/app/actions.ts-487-    await createComposeDomain(composeId, serviceName.trim(), g.host, port, {
+dashboard/src/app/actions.ts-488-      https: g.https,
+dashboard/src/app/actions.ts-489-      certificateType: g.certificateType,
+dashboard/src/app/actions.ts-490-    });
+dashboard/src/app/actions.ts-491-    return g.host;
+dashboard/src/app/actions.ts-492-  });
+dashboard/src/app/actions.ts-493-}
+dashboard/src/app/actions.ts-494-
+
+CODE — dashboard/src/lib/docker.ts
+dashboard/src/lib/docker.ts:13:const socketPath = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
+dashboard/src/lib/docker.ts:14:const docker = new Docker({ socketPath });
+--
+dashboard/src/lib/docker.ts:42:      () => reject(new DockerTimeoutError(`${label} timed out after ${ms}ms`)),
+
+CODE — cli/src/commands/up.ts
+cli/src/commands/up.ts:226:  if (cfg.platform === "linux" && !cfg.hostIp) {
+cli/src/commands/up.ts-227-    const ip = await detectHostIp();
+cli/src/commands/up.ts-228-    if (ip) {
+cli/src/commands/up.ts-229-      cfg.hostIp = ip;
+cli/src/commands/up.ts-230-      info(`Auto-URL enabled — app deploys get a URL on ${ip} (Dokploy *.traefik.me / *.${ip}.sslip.io).`);
+cli/src/commands/up.ts-231-    } else {
+cli/src/commands/up.ts-232-      warn("Could not detect a host IP — app deploys won't get an automatic URL. Set one with `switchyard config set hostIp <ip>`.");
+
+CODE — cli/src/core/switchyard-container.ts
+cli/src/core/switchyard-container.ts:50:  if (cfg.hostIp) env.SWITCHYARD_HOST_IP = cfg.hostIp;
+--
+cli/src/core/switchyard-container.ts:55:    socket: "/var/run/docker.sock:/var/run/docker.sock",
+--
+cli/src/core/switchyard-container.ts:72:    spec.socket,
+
+CODE — cli/src/commands/local-ingress.ts
+cli/src/commands/local-ingress.ts:35:  cfg.localIngress = action === "up";
+--
+cli/src/commands/local-ingress.ts:39:  await platform.localIngress(action, cfg, (m) => p.log.step(m));
+--
+cli/src/commands/local-ingress.ts:51:        `http://<host>:${cfg.localIngressHttpPort}.`,
+
+CODE — cli/src/core/config.ts
+cli/src/core/config.ts:30:  localIngress: boolean;
+cli/src/core/config.ts:31:  localIngressHttpPort: number;
+--
+cli/src/core/config.ts:87:    localIngress: false,
+cli/src/core/config.ts:88:    localIngressHttpPort: 8080,
+--
+cli/src/core/config.ts:109:  localIngress: "boolean",
+cli/src/core/config.ts:110:  localIngressHttpPort: "number",
+
+CODE — desktop/src/main/orchestrator.ts
+desktop/src/main/orchestrator.ts:281:      const result = await ensureSwitchyard(cfg, CLI_VERSION, (m) => log(m));
+desktop/src/main/orchestrator.ts-282-      log(
+desktop/src/main/orchestrator.ts-283-        result === "unchanged"
+desktop/src/main/orchestrator.ts-284-          ? "Switchyard container already up to date."
+--
+desktop/src/main/orchestrator.ts:305:      if (cfg.localIngress) {
+desktop/src/main/orchestrator.ts-306-        try {
+desktop/src/main/orchestrator.ts-307-          await dockerDesktopPlatform.localIngress("up", cfg, (m) => log(m));
+desktop/src/main/orchestrator.ts-308-        } catch (e) {
+
+PASS: all targeted stale DOC-P2-2 phrases are gone; before/after claims and code evidence printed.
