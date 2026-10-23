@@ -14,4 +14,8 @@ Live run on the bridge stack (Dokploy + Traefik on this box), captured with Play
 - Redeploying `welcome-to-docker` first snapshots the running image as `<app>-app:sy-<ms>`. The snapshot's image ID equals the pre-redeploy running ID.
 - Roll back runs that snapshot. The compose has **no `build:`**, sets `pull_policy: never` and records `pinnedTag`.
 - The lifecycle button changes to **"Redeploy latest from main"**, which unpins on click. The public URL returns 200.
-- Note: the branch head didn't change during the demo, so old and new image IDs are identical. That doesn't affect the mechanism shown: the tag is pinned and nothing is rebuilt.
+- Note: the branch head didn't change during this run, so old and new image IDs are identical. **Superseded by [`code-rollback/`](code-rollback/)**, which pushes a real code change (commit A → B) and rolls back to A's snapshot (different image ID, page content reverts).
+
+## Restacked onto #52+fix (06:49 EDT): [`code-rollback/`](code-rollback/)
+- `codex/bridge-rollback` now merges `codex/bridge-git-deploys` (merge commit `d9ac68e`, no rebase or force-push). Lint, tsc and vitest pass: 321/321.
+- Real code rollback: Version A → push B → Redeploy (B) → Roll back (A, snapshot `92b1…`, no build) → Redeploy latest (B).

@@ -1,0 +1,22 @@
+## [after] #53 rollback of a real code change (repo http://127.0.0.1:8765/rb-demo.git)
+$ git log --oneline (served repo)
+74fe9f7 v1: Version A
+app: rb-demo-n328-9nkqi9
+[first deploy (fallback port)] container image rb-demo-n328-9nkqi9-app:latest 92b10049736c | curl -> ERR 1
+first deploy routed to port server.port=3000 -> clicking Redeploy once to let the port reconcile run
+after reconcile: server.port=80
+commit A live: true
+[deployed @A] container image rb-demo-n328-9nkqi9-app:latest 92b10049736c | curl -> <h1>Version A — commit 1</h1>
+$ git push (commit B)
+bee2018 v2: Version B
+74fe9f7 v1: Version A
+commit B live after Redeploy: true
+[redeployed @B] container image rb-demo-n328-9nkqi9-app:latest 3401e7e5f7a9 | curl -> <h1>Version B — commit 2 (new code)</h1>
+snapshot tags: rb-demo-n328-9nkqi9-app:latest 3401e7e5f7a9 rb-demo-n328-9nkqi9-app:sy-1792752255857 92b10049736c rb-demo-n328-9nkqi9-app:sy-1792752266899 92b10049736c
+Roll back buttons: 2
+commit A live again after Roll back: true
+[rolled back] container image rb-demo-n328-9nkqi9-app:sy-1792752266899 92b10049736c | curl -> <h1>Version A — commit 1</h1>
+compose after rollback: build section: false; pull_policy never: true; pinnedTag: rb-demo-n328-9nkqi9-app:sy-1792752266899
+"Redeploy latest" button: 1
+commit B live after Redeploy latest: true
+[redeploy latest] container image rb-demo-n328-9nkqi9-app:latest 3401e7e5f7a9 | curl -> <h1>Version B — commit 2 (new code)</h1>
