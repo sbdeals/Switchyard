@@ -1,0 +1,6 @@
+## [after] bridge image app rollback
+after first deploy: nginx-pbay-cntxtl | nginx:1.27-alpine | Up 34 seconds
+after image change: nginx:1.28-alpine|Up 34 seconds
+"Roll back" buttons on Overview: 1
+after rollback: nginx:1.27-alpine|Up 34 seconds
+app: nginx-pbay-cntxtl

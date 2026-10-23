@@ -1,0 +1,13 @@
+## [after] repo app rollback — welcome-to-docker-ivuw-ojypxo
+running before redeploy: welcome-to-docker-ivuw-ojypxo-app:latest sha256:e501ad3b48cd96f6fb68d0ac837e6464c26443a469d221a6105b895f25d72a99
+drawer opened for welcome-to-docker-ivuw-ojypxo: true
+local tags after redeploy:
+  welcome-to-docker-ivuw-ojypxo-app:latest e501ad3b48cd
+  welcome-to-docker-ivuw-ojypxo-app:sy-1792749461704 e501ad3b48cd
+snapshot welcome-to-docker-ivuw-ojypxo-app:sy-1792749461704 image id == pre-redeploy running id: true
+running after redeploy: welcome-to-docker-ivuw-ojypxo-app:latest sha256:e501ad3b48cd96f6fb68d0ac837e6464c26443a469d221a6105b895f25d72a99
+Roll back buttons: 1
+running after rollback: welcome-to-docker-ivuw-ojypxo-app:sy-1792749461704 sha256:e501ad3b48cd96f6fb68d0ac837e6464c26443a469d221a6105b895f25d72a99
+compose after rollback: build section present: false; pull_policy never: true; pinnedTag: welcome-to-docker-ivuw-ojypxo-app:sy-1792749461704
+lifecycle button now: Redeploy latest from main
+curl -H "Host: welcome-to-docker-ivuw-ojypxo-88481e-140-248-50-52.sslip.io" http://127.0.0.1/ -> 200

@@ -1,0 +1,6 @@
+## [before] bridge image app rollback
+after first deploy: nginx-se5p-0sehdu | nginx:1.27-alpine | Up 34 seconds
+after image change: nginx:1.28-alpine|Up 34 seconds
+"Roll back" buttons on Overview: 0
+no way to return to nginx:1.27-alpine from the dashboard (old ref is gone from the compose file)
+app: nginx-se5p-0sehdu
