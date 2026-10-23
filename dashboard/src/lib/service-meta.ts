@@ -10,7 +10,7 @@ export function serviceAccent(s: Service): string {
   if (s.kind === "database") return ENGINE_META[s.engine].accent;
   if (s.kind === "compose") {
     if (s.managed?.kind === "database") return ENGINE_META[s.managed.engine].accent;
-    return s.managed?.kind === "image" ? APP_ACCENT : COMPOSE_ACCENT;
+    return s.managed ? APP_ACCENT : COMPOSE_ACCENT;
   }
   return APP_ACCENT;
 }
@@ -20,6 +20,9 @@ export function serviceLabel(s: Service): string {
   if (s.kind === "database") return ENGINE_META[s.engine].label;
   if (s.kind === "compose") {
     if (s.managed?.kind === "database") return ENGINE_META[s.managed.engine].label;
+    if (s.managed?.kind === "repo") {
+      return /^https?:\/\/github\.com(?:\/|:|$)/i.test(s.managed.repoUrl) ? "GitHub repo" : "Git repo";
+    }
     return s.managed?.kind === "image" ? "Docker image" : "Compose";
   }
   switch (s.sourceType) {
@@ -47,6 +50,9 @@ export function presentedKind(s: Service): "database" | "application" | "compose
 
 /** Secondary line under the name (image tag, or label). */
 export function serviceSubtitle(s: Service): string {
+  if (s.kind === "compose" && s.managed?.kind === "repo") {
+    return `${serviceLabel(s)} · ${s.managed.branch}`;
+  }
   return s.dockerImage ?? serviceLabel(s);
 }
 

@@ -18,7 +18,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: () => void }) {
   const accent = serviceAccent(service);
   const domains = service.kind === "application" ||
-    (service.kind === "compose" && service.managed?.kind === "image") ? service.domains : [];
+    (service.kind === "compose" && (service.managed?.kind === "image" || service.managed?.kind === "repo")) ? service.domains : [];
   const publicDomain = domains.find((d) => d.https) ?? domains[0];
   const logos = useTemplateLogos();
   const [pending, startTransition] = useTransition();

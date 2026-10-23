@@ -1,5 +1,5 @@
 /**
- * Switchyard-managed compose stacks: one-click databases and image apps that
+ * Switchyard-managed compose stacks: one-click databases, image and repo apps that
  * run as plain `docker compose` projects on the local bridge network instead
  * of Swarm services. Used when the host can't run Swarm services (no overlay
  * network — see lib/deploy-target.ts).
@@ -17,7 +17,8 @@ export const BRIDGE_NETWORK = "dokploy-network";
 
 export type ManagedMeta =
   | { kind: "database"; engine: Engine; image: string }
-  | { kind: "image"; image: string };
+  | { kind: "image"; image: string }
+  | { kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string };
 
 const ENGINES = new Set<string>(Object.keys(ENGINE_META));
 
@@ -28,13 +29,31 @@ export function parseManaged(composeFile: string | null | undefined): ManagedMet
   if (!block) return null;
   const fields: Record<string, string> = {};
   for (const line of block[1].split("\n")) {
-    const m = line.match(/^[ \t]+([\w-]+):[ \t]*["']?([^"'\r\n]*?)["']?[ \t]*$/);
-    if (m) fields[m[1]] = m[2];
+    const m = line.match(/^[ \t]+([\w-]+):[ \t]*(.*?)[ \t\r]*$/);
+    if (!m) continue;
+    const value = m[2];
+    if (value.startsWith('"')) {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        if (typeof parsed === "string") fields[m[1]] = parsed;
+      } catch { /* Ignore malformed quoted metadata. */ }
+    } else if (/^'(?:[^']|'')*'$/.test(value)) {
+      fields[m[1]] = value.slice(1, -1).replace(/''/g, "'");
+    } else if (!value.startsWith("'")) {
+      fields[m[1]] = value;
+    }
   }
   if (fields.kind === "database" && ENGINES.has(fields.engine) && fields.image) {
     return { kind: "database", engine: fields.engine as Engine, image: fields.image };
   }
   if (fields.kind === "image" && fields.image) return { kind: "image", image: fields.image };
+  if (fields.kind === "repo" && fields.image && fields.repoUrl && fields.branch) {
+    return {
+      kind: "repo", image: fields.image, repoUrl: fields.repoUrl, branch: fields.branch,
+      ...(fields.subdirectory ? { subdirectory: fields.subdirectory } : {}),
+      ...(fields.dockerfile ? { dockerfile: fields.dockerfile } : {}),
+    };
+  }
   return null;
 }
 
@@ -55,7 +74,7 @@ function networkBlock(alias: string): string {
   return `    networks:
       ${BRIDGE_NETWORK}:
         aliases:
-          - ${alias}`;
+          - ${scalar(alias)}`;
 }
 
 const FOOTER = `networks:
@@ -65,7 +84,44 @@ const FOOTER = `networks:
 
 /** A YAML-safe scalar for image refs and names (quoted only when needed). */
 function scalar(s: string): string {
-  return /^[\w./:@-]+$/.test(s) ? s : JSON.stringify(s);
+  return /^[\w./][\w./:@-]*$/.test(s) && !s.endsWith(":") &&
+    !/^(?:null|true|false|yes|no|on|off|\d.*|\.(?:\d.*|inf|nan))$/i.test(s) ? s : JSON.stringify(s);
+}
+
+export interface RepoStackInput {
+  appName: string;
+  repoUrl: string;
+  branch: string;
+  subdirectory?: string;
+  dockerfile?: string;
+}
+
+/** Validate a public Git source before creating a bridge stack. */
+export function validateRepoSource(input: Omit<RepoStackInput, "appName">): void {
+  if ([input.repoUrl, input.branch, input.subdirectory, input.dockerfile].some((value) => value?.includes("$"))) {
+    throw new Error("Repository URL, branch, subdirectory, and Dockerfile path must not contain $ (Compose interpolation is unsupported).");
+  }
+  let url: URL;
+  try {
+    url = new URL(input.repoUrl);
+  } catch {
+    throw new Error("Repository URL must be a valid public http:// or https:// URL.");
+  }
+  if (!/^https?:\/\//i.test(input.repoUrl) || /\s/.test(input.repoUrl) || !url.hostname) {
+    throw new Error("Repository URL must use http:// or https:// and contain no whitespace.");
+  }
+  if (url.username || url.password || /^https?:\/\/[^/?#]*@/i.test(input.repoUrl)) {
+    throw new Error("Repository URL must not contain credentials. Use a public repository URL.");
+  }
+  if (input.repoUrl.includes("#")) {
+    throw new Error("Repository URL must not contain #. Set the branch separately.");
+  }
+  if (!input.branch || /[\s#:]/.test(input.branch)) {
+    throw new Error("Branch must be nonempty and contain no whitespace, #, or :.");
+  }
+  if (input.subdirectory && (input.subdirectory.includes("..") || /[#:]/.test(input.subdirectory))) {
+    throw new Error("Repository subdirectory must not contain .., #, or :.");
+  }
 }
 
 export interface DatabaseStackInput {
@@ -192,6 +248,44 @@ export function imageStack(input: { appName: string; image: string }): string {
   ].join("\n");
 }
 
+/** Build a public Dockerfile repository as a local image on the bridge network. */
+export function repoStack(input: RepoStackInput): string {
+  validateRepoSource(input);
+  const image = scalar(`${input.appName}-app:latest`);
+  // BuildKit needs the .git suffix to distinguish a Git context from an HTTP file.
+  const repoUrl = new URL(input.repoUrl);
+  const path = repoUrl.pathname.replace(/\/+$/, "");
+  repoUrl.pathname = path.endsWith(".git") ? path : `${path}.git`;
+  const context = `${repoUrl.href}#${input.branch}${input.subdirectory ? `:${input.subdirectory}` : ""}`;
+  const lines = [
+    `x-switchyard:`,
+    `  kind: repo`,
+    `  image: ${image}`,
+    `  repoUrl: ${scalar(input.repoUrl)}`,
+    `  branch: ${scalar(input.branch)}`,
+  ];
+  if (input.subdirectory) lines.push(`  subdirectory: ${scalar(input.subdirectory)}`);
+  if (input.dockerfile) lines.push(`  dockerfile: ${scalar(input.dockerfile)}`);
+  lines.push(
+    `services:`,
+    `  app:`,
+    `    build:`,
+    `      context: ${scalar(context)}`,
+  );
+  if (input.dockerfile && input.dockerfile !== "Dockerfile") {
+    lines.push(`      dockerfile: ${scalar(input.dockerfile)}`);
+  }
+  lines.push(
+    `    image: ${image}`,
+    `    restart: unless-stopped`,
+    `    env_file:`,
+    `      - .env`,
+    networkBlock(input.appName),
+    FOOTER,
+  );
+  return lines.join("\n");
+}
+
 /**
  * Native compose domains inject Traefik labels even with isolatedDeployment:false,
  * preserving our shared network alias. Keeping the domain in Dokploy also keeps
@@ -213,13 +307,14 @@ export function bridgeImageDomain(input: {
 }
 
 /**
- * One-click image stacks created before variables were passed through lack
+ * Managed app stacks created before variables were passed through lack
  * `env_file`; add it under the `app` service so Variables reach the container.
  * Returns the file unchanged for anything else (including user-edited stacks
  * where the expected line isn't found).
  */
 export function withImageEnvFile(composeFile: string): string {
-  if (parseManaged(composeFile)?.kind !== "image" || /^\s+env_file:/m.test(composeFile)) {
+  const kind = parseManaged(composeFile)?.kind;
+  if ((kind !== "image" && kind !== "repo") || /^\s+env_file:/m.test(composeFile)) {
     return composeFile;
   }
   return composeFile.replace(

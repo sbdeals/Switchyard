@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
-import { isStopped } from "@/lib/service-meta";
+import { isStopped, serviceLabel } from "@/lib/service-meta";
 import { BRIDGE_NETWORK, managedConnectionString, type ManagedMeta } from "@/lib/managed-compose";
 import { DomainRow } from "@/components/service/AppTabs";
 import {
@@ -63,7 +63,7 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
 }
 
 /**
- * Overview body for a one-click database or image app that Switchyard runs as
+ * Overview body for a one-click database or app that Switchyard runs as
  * a compose project on the local bridge network.
  */
 function ManagedOverview({ compose, managed }: { compose: ComposeService; managed: ManagedMeta }) {
@@ -84,7 +84,15 @@ function ManagedOverview({ compose, managed }: { compose: ComposeService; manage
         </Field>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <Info label="Image" value={managed.image} mono />
+        {managed.kind === "repo" ? (
+          <>
+            <Info label="Source" value={serviceLabel(compose)} />
+            <Info label="Repository" value={managed.repoUrl} mono />
+            <Info label="Branch" value={managed.branch} mono />
+            <Info label="Build" value={managed.dockerfile ?? "Dockerfile"} mono />
+            {managed.subdirectory && <Info label="Subdirectory" value={managed.subdirectory} mono />}
+          </>
+        ) : <Info label="Image" value={managed.image} mono />}
         {managed.kind === "database" && (
           <Info label="Internal port" value={String(ENGINE_META[managed.engine].defaultPort)} />
         )}
@@ -95,6 +103,7 @@ function ManagedOverview({ compose, managed }: { compose: ComposeService; manage
         Runs as a container on this host&apos;s local network, reachable from your other services
         at <span className="font-mono">{compose.appName}</span>.
         {managed.kind === "database" && " Credentials live in Variables; data persists in a named volume."}
+        {managed.kind === "repo" && " Redeploy rebuilds from the current branch head; pushes do not deploy automatically."}
       </p>
     </div>
   );
@@ -167,13 +176,13 @@ function composeServiceNames(file: string | null): string[] {
 }
 
 export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
-  const managedImage = compose.managed?.kind === "image" ? compose.managed : null;
+  const managedApp = compose.managed?.kind === "image" || compose.managed?.kind === "repo";
   const services = composeServiceNames(compose.composeFile);
-  const [serviceName, setServiceName] = useState(managedImage ? "app" : services[0] ?? "");
+  const [serviceName, setServiceName] = useState(managedApp ? "app" : services[0] ?? "");
   const [host, setHost] = useState("");
-  // Blank means the server detects PORT / local image EXPOSE metadata for image apps.
-  const [port, setPort] = useState(managedImage ? "" : "80");
-  const targetPort = managedImage ? (port ? Number(port) : undefined) : Number(port) || 80;
+  // Blank means the server detects PORT / local image EXPOSE metadata for managed apps.
+  const [port, setPort] = useState(managedApp ? "" : "80");
+  const targetPort = managedApp ? (port ? Number(port) : undefined) : Number(port) || 80;
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
@@ -203,7 +212,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
       const res = await generateComposeDomainAction(
         compose.id,
         serviceName,
-        managedImage ? compose.appName : serviceName,
+        managedApp ? compose.appName : serviceName,
         targetPort
       );
       if (res.ok) setGenerated(res.host);
@@ -220,7 +229,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
 
       {compose.domains.length > 0 ? (
         <div className="space-y-2">
-          {compose.domains.map((d) => managedImage ? (
+          {compose.domains.map((d) => managedApp ? (
             <DomainRow key={d.domainId} d={d} composeId={compose.id} />
           ) : (
             <a
@@ -250,7 +259,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
             <input
               value={serviceName}
               onChange={(e) => setServiceName(e.target.value)}
-              readOnly={!!managedImage}
+              readOnly={managedApp}
               placeholder="web"
               list="compose-services"
               className={inputCls}
@@ -276,7 +285,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
           <Field label="Port">
             <input
               value={port}
-              placeholder={managedImage ? "Auto" : "80"}
+              placeholder={managedApp ? "Auto" : "80"}
               onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ""))}
               className={inputCls}
             />

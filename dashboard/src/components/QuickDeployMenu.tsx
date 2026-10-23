@@ -46,6 +46,7 @@ export function QuickDeployMenu({
   const [error, setError] = useState<string | null>(null);
   const [image, setImage] = useState("");
   const [repo, setRepo] = useState("");
+  const [branch, setBranch] = useState("main");
   const [, startTransition] = useTransition();
 
   // Template catalog — lazily loaded from Dokploy the first time it's opened.
@@ -75,6 +76,7 @@ export function QuickDeployMenu({
         setOpen(false);
         setImage("");
         setRepo("");
+        setBranch("main");
         onDeployed(res.id);
       } else setError(res.error);
     });
@@ -83,7 +85,7 @@ export function QuickDeployMenu({
   const deployDb = (engine: Engine) =>
     run(`db:${engine}`, () => quickDeployDatabaseAction(engine, targetEnv));
   const deployImage = () => run("app", () => quickDeployImageAction(image, undefined, targetEnv));
-  const deployRepo = () => run("repo", () => quickDeployRepoAction(repo, undefined, targetEnv));
+  const deployRepo = () => run("repo", () => quickDeployRepoAction(repo, branch, targetEnv));
   const createComposeStack = () => run("compose", () => createComposeAction(undefined, targetEnv));
   const deployTemplate = (id: string) =>
     run(`tpl:${id}`, () => quickDeployTemplateAction(id, targetEnv));
@@ -188,7 +190,7 @@ export function QuickDeployMenu({
                   value={repo}
                   onChange={(e) => setRepo(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && repo.trim() && deployRepo()}
-                  placeholder="git repo url (Nixpacks build)"
+                  placeholder="public git repo url"
                   aria-label="Git repository URL"
                   className="min-w-0 flex-1 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                 />
@@ -206,6 +208,17 @@ export function QuickDeployMenu({
                     "Deploy"
                   )}
                 </button>
+              </div>
+              <div className="mb-2 flex items-center gap-2 pl-10 pr-1">
+                <label htmlFor="quick-deploy-branch" className="text-xs text-[var(--color-fg-muted)]">Branch</label>
+                <input
+                  id="quick-deploy-branch"
+                  value={branch}
+                  onChange={(e) => setBranch(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && repo.trim() && deployRepo()}
+                  placeholder="main"
+                  className="min-w-0 flex-1 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+                />
               </div>
               <button
                 onClick={() => {

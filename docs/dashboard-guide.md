@@ -85,9 +85,15 @@ Switchyard creates an application named after the image plus a random suffix (`t
 
 ### Deploy from a Git repository
 
-Paste a public clone URL (for example `https://github.com/you/my-app.git`) into the **git repo url** field and click **Deploy**. Switchyard creates an application named after the repository, sets it to build from the `main` branch at the repo root with **Nixpacks** (Dokploy's default buildpack — it detects the language and produces an image without a Dockerfile), and starts the first deployment.
+Paste a public clone URL (for example `https://github.com/you/my-app.git`) into the **git repo url** field, choose a **Branch** (default `main`), and click **Deploy**. On Swarm hosts, Switchyard creates an application named after the repository, sets it to build at the repo root with **Nixpacks** (Dokploy's default buildpack — it detects the language and produces an image without a Dockerfile), and starts the first deployment.
 
-No OAuth or deploy keys are involved — the URL is cloned directly, so the repository must be public. Builds take longer than image deploys; the service shows **Deploying** while Nixpacks works, and the [Deploys tab](#deployment-history) records the attempt. Branch and build path are editable in Dokploy itself if you need something other than `main` at `/`.
+No OAuth or deploy keys are involved — the URL is cloned directly, so the repository must be public. Builds take longer than image deploys; the service shows **Deploying** during the build, and the [Deploys tab](#deployment-history) records the attempt.
+
+### Bridge hosts
+
+When Swarm is unavailable, Switchyard supports image deploys, databases, and public HTTP(S) Git repositories with a **Dockerfile**. These services run on the host's local bridge network. For a public repo, **Redeploy** fetches the configured branch head and rebuilds it. Variables, Networking, Deploys, and deployment logs work as they do for image services. New repo URLs use `PORT`, then the locally built image's exposed port, then `3000`; the first URL usually uses `3000` because the image has not built yet. For another port, edit it in Networking or generate a URL after the build. Redeploy preserves existing domain settings.
+
+Bridge repo deploys do not support Nixpacks or repositories without a Dockerfile, private GitHub App repositories, or auto-deploy on push. Deploy a public Dockerfile repo or a registry image instead; changing an existing repo's URL or branch in the dashboard is not supported yet.
 
 ### Compose stacks
 

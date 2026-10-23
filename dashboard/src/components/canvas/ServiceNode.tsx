@@ -18,7 +18,7 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
   const accent = serviceAccent(service);
   const status = resolveServiceDisplay(service.status, service.runtime);
   const domains = service.kind === "application" ||
-    (service.kind === "compose" && service.managed?.kind === "image") ? service.domains : [];
+    (service.kind === "compose" && (service.managed?.kind === "image" || service.managed?.kind === "repo")) ? service.domains : [];
   const publicDomain = domains.find((d) => d.https) ?? domains[0];
 
   return (

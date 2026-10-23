@@ -30,9 +30,12 @@ import {
   bridgeImageDomain,
   databaseStack,
   imageStack,
+  repoStack,
   parseManaged,
+  validateRepoSource,
   withImageEnvFile,
   type ManagedMeta,
+  type RepoStackInput,
 } from "./managed-compose";
 import {
   REF_ANNOTATION,
@@ -1354,7 +1357,7 @@ export async function createComposeDomain(
       `compose.one?composeId=${encodeURIComponent(composeId)}`
     );
     const managed = parseManaged(detail.composeFile);
-    port = managed?.kind === "image"
+    port = managed?.kind === "image" || managed?.kind === "repo"
       ? await resolveImagePort(managed.image, detail.env)
       : 80;
   }
@@ -1891,6 +1894,25 @@ export async function deployBridgeImage(
   const id = await createManagedCompose(name, environmentId, (appName) => ({
     composeFile: imageStack({ appName, image }),
   }));
+  await deployBridgeApp(id);
+  return id;
+}
+
+/** Build a public Dockerfile repo as a compose app on the bridge network. */
+export async function deployBridgeRepo(
+  name: string,
+  source: Omit<RepoStackInput, "appName">,
+  environmentId: string
+): Promise<string> {
+  validateRepoSource(source);
+  const id = await createManagedCompose(name, environmentId, (appName) => ({
+    composeFile: repoStack({ ...source, appName }),
+  }));
+  await deployBridgeApp(id);
+  return id;
+}
+
+async function deployBridgeApp(id: string): Promise<void> {
   // Compose domains become labels during deploy, so persist the URL first.
   try {
     await ensureBridgeAutoDomain(id);
@@ -1899,10 +1921,9 @@ export async function deployBridgeImage(
     // Networking can retry with Generate URL if the engine rejected the domain.
   }
   await composeAction(id, "deploy");
-  return id;
 }
 
-/** Mint an automatic URL for a managed image, leaving databases/raw stacks alone. */
+/** Mint an automatic URL for a managed app, leaving databases/raw stacks alone. */
 export async function ensureBridgeAutoDomain(composeId: string): Promise<string | null> {
   const hostIp = process.env.SWITCHYARD_HOST_IP?.trim();
   if (!hostIp) return null;
@@ -1910,7 +1931,7 @@ export async function ensureBridgeAutoDomain(composeId: string): Promise<string 
     `compose.one?composeId=${encodeURIComponent(composeId)}`
   );
   const managed = parseManaged(detail.composeFile);
-  if (managed?.kind !== "image" || !detail.appName) return null;
+  if ((managed?.kind !== "image" && managed?.kind !== "repo") || !detail.appName) return null;
   const existing = (detail.domains ?? []).find(
     (d) => d.serviceName === "app" && isAutoDomainHost(d.host)
   );
@@ -1930,12 +1951,13 @@ async function resolveImagePort(image: string, env?: string | null): Promise<num
   return resolveAppPort({ image, env, exposedPorts: await inspectImageExposedPorts(image) });
 }
 
-/** Compose label changes take effect on deploy; apply Networking edits to image apps. */
+/** Compose label changes take effect on deploy; apply Networking edits to managed apps. */
 export async function redeployManagedImage(composeId: string): Promise<void> {
   const detail = await request<RawComposeDetail>(
     `compose.one?composeId=${encodeURIComponent(composeId)}`
   );
-  if (parseManaged(detail.composeFile)?.kind === "image") await composeAction(composeId, "deploy");
+  const managed = parseManaged(detail.composeFile);
+  if (managed?.kind === "image" || managed?.kind === "repo") await composeAction(composeId, "deploy");
 }
 
 export async function updateComposeFile(id: string, composeFile: string): Promise<void> {
@@ -2030,7 +2052,7 @@ async function readOwner(owner: EnvOwner): Promise<{ env: string; composeFile: s
 
 /**
  * Pre-deploy hook: re-resolve reference variables so the deploy sees current
- * values, and make sure one-click image apps pass their variables into the
+ * values, and make sure managed apps pass their variables into the
  * container. Cheap when there's nothing to do (one detail read). Throws a
  * clear error — failing the deploy up front — if a reference no longer
  * resolves (e.g. the referenced service was renamed or deleted).
