@@ -13,3 +13,5 @@
 
 - Files: [before-result.txt](before-result.txt), [after-result.txt](after-result.txt), [before.mp4](before.mp4), [after.mp4](after.mp4), [before-deploys.png](before-deploys.png), [after-deploys.png](after-deploys.png).
 - Note on "compose file now has build: 0 line(s)" in after-result.txt: that line greps the **on-disk** compose Dokploy wrote for the fix-up deploy (pinned image, no build). Checked at 01:10 EDT: Dokploy's stored composeFile was restored to the build compose (`build: context: …c1-pin.git#main`, `image: …-app:latest`), so the next Redeploy builds the branch head as normal. The temporary `sy-…` tag was pruned afterwards; the running container keeps its image ID.
+
+- **Known bug found during this demo (01:08 EDT, fix in Codex round 2):** after the fix-up, the on-disk compose still references the temporary tag, and that tag is pruned. Dokploy Stop → Start then fails with "No such image" and the app is down until the next Redeploy. This demo proves the pinning only; it doesn't prove Stop/Start afterwards.
