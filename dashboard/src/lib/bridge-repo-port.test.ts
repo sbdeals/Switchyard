@@ -9,10 +9,10 @@ vi.mock("./session", () => ({
   SESSION_COOKIE: "switchyard-session",
   openSession: () => ({ dokployCookie: "dokploy-session=test" }),
 }));
-vi.mock("./docker", () => ({ inspectImageExposedPorts: vi.fn(), snapshotComposeAppImage: vi.fn(), verifyComposeAppImage: vi.fn(), pruneComposeAppImages: vi.fn() }));
+vi.mock("./docker", () => ({ inspectImageExposedPorts: vi.fn(), snapshotComposeAppImage: vi.fn(), verifyComposeAppImage: vi.fn(), pruneComposeAppImages: vi.fn(), pruneComposePortFixupImages: vi.fn() }));
 
-import { composeAction, deployBridgeRepo, saveServiceEnv } from "./dokploy";
-import { inspectImageExposedPorts, pruneComposeAppImages, snapshotComposeAppImage } from "./docker";
+import { composeAction, deployBridgeRepo, rollbackManagedCompose, saveServiceEnv } from "./dokploy";
+import { inspectImageExposedPorts, pruneComposeAppImages, pruneComposePortFixupImages, snapshotComposeAppImage } from "./docker";
 import { parseManaged, repoSnapshotTag, rewriteManagedApp, writeManagedMeta } from "./managed-compose";
 import { AUTOMATIC_PORT_FIXUP_TITLE } from "./bridge-repo-release";
 import { saveComposeFileAction, updateDomainAction } from "@/app/actions";
@@ -30,6 +30,8 @@ let detail: {
 let requests: { procedure: string; body: Record<string, unknown> }[];
 let deployedFiles: string[];
 let finishFixup: boolean;
+let onDiskCompose: string;
+let availableImages: Set<string>;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -43,7 +45,17 @@ beforeEach(() => {
   requests = [];
   deployedFiles = [];
   finishFixup = true;
-  vi.mocked(snapshotComposeAppImage).mockResolvedValue(undefined);
+  onDiskCompose = "";
+  availableImages = new Set();
+  vi.mocked(snapshotComposeAppImage).mockImplementation(async (_appName, tag) => { availableImages.add(tag); });
+  vi.mocked(pruneComposeAppImages).mockImplementation(async (_appName, tags) => {
+    tags.forEach((tag) => availableImages.delete(tag));
+  });
+  vi.mocked(pruneComposePortFixupImages).mockImplementation(async (_appName, retained) => {
+    for (const tag of availableImages) {
+      if (tag.endsWith("-portfix") && !retained.includes(tag)) availableImages.delete(tag);
+    }
+  });
   vi.mocked(inspectImageExposedPorts).mockResolvedValue([]);
   vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
     if (new URL(url).hostname === "raw.githubusercontent.com") return new Response("FROM alpine\nEXPOSE 80/tcp");
@@ -60,6 +72,11 @@ beforeEach(() => {
         detail.env = body.env;
         return Response.json({});
       case "compose.stop": return Response.json({});
+      case "compose.start": {
+        const image = parseManaged(onDiskCompose)?.image ?? "";
+        return image.endsWith("-portfix") && !availableImages.has(image)
+          ? new Response(`No such image: ${image}`, { status: 400 }) : Response.json({});
+      }
       case "domain.generateDomain": return Response.json(host);
       case "domain.create":
         detail.domains.push({ domainId: "domain-1", ...body });
@@ -69,6 +86,7 @@ beforeEach(() => {
         return Response.json({});
       case "compose.deploy":
         deployedFiles.push(detail.composeFile);
+        onDiskCompose = detail.composeFile;
         detail.composeStatus = body.title === AUTOMATIC_PORT_FIXUP_TITLE && finishFixup ? "done" : "running";
         detail.deployments.push({ deploymentId: `deploy-${detail.deployments.length + 1}`, status: detail.composeStatus, title: body.title, createdAt: new Date().toISOString() });
         return Response.json({});
@@ -128,6 +146,7 @@ describe("first repo deployment port", () => {
       description: `Same release as the first deploy: applies the detected port ${port} to the public URL. No rollback entry is recorded.`,
     });
     const releaseImage = vi.mocked(snapshotComposeAppImage).mock.calls[0][1];
+    expect(releaseImage).toMatch(/:sy-\d+-portfix$/);
     expect(snapshotComposeAppImage).toHaveBeenCalledExactlyOnceWith(detail.appName, releaseImage);
     expect(inspectImageExposedPorts).toHaveBeenCalledWith(releaseImage);
     expect(deployedFiles[1]).not.toMatch(/^    build:/m);
@@ -141,7 +160,13 @@ describe("first repo deployment port", () => {
     expect(detail.composeFile).toContain("    build:\n");
     expect(detail.composeFile).toContain(`${source.repoUrl}#main`);
     expect(detail.composeFile).not.toContain("pull_policy:");
-    expect(pruneComposeAppImages).toHaveBeenCalledWith(detail.appName, [releaseImage]);
+    expect(pruneComposeAppImages).not.toHaveBeenCalled();
+    // Dokploy Stop/Start runs `up` from its on-disk compose, which compose.update
+    // never rewrites. Keeping this tag lets it restart the exact first image.
+    expect(parseManaged(onDiskCompose)).toMatchObject({ image: releaseImage });
+    await composeAction("compose-1", "stop");
+    await composeAction("compose-1", "start");
+    expect(availableImages.has(releaseImage)).toBe(true);
     vi.mocked(snapshotComposeAppImage).mockClear();
     await background[0](); // duplicate callback cannot submit another deployment
     detail.composeStatus = "done"; detail.deployments.forEach((d) => { d.status = "done"; }); // integration (#53): explicit deploys wait for the follow-up
@@ -157,6 +182,15 @@ describe("first repo deployment port", () => {
     expect(deployedFiles[2]).toContain("    build:\n");
     expect(deployedFiles[2]).not.toContain("pull_policy:");
     expect(redeployed).not.toHaveProperty("pinnedTag");
+    expect(pruneComposePortFixupImages).not.toHaveBeenCalled();
+    detail.composeStatus = "done";
+    detail.deployments.at(-1)!.status = "done";
+    await background[1]();
+    expect(onDiskCompose).toContain("    build:\n");
+    expect(pruneComposePortFixupImages).toHaveBeenCalledExactlyOnceWith(detail.appName,
+      expect.arrayContaining([redeployed.history![0].image]));
+    expect(availableImages.has(releaseImage)).toBe(false);
+    expect(availableImages.has(redeployed.history![0].image)).toBe(true);
   });
 
   it("skips the fix-up when the first build's image cannot be pinned", async () => {
@@ -214,7 +248,7 @@ describe("first repo deployment port", () => {
     expect(detail.composeFile).toContain("    build:\n");
     expect(parseManaged(detail.composeFile)).toMatchObject({ autoDomain: { host, port: 80 } });
     expect(parseManaged(detail.composeFile)).not.toHaveProperty("pinnedTag");
-    expect(pruneComposeAppImages).toHaveBeenCalledOnce();
+    expect(pruneComposeAppImages).not.toHaveBeenCalled();
   });
 
   it.each([404, 400])("stops without restoring when the compose is deleted during the wait (%i)", async (status) => {
@@ -232,7 +266,7 @@ describe("first repo deployment port", () => {
     await pending;
     expect(requests.filter(({ procedure }) => procedure === "compose.update")).toHaveLength(writes);
     expect(pruneComposeAppImages).toHaveBeenCalledExactlyOnceWith(
-      detail.appName, [vi.mocked(snapshotComposeAppImage).mock.calls[0][1]]);
+      detail.appName, [vi.mocked(snapshotComposeAppImage).mock.calls[0][1]], true);
   });
 
   it.each([false, true])("caps cleanup and restores once only if the pinned compose is unchanged (edited: %s)", async (edited) => {
@@ -316,7 +350,7 @@ describe("first repo deployment port", () => {
     await vi.advanceTimersByTimeAsync(10);
     await pending;
     expect(detail.composeFile).toContain("    build:\n");
-    expect(pruneComposeAppImages).toHaveBeenCalledOnce();
+    expect(pruneComposeAppImages).not.toHaveBeenCalled();
   });
 
   it.each([false, true])("protects rollback history when choosing and pruning the temporary tag (collision: %s)", async (collision) => {
@@ -325,8 +359,8 @@ describe("first repo deployment port", () => {
     finishBuild();
     const managed = parseManaged(detail.composeFile);
     if (managed?.kind !== "repo") throw new Error("Expected managed repo metadata");
-    const timestamp = new Date(Date.now() + (collision ? 10 : -10)).toISOString();
-    const history = [{ timestamp, image: repoSnapshotTag(detail.appName, timestamp) }];
+    const timestamp = new Date(Date.now() + 10).toISOString();
+    const history = [{ timestamp, image: repoSnapshotTag(detail.appName, timestamp) + (collision ? "-portfix" : "") }];
     detail.composeFile = writeManagedMeta(detail.composeFile, { ...managed, history });
     await runWatcher();
     if (collision) {
@@ -336,7 +370,7 @@ describe("first repo deployment port", () => {
     } else {
       const image = vi.mocked(snapshotComposeAppImage).mock.calls[0][1];
       expect(image).not.toBe(history[0].image);
-      expect(pruneComposeAppImages).toHaveBeenCalledExactlyOnceWith(detail.appName, [image]);
+      expect(pruneComposeAppImages).not.toHaveBeenCalled();
     }
     expect(parseManaged(detail.composeFile)).toMatchObject({ history });
   });
@@ -351,7 +385,7 @@ describe("first repo deployment port", () => {
     if (managed?.kind !== "repo") throw new Error("Expected managed repo metadata");
     const history = [{ timestamp: new Date().toISOString(), image: managed.image }];
     delete managed.pinnedTag;
-    detail.composeFile = rewriteManagedApp(detail.composeFile, detail.appName, { ...managed, history });
+    detail.composeFile = writeManagedMeta(rewriteManagedApp(detail.composeFile, detail.appName, managed), { ...managed, image: `${detail.appName}-app:latest`, history });
     detail.deployments[1].status = "done";
     await vi.advanceTimersByTimeAsync(10);
     await pending;
@@ -408,8 +442,74 @@ describe("first repo deployment port", () => {
     await pending;
     expect(detail.composeFile).toContain("    build:\n");
     expect(parseManaged(detail.composeFile)).not.toHaveProperty("pinnedTag");
-    expect(pruneComposeAppImages).toHaveBeenCalledOnce();
+    expect(pruneComposeAppImages).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it("retains the on-disk tag until the next explicit deployment leaves the queue and completes", async () => {
+    await deployBridgeRepo("repo", source, "env-1");
+    finishBuild();
+    await runWatcher();
+    const image = parseManaged(onDiskCompose)!.image;
+    const fetchApi = vi.mocked(fetch).getMockImplementation()!;
+    let startWorker!: () => Promise<Response>;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/compose.deploy")) {
+        startWorker = () => Promise.resolve(fetchApi(input, init));
+        return Response.json({});
+      }
+      return fetchApi(input, init);
+    });
+    await composeAction("compose-1", "deploy");
+    const cleanup = background[1]();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(parseManaged(onDiskCompose)!.image).toBe(image);
+    expect(pruneComposePortFixupImages).not.toHaveBeenCalled();
+    await startWorker();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(pruneComposePortFixupImages).not.toHaveBeenCalled();
+    detail.deployments.at(-1)!.status = "done";
+    detail.composeStatus = "done";
+    await vi.advanceTimersByTimeAsync(10);
+    await cleanup;
+    expect(onDiskCompose).toContain("    build:\n");
+    expect(availableImages.has(image)).toBe(false);
+  });
+
+  it("cleans up after an explicit rollback while retaining its history images", async () => {
+    await deployBridgeRepo("repo", source, "env-1");
+    finishBuild();
+    await runWatcher();
+    const portFixupImage = parseManaged(onDiskCompose)!.image;
+    const managed = parseManaged(detail.composeFile);
+    if (managed?.kind !== "repo") throw new Error("Expected managed repo metadata");
+    const timestamp = new Date(Date.now() - 1000).toISOString();
+    const target = { timestamp, image: repoSnapshotTag(detail.appName, timestamp) };
+    availableImages.add(target.image);
+    detail.composeFile = writeManagedMeta(detail.composeFile, { ...managed, history: [target] });
+    await rollbackManagedCompose("compose-1", timestamp);
+    expect(pruneComposePortFixupImages).not.toHaveBeenCalled();
+    detail.deployments.at(-1)!.status = "done";
+    detail.composeStatus = "done";
+    await background[1]();
+    expect(parseManaged(onDiskCompose)!.image).toBe(target.image);
+    expect(availableImages.has(portFixupImage)).toBe(false);
+    expect(availableImages.has(target.image)).toBe(true);
+  });
+
+  it.each(["running", "error"])("retains tags if the next explicit deploy stays %s", async (status) => {
+    await deployBridgeRepo("repo", source, "env-1");
+    finishBuild();
+    await runWatcher();
+    const image = parseManaged(onDiskCompose)!.image;
+    await composeAction("compose-1", "deploy");
+    detail.deployments.at(-1)!.status = status;
+    detail.composeStatus = status;
+    const cleanup = background[1]();
+    await vi.advanceTimersByTimeAsync(500);
+    await cleanup;
+    expect(pruneComposePortFixupImages).not.toHaveBeenCalled();
+    expect(availableImages.has(image)).toBe(true);
   });
 
   it("does not overwrite a compose file edited directly in Dokploy during the fix-up", async () => {

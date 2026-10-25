@@ -194,12 +194,13 @@ export function validateImageRef(image: string): void {
   }
 }
 
-/** Only this app's immutable local snapshots may be pinned or deleted. */
-export function validateRepoTag(appName: string, tag: string): void {
+/** History accepts snapshots only; temporary port-fix pins must opt in. */
+export function validateRepoTag(appName: string, tag: string, allowPortFixup = false): void {
   validateManagedAppName(appName);
   validateImageRef(tag);
   const prefix = `${appName}-app:sy-`;
-  const timestamp = tag.startsWith(prefix) ? tag.slice(prefix.length) : "";
+  const suffix = tag.startsWith(prefix) ? tag.slice(prefix.length) : "";
+  const timestamp = allowPortFixup ? suffix.replace(/-portfix$/, "") : suffix;
   if (!/^(?:0|[1-9][0-9]{0,15})$/.test(timestamp) || !Number.isSafeInteger(Number(timestamp)) || Number(timestamp) > 8640000000000000) {
     throw new Error("Invalid local rollback image tag.");
   }
@@ -526,7 +527,7 @@ export function rewriteManagedApp(composeFile: string, appName: string, meta: Ex
   validateImageRef(image);
   if (meta.kind === "repo") {
     validateRepoSource(meta);
-    if (meta.pinnedTag) validateRepoTag(appName, meta.pinnedTag);
+    if (meta.pinnedTag) validateRepoTag(appName, meta.pinnedTag, true);
     for (const entry of meta.history ?? []) validateRepoTag(appName, entry.image);
   }
   const replacement: string[] = [];

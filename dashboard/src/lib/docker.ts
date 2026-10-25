@@ -142,7 +142,7 @@ const snapshotTags = new Set<string>();
 /** Preserve the running app's image ID before a repo build replaces :latest. */
 export async function snapshotComposeAppImage(appName: string, tag: string): Promise<void> {
   validateManagedAppName(appName);
-  validateRepoTag(appName, tag);
+  validateRepoTag(appName, tag, true);
   if (snapshotTags.has(tag)) throw new Error("This rollback image is already being saved");
   snapshotTags.add(tag);
   try {
@@ -193,16 +193,16 @@ export async function snapshotComposeAppImage(appName: string, tag: string): Pro
 /** A recorded local image must still exist before pinning a compose app to it. */
 export async function verifyComposeAppImage(appName: string, tag: string): Promise<void> {
   validateManagedAppName(appName);
-  validateRepoTag(appName, tag);
+  validateRepoTag(appName, tag, true);
   await withTimeout(docker.getImage(tag).inspect(), DOCKER_OP_TIMEOUT_MS, "Checking the rollback image");
 }
 
 /** Best effort: only untag this app's expired snapshots, without forcing removal. */
-export async function pruneComposeAppImages(appName: string, tags: string[]): Promise<void> {
+export async function pruneComposeAppImages(appName: string, tags: string[], allowPortFixup = false): Promise<void> {
   validateManagedAppName(appName);
   for (const tag of new Set(tags)) {
     try {
-      validateRepoTag(appName, tag);
+      validateRepoTag(appName, tag, allowPortFixup);
       await withTimeout(
         docker.getImage(tag).remove({ force: false, noprune: true }),
         DOCKER_OP_TIMEOUT_MS,
@@ -211,6 +211,28 @@ export async function pruneComposeAppImages(appName: string, tags: string[]): Pr
     } catch {
       /* Invalid, missing, or still in use: leave it alone and continue. */
     }
+  }
+}
+
+/** Call only after a later deploy has replaced the on-disk port-fix compose. */
+export async function pruneComposePortFixupImages(appName: string, retained: string[]): Promise<void> {
+  validateManagedAppName(appName);
+  try {
+    const images = await withTimeout(
+      docker.listImages({ filters: { reference: [`${appName}-app:sy-*-portfix`] } }),
+      DOCKER_OP_TIMEOUT_MS,
+      "Finding old port-fix images",
+    );
+    if (!images.length) return;
+    const containers = await withTimeout(docker.listContainers({ all: false }), DOCKER_OP_TIMEOUT_MS, "Checking running images");
+    const running = new Set(containers.map((container) => container.ImageID));
+    const tags = images.filter((image) => !running.has(image.Id))
+      .flatMap((image) => image.RepoTags ?? [])
+      .filter((tag) => tag.endsWith("-portfix") && !retained.includes(tag));
+    // Validate exact project ownership again; never match rollback snapshot tags.
+    await pruneComposeAppImages(appName, tags, true);
+  } catch {
+    // Docker unavailable: retain the tags and retry after the next explicit deploy.
   }
 }
 

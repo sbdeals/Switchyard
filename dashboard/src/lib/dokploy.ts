@@ -68,6 +68,7 @@ import {
   snapshotComposeAppImage,
   verifyComposeAppImage,
   pruneComposeAppImages,
+  pruneComposePortFixupImages,
   type ServiceRuntime,
 } from "./docker";
 
@@ -2039,7 +2040,7 @@ function isMissingCompose(error: unknown): boolean {
   return failure?.status === 404 || (failure?.status === 400 && /not found/i.test(failure.message ?? ""));
 }
 
-/** Restore the build compose; return whether the temporary image can be pruned. */
+/** Restore the build compose; only a deleted stack releases its on-disk pin. */
 async function finishBridgeRepoPortFixup(
   composeId: string,
   firstDeploymentId: string,
@@ -2065,7 +2066,9 @@ async function finishBridgeRepoPortFixup(
       if (fixup && (fixup.status === "done" || fixup.status === "error" || superseded)) {
         // Preserve edits made directly in Dokploy while the fix-up was running.
         if (current.composeFile === pinnedCompose) await updateComposeFile(composeId, buildCompose);
-        return !superseded; // A newer deployment may still be using the tag.
+        // compose.update restores the DB only. Stop/Start still reads the pinned
+        // on-disk file, so retain its tag until a later explicit deploy finishes.
+        return false;
       }
     } catch (error) {
       if (isMissingCompose(error)) return true;
@@ -2123,7 +2126,7 @@ function watchBridgeRepoPort(composeId: string): void {
           if (deployment.status !== "done" || detail.composeStatus !== "done") continue;
           watch.applying = (async () => {
             const appName = detail.appName ?? "";
-            const image = repoSnapshotTag(appName, new Date().toISOString());
+            const image = `${repoSnapshotTag(appName, new Date().toISOString())}-portfix`;
             try {
               if (managed.history?.some((entry) => entry.image === image)) {
                 throw new Error("The temporary image tag is already in rollback history.");
@@ -2200,7 +2203,7 @@ function watchBridgeRepoPort(composeId: string): void {
                 }
                 // Never prune a retained history image or a tag whose ownership
                 // is uncertain. Pending/superseding deployments keep their tag.
-                if (!retained) await pruneComposeAppImages(appName, [image]);
+                if (!retained) await pruneComposeAppImages(appName, [image], true);
               }
             }
           })();
@@ -2216,6 +2219,43 @@ function watchBridgeRepoPort(composeId: string): void {
     });
   } catch {
     repoPortWatches.delete(composeId);
+  }
+}
+
+/** A successful later deployment proves Dokploy has rewritten its on-disk file. */
+function watchRepoPortFixupCleanup(composeId: string, appName: string, previous: RawDeployment[]): void {
+  const priorIds = new Set(previous.map((deployment) => deployment.deploymentId));
+  const timeout = Number(process.env.BRIDGE_REPO_PORT_FIXUP_TIMEOUT_MS);
+  const deadline = Date.now() + (Number.isFinite(timeout) && timeout > 0 ? timeout : BRIDGE_REPO_PORT_FIXUP_TIMEOUT_MS);
+  const poll = Number(process.env.BRIDGE_REPO_PORT_POLL_MS);
+  const interval = Number.isFinite(poll) && poll > 0 ? poll : 5_000;
+  let started = false;
+  try {
+    after(async () => {
+      if (started) return;
+      started = true;
+      while (Date.now() < deadline) {
+        try {
+          const current = await request<RawComposeDetail>(`compose.one?composeId=${encodeURIComponent(composeId)}`);
+          const deployment = current.deployments?.find((d) => !priorIds.has(d.deploymentId) && d.title !== AUTOMATIC_PORT_FIXUP_TITLE);
+          if (deployment?.status === "error") return; // the file may not have been written
+          if (deployment?.status === "done" && current.composeStatus === "done") {
+            const managed = parseManaged(current.composeFile);
+            if (managed?.kind === "repo") {
+              await pruneComposePortFixupImages(appName, [managed.image, managedAppImage(current.composeFile!),
+                ...(managed.history ?? []).map((entry) => entry.image)]);
+            }
+            return;
+          }
+        } catch (error) {
+          if (isMissingCompose(error)) return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.min(interval, deadline - Date.now()))));
+      }
+      // Retain tags on timeout; the next explicit deploy retries discovery/cleanup.
+    });
+  } catch {
+    // No background request context: retain tags for a later explicit deploy.
   }
 }
 
@@ -2336,7 +2376,7 @@ async function deployCompose(id: string, preservePinned = false, rollbackTimesta
     // Metadata is editable YAML. Validate every retained tag against this
     // authorized stack before it can reach the host-wide Docker socket.
     for (const entry of history) validateRepoTag(appName, entry.image);
-    if (managed.pinnedTag) validateRepoTag(appName, managed.pinnedTag);
+    if (managed.pinnedTag) validateRepoTag(appName, managed.pinnedTag, true);
     validateRepoSource(managed);
     if (managed.pinnedTag && preservePinned) await verifyComposeAppImage(appName, managed.pinnedTag);
     await refreshReferences({ kind: "compose", id });
@@ -2390,6 +2430,7 @@ async function deployCompose(id: string, preservePinned = false, rollbackTimesta
   }
   await request("compose.deploy", { method: "POST", body: { composeId: id } });
   if (managed.kind === "repo") {
+    if (hasComposeDeployed(detail)) watchRepoPortFixupCleanup(id, appName, detail.deployments ?? []);
     const retained = new Set(history.map((entry) => entry.image));
     const pruned = [...originalHistory, ...(snapshot ? [snapshot] : [])]
       .map((entry) => entry.image)
