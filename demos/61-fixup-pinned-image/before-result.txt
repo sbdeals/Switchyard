@@ -1,0 +1,12 @@
+## [before] 01:03:08 EDT  dashboard image: switchyard-dash:c1-before
+t+5s app created via New service: c1-pin-zwms-8v433o  (repo http://127.0.0.1:8765/c1-pin.git, head = FIRST c4e02ad)
+t+5s first deploy finished: 01:03:11 EDT | Manual deployment | done  container image 7c1f54076c3f (c1-pin-zwms-8v433o-app:latest)
+t+5s pushed SECOND to the repo (head now ccc4bbf) BEFORE the watcher's fix-up
+t+72s Dokploy deployments (oldest first):
+01:03:11 EDT | Manual deployment | done
+01:04:12 EDT | Automatic port fix-up | done
+curl app -> SECOND
+ [200]   port label: server.port=80
+container image after fix-up: 5029fee47fdb (c1-pin-zwms-8v433o-app:latest)   (first build: 7c1f54076c3f (c1-pin-zwms-8v433o-app:latest))  same image: false
+compose file now has build: 1 line(s), pinned image: line: 0; history entries: 0
+temporary pinned tags left for c1-pin-zwms-8v433o: 0

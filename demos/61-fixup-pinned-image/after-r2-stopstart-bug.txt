@@ -1,0 +1,6 @@
+## [after r2 8f3b751] cleanup check + Dokploy Stop/Start — 01:08:32 EDT
+DB composeFile restored (build: present, image :latest) — OK
+on-disk /etc/dokploy/compose/c1-pin-izcb-y6vykl/code/docker-compose.yml still references image c1-pin-izcb-y6vykl-app:sy-1792904754002 (Dokploy only writes the file on deploy)
+temporary tag pruned -> only c1-pin-izcb-y6vykl-app:latest remains
+compose.stop -> ok; compose.start -> ERROR: docker compose up -d: No such image: c1-pin-izcb-y6vykl-app:sy-1792904754002
+curl app -> 404 page not found  (BUG found in live proof; fixed in round 3)
