@@ -139,7 +139,7 @@ describe("agent routes partition the staged queue by the VERIFIED session", () =
   it("POST /api/agent/chat passes the opened session to sessionKey", async () => {
     await call(chat.POST, valid(), "POST", { messages: [{ role: "user", content: "hello" }] });
     expect(mocks.sessionKey).toHaveBeenCalledWith(verified);
-    expect(mocks.runAgentTurn).toHaveBeenCalledWith(expect.anything(), "k", expect.any(Function));
+    expect(mocks.runAgentTurn).toHaveBeenCalledWith(expect.anything(), "k", expect.any(Function), expect.any(Function));
   });
 
   it("GET + POST /api/agent/changes pass the opened session to sessionKey", async () => {

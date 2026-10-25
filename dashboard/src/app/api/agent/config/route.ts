@@ -14,7 +14,7 @@ import {
   setRuntimeKey,
   setRuntimeModel,
 } from "@/lib/agent/key-store";
-import { sessionFromRequest, unauthorized } from "@/lib/session";
+import { requireActiveAgentSession } from "@/lib/agent/session";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -70,8 +70,7 @@ const PROVIDER_PRESETS = [
 
 // The proxy only checks that a session cookie EXISTS. The agent credential
 // store is process-wide (one key for every user of this dashboard), so each
-// handler below opens and verifies the sealed cookie before touching it — a
-// forged `switchyard_session=x` must not be able to set the key everyone uses.
+// handler below verifies both the envelope and its live Dokploy session.
 
 function status(canConfigure: boolean) {
   const resolved = resolveAgentKey();
@@ -93,9 +92,9 @@ function status(canConfigure: boolean) {
 
 /** GET -> credential + provider status (never the key itself). */
 export async function GET(req: Request) {
-  const session = sessionFromRequest(req);
-  if (!session) return unauthorized();
-  const access = await agentConfigAccess(session);
+  const auth = await requireActiveAgentSession(req);
+  if ("response" in auth) return auth.response;
+  const access = agentConfigAccess(auth.role);
   return Response.json(status(access.canConfigure));
 }
 
@@ -110,9 +109,9 @@ export async function GET(req: Request) {
  * All take effect immediately, no restart. Chat usage policy is unchanged.
  */
 export async function POST(req: Request) {
-  const session = sessionFromRequest(req);
-  if (!session) return unauthorized();
-  const access = await agentConfigAccess(session);
+  const auth = await requireActiveAgentSession(req);
+  if ("response" in auth) return auth.response;
+  const access = agentConfigAccess(auth.role);
   if (!access.canConfigure) return Response.json({ error: access.error }, { status: 403 });
 
   let body: { key?: unknown; model?: unknown; provider?: unknown; baseUrl?: unknown; clear?: unknown };

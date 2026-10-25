@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { isAgentConfigured } from "@/lib/agent/client";
 import { runAgentTurn, type AgentEvent } from "@/lib/agent/run";
 import { sessionKey } from "@/lib/agent/store";
-import { sessionFromRequest, unauthorized } from "@/lib/session";
+import { requireActiveAgentSession } from "@/lib/agent/session";
 import { SSE_HEADERS } from "@/lib/sse";
 
 export const runtime = "nodejs";
@@ -29,10 +29,9 @@ function toMessages(raw: unknown): Anthropic.MessageParam[] {
  *    signals, then a final `done` event.
  */
 export async function POST(req: Request) {
-  // The proxy only proves a session cookie EXISTS. Verify it before spending
-  // the (shared, process-wide) agent credential on this caller.
-  const session = sessionFromRequest(req);
-  if (!session) return unauthorized();
+  // Verify the backing Dokploy session before spending the shared credential.
+  const auth = await requireActiveAgentSession(req);
+  if ("response" in auth) return auth.response;
 
   if (!isAgentConfigured()) {
     return Response.json(
@@ -52,7 +51,13 @@ export async function POST(req: Request) {
     return Response.json({ error: "No messages provided." }, { status: 400 });
   }
 
-  const key = sessionKey(session);
+  const key = sessionKey(auth.session);
+  const checkSession = async () => {
+    const current = await requireActiveAgentSession(req);
+    // Headers are already sent; the stream reports the error and ends. The
+    // next agent request returns 401 and clears the browser's session cookie.
+    if ("response" in current) throw new Error(current.error);
+  };
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -61,7 +66,7 @@ export async function POST(req: Request) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
       };
       try {
-        await runAgentTurn(messages, key, emit);
+        await runAgentTurn(messages, key, emit, checkSession);
       } catch (e) {
         emit({ type: "error", error: e instanceof Error ? e.message : String(e) });
       } finally {
