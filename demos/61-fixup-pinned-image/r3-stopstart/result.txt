@@ -1,0 +1,25 @@
+## [after-r3] 01:36:04 EDT  dashboard image: switchyard-dash:c1-r3
+t+5s app created via New service: c1-pin-uri5-dcz3hx  (repo http://127.0.0.1:8765/c1-pin.git, head = FIRST c4e02ad)
+t+5s first deploy finished: 01:36:08 EDT | Manual deployment | done  container image cd6151d29dd4 (c1-pin-uri5-dcz3hx-app:latest)
+t+5s pushed SECOND to the repo (head now b6f0d38) BEFORE the watcher's fix-up
+t+72s Dokploy deployments (oldest first):
+01:36:08 EDT | Manual deployment | done
+01:37:09 EDT | Automatic port fix-up | done
+curl app -> FIRST
+ [200]   port label: server.port=80
+container image after fix-up: cd6151d29dd4 (c1-pin-uri5-dcz3hx-app:sy-1792906628759-portfix)   (first build: cd6151d29dd4 (c1-pin-uri5-dcz3hx-app:latest))  same image: true
+compose file now has build: 0 line(s), pinned image: line: 0; history entries: 0
+temporary pinned tags left for c1-pin-uri5-dcz3hx: 1
+## [r3 stop/start + redeploy] 01:37:35 EDT  app c1-pin-uri5-dcz3hx
+start: curl -> FIRST
+ [200]   image tags: c1-pin-uri5-dcz3hx-app:sy-1792906628759-portfix   on-disk image: image: c1-pin-uri5-dcz3hx-app:sy-1792906628759-portfix
+after Stop (UI): containers running: 0   curl -> 000
+after Start (UI): curl -> FIRST
+ [200]   container image: c1-pin-uri5-dcz3hx-app:sy-1792906628759-portfix
+after explicit Redeploy (UI): deployments:
+Manual deployment | done
+Automatic port fix-up | done
+Manual deployment | done
+curl -> SECOND
+ [200]
+after cleanup: image tags: c1-pin-uri5-dcz3hx-app:sy-1792906705819   history entries: 1 (x-switchyard history images in on-disk compose)
