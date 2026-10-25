@@ -1,4 +1,5 @@
 import { completeLogin } from "@/lib/agent/oauth";
+import { agentConfigAccess } from "@/lib/agent/authorization";
 import { setOAuthCredential } from "@/lib/agent/key-store";
 import { sessionFromRequest, unauthorized } from "@/lib/session";
 
@@ -14,7 +15,10 @@ export const dynamic = "force-dynamic";
  * here because the stored tokens become the process-wide agent credential.
  */
 export async function POST(req: Request) {
-  if (!sessionFromRequest(req)) return unauthorized();
+  const session = sessionFromRequest(req);
+  if (!session) return unauthorized();
+  const access = await agentConfigAccess(session);
+  if (!access.canConfigure) return Response.json({ error: access.error }, { status: 403 });
 
   let body: { code?: unknown };
   try {

@@ -45,9 +45,38 @@ function isKnownModel(id: string): boolean {
 
 export type AgentProvider = "anthropic" | "openai";
 
+interface CredentialBinding {
+  provider: AgentProvider;
+  baseUrl: string;
+}
+
+const ANTHROPIC_BASE_URL = "https://api.anthropic.com";
+const OPENAI_BASE_URL = "https://api.openai.com/v1";
+
+/** Canonical API base (including its path); local model servers may use HTTP. */
+export function normalizeBaseUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    throw new Error("Enter a valid base URL.");
+  }
+  const loopback = url.hostname === "localhost" || url.hostname === "[::1]" || /^127\.\d+\.\d+\.\d+$/.test(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    throw new Error("Base URL must use HTTPS (HTTP is allowed only for loopback model servers).");
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new Error("Base URL must not contain credentials, a query, or a fragment.");
+  }
+  return url.origin + url.pathname.replace(/\/+$/, "");
+}
+
 interface KeyState {
   loaded: boolean;
   key: string | null;
+  binding: CredentialBinding | null;
+  // A deliberate removal/endpoint change must not resurrect an env credential.
+  keyDisabled: boolean;
   model: string | null;
   // "anthropic" (default) drives the Anthropic Messages API. "openai" drives
   // any OpenAI-compatible /chat/completions endpoint (OpenRouter, Together,
@@ -66,6 +95,8 @@ const g = globalThis as unknown as { __switchyardAgentKey?: KeyState };
 const state: KeyState = (g.__switchyardAgentKey ??= {
   loaded: false,
   key: null,
+  binding: null,
+  keyDisabled: false,
   model: null,
   provider: null,
   baseUrl: null,
@@ -79,6 +110,8 @@ function loadOnce(): void {
   try {
     const raw = JSON.parse(fs.readFileSync(KEY_FILE, "utf8")) as {
       key?: unknown;
+      binding?: unknown;
+      keyDisabled?: unknown;
       model?: unknown;
       provider?: unknown;
       baseUrl?: unknown;
@@ -90,10 +123,22 @@ function loadOnce(): void {
     if (typeof raw.model === "string" && raw.model.trim()) state.model = raw.model.trim();
     if (raw.provider === "anthropic" || raw.provider === "openai") state.provider = raw.provider;
     if (typeof raw.baseUrl === "string" && raw.baseUrl.trim()) state.baseUrl = raw.baseUrl.trim();
+    state.keyDisabled = raw.keyDisabled === true;
     if (raw.oauth && typeof raw.oauth === "object") {
       const o = raw.oauth as { refresh?: unknown; expiresAt?: unknown };
       if (typeof o.refresh === "string" && o.refresh) state.oauthRefresh = o.refresh;
       if (typeof o.expiresAt === "number") state.oauthExpiresAt = o.expiresAt;
+    }
+    if (raw.binding === undefined && state.key) {
+      // Legacy keys belonged to the configuration loaded with them. Persist that
+      // binding now so later restarts/env changes cannot silently rebind them.
+      state.binding = currentBinding();
+      persist();
+    } else if (raw.binding && typeof raw.binding === "object") {
+      const binding = raw.binding as { provider?: unknown; baseUrl?: unknown };
+      if ((binding.provider === "anthropic" || binding.provider === "openai") && typeof binding.baseUrl === "string") {
+        state.binding = { provider: binding.provider, baseUrl: normalizeBaseUrl(binding.baseUrl) };
+      }
     }
   } catch {
     /* no persisted settings */
@@ -102,16 +147,22 @@ function loadOnce(): void {
 
 function persist(): void {
   try {
-    if (state.key || state.model || state.provider || state.baseUrl || state.oauthRefresh) {
+    if (state.key || state.keyDisabled || state.model || state.provider || state.baseUrl || state.oauthRefresh) {
       fs.mkdirSync(path.dirname(KEY_FILE), { recursive: true });
       const body: {
         key?: string;
+        binding?: CredentialBinding | null;
+        keyDisabled?: boolean;
         model?: string;
         provider?: AgentProvider;
         baseUrl?: string;
         oauth?: { refresh: string; expiresAt: number | null };
       } = {};
-      if (state.key) body.key = state.key;
+      if (state.key) {
+        body.key = state.key;
+        body.binding = state.binding ?? null;
+      }
+      if (state.keyDisabled) body.keyDisabled = true;
       if (state.model) body.model = state.model;
       if (state.provider) body.provider = state.provider;
       if (state.baseUrl) body.baseUrl = state.baseUrl;
@@ -139,7 +190,34 @@ export function resolveProvider(): AgentProvider {
 /** Base URL for the openai provider (OpenAI-compatible endpoint). Null otherwise. */
 export function resolveBaseUrl(): string | null {
   loadOnce();
-  return state.baseUrl || process.env.SWITCHYARD_AGENT_BASE_URL?.trim() || null;
+  return state.baseUrl || process.env.SWITCHYARD_AGENT_BASE_URL?.trim() || process.env.OPENAI_BASE_URL?.trim() || null;
+}
+
+function currentBinding(): CredentialBinding {
+  const provider = resolveProvider();
+  return {
+    provider,
+    baseUrl: normalizeBaseUrl(provider === "openai"
+      ? resolveBaseUrl() || OPENAI_BASE_URL
+      : process.env.ANTHROPIC_BASE_URL?.trim() || ANTHROPIC_BASE_URL),
+  };
+}
+
+function bindingMatches(binding: CredentialBinding | null): boolean {
+  try {
+    const current = currentBinding();
+    return binding?.provider === current.provider && binding.baseUrl === current.baseUrl;
+  } catch {
+    return false; // An unsafe/invalid persisted endpoint cannot receive a key.
+  }
+}
+
+function clearCredential(): void {
+  state.key = null;
+  state.binding = null;
+  state.keyDisabled = true;
+  state.oauthRefresh = null;
+  state.oauthExpiresAt = null;
 }
 
 /**
@@ -165,18 +243,32 @@ export function setRuntimeModel(model: string | null): void {
   persist();
 }
 
-/** Switch provider. Clears the model (it's provider-specific) so the UI reprompts. */
+/** Switch provider. A different provider requires an explicit new credential. */
 export function setProvider(provider: AgentProvider | null): void {
   loadOnce();
-  if (state.provider !== provider) state.model = null;
+  const previous = resolveProvider();
   state.provider = provider === "openai" || provider === "anthropic" ? provider : null;
+  if (previous !== resolveProvider()) {
+    state.model = null;
+    clearCredential();
+  }
   persist();
 }
 
 /** Store (or clear, with null) the OpenAI-compatible base URL. */
 export function setBaseUrl(url: string | null): void {
   loadOnce();
-  state.baseUrl = url?.trim() || null;
+  const next = url?.trim() ? normalizeBaseUrl(url) : null;
+  const fallback = process.env.SWITCHYARD_AGENT_BASE_URL?.trim() || process.env.OPENAI_BASE_URL?.trim() || OPENAI_BASE_URL;
+  const endpoint = normalizeBaseUrl(next || fallback);
+  let previous: string | null = null;
+  try {
+    previous = normalizeBaseUrl(resolveBaseUrl() || OPENAI_BASE_URL);
+  } catch {
+    // Allow an admin to replace an unsafe legacy endpoint, dropping its key.
+  }
+  state.baseUrl = next;
+  if (previous !== endpoint) clearCredential();
   persist();
 }
 
@@ -193,16 +285,25 @@ export function isOAuthToken(key: string): boolean {
 /** Store (or clear, with null) a pasted credential. Clears any subscription login. */
 export function setRuntimeKey(key: string | null): void {
   loadOnce();
-  state.key = key?.trim() || null;
-  state.oauthRefresh = null;
-  state.oauthExpiresAt = null;
+  const value = key?.trim() || null;
+  const binding = value ? currentBinding() : null;
+  clearCredential();
+  state.key = value;
+  state.binding = binding;
+  state.keyDisabled = !value;
   persist();
 }
 
 /** Store the tokens from a "Sign in with Claude" flow (access + refresh + expiry). */
 export function setOAuthCredential(t: { access: string; refresh: string; expiresAt: number }): void {
   loadOnce();
+  const binding: CredentialBinding = { provider: "anthropic", baseUrl: ANTHROPIC_BASE_URL };
+  if (!bindingMatches(binding)) {
+    throw new Error("Select Anthropic's default endpoint before connecting Claude.");
+  }
   state.key = t.access;
+  state.binding = binding;
+  state.keyDisabled = false;
   state.oauthRefresh = t.refresh || null;
   state.oauthExpiresAt = t.expiresAt;
   persist();
@@ -211,7 +312,7 @@ export function setOAuthCredential(t: { access: string; refresh: string; expires
 /** True when the active credential came from the subscription sign-in (refreshable). */
 export function isLoginCredential(): boolean {
   loadOnce();
-  return state.oauthRefresh != null;
+  return state.oauthRefresh != null && bindingMatches(state.binding);
 }
 
 /**
@@ -222,9 +323,13 @@ export function isLoginCredential(): boolean {
 export async function ensureFreshOAuth(): Promise<void> {
   loadOnce();
   if (!state.oauthRefresh) return;
+  if (state.binding?.provider !== "anthropic" || !bindingMatches(state.binding)) return;
   if (state.oauthExpiresAt && Date.now() < state.oauthExpiresAt - 120_000) return;
+  const { key, binding, oauthRefresh } = state;
   try {
-    const t = await refreshLogin(state.oauthRefresh);
+    const t = await refreshLogin(oauthRefresh);
+    // Configuration/removal may have changed while the exchange was in flight.
+    if (state.key !== key || state.binding !== binding || state.oauthRefresh !== oauthRefresh || !bindingMatches(binding)) return;
     state.key = t.access;
     if (t.refresh) state.oauthRefresh = t.refresh; // some refreshes rotate it, some don't
     state.oauthExpiresAt = t.expiresAt;
@@ -234,7 +339,7 @@ export async function ensureFreshOAuth(): Promise<void> {
   }
 }
 
-export interface ResolvedKey {
+export interface ResolvedKey extends CredentialBinding {
   key: string;
   source: "ui" | "env";
 }
@@ -242,9 +347,28 @@ export interface ResolvedKey {
 /** The active credential: UI-set beats the env var. Null when unconfigured. */
 export function resolveAgentKey(): ResolvedKey | null {
   loadOnce();
-  if (state.key) return { key: state.key, source: "ui" };
+  if (state.key) {
+    return state.binding && bindingMatches(state.binding)
+      ? { key: state.key, source: "ui", ...state.binding }
+      : null;
+  }
+  if (state.keyDisabled) return null;
   const env = process.env.ANTHROPIC_API_KEY?.trim();
-  if (env) return { key: env, source: "env" };
+  if (env) {
+    // Env credentials belong to the env configuration, never a later UI pick.
+    const provider = process.env.SWITCHYARD_AGENT_PROVIDER?.trim() === "openai" ? "openai" : "anthropic";
+    try {
+      const binding: CredentialBinding = {
+        provider,
+        baseUrl: normalizeBaseUrl(provider === "openai"
+          ? process.env.SWITCHYARD_AGENT_BASE_URL?.trim() || process.env.OPENAI_BASE_URL?.trim() || OPENAI_BASE_URL
+          : process.env.ANTHROPIC_BASE_URL?.trim() || ANTHROPIC_BASE_URL),
+      };
+      if (bindingMatches(binding)) return { key: env, source: "env", ...binding };
+    } catch {
+      /* unsafe env endpoint */
+    }
+  }
   return null;
 }
 
