@@ -1,0 +1,6 @@
+head: wt-agent-shell-approval (uncommitted -> codex/agent-shell-approval)   real local Docker, fixture Dokploy identity
+{"step":"staged","executed":false,"review":{"id":"chg_cbd84ff4-c4a4-443e-976c-1f9838a0ef8c","kind":"exec_in_service","description":"Run shell command in \"Shell approval demo\"","createdAt":1792908628273,"shell":{"serviceId":"sy-shell-approval-demo","serviceName":"Shell approval demo","appName":"sy-shell-approval-demo","containerId":"9423f0cc039b6db90afc6ca8b9ff504e47da47f48dcf1109556129c33c8ecb87","workingDir":"/tmp","command":"printf '%s\\n' approved >> /tmp/sy-shell-proof; cat /tmp/sy-shell-proof"}}}
+{"step":"tampered approval refused","status":400}
+{"step":"approved and executed exactly once","result":{"results":[{"id":"chg_cbd84ff4-c4a4-443e-976c-1f9838a0ef8c","description":"Run shell command in \"Shell approval demo\"","ok":true,"output":"stdout:\napproved\n\n\nexit code: 0"}],"remaining":[]},"concurrentReplay":409}
+{"step":"replay and rejection verified","replayStatus":409,"marker":"approved (one line)"}
+PASS: real local Docker execution; fixture Dokploy identity/workspace; no provider credentials or calls

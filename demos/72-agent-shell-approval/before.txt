@@ -1,0 +1,5 @@
+base: 0314301 (#68)   tool: exec_in_service   (model asked to run a 'diagnostic')
+marker before tool call: <no file>
+tool result: {"staged":false,"content":"stdout:\nran-without-approval\n\n\nexit code: 0"}
+staged changes waiting for approval: 0
+marker after tool call: ran-without-approval  <- the command already ran, no human approval
