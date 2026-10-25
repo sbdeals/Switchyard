@@ -1,0 +1,29 @@
+## [after] 01:21:46 EDT Oct 25  dashboard image: switchyard-dash:a-after
+
+### nodejs-getting-started
+t+2s app created via New service: nodejs-getting-started-u7cf-uoz3bt
+t+22s deployments: done
+port label: server.port=3000   build: 1 dockerfile_inline line(s)
+curl http://nodejs-getting-started-u7cf-uoz3bt-30d41d-104-28-215-142.sslip.io/ via Traefik -> 200  <title>Node.js Getting Started on Heroku
+Overview lines: nodejs-getting-started-jh8z | nodejs-getting-started-jh8z-iojal4-981320-104-28-215-142.sslip.io | nodejs-getting-started-u7cf | nodejs-getting-started-u7cf-uoz3bt-30d41d-104-28-215-142.sslip.io | nodejs-getting-started-u7cf | nodejs-getting-started-u7cf-uoz3bt-30d41d-104-28-215-142.sslip.io
+
+### flask-hello-world
+t+2s app created via New service: flask-hello-world-adny-1caqrz
+t+81s deployments: done
+port label: server.port=8000   build: 1 dockerfile_inline line(s)
+curl http://flask-hello-world-adny-1caqrz-370862-104-28-215-142.sslip.io/ via Traefik -> 200  <title>Hello, World!
+Overview lines: nodejs-getting-started-jh8z | nodejs-getting-started-jh8z-iojal4-981320-104-28-215-142.sslip.io | nodejs-getting-started-u7cf | nodejs-getting-started-u7cf-uoz3bt-30d41d-104-28-215-142.sslip.io | Python (auto-detected) | Detected port
+
+### go-getting-started
+t+2s app created via New service: go-getting-started-2p94-6fks2u
+t+81s deployments: done
+port label: server.port=8080   build: 1 dockerfile_inline line(s)
+curl http://go-getting-started-2p94-6fks2u-72c238-104-28-215-142.sslip.io/ via Traefik -> 200  <title>Go Getting Started on Heroku
+Overview lines: nodejs-getting-started-jh8z | nodejs-getting-started-jh8z-iojal4-981320-104-28-215-142.sslip.io | nodejs-getting-started-u7cf | nodejs-getting-started-u7cf-uoz3bt-30d41d-104-28-215-142.sslip.io | Go (auto-detected) | Detected port
+
+### beginner-html-site-styled
+t+2s app created via New service: beginner-html-site-styled-rys8-gxnb8o
+t+81s deployments: done
+port label: server.port=80   build: 1 dockerfile_inline line(s)
+curl http://beginner-html-site-styled-rys8-gxnb8o-d8ef0b-104-28-215-142.sslip.io/ via Traefik -> 200  <title>My test page
+Overview lines: nodejs-getting-started-jh8z | nodejs-getting-started-jh8z-iojal4-981320-104-28-215-142.sslip.io | nodejs-getting-started-u7cf | nodejs-getting-started-u7cf-uoz3bt-30d41d-104-28-215-142.sslip.io | Static (nginx) (auto-detected) | Detected port

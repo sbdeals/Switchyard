@@ -1,0 +1,32 @@
+## [before] 01:11:39 EDT Oct 25  dashboard image: switchyard-dash:a-before
+
+### nodejs-getting-started
+t+2s app created via New service: nodejs-getting-started-jh8z-iojal4
+t+82s deployments: error
+port label: server.port=3000   build: 0 dockerfile_inline line(s)
+curl http://nodejs-getting-started-jh8z-iojal4-981320-104-28-215-142.sslip.io/ via Traefik -> 404  <title>404 page not found
+Overview lines: nodejs-getting-started-jh8z | nodejs-getting-started-jh8z-iojal4-981320-104-28-215-142.sslip.io | nodejs-getting-started-jh8z | nodejs-getting-started-jh8z-iojal4-981320-104-28-215-142.sslip.io | https://github.com/heroku/nodejs-getting-started | Build
+
+### flask-hello-world
+t+2s app created via New service: flask-hello-world-bsyq-puyupd
+t+142s deployments: error
+port label: server.port=3000   build: 0 dockerfile_inline line(s)
+curl http://flask-hello-world-bsyq-puyupd-3486b3-104-28-215-142.sslip.io/ via Traefik -> 404  <title>404 page not found
+Overview lines: nodejs-getting-started-jh8z | nodejs-getting-started-jh8z-iojal4-981320-104-28-215-142.sslip.io | Build | Runs as a container on this host's local network, reachable from your other services at flask-hello-world-bsyq-puyupd. Redeploy rebuilds from the current branch head; pushes do not deploy automatically.
+
+### go-getting-started
+t+2s app created via New service: go-getting-started-vtzp-gzeaez
+t+142s deployments: error
+port label: server.port=3000   build: 0 dockerfile_inline line(s)
+curl http://go-getting-started-vtzp-gzeaez-932f0e-104-28-215-142.sslip.io/ via Traefik -> 404  <title>404 page not found
+Overview lines: nodejs-getting-started-jh8z | nodejs-getting-started-jh8z-iojal4-981320-104-28-215-142.sslip.io | Build | Runs as a container on this host's local network, reachable from your other services at go-getting-started-vtzp-gzeaez. Redeploy rebuilds from the current branch head; pushes do not deploy automatically.
+
+### beginner-html-site-styled
+t+2s app created via New service: beginner-html-site-styled-qkr2-hu3ban
+t+141s deployments: error
+port label: server.port=3000   build: 0 dockerfile_inline line(s)
+curl http://beginner-html-site-styled-qkr2-hu3ban-6a8b35-104-28-215-142.sslip.io/ via Traefik -> 404  <title>404 page not found
+Overview lines: nodejs-getting-started-jh8z | nodejs-getting-started-jh8z-iojal4-981320-104-28-215-142.sslip.io | Build | Runs as a container on this host's local network, reachable from your other services at beginner-html-site-styled-qkr2-hu3ban. Redeploy rebuilds from the current branch head; pushes do not deploy automatically.
+failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory
+Error: ❌ Docker command failed
+Error occurred ❌, check the logs for details.
