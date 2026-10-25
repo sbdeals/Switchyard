@@ -1,0 +1,9 @@
+===== before (switchyard-dash:b1-before = #31 6ad123b) 00:54:52 EDT
+[admin(owner)] GET  /api/agent/config                               -> HTTP 200  configured=false  baseUrl=null
+[admin(owner)] POST {provider:"openai", baseUrl:"http://127.0.0.1:9/v1", key} -> HTTP 200  configured=false  baseUrl=null
+[admin(owner)] POST {baseUrl:"https://other.invalid/v1"} (no new key) -> HTTP 200  configured=false  baseUrl=https://other.invalid/v1
+[admin(owner)] POST {baseUrl:"http://plain.invalid/v1"}             -> HTTP 200  configured=false  baseUrl=http://plain.invalid/v1
+[admin(owner)] POST {clear:true} + reset                            -> HTTP 200  configured=false  baseUrl=http://plain.invalid/v1
+[member] GET  /api/agent/config                               -> HTTP 200  configured=false  baseUrl=http://plain.invalid/v1
+[member] POST {provider:"openai", baseUrl:"https://evil.invalid/v1"} -> HTTP 200  configured=false  baseUrl=http://plain.invalid/v1
+[member] POST {key:"sk-member-planted-0000"}                  -> HTTP 200  configured=true  baseUrl=http://plain.invalid/v1

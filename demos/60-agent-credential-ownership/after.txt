@@ -1,0 +1,9 @@
+===== after (switchyard-dash:b1-after = 82b6d0b) 00:55:57 EDT
+[admin(owner)] GET  /api/agent/config                               -> HTTP 200  canConfigure=true  configured=false  baseUrl=null
+[admin(owner)] POST {provider:"openai", baseUrl:"http://127.0.0.1:9/v1", key} -> HTTP 200  canConfigure=true  configured=true  baseUrl=http://127.0.0.1:9/v1
+[admin(owner)] POST {baseUrl:"https://other.invalid/v1"} (no new key) -> HTTP 200  canConfigure=true  configured=false  baseUrl=https://other.invalid/v1
+[admin(owner)] POST {baseUrl:"http://plain.invalid/v1"}             -> HTTP 400  error: Base URL must use HTTPS (HTTP is allowed only for loopback model servers).
+[admin(owner)] POST {clear:true} + reset                            -> HTTP 200  canConfigure=true  configured=false  baseUrl=https://other.invalid/v1
+[member] GET  /api/agent/config                               -> HTTP 200  canConfigure=false  configured=false  baseUrl=https://other.invalid/v1
+[member] POST {provider:"openai", baseUrl:"https://evil.invalid/v1"} -> HTTP 403  error: Only workspace admins can change the agent provider.
+[member] POST {key:"sk-member-planted-0000"}                  -> HTTP 403  error: Only workspace admins can change the agent provider.
