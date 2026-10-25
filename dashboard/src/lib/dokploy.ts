@@ -23,6 +23,8 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 
 import { SESSION_COOKIE, openSession } from "./session";
+import { repoDeploymentLabel } from "./deploy-commit";
+import { syncDeployHookSource } from "./deploy-hook-store";
 import { randomPassword, randomServiceName } from "./names";
 import { ENGINE_META } from "./engines";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
@@ -2062,11 +2064,14 @@ function watchBridgeRepoPort(composeId: string): void {
                 current.deployments[0].status === "done" && current.composeFile === detail.composeFile &&
                 current.env === detail.env && JSON.stringify(current.domains) === JSON.stringify(detail.domains);
             });
+            const label = changed ? await repoDeploymentLabel(detail.composeFile) : {};
             if (changed && !watch.cancelled) {
               // Exactly one follow-up; skip watcher registration and predeploy
               // reconciliation, which just succeeded. Finish applying accepted
               // writes even if they crossed the polling deadline.
-              await request("compose.deploy", { method: "POST", body: { composeId } });
+              await request("compose.deploy", {
+                method: "POST", body: { composeId, ...label },
+              });
             }
           })();
           await watch.applying;
@@ -2102,6 +2107,7 @@ export async function redeployManagedImage(composeId: string): Promise<void> {
 
 export async function updateComposeFile(id: string, composeFile: string): Promise<void> {
   await request("compose.update", { method: "POST", body: { composeId: id, composeFile } });
+  syncDeployHookSource(id, composeFile);
 }
 
 /**
@@ -2120,11 +2126,13 @@ export async function saveComposeEnvironment(id: string, env: string): Promise<v
 export async function composeAction(id: string, action: Action): Promise<void> {
   // compose uses delete instead of remove.
   const proc = action === "remove" ? "delete" : action;
+  let label = {};
   if (action === "deploy") {
     await refreshReferences({ kind: "compose", id });
     await cancelRepoPortWatch(id);
     try {
       const detail = await request<RawComposeDetail>(`compose.one?composeId=${encodeURIComponent(id)}`);
+      label = await repoDeploymentLabel(detail.composeFile);
       await reconcileBridgeAutoDomain(id, detail);
     } catch {
       // URL provisioning is best-effort; never block a requested deployment.
@@ -2132,7 +2140,7 @@ export async function composeAction(id: string, action: Action): Promise<void> {
   } else {
     await stopBridgeRepoPortWatch(id);
   }
-  await request(`compose.${proc}`, { method: "POST", body: { composeId: id } });
+  await request(`compose.${proc}`, { method: "POST", body: { composeId: id, ...label } });
 }
 
 // --- reference variables ----------------------------------------------------
