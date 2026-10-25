@@ -394,6 +394,18 @@ describe("managed app rollback rewrites", () => {
     expect(() => rewriteManagedApp(compose, "web-x1", { ...meta, history: [{ timestamp, image: "nginx:alpine" }] })).toThrow("rollback image tag");
   });
 
+  it("allows a scoped port-fix pin without admitting it to rollback history", () => {
+    const compose = repoStack(repoInput);
+    const meta = parseManaged(compose)!;
+    if (meta.kind !== "repo") throw new Error("Expected repo metadata");
+    const tag = `${snapshot}-portfix`;
+    const pinned = rewriteManagedApp(compose, repoInput.appName, { ...meta, pinnedTag: tag });
+    expect(pinned).not.toMatch(/^    build:/m);
+    expect(pinned).toContain(`    image: ${tag}\n    pull_policy: never\n`);
+    expect(() => rewriteManagedApp(compose, repoInput.appName, { ...meta, history: [{ timestamp, image: tag }] })).toThrow();
+    expect(() => validateRepoTag("another-app", tag, true)).toThrow();
+  });
+
   it.each([
     "services: {app: {image: nginx:latest}}\n",
     "services:\n  app:\n    image: nginx:latest\nservices :\n  app:\n    build: .\n",
@@ -431,7 +443,7 @@ describe("rollback reference validation", () => {
     expect(() => validateImageRef(ref)).toThrow();
   });
 
-  it.each(["other-app:sy-1792756800000", "web-x1-app:latest", `${snapshot}\n`, `${snapshot};id`, "web-x1-app:sy-01", "web-x1-app:sy-9007199254740992"])("rejects invalid local snapshot %s", (tag) => {
+  it.each(["other-app:sy-1792756800000", "web-x1-app:latest", `${snapshot}\n`, `${snapshot};id`, `${snapshot}-portfix`, "web-x1-app:sy-01", "web-x1-app:sy-9007199254740992"])("rejects invalid local snapshot %s", (tag) => {
     expect(() => validateRepoTag("web-x1", tag)).toThrow();
   });
 
