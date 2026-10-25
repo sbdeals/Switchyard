@@ -1500,11 +1500,12 @@ async function generateTraefikMeHost(appName: string): Promise<string | null> {
 async function createDomainRecord(
   applicationId: string,
   host: string,
+  port: number,
   certificateType: "none" | "letsencrypt"
 ): Promise<void> {
   await request("domain.create", {
     method: "POST",
-    body: { applicationId, host, port: AUTO_DOMAIN_PORT, https: true, certificateType },
+    body: { applicationId, host, port, https: true, certificateType },
   });
 }
 
@@ -1528,13 +1529,17 @@ export async function ensureAutoDomain(applicationId: string): Promise<string | 
   const existing = (detail.domains ?? []).find((d) => isAutoDomainHost(d.host));
   if (existing) return existing.host;
 
+  // Docker images can listen on ports other than the repo build default.
+  const port = detail.sourceType === "docker" && detail.dockerImage
+    ? await resolveImagePort(detail.dockerImage, detail.env, true)
+    : AUTO_DOMAIN_PORT;
   const generated = await generateTraefikMeHost(appName);
   if (generated) {
-    await createDomainRecord(applicationId, generated, "none");
+    await createDomainRecord(applicationId, generated, port, "none");
     return generated;
   }
   const host = `${appName}.${hostIp}.sslip.io`;
-  await createDomainRecord(applicationId, host, "letsencrypt");
+  await createDomainRecord(applicationId, host, port, "letsencrypt");
   return host;
 }
 
