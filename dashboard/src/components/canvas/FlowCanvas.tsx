@@ -18,6 +18,7 @@ import type { Service, ServiceEdge } from "@/lib/dokploy";
 import { serviceAccent } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
+import type { ServiceSection } from "@/components/service/ServiceContextMenu";
 
 // v2: key bumped when the default layout became a grid — pre-grid saves froze
 // every auto-position (not just drags), which would pin the old horizontal
@@ -59,10 +60,14 @@ export function FlowCanvas({
   services,
   edges: serviceEdges,
   onSelect,
+  highlightedId,
+  onHighlight,
 }: {
   services: Service[];
   edges: ServiceEdge[];
-  onSelect: (service: Service) => void;
+  onSelect: (service: Service, section?: ServiceSection) => void;
+  highlightedId: string | null;
+  onHighlight: (id: string | null) => void;
 }) {
   // Catalog logos for Railway-style node icons (null while the catalog loads).
   const logos = useTemplateLogos();
@@ -98,8 +103,12 @@ export function FlowCanvas({
           nodes.push({
             id: service.id,
             type: "service",
+            selected: service.id === highlightedId,
+            // The service card owns the tab stop; retain React Flow's bubbled
+            // keyboard handlers for selecting and moving nodes.
+            domAttributes: { tabIndex: -1 },
             position: saved[service.id] ?? { x, y: rowY + row * ROW_H },
-            data: { service, logo: resolveServiceLogo(service, logos), onSelect } as ServiceNodeData,
+            data: { service, logo: resolveServiceLogo(service, logos), onSelect, onHighlight } as ServiceNodeData,
           });
         });
         rowMaxServices = Math.max(rowMaxServices, svcs.length);
@@ -107,7 +116,7 @@ export function FlowCanvas({
       }
       return nodes;
     },
-    [services, onSelect, logos]
+    [services, onSelect, logos, highlightedId, onHighlight]
   );
 
   const buildEdges = useCallback(
@@ -184,6 +193,7 @@ export function FlowCanvas({
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
+        onPaneClick={() => onHighlight(null)}
         colorMode="dark"
         fitView
         fitViewOptions={{ padding: 0.3, maxZoom: 1 }}

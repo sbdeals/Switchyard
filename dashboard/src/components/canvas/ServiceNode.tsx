@@ -1,20 +1,24 @@
 "use client";
 
 import { memo, useState } from "react";
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { Database as DatabaseIcon, Box, Layers, ExternalLink } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import { presentedKind, resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
+import { ServiceContextMenu, type ServiceSection } from "@/components/service/ServiceContextMenu";
+import { selectMenuService } from "@/lib/context-menu";
 
 export interface ServiceNodeData extends Record<string, unknown> {
   service: Service;
   /** Catalog logo URL for the app (Railway-style), or null for the generic icon. */
   logo: string | null;
-  onSelect: (service: Service) => void;
+  onSelect: (service: Service, section?: ServiceSection) => void;
+  onHighlight: (id: string) => void;
 }
 
 function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData }) {
-  const { service, logo, onSelect } = data;
+  const { service, logo, onSelect, onHighlight } = data;
+  const { setNodes } = useReactFlow();
   const accent = serviceAccent(service);
   const status = resolveServiceDisplay(service.status, service.runtime);
   const domains = service.kind === "application" ||
@@ -22,9 +26,16 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
   const publicDomain = domains.find((d) => d.https) ?? domains[0];
 
   return (
+    <ServiceContextMenu service={service} onOpen={(section) => onSelect(service, section)} onSelect={() => {
+      setNodes((nodes) => selectMenuService(nodes, service.id));
+      onHighlight(service.id);
+    }}>
+      {(trigger, _deploy, _pending, error) => (
     <div
+      {...trigger}
       role="button"
       tabIndex={0}
+      data-selected={selected}
       aria-label={`${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""} — open details`}
       onClick={() => onSelect(service)}
       onKeyDown={(e) => {
@@ -84,7 +95,10 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
           <ExternalLink className="size-3 shrink-0" />
         </a>
       )}
+      {error && <p role="alert" className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
+      )}
+    </ServiceContextMenu>
   );
 }
 

@@ -8,6 +8,8 @@ import { ENGINE_META } from "@/lib/engines";
 import { isStopped, serviceLabel } from "@/lib/service-meta";
 import { BRIDGE_NETWORK, managedConnectionString, type ManagedMeta } from "@/lib/managed-compose";
 import { DomainRow } from "@/components/service/AppTabs";
+import { ContextMenu } from "@/components/ContextMenu";
+import { deploymentMenuItems } from "@/lib/context-menu";
 import {
   composeLifecycleAction,
   saveComposeFileAction,
@@ -111,7 +113,9 @@ function PreviousDeploys({ compose, managed, pending, error, rollback }: {
     <div className="space-y-2 border-t border-[var(--color-border)] pt-4">
       <h3 className="text-xs font-medium text-[var(--color-fg-muted)]">Previous deploys</h3>
       {rows.length ? rows.map((entry) => (
-        <div key={`${entry.timestamp}-${entry.image}`} className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5">
+        <ContextMenu key={`${entry.timestamp}-${entry.image}`} label={`${entry.image} actions`} items={deploymentMenuItems({ rollbackAvailable: !entry.current && entry.saved, pending }).filter((item) => item.id === "rollback").map((item) => ({ ...item, onSelect: () => rollback(entry.timestamp, entry.image) }))}>
+          {(trigger) => (
+        <div {...trigger} className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]">
           <div className="min-w-0 flex-1">
             <div className="truncate font-mono text-xs" title={entry.image}>{entry.image}</div>
             <div className="mt-0.5 text-[11px] text-[var(--color-fg-subtle)]">
@@ -128,6 +132,8 @@ function PreviousDeploys({ compose, managed, pending, error, rollback }: {
             </Btn>
           )}
         </div>
+          )}
+        </ContextMenu>
       )) : (
         <p className="text-xs text-[var(--color-fg-subtle)]">No previous deploys saved yet. Deploy this service to start its history.</p>
       )}

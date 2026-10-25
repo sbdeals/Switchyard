@@ -67,6 +67,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import type { ServiceSection } from "@/components/service/ServiceContextMenu";
 
 type TabId =
   | "overview"
@@ -348,24 +349,28 @@ export function ServiceDrawer({
   service,
   services,
   onClose,
+  initialTab = "overview",
 }: {
   service: Service | null;
   /** Every service in the workspace — the Variables tab's reference targets. */
   services: Service[];
   onClose: () => void;
+  initialTab?: ServiceSection;
 }) {
-  const [tab, setTab] = useState<TabId>("overview");
+  const [tab, setTab] = useState<TabId>(initialTab);
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
-  // Reset to Overview when a different service is opened (adjust state during
+  // Reset to the requested section when a service is opened (adjust state during
   // render — the React-recommended alternative to a resetting effect).
   const [shownId, setShownId] = useState<string | null>(null);
+  const [shownTab, setShownTab] = useState(initialTab);
   // Deploy whose log the Deploys tab should open (set by the banner's "View logs").
   const [logDeployId, setLogDeployId] = useState<string | null>(null);
-  if (service && service.id !== shownId) {
-    setShownId(service.id);
-    setTab("overview");
+  if ((service?.id ?? null) !== shownId || initialTab !== shownTab) {
+    setShownId(service?.id ?? null);
+    setShownTab(initialTab);
+    setTab(initialTab);
     setLogDeployId(null);
   }
   const baseTabs =
