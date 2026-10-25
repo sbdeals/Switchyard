@@ -1,0 +1,31 @@
+## [before] 01:35:28 EDT  /workspace/wt-c2c-before/dashboard/src/lib/template-volumes.ts
+--- template (two sources differing only by _ vs -) ---
+services:
+  db:
+    image: postgres:16
+    volumes:
+      - ../files/volumes/db_data:/var/lib/postgresql/data
+  analytics:
+    image: postgres:16
+    volumes:
+      - ../files/volumes/db-data:/var/lib/postgresql/data
+--- rewritten compose ---
+services:
+  db:
+    image: postgres:16
+    volumes:
+      - data-volumes-db-data:/var/lib/postgresql/data
+  analytics:
+    image: postgres:16
+    volumes:
+      - data-volumes-db-data:/var/lib/postgresql/data
+
+volumes:
+  data-volumes-db-data:
+  data-volumes-db-data:
+rewritten: ["../files/volumes/db_data -> data-volumes-db-data","../files/volumes/db-data -> data-volumes-db-data"]
+--- docker compose config --volumes ---
+FAILED
+yaml: unmarshal errors:
+  line 13: mapping key "data-volumes-db-data" already defined at line 12
+

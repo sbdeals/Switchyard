@@ -1,0 +1,19 @@
+## [before] 01:34:09 EDT  store.ts=/workspace/wt-c2c-before/dashboard/src/lib/store.ts
+t+ 0s   log: [store] disabled after error: connect ECONNREFUSED 127.0.0.1:55432
+t+ 0s collector tick: write+read -> 0 rows persisted
+t+ 3s collector tick: write+read -> 0 rows persisted
+  (t+~3s: throwaway postgres:16 container started)
+t+ 6s collector tick: write+read -> 0 rows persisted
+t+ 9s collector tick: write+read -> 0 rows persisted
+t+12s collector tick: write+read -> 0 rows persisted
+t+15s collector tick: write+read -> 0 rows persisted
+t+18s collector tick: write+read -> 0 rows persisted
+t+21s collector tick: write+read -> 0 rows persisted
+t+24s collector tick: write+read -> 0 rows persisted
+t+27s collector tick: write+read -> 0 rows persisted
+t+30s collector tick: write+read -> 0 rows persisted
+t+33s collector tick: write+read -> 0 rows persisted
+t+36s collector tick: write+read -> 0 rows persisted
+t+39s collector tick: write+read -> 0 rows persisted
+t+42s collector tick: write+read -> 0 rows persisted
+t+45s RESULT: persistence still OFF (needs dashboard restart)

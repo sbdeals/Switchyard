@@ -1,0 +1,13 @@
+services:
+  db:
+    image: postgres:16
+    volumes:
+      - data-volumes-db-data:/var/lib/postgresql/data
+  analytics:
+    image: postgres:16
+    volumes:
+      - data-volumes-db-data-559c77:/var/lib/postgresql/data
+
+volumes:
+  data-volumes-db-data:
+  data-volumes-db-data-559c77:

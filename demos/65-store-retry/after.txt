@@ -1,0 +1,10 @@
+## [after] 01:34:55 EDT  store.ts=/workspace/wt-store-retry/dashboard/src/lib/store.ts
+t+ 0s   log: [store] backing off after error: connect ECONNREFUSED 127.0.0.1:55432
+t+ 0s collector tick: write+read -> 0 rows persisted  storeAvailable=false
+  (t+~3s: throwaway postgres:16 container started)
+t+ 3s collector tick: write+read -> 0 rows persisted  storeAvailable=false
+t+ 5s   log: [store] recovered
+t+ 5s collector tick: write+read -> 1 rows persisted  storeAvailable=true
+t+ 6s collector tick: write+read -> 2 rows persisted  storeAvailable=true
+t+ 7s collector tick: write+read -> 3 rows persisted  storeAvailable=true
+t+ 7s RESULT: persistence RECOVERED after Postgres came up
