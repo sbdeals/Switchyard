@@ -1,4 +1,5 @@
 import "server-only";
+import { djangoWsgiPath, type RepoBuildFiles } from "./build-plan";
 
 interface RepoSource {
   repoUrl: string;
@@ -57,7 +58,7 @@ function relativePath(value: string): string[] | null {
   return parts.some((part) => !part || part === "." || part === "..") ? null : parts;
 }
 
-function rawDockerfileUrl(source: RepoSource): string | null {
+function rawFileUrl(source: RepoSource, file: string): string | null {
   try {
     if (/[\\\s$?#]/.test(source.repoUrl)) return null;
     const url = new URL(source.repoUrl);
@@ -72,11 +73,11 @@ function rawDockerfileUrl(source: RepoSource): string | null {
     if (!repo[repo.length - 1] || repo.some((part) => part === "." || part === ".." || part === "-")) return null;
     if (!relativePath(source.branch) || /\s/.test(source.branch)) return null;
     const directory = source.subdirectory ? relativePath(source.subdirectory) : [];
-    const dockerfile = relativePath(source.dockerfile || "Dockerfile");
-    if (!directory || !dockerfile) return null;
+    const parts = relativePath(file);
+    if (!directory || !parts) return null;
     const repository = repo.map(encodeURIComponent).join("/");
     const branch = encodeURIComponent(source.branch);
-    const path = [...directory, ...dockerfile].map(encodeURIComponent).join("/");
+    const path = [...directory, ...parts].map(encodeURIComponent).join("/");
     switch (url.hostname) {
       case "github.com": return `https://raw.githubusercontent.com/${repository}/${branch}/${path}`;
       case "gitlab.com": return `https://gitlab.com/${repository}/-/raw/${branch}/${path}`;
@@ -88,48 +89,98 @@ function rawDockerfileUrl(source: RepoSource): string | null {
   }
 }
 
-/** A bounded public-file lookup; unavailable or ambiguous sources use post-build detection. */
-export async function fetchRepoExposedPorts(source: RepoSource): Promise<string[]> {
-  const url = rawDockerfileUrl(source);
-  if (!url) return [];
+type PublicFile = { status: "found"; text: string } | { status: "missing" | "unavailable" };
+
+/** No credentials or redirects; both fetch and body reads share a hard deadline. */
+async function fetchPublicFile(url: string, contents: boolean, deadline: number): Promise<PublicFile> {
+  const unavailable: PublicFile = { status: "unavailable" };
+  if (Date.now() >= deadline) return unavailable;
   const controller = new AbortController();
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const read = async (): Promise<string[]> => {
+  const read = async (): Promise<PublicFile> => {
     const response = await fetch(url, {
       cache: "no-store", redirect: "error", credentials: "omit", signal: controller.signal,
     });
     reader = response.body?.getReader();
     if (controller.signal.aborted) {
       void reader?.cancel().catch(() => {});
-      return [];
+      return unavailable;
     }
-    if (!response.ok || !reader ||
-      Number(response.headers.get("content-length")) > DOCKERFILE_MAX_BYTES) return [];
+    if (response.status === 404) return { status: "missing" };
+    if (!response.ok) return unavailable;
+    // Lockfiles and entry points only need a presence check, even if very large.
+    if (!contents) return { status: "found", text: "" };
+    if (!reader || Number(response.headers.get("content-length")) > DOCKERFILE_MAX_BYTES) return unavailable;
     const decoder = new TextDecoder("utf-8", { fatal: true });
     let size = 0;
     let text = "";
     while (!controller.signal.aborted) {
       const { done, value } = await reader.read();
-      if (done) return parseDockerfileExposedPorts(text + decoder.decode());
+      if (done) return { status: "found", text: text + decoder.decode() };
       size += value.byteLength;
-      if (size > DOCKERFILE_MAX_BYTES) return [];
+      if (size > DOCKERFILE_MAX_BYTES) return unavailable;
       text += decoder.decode(value, { stream: true });
     }
-    return [];
+    return unavailable;
   };
   try {
     return await Promise.race([
       read(),
-      new Promise<string[]>((resolve) => {
-        timer = setTimeout(() => { controller.abort(); resolve([]); }, DOCKERFILE_TIMEOUT_MS);
+      new Promise<PublicFile>((resolve) => {
+        timer = setTimeout(() => { controller.abort(); resolve(unavailable); }, Math.max(1, deadline - Date.now()));
       }),
     ]);
   } catch {
-    return [];
+    return unavailable;
   } finally {
     clearTimeout(timer);
     controller.abort();
     void reader?.cancel().catch(() => {});
   }
+}
+
+/** A bounded public-file lookup; unavailable or ambiguous sources use post-build detection. */
+export async function fetchRepoExposedPorts(source: RepoSource): Promise<string[]> {
+  const url = rawFileUrl(source, source.dockerfile || "Dockerfile");
+  if (!url) return [];
+  const file = await fetchPublicFile(url, true, Date.now() + DOCKERFILE_TIMEOUT_MS);
+  return file.status === "found" ? parseDockerfileExposedPorts(file.text) : [];
+}
+
+const MANIFESTS = ["package.json", "requirements.txt", "pyproject.toml", "Pipfile", "go.mod", "Procfile", "manage.py"];
+const PRESENCE_ONLY = ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "Pipfile.lock", "server.js", "index.js", "app.py", "main.py", "index.html"];
+
+/**
+ * Probe a fixed set of public paths, not an unbounded tree/clone. All requests
+ * share a five-second deadline. Unavailable discovery preserves Dockerfile
+ * deployment; only confirmed absence is used for automatic build detection.
+ */
+export async function fetchRepoBuildFiles(source: RepoSource): Promise<RepoBuildFiles | null> {
+  // An explicitly selected Dockerfile remains authoritative, even if unavailable.
+  if (source.dockerfile && source.dockerfile !== "Dockerfile") return null;
+  const dockerfileUrl = rawFileUrl(source, "Dockerfile");
+  if (!dockerfileUrl) return null;
+  const deadline = Date.now() + Math.min(DOCKERFILE_TIMEOUT_MS, 5_000);
+  const dockerfile = await fetchPublicFile(dockerfileUrl, false, deadline);
+  if (dockerfile.status === "unavailable") return null;
+  if (dockerfile.status === "found") return { files: ["Dockerfile"], contents: {} };
+  const paths = [...MANIFESTS, ...PRESENCE_ONLY];
+  const results = await Promise.all(paths.map((path) =>
+    fetchPublicFile(rawFileUrl(source, path)!, MANIFESTS.includes(path), deadline)));
+  if (results.some((result) => result.status === "unavailable")) return null;
+  const found: RepoBuildFiles = { files: [], contents: {} };
+  results.forEach((result, i) => {
+    if (result.status === "found") {
+      found.files.push(paths[i]);
+      found.contents[paths[i]] = result.text;
+    }
+  });
+  const wsgi = djangoWsgiPath(found.contents["manage.py"] ?? "");
+  if (wsgi) {
+    const file = await fetchPublicFile(rawFileUrl(source, wsgi)!, false, deadline);
+    if (file.status === "unavailable") return null;
+    if (file.status === "found") found.files.push(wsgi);
+  }
+  return found;
 }

@@ -93,6 +93,42 @@ async function runWatcher() {
 }
 
 describe("first repo deployment port", () => {
+  it.each([
+    ["node", 3000, { "package.json": '{"scripts":{"start":"node index.js"}}' }],
+    ["python", 8000, { "requirements.txt": "flask", "app.py": "" }],
+    ["go", 8080, { "go.mod": "module example.com/web" }],
+    ["static", 80, { "index.html": "<h1>Hello</h1>" }],
+    ["node", 80, { "package.json": '{"scripts":{"build":"vite build"}}' }],
+  ])("routes an auto-detected %s app to port %i before its only deploy", async (kind, port, contents) => {
+    const fetchApi = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const url = new URL(String(input));
+      if (url.hostname !== "raw.githubusercontent.com") return fetchApi(input, init);
+      const text = (contents as Record<string, string>)[url.pathname.split("/main/")[1]];
+      return Promise.resolve(text === undefined ? new Response("missing", { status: 404 }) : new Response(text));
+    });
+    // A stale local tag must not override the plan on a newly-created app.
+    vi.mocked(inspectImageExposedPorts).mockResolvedValue(["9999/tcp"]);
+    await deployBridgeRepo("repo", { repoUrl: "https://github.com/example/repo", branch: "main" }, "env-1");
+    expect(parseManaged(detail.composeFile)).toMatchObject({ buildKind: kind, buildPort: port, autoDomain: { host, port } });
+    expect(detail.composeFile).toContain("dockerfile_inline: |");
+    expect(detail.domains[0].port).toBe(port);
+    expect(requests.findIndex(({ procedure }) => procedure === "domain.create"))
+      .toBeLessThan(requests.findIndex(({ procedure }) => procedure === "compose.deploy"));
+    expect(background).toHaveLength(0);
+    expect(deployments()).toHaveLength(1);
+    expect(inspectImageExposedPorts).not.toHaveBeenCalled();
+  });
+
+  it("explains unsupported public repos before creating a stack", async () => {
+    const fetchApi = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation((input, init) => String(input).includes("raw.githubusercontent.com")
+      ? Promise.resolve(new Response("missing", { status: 404 })) : fetchApi(input, init));
+    await expect(deployBridgeRepo("repo", { repoUrl: "https://github.com/example/repo", branch: "main", subdirectory: "apps/web" }, "env-1"))
+      .rejects.toThrow("No Dockerfile and no Node/Python/Go/static app detected in https://github.com/example/repo@main/apps/web. Add a Dockerfile, or");
+    expect(requests).toHaveLength(0);
+  });
+
   it("uses the public Dockerfile's port 80 on the first deploy and needs no follow-up", async () => {
     await deployBridgeRepo("repo", { ...source, repoUrl: "https://github.com/example/repo" }, "env-1");
     expect(detail.domains[0].port).toBe(80);

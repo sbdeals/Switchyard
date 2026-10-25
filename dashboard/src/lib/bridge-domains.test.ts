@@ -8,7 +8,7 @@ vi.mock("./session", () => ({
   openSession: () => ({ dokployCookie: "dokploy-session=test" }),
 }));
 vi.mock("./docker", () => ({ inspectImageExposedPorts: vi.fn() }));
-vi.mock("./repo-port", () => ({ fetchRepoExposedPorts: async () => [] }));
+vi.mock("./repo-port", () => ({ fetchRepoExposedPorts: async () => [], fetchRepoBuildFiles: async () => null }));
 
 import { inspectImageExposedPorts } from "./docker";
 import { composeAction, deployBridgeImage, deployBridgeRepo, ensureAutoDomain, ensureBridgeAutoDomain, redeployManagedImage } from "./dokploy";

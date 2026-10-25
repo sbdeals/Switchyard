@@ -27,7 +27,8 @@ import { randomPassword, randomServiceName } from "./names";
 import { ENGINE_META } from "./engines";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
 import { resolveAppPort } from "./app-port";
-import { fetchRepoExposedPorts } from "./repo-port";
+import { fetchRepoBuildFiles, fetchRepoExposedPorts } from "./repo-port";
+import { detectBuildPlan } from "./build-plan";
 import {
   bridgeImageDomain,
   databaseStack,
@@ -1901,18 +1902,20 @@ export async function deployBridgeImage(
   return id;
 }
 
-/** Build a public Dockerfile repo as a compose app on the bridge network. */
+/** Build a public repo as a compose app on the bridge network. */
 export async function deployBridgeRepo(
   name: string,
   source: Omit<RepoStackInput, "appName">,
   environmentId: string
 ): Promise<string> {
   validateRepoSource(source);
+  const files = await fetchRepoBuildFiles(source);
+  const plan = files ? detectBuildPlan(files, `${source.repoUrl}@${source.branch}/${source.subdirectory ?? ""}`) : undefined;
   const id = await createManagedCompose(name, environmentId, (appName) => ({
-    composeFile: repoStack({ ...source, appName }),
+    composeFile: repoStack({ ...source, appName }, plan),
   }));
   await deployBridgeApp(id);
-  watchBridgeRepoPort(id);
+  if (!plan || plan.kind === "dockerfile") watchBridgeRepoPort(id);
   return id;
 }
 
@@ -1943,7 +1946,9 @@ export async function ensureBridgeAutoDomain(composeId: string): Promise<string 
   }
   // Repo images only exist after the build; never try pulling their local tag.
   let port: number;
-  if (managed.kind === "repo") {
+  if (managed.kind === "repo" && managed.buildPort) {
+    port = resolveAppPort({ env: detail.env, exposedPorts: [`${managed.buildPort}/tcp`] });
+  } else if (managed.kind === "repo") {
     const localPorts = await inspectImageExposedPorts(managed.image);
     port = resolveAppPort({ image: managed.image, env: detail.env,
       exposedPorts: localPorts.length ? localPorts : await fetchRepoExposedPorts(managed) });
