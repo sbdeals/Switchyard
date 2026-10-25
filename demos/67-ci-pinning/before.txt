@@ -1,0 +1,19 @@
+## [before] 01:37:25 EDT  1fc46d5 (HEAD)
+action refs total:      27
+  pinned to 40-hex SHA: 0
+  mutable tag refs:     27
+           11 uses: actions/checkout@v4
+            7 uses: actions/setup-node@v4
+            1 uses: actions/upload-artifact@v4
+            2 uses: docker/build-push-action@v6
+            1 uses: docker/login-action@v3
+            1 uses: docker/metadata-action@v5
+            2 uses: docker/setup-buildx-action@v3
+            1 uses: docker/setup-qemu-action@v3
+            1 uses: signpath/github-action-submit-signing-request@v1.2
+curl | bash installers: ci.yml:0 e2e-domain.yml:1 release.yml:0
+sha256 --check steps:   ci.yml:0 e2e-domain.yml:0 release.yml:0
+Install-Module w/o version: 1
+top-level permissions in ci.yml: 
+top-level permissions in e2e-domain.yml: 
+top-level permissions in release.yml:  contents: read packages: write id-token: write # npm --provenance 
