@@ -5,6 +5,12 @@ vi.mock("./docker", () => ({}));
 const session = { dokployCookie: "sess=member-fixture", email: "owner@example.test", iat: Date.now() };
 const fetchMock = vi.fn();
 
+async function access() {
+  const { getDokployRole } = await import("./dokploy");
+  const { agentConfigAccess } = await import("./agent/authorization");
+  return agentConfigAccess(await getDokployRole(session.dokployCookie));
+}
+
 beforeEach(() => {
   vi.resetModules();
   vi.stubEnv("DOKPLOY_URL", "http://dokploy.test");
@@ -22,8 +28,7 @@ afterEach(() => {
 describe("authoritative agent configuration role", () => {
   it.each(["owner", "admin"])("allows the Dokploy %s membership using only the request's cookie", async (role) => {
     fetchMock.mockResolvedValue(Response.json({ role, user: { role: "member" } }));
-    const { agentConfigAccess } = await import("./agent/authorization");
-    expect(await agentConfigAccess(session)).toEqual({ canConfigure: true, error: null });
+    expect(await access()).toEqual({ canConfigure: true, error: null });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith("http://dokploy.test/api/user.get", expect.objectContaining({
       headers: { Origin: "http://dokploy.test", Cookie: session.dokployCookie },
@@ -35,8 +40,7 @@ describe("authoritative agent configuration role", () => {
 
   it.each(["member", "custom", "Owner", "admin,member"])("denies %s even if the nested user says admin", async (role) => {
     fetchMock.mockResolvedValue(Response.json({ role, user: { role: "admin" } }));
-    const { agentConfigAccess } = await import("./agent/authorization");
-    expect(await agentConfigAccess(session)).toMatchObject({
+    expect(await access()).toMatchObject({
       canConfigure: false,
       error: "Only workspace admins can change the agent provider.",
     });
@@ -44,31 +48,27 @@ describe("authoritative agent configuration role", () => {
 
   it.each([null, {}, { user: { role: "owner" } }, { role: false }, { role: "" }])("fails closed for a malformed membership: %j", async (body) => {
     fetchMock.mockResolvedValue(Response.json(body));
-    const { agentConfigAccess } = await import("./agent/authorization");
-    expect(await agentConfigAccess(session)).toMatchObject({ canConfigure: false, error: expect.stringContaining("Could not verify") });
+    await expect(access()).rejects.toThrow("Could not verify");
   });
 
   it.each([401, 403, 500])("fails closed on HTTP %i without a system-session fallback", async (status) => {
     fetchMock.mockResolvedValue(new Response("upstream failure", { status }));
-    const { agentConfigAccess } = await import("./agent/authorization");
-    expect(await agentConfigAccess(session)).toMatchObject({ canConfigure: false, error: expect.stringContaining("Could not verify") });
+    await expect(access()).rejects.toThrow(status === 500 ? "Could not verify" : "Session expired");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed on a timeout or malformed JSON", async () => {
-    const { agentConfigAccess } = await import("./agent/authorization");
     fetchMock.mockRejectedValueOnce(new DOMException("timed out", "TimeoutError"));
-    expect((await agentConfigAccess(session)).canConfigure).toBe(false);
+    await expect(access()).rejects.toThrow("timed out");
     fetchMock.mockResolvedValueOnce(new Response("not json"));
-    expect((await agentConfigAccess(session)).canConfigure).toBe(false);
+    await expect(access()).rejects.toThrow();
   });
 
   it("rechecks membership after a demotion", async () => {
-    const { agentConfigAccess } = await import("./agent/authorization");
     fetchMock.mockResolvedValueOnce(Response.json({ role: "admin" }));
-    expect((await agentConfigAccess(session)).canConfigure).toBe(true);
+    expect((await access()).canConfigure).toBe(true);
     fetchMock.mockResolvedValueOnce(Response.json({ role: "member" }));
-    expect((await agentConfigAccess(session)).canConfigure).toBe(false);
+    expect((await access()).canConfigure).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

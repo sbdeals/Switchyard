@@ -40,11 +40,12 @@ function friendlyError(e: unknown, model: string): string {
 export async function runAgentTurn(
   incoming: Anthropic.MessageParam[],
   sessionKey: string,
-  emit: (e: AgentEvent) => void
+  emit: (e: AgentEvent) => void,
+  checkSession: () => Promise<void>,
 ): Promise<void> {
   // OpenAI-compatible provider runs a separate loop (different wire format).
   if (activeProvider() === "openai") {
-    return runOpenAiTurn(incoming, sessionKey, emit);
+    return runOpenAiTurn(incoming, sessionKey, emit, checkSession);
   }
 
   await ensureAgentCredentialFresh();
@@ -58,6 +59,7 @@ export async function runAgentTurn(
   const messages: Anthropic.MessageParam[] = [...incoming];
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
+    await checkSession();
     let msg: Anthropic.Message;
     try {
       // effort:"high" balances quality and latency for an interactive copilot.
@@ -110,6 +112,7 @@ export async function runAgentTurn(
     const results: Anthropic.ToolResultBlockParam[] = [];
 
     for (const tu of toolUses) {
+      await checkSession();
       emit({ type: "tool", id: tu.id, name: tu.name, label: initialLabel(tu.name), status: "running" });
       const outcome = await runTool(
         tu.name,

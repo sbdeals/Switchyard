@@ -1,6 +1,6 @@
 import { startLogin } from "@/lib/agent/oauth";
 import { agentConfigAccess } from "@/lib/agent/authorization";
-import { sessionFromRequest, unauthorized } from "@/lib/session";
+import { requireActiveAgentSession } from "@/lib/agent/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,9 +14,9 @@ export const dynamic = "force-dynamic";
  * be started.
  */
 export async function POST(req: Request) {
-  const session = sessionFromRequest(req);
-  if (!session) return unauthorized();
-  const access = await agentConfigAccess(session);
+  const auth = await requireActiveAgentSession(req);
+  if ("response" in auth) return auth.response;
+  const access = agentConfigAccess(auth.role);
   if (!access.canConfigure) return Response.json({ error: access.error }, { status: 403 });
   return Response.json(startLogin());
 }

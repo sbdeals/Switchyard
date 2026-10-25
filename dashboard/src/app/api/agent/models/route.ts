@@ -10,7 +10,7 @@
  */
 import { getOpenAI } from "@/lib/agent/client";
 import { AGENT_MODELS, resolveAgentKey, resolveProvider } from "@/lib/agent/key-store";
-import { sessionFromRequest, unauthorized } from "@/lib/session";
+import { requireActiveAgentSession } from "@/lib/agent/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +36,8 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 export async function GET(req: Request) {
   // The proxy only proves a session cookie EXISTS; verify it (the stored key
   // is sent to whatever endpoint this lists models from).
-  if (!sessionFromRequest(req)) return unauthorized();
+  const auth = await requireActiveAgentSession(req);
+  if ("response" in auth) return auth.response;
 
   if (resolveProvider() === "anthropic") {
     return Response.json({

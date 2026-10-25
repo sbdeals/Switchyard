@@ -24,7 +24,10 @@ vi.mock("node:fs", () => ({
     rmSync: () => { mocks.file = null; },
   },
 }));
-vi.mock("@/lib/dokploy", () => ({ getDokployRole: mocks.role }));
+vi.mock("@/lib/dokploy", () => ({
+  getDokployRole: mocks.role,
+  DokploySessionExpiredError: class extends Error {},
+}));
 vi.mock("./oauth", () => ({ refreshLogin: mocks.refresh, startLogin: mocks.start, completeLogin: mocks.complete }));
 vi.mock("./run", () => ({ runAgentTurn: mocks.turn }));
 
@@ -121,7 +124,7 @@ describe("global agent configuration authorization", () => {
     mocks.role.mockRejectedValue(new Error("Dokploy unavailable"));
     for (const handler of [config.POST, oauthStart.POST, oauthComplete.POST]) {
       const response = await handler(request("POST", { clear: true, code: "fixture-code" }));
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(503);
       expect(await response.json()).toMatchObject({ error: expect.stringContaining("Could not verify") });
     }
     expect(mocks.file).toBe(before);
@@ -162,15 +165,15 @@ describe("global agent configuration authorization", () => {
     expect(response.status).toBe(200);
     await response.text();
     expect(mocks.turn).toHaveBeenCalledTimes(1);
-    expect(mocks.role).toHaveBeenCalledTimes(1); // Only config status checks role.
+    expect(mocks.role).toHaveBeenCalledTimes(3); // Every route verifies its Dokploy session.
   });
 
-  it("returns read-only status when Dokploy is unavailable", async () => {
+  it("withholds configuration status when Dokploy is unavailable", async () => {
     configureOpenAI();
     mocks.role.mockRejectedValue(new Error("offline"));
     const response = await config.GET(request());
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ canConfigure: false, configured: true });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: expect.stringContaining("Could not verify") });
   });
 });
 

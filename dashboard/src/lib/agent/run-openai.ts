@@ -37,7 +37,8 @@ function friendlyError(e: unknown, model: string): string {
 export async function runOpenAiTurn(
   incoming: Anthropic.MessageParam[],
   sessionKey: string,
-  emit: (e: AgentEvent) => void
+  emit: (e: AgentEvent) => void,
+  checkSession: () => Promise<void>,
 ): Promise<void> {
   const model = agentModel();
   if (!model) {
@@ -59,6 +60,7 @@ export async function runOpenAiTurn(
   }
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
+    await checkSession();
     let text = "";
     const toolAcc: Record<number, ToolAcc> = {};
     try {
@@ -109,6 +111,7 @@ export async function runOpenAiTurn(
     if (!calls.length) return; // model produced a final answer
 
     for (const c of calls) {
+      await checkSession();
       emit({ type: "tool", id: c.id, name: c.name, label: initialLabel(c.name), status: "running" });
       let input: Record<string, unknown> = {};
       try {

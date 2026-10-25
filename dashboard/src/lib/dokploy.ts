@@ -367,7 +367,9 @@ export async function getDokployRole(dokployCookie: string): Promise<string> {
       redirect: "error",
       signal: AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
     });
+    // An untrusted origin is a configuration failure, not a revoked session.
     if (await isInvalidOrigin(res)) continue;
+    if (res.status === 401 || res.status === 403) throw new DokploySessionExpiredError();
     if (!res.ok) throw new Error("Could not verify your workspace role with Dokploy.");
     const member = await res.json() as { role?: unknown } | null;
     if (!member || typeof member.role !== "string" || !member.role) break;
@@ -375,6 +377,12 @@ export async function getDokployRole(dokployCookie: string): Promise<string> {
     return member.role;
   }
   throw new Error("Could not verify your workspace role with Dokploy.");
+}
+
+export class DokploySessionExpiredError extends Error {
+  constructor() {
+    super("Session expired. Sign in again at /login.");
+  }
 }
 
 /**
