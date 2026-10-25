@@ -313,7 +313,7 @@ export function DeploymentHistory({
                     )}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm">{d.title}</div>
+                    <div className="truncate text-sm" title={d.title}>{d.title}</div>
                     <div className="text-[11px] text-[var(--color-fg-subtle)]">
                       {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
                       {duration && ` · ${duration}`}

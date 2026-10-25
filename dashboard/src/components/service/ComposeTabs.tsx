@@ -7,6 +7,7 @@ import { ENGINE_META } from "@/lib/engines";
 import { isStopped, serviceLabel } from "@/lib/service-meta";
 import { BRIDGE_NETWORK, managedConnectionString, type ManagedMeta } from "@/lib/managed-compose";
 import { DomainRow } from "@/components/service/AppTabs";
+import { DeployHookPanel } from "@/components/service/DeployHookPanel";
 import {
   composeLifecycleAction,
   saveComposeFileAction,
@@ -103,7 +104,7 @@ function ManagedOverview({ compose, managed }: { compose: ComposeService; manage
         Runs as a container on this host&apos;s local network, reachable from your other services
         at <span className="font-mono">{compose.appName}</span>.
         {managed.kind === "database" && " Credentials live in Variables; data persists in a named volume."}
-        {managed.kind === "repo" && " Redeploy rebuilds from the current branch head; pushes do not deploy automatically."}
+        {managed.kind === "repo" && " Redeploy rebuilds from the current branch head. Enable deploy on push in Settings to deploy automatically."}
       </p>
     </div>
   );
@@ -326,6 +327,9 @@ export function ComposeSettingsTab({
         label="Created"
         value={compose.createdAt ? new Date(compose.createdAt).toLocaleString() : "—"}
       />
+      {compose.managed?.kind === "repo" && (
+        <DeployHookPanel key={compose.id} serviceId={compose.id} branch={compose.managed.branch} />
+      )}
       <DangerZone
         name={compose.name}
         message="Destroying removes the stack and all its containers."

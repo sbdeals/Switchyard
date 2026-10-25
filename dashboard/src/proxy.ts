@@ -24,6 +24,7 @@ const SESSION_COOKIE = "switchyard_session";
  * Paths reachable without a session:
  *  - /login          the sign-in page AND its Server Action POST target
  *  - /api/health     the installer's liveness/deep probe (shallow + ?deep=1)
+ *  - POST /api/hooks/deploy/<64 hex chars> verifies its own per-service HMAC
  * Next static assets are excluded by the matcher below, so the login page can
  * load its CSS/JS while unauthenticated.
  */
@@ -35,6 +36,9 @@ export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
   if (isPublic(pathname)) return NextResponse.next();
+  if (request.method === "POST" && /^\/api\/hooks\/deploy\/[a-f0-9]{64}$/.test(pathname)) {
+    return NextResponse.next();
+  }
   if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next();
 
   // Unauthenticated. API routes and Server Actions get a 401 (they are called

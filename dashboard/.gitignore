@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# Server-side deploy hook credentials
+/data/
+
 # next.js
 /.next/
 /out/
