@@ -11,6 +11,7 @@
  */
 import type { DomainInput, Engine } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
+import type { BuildKind, BuildPlan } from "@/lib/build-plan";
 
 /** Shared bridge network every Dokploy-managed container joins (Traefik lives here). */
 export const BRIDGE_NETWORK = "dokploy-network";
@@ -23,7 +24,7 @@ export interface ManagedAutoDomain {
 export type ManagedMeta =
   | { kind: "database"; engine: Engine; image: string }
   | { kind: "image"; image: string; autoDomain?: ManagedAutoDomain }
-  | { kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string; autoDomain?: ManagedAutoDomain };
+  | { kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string; buildKind?: BuildKind; buildPort?: number; autoDomain?: ManagedAutoDomain };
 
 const ENGINES = new Set<string>(Object.keys(ENGINE_META));
 const MANAGED_BLOCK = /^x-switchyard:[ \t]*\r?\n((?:[ \t]+\S.*(?:\r?\n|$))+)/m;
@@ -43,7 +44,7 @@ export function parseManaged(composeFile: string | null | undefined): ManagedMet
   for (const line of block[1].split("\n")) {
     const m = line.match(/^[ \t]+([\w-]+):[ \t]*(.*?)[ \t\r]*$/);
     if (!m) continue;
-    if ((m[1] === "autoDomainHost" || m[1] === "autoDomainPort") && !line.startsWith(`${indent}${m[1]}:`)) continue;
+    if (["autoDomainHost", "autoDomainPort", "buildKind", "buildPort"].includes(m[1]) && !line.startsWith(`${indent}${m[1]}:`)) continue;
     const value = m[2];
     if (value.startsWith('"')) {
       try {
@@ -64,10 +65,14 @@ export function parseManaged(composeFile: string | null | undefined): ManagedMet
     ? { autoDomain: marker } : {};
   if (fields.kind === "image" && fields.image) return { kind: "image", image: fields.image, ...autoDomain };
   if (fields.kind === "repo" && fields.image && fields.repoUrl && fields.branch) {
+    const build = ["node", "python", "go", "static"].includes(fields.buildKind) &&
+      /^\d+$/.test(fields.buildPort ?? "") && Number(fields.buildPort) >= 1 && Number(fields.buildPort) <= 65535
+      ? { buildKind: fields.buildKind as BuildKind, buildPort: Number(fields.buildPort) } : {};
     return {
       kind: "repo", image: fields.image, repoUrl: fields.repoUrl, branch: fields.branch,
       ...(fields.subdirectory ? { subdirectory: fields.subdirectory } : {}),
       ...(fields.dockerfile ? { dockerfile: fields.dockerfile } : {}),
+      ...build,
       ...autoDomain,
     };
   }
@@ -283,8 +288,8 @@ export function imageStack(input: { appName: string; image: string }): string {
   ].join("\n");
 }
 
-/** Build a public Dockerfile repository as a local image on the bridge network. */
-export function repoStack(input: RepoStackInput): string {
+/** Build a public repository as a local image on the bridge network. */
+export function repoStack(input: RepoStackInput, plan?: BuildPlan): string {
   validateRepoSource(input);
   const image = scalar(`${input.appName}-app:latest`);
   // BuildKit needs the .git suffix to distinguish a Git context from an HTTP file.
@@ -301,13 +306,19 @@ export function repoStack(input: RepoStackInput): string {
   ];
   if (input.subdirectory) lines.push(`  subdirectory: ${scalar(input.subdirectory)}`);
   if (input.dockerfile) lines.push(`  dockerfile: ${scalar(input.dockerfile)}`);
+  const generated = plan && plan.kind !== "dockerfile" && plan.dockerfileInline;
+  if (generated) lines.push(`  buildKind: ${plan.kind}`, `  buildPort: ${plan.port}`);
   lines.push(
     `services:`,
     `  app:`,
     `    build:`,
     `      context: ${scalar(context)}`,
   );
-  if (input.dockerfile && input.dockerfile !== "Dockerfile") {
+  if (generated) {
+    lines.push(`      dockerfile_inline: |`,
+      // Preserve container/build-time variables through Compose interpolation.
+      ...generated.trimEnd().split("\n").map((line) => `        ${line.replaceAll("$", "$$$$")}`));
+  } else if (input.dockerfile && input.dockerfile !== "Dockerfile") {
     lines.push(`      dockerfile: ${scalar(input.dockerfile)}`);
   }
   lines.push(
