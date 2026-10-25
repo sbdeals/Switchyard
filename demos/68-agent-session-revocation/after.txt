@@ -1,0 +1,17 @@
+## [after] 01:42:05 EDT Oct 25  dashboard image: switchyard-dash:b2-after
+member signed in; member's Dokploy sessions: 1
+  signed in                  GET  /api/agent/config    -> HTTP 200  {"canConfigure":false,"configured":false,"source":null,"masked":null,"loginActive":false,"provider":"anthropic
+  signed in                  GET  /api/agent/models    -> HTTP 200  {"provider":"anthropic","dynamic":false,"models":[{"id":"claude-opus-4-8","label":"Claude Opus 4.8"},{"id":"cl
+  signed in                  GET  /api/agent/changes   -> HTTP 200  {"configured":false,"changes":[]}
+  signed in                  POST /api/agent/chat      -> HTTP 503  {"error":"No Anthropic API key configured — add one at the top of the Agent panel."}
+
+>>> revoked the member's Dokploy sessions server-side (deleted 1 session row(s) in Dokploy; admin sessions untouched)
+    Dokploy itself now: 401 for user.get without a valid session
+
+  after Dokploy revocation   GET  /api/agent/config    -> HTTP 401  {"error":"Session expired. Sign in again at /login."}
+  after Dokploy revocation   GET  /api/agent/models    -> HTTP 401  {"error":"Unauthorized. Sign in at /login."}
+  after Dokploy revocation   GET  /api/agent/changes   -> HTTP 401  {"error":"Unauthorized. Sign in at /login."}
+  after Dokploy revocation   POST /api/agent/chat      -> HTTP 401  {"error":"Unauthorized. Sign in at /login."}
+
+switchyard_session cookie still in browser: false
+navigating to / lands on: /login

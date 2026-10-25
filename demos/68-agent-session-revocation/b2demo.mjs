@@ -1,0 +1,25 @@
+// B2 (S-P1-2) demo: a member's Dokploy session is revoked server-side; do the agent routes notice? usage: BASE=http://127.0.0.1:3005 LABEL=before node b2demo.mjs
+import { open } from './lib.mjs'; import fs from 'fs'; import { execSync } from 'child_process';
+const BASE = process.env.BASE || 'http://127.0.0.1:3005', LABEL = process.env.LABEL || 'run';
+const MPW = fs.readFileSync(new URL('./.onboard-pass', import.meta.url).pathname, 'utf8').trim();
+const sh = (c) => execSync(c, { shell: '/bin/bash' }).toString().trim();
+const q = (sql) => sh(`sudo docker exec dokploy-postgres psql -U dokploy -d dokploy -At -c "${sql}"`);
+const MEMBER = "(select id from \\\"user\\\" where email='b1-member@switchyard.local')";
+console.log(`## [${LABEL}] ${sh('date "+%H:%M:%S %Z %b %d"')}  dashboard image: ${sh("sudo docker inspect sy-b2 --format '{{.Config.Image}}'")}`);
+const { browser, ctx, page } = await open();
+await page.goto(BASE + '/login'); await page.fill('input[name=email]', 'b1-member@switchyard.local'); await page.fill('input[name=password]', MPW);
+await page.locator('button[type=submit]').first().click(); await page.waitForURL(u => !u.pathname.startsWith('/login'), { timeout: 60000 });
+const call = (m, url, b) => page.evaluate(async ([m, url, b]) => { const r = await fetch(url, { method: m, headers: { 'content-type': 'application/json' }, body: b ? JSON.stringify(b) : undefined }); const t = await r.text(); return { s: r.status, t: t.slice(0, 110).replace(/\n/g, ' ') }; }, [m, url, b]);
+const routes = [['GET', '/api/agent/config'], ['GET', '/api/agent/models'], ['GET', '/api/agent/changes'], ['POST', '/api/agent/chat', { messages: [{ role: 'user', content: 'list my services' }] }]];
+const probe = async (when) => { for (const [m, u, b] of routes) { const r = await call(m, u, b); console.log(`  ${when.padEnd(26)} ${m.padEnd(4)} ${u.padEnd(20)} -> HTTP ${r.s}  ${r.t}`); } };
+console.log(`member signed in; member's Dokploy sessions: ${q(`select count(*) from session where user_id=${MEMBER}`)}`);
+await probe('signed in');
+const n = q(`with d as (delete from session where user_id=${MEMBER} returning 1) select count(*) from d`);
+console.log(`\n>>> revoked the member's Dokploy sessions server-side (deleted ${n} session row(s) in Dokploy; admin sessions untouched)`);
+console.log(`    Dokploy itself now: ${sh(`curl -s -o /dev/null -w '%{http_code}' -H 'Origin: http://localhost:3000' http://127.0.0.1:3000/api/user.get`)} for user.get without a valid session\n`);
+await probe('after Dokploy revocation');
+const cookies = (await ctx.cookies()).map(c => c.name);
+console.log(`\nswitchyard_session cookie still in browser: ${cookies.includes('switchyard_session')}`);
+const nav = await page.goto(BASE + '/').then(() => null, (e) => e.message.split('\n')[0]); await page.waitForTimeout(2000); if (nav) console.log('navigating to / fails: ' + nav);
+if (!nav) console.log(`navigating to / lands on: ${new URL(page.url()).pathname}`);
+await browser.close();

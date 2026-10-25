@@ -1,0 +1,17 @@
+## [before] 01:41:49 EDT Oct 25  dashboard image: switchyard-dash:b1-after
+member signed in; member's Dokploy sessions: 5
+  signed in                  GET  /api/agent/config    -> HTTP 200  {"canConfigure":false,"configured":false,"source":null,"masked":null,"loginActive":false,"provider":"anthropic
+  signed in                  GET  /api/agent/models    -> HTTP 200  {"provider":"anthropic","dynamic":false,"models":[{"id":"claude-opus-4-8","label":"Claude Opus 4.8"},{"id":"cl
+  signed in                  GET  /api/agent/changes   -> HTTP 200  {"configured":false,"changes":[]}
+  signed in                  POST /api/agent/chat      -> HTTP 503  {"error":"No Anthropic API key configured — add one at the top of the Agent panel."}
+
+>>> revoked the member's Dokploy sessions server-side (deleted 5 session row(s) in Dokploy; admin sessions untouched)
+    Dokploy itself now: 401 for user.get without a valid session
+
+  after Dokploy revocation   GET  /api/agent/config    -> HTTP 200  {"canConfigure":false,"configured":false,"source":null,"masked":null,"loginActive":false,"provider":"anthropic
+  after Dokploy revocation   GET  /api/agent/models    -> HTTP 200  {"provider":"anthropic","dynamic":false,"models":[{"id":"claude-opus-4-8","label":"Claude Opus 4.8"},{"id":"cl
+  after Dokploy revocation   GET  /api/agent/changes   -> HTTP 200  {"configured":false,"changes":[]}
+  after Dokploy revocation   POST /api/agent/chat      -> HTTP 503  {"error":"No Anthropic API key configured — add one at the top of the Agent panel."}
+
+switchyard_session cookie still in browser: true
+navigating to / fails: page.goto: net::ERR_TOO_MANY_REDIRECTS (pre-existing loop, see notes)
