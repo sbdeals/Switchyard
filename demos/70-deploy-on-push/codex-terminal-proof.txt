@@ -1,0 +1,72 @@
+F hook local-only proof
+Source inspected read-only: local dokploy/dokploy:v0.30.10, /app/.next/server/pages/api/deploy/compose/[refreshToken].js and chunks/7794.js.
+Handler: requires matching compose.refreshToken and autoDeploy=true; raw source skips branch/watchPaths checks. GitHub-shaped head_commit supplies title/hash.
+No Railway access, production credentials, pre-existing apps, or :3001/:3002 deployment changes.
+Created isolated local test owner/organization f-hook-b0716c6c; generated credentials remain in this process memory.
+Started this worktree dashboard on :3015; scratch /tmp/f-hook-proof-aJagdK
+Local dumb HTTP initial commit: {"sha":"96ef7cd9b9a3978005ddf1587acf2aad5d58068a"}
+Local dumb HTTP after push + update-server-info: {"sha":"3bb10c4f93cc9c84c45a37565d7304b448ef5831"}
+Local HTTP server binds 127.0.0.1:8765; fetches from Dokploy to 172.18.0.1:8765 and 172.17.0.1:8765 failed. Using explicitly allowed public GitHub sample for the actual build.
+Source inspected read-only: local dokploy/dokploy:v0.30.10, /app/.next/server/pages/api/deploy/compose/[refreshToken].js and chunks/7794.js.
+Handler: requires matching compose.refreshToken and autoDeploy=true; raw source skips branch/watchPaths checks. GitHub-shaped head_commit supplies title/hash.
+No Railway access, production credentials, pre-existing apps, or :3001/:3002 deployment changes.
+Created isolated local test owner/organization f-hook-b0716c6c; generated credentials remain in this process memory.
+Started this worktree dashboard on :3015; scratch /tmp/f-hook-proof-cjUxDA
+Created only new service f-hook-b0716c6c composeId=Cxk7ieuTrgA-Iyw_OefUm appName=f-hook-b0716c6c-vd0guq sourceType=raw composeType=docker-compose.
+Deployment rows [{"id":"v-JoshCsK-MptxdG80ulS","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"running","description":"Branch main at deploy request: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb\nfix: use lockfile-aware install commands (#134)"}]
+Enabled hook through authenticated owner action; secret and native refresh token omitted.
+Persisted field names only: branch, enabled, ownerId, recent, refreshToken, repoUrl, secret, serviceId, token
+Deployment rows [{"id":"v-JoshCsK-MptxdG80ulS","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Branch main at deploy request: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb\nfix: use lockfile-aware install commands (#134)"}]
+Unsigned: {"result":"invalid signature"} HTTP_STATUS=403
+Signed wrong ref: {"result":"invalid signature"} HTTP_STATUS=403
+Signed push: {"result":"invalid signature"} HTTP_STATUS=403
+Duplicate signed push: {"result":"invalid signature"} HTTP_STATUS=403
+Deployment count before=1 after=1
+Deployment rows [{"id":"v-JoshCsK-MptxdG80ulS","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Branch main at deploy request: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb\nfix: use lockfile-aware install commands (#134)"}]
+Signature diagnostic: stored secret matches owner view=true local verifier=true body bytes=25
+Node fetch signed delivery HTTP=202 {"result":"deployment queued"}
+Signature diagnostic: stored secret matches owner view=true local verifier=true body bytes=25
+Node fetch signed delivery HTTP=200 {"result":"duplicate or disabled"}
+Unsigned: {"result":"invalid signature"} HTTP_STATUS=403
+Signed wrong ref: {"result":"invalid signature"} HTTP_STATUS=403
+Signed push: {"result":"invalid signature"} HTTP_STATUS=403
+Duplicate signed push: {"result":"invalid signature"} HTTP_STATUS=403
+Deployment count before=2 after=2
+Deployment rows [{"id":"v-JoshCsK-MptxdG80ulS","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Branch main at deploy request: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb\nfix: use lockfile-aware install commands (#134)"},{"id":"0NHJiJ5SZuQHBUVC26fxs","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Hash: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb"}]
+Unsigned: <!DOCTYPE html><html><head><meta charSet="utf-8" data-next-head=""/><meta name="viewport" content="width=device-width" data-next-head=""/><style data-next-hide-fouc="true">body{display:none}</style><noscript data-next-hide-fouc="true"><style>body{display:block}</style></noscript><noscript data-n-css=""></noscript><script defer="" noModule="" src="/_next/static/chunks/polyfills.js"></script><script src="/_next/static/chunks/webpack.js" defer=""></script><script src="/_next/static/chunks/main.js" defer=""></script><script src="/_next/static/chunks/pages/_app.js" defer=""></script><script src="/_next/static/chunks/pages/_error.js" defer=""></script><script src="/_next/static/development/_buildManifest.js" defer=""></script><script src="/_next/static/development/_ssgManifest.js" defer=""></script><noscript id="__next_css__DO_NOT_USE__"></noscript></head><body><div id="__next"></div><script src="/_next/static/chunks/react-refresh.js"></script><script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"statusCode":500,"hostname":"localhost"}},"page":"/_error","query":{},"buildId":"development","isFallback":false,"err":{"name":"SyntaxError","source":"server","message":"Unexpected end of JSON input","stack":"SyntaxError: Unexpected end of JSON input\n    at JSON.parse (\u003canonymous\u003e)\n    at loadManifest (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/load-manifest.external.js:54:25)\n    at loadManifestFromRelativePath (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/load-manifest.external.js:111:12)\n    at AppRouteRouteModule.loadManifests (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:1:193273)\n    at AppRouteRouteModule.prepare (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:1:203547)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async Module.handler (webpack-internal:///(rsc)/../../wt-bridge-public-urls/dashboard/node_modules/next/dist/build/webpack/loaders/next-app-loader/index.js?name=app%2Fapi%2Fhooks%2Fdeploy%2F%5BserviceToken%5D%2Froute\u0026page=%2Fapi%2Fhooks%2Fdeploy%2F%5BserviceToken%5D%2Froute\u0026appPaths=\u0026allNormalizedAppPaths=\u0026pagePath=private-next-app-dir%2Fapi%2Fhooks%2Fdeploy%2F%5BserviceToken%5D%2Froute.ts\u0026appDir=%2Fworkspace%2Fwt-bridge-deploy-on-push%2Fdashboard%2Fsrc%2Fapp\u0026pageExtensions=tsx\u0026pageExtensions=ts\u0026pageExtensions=jsx\u0026pageExtensions=js\u0026rootDir=%2Fworkspace%2Fwt-bridge-deploy-on-push%2Fdashboard\u0026isDev=true\u0026tsconfigPath=\u0026basePath=\u0026assetPrefix=\u0026nextConfigOutput=standalone\u0026preferredRegion=\u0026middlewareConfig=e30%3D\u0026isGlobalNotFoundEnabled=!:109:27)\n    at async DevServer.renderToResponseWithComponentsImpl (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/base-server.js:1462:9)\n    at async DevServer.renderPageComponent (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/base-server.js:1514:24)\n    at async DevServer.renderToResponseImpl (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/base-server.js:1564:32)\n    at async DevServer.pipeImpl (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/base-server.js:1044:25)\n    at async NextNodeServer.handleCatchallRenderRequest (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/next-server.js:338:17)\n    at async DevServer.handleRequestImpl (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/base-server.js:935:17)\n    at async /workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/dev/next-dev-server.js:394:20\n    at async Span.traceAsyncFn (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/trace/trace.js:164:20)\n    at async DevServer.handleRequest (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/dev/next-dev-server.js:390:24)\n    at async invokeRender (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/lib/router-server.js:266:21)\n    at async handleRequest (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/lib/router-server.js:465:24)\n    at async requestHandlerImpl (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/lib/router-server.js:514:13)\n    at async Server.requestListener (/workspace/wt-bridge-public-urls/dashboard/node_modules/next/dist/server/lib/start-server.js:225:13)"},"gip":true,"scriptLoader":[]}</script></body></html> HTTP_STATUS=500
+Signed wrong ref: {"result":"ignored ref"} HTTP_STATUS=200
+Signed push: {"result":"deployment queued"} HTTP_STATUS=202
+Duplicate signed push: {"result":"duplicate or disabled"} HTTP_STATUS=200
+Deployment count before=2 after=3
+Deployment rows [{"id":"T3ZrGBjFi2_KNW9zdF1KY","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"running","description":"Hash: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb"},{"id":"v-JoshCsK-MptxdG80ulS","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Branch main at deploy request: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb\nfix: use lockfile-aware install commands (#134)"},{"id":"0NHJiJ5SZuQHBUVC26fxs","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Hash: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb"}]
+Proof harness correction: initial signed curl commands omitted the required sha256= prefix; correctly rejected with 403. Node fetch with the prefix succeeded. Corrected curl uses the same prefix. One unsigned retry hit a transient Next dev manifest reload while source diagnostics were removed; stable retest follows. No signature-verification product change was needed.
+Unsigned: {"result":"invalid signature"} HTTP_STATUS=403
+Signed wrong ref: {"result":"ignored ref"} HTTP_STATUS=200
+Signed push: {"result":"deployment queued"} HTTP_STATUS=202
+Duplicate signed push: {"result":"duplicate or disabled"} HTTP_STATUS=200
+Deployment count before=3 after=4
+Deployment rows [{"id":"T3ZrGBjFi2_KNW9zdF1KY","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Hash: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb"},{"id":"sBhlaKqo_ZcEuejGgaB03","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"running","description":"Hash: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb"},{"id":"v-JoshCsK-MptxdG80ulS","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Branch main at deploy request: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb\nfix: use lockfile-aware install commands (#134)"},{"id":"0NHJiJ5SZuQHBUVC26fxs","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Hash: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb"}]
+Owner sign-out HTTP=200; subsequent signed anonymous push HTTP=202 {"result":"deployment queued"}
+Browser Deploys panel contains SHA/message: false
+Browser Settings loaded owner-only hook controls: false
+Browser Disable switch aria-checked=undefined
+Browser Deploys panel contains SHA/message: false
+Browser Settings loaded owner-only hook controls: false
+Browser Disable switch aria-checked=undefined
+Browser Deploys panel contains SHA/message: false
+Browser Settings loaded owner-only hook controls: false
+Browser Disable switch aria-checked=undefined
+Browser Deploys panel contains SHA/message: false
+Browser Settings loaded owner-only hook controls: false
+Browser Disable switch aria-checked=undefined
+Browser Deploys panel contains SHA/message: false
+Browser Settings loaded owner-only hook controls: false
+Browser Disable switch aria-checked=undefined
+Disable result=true native autoDeploy=false token rotated=true old native token HTTP=404 Switchyard disabled HTTP=404
+Browser hydration diagnosis: [{"path":"/_next/static/chunks/main-app.js","status":200,"type":"application/javascript; charset=UTF-8"},{"path":"/_next/static/chunks/app-pages-internals.js","status":200,"type":"application/javascript; charset=UTF-8"},{"path":"/_next/static/chunks/app/page.js","status":200,"type":"application/javascript; charset=UTF-8"},{"path":"/_next/static/chunks/polyfills.js","status":200,"type":"application/javascript; charset=UTF-8"},{"path":"/_next/static/chunks/webpack.js","status":200,"type":"application/javascript; charset=UTF-8"}]
+Regenerate result=true new Switchyard token=true new HMAC secret=true new native token=true kept disabled=true prior native token HTTP=404
+Deployment rows [{"id":"T3ZrGBjFi2_KNW9zdF1KY","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Hash: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb"},{"id":"sBhlaKqo_ZcEuejGgaB03","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Hash: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb"},{"id":"HTd0oJZ0XbCIQQrwIkM0r","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Hash: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb"},{"id":"v-JoshCsK-MptxdG80ulS","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Branch main at deploy request: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb\nfix: use lockfile-aware install commands (#134)"},{"id":"0NHJiJ5SZuQHBUVC26fxs","title":"Deploy 68c1b9f · fix: use lockfile-aware install commands (#134)","status":"done","description":"Hash: 68c1b9f87c41fb3fef2667e27149865c2f42d1eb"}]
+Final checks: cd dashboard && npm run lint && npx tsc --noEmit && npx vitest run: all passed, 17 files / 479 tests. git diff --check passed.
+Browser automation did not hydrate the workspace; button clicks/screenshots do not count as UI proof. Deployment titles/statuses above are live Dokploy records. UI rendering has Vitest coverage.
+Only app created in this session retained: f-hook-b0716c6c composeId=Cxk7ieuTrgA-Iyw_OefUm. Hook disabled and native token revoked after testing.
+Stopped only this session dashboard :3015. New f-hook proof app retained; pre-existing apps untouched.

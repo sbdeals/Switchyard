@@ -1,0 +1,15 @@
+import { open, login } from './lib.mjs';
+const BASE = process.env.BASE, OUT = '/tmp/fdemo/before';
+const { browser, page } = await open({ video: OUT }); await login(page); await page.waitForTimeout(2500);
+await page.getByText(/nodejs-getting-started/).first().click(); await page.waitForTimeout(1500);
+await page.getByRole('tab', { name: 'Settings' }).click(); await page.waitForTimeout(1500);
+const t = await page.getByRole('dialog').first().innerText();
+console.log('Settings has "Deploy on push":', t.includes('Deploy on push'));
+await page.screenshot({ path: `${OUT}/1-settings.png` });
+await page.getByRole('tab', { name: 'Deploys' }).click(); await page.waitForTimeout(3000);
+const d = await page.getByRole('dialog').first().innerText();
+console.log('newest deploy row:', (d.match(/\n(Deploy[^\n]*|[^\n]*\n[^\n]*(Succeeded|Failed))/) || ['?'])[0].trim().replace(/\n/g, ' | '));
+await page.screenshot({ path: `${OUT}/3-deploys-row.png` });
+const r = await fetch(BASE + '/api/hooks/deploy/' + 'a'.repeat(64), { method: 'POST', redirect: 'manual', headers: { 'x-github-event': 'push' }, body: '{}' });
+console.log('POST /api/hooks/deploy/<64hex> ->', r.status, r.headers.get('location') || '');
+await page.close(); await browser.close();

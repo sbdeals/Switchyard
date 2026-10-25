@@ -1,0 +1,44 @@
+(already enabled)
+--- panel after enable ---
+
+
+Automatically deploy pushes to main.
+
+Disable
+
+In your GitHub repository, open Settings → Webhooks → Add webhook.
+
+Payload URL
+
+GitHub needs an externally reachable dashboard URL. Replace the origin above if you access this dashboard locally.
+
+Secret
+Show
+
+Set Content type to application/json, select Just the push event, keep Active checked, then click Add webhook.
+
+This hook keeps working when you sign out. Disable or regenerate it to revoke its deployment token.
+
+Regenerate
+
+Replaces the URL and secret. Update both in GitHub afterward.
+
+
+hook url found: true | secret shown: true
+unsigned      -> 403 {"result":"invalid signature"}
+bad signature -> 403 {"result":"invalid signature"}
+signed push   -> 202 {"result":"deployment queued"}
+duplicate     -> 200 {"result":"duplicate or disabled"}
+newest deploy row: Deploy 8b8dec1 · Bump express (#418) | 10/25/2026, 1:55:49 AM · 2s (Dokploy builds the real branch HEAD, so the row shows the real commit, not the payload sha)
+--- deploys (head) ---
+, newest first. Open one to see its build and deploy log.
+
+Deploy 8b8dec1 · Bump express (#418)
+10/25/2026, 1:55:49 AM · 2s
+Succeeded
+Deploy 8b8dec1 · Bump express (#418)
+10/25/2026, 1:54:49 AM · 3s
+Succeeded
+Manual deployment
+10/25/2026, 1:21:51 AM · 3s
+Succeeded
