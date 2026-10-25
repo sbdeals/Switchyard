@@ -1,7 +1,7 @@
 /**
  * Tool surface exposed to the model. Each tool wraps existing dokploy.ts
- * operations (via ./ops). SAFE tools execute immediately; the four DESTRUCTIVE
- * tools never execute — they append to the per-user staged-changes store and
+ * operations (via ./ops). The four destructive tools and ALL shell commands
+ * never execute here — they append to the per-user staged-changes store and
  * return `{staged}` so the model can tell the user to review the Apply bar.
  */
 import "server-only";
@@ -243,7 +243,7 @@ const TOOLS: Record<string, ToolDef> = {
     schema: {
       name: "lifecycle_action",
       description:
-        "Run a non-destructive lifecycle action on a service: start, deploy, or redeploy. (Stopping or removing a service is a separate staged action.)",
+        "Immediately start, deploy, or redeploy a service without approval. (Stopping or removing a service is a separate staged action.)",
       input_schema: {
         type: "object",
         properties: {
@@ -287,27 +287,31 @@ const TOOLS: Record<string, ToolDef> = {
     schema: {
       name: "exec_in_service",
       description:
-        "Run a shell command (via `sh -c`) INSIDE a service's running container and get its stdout/stderr/exit code back. This is your window into a deployment for diagnosis — inspect files and processes, check config, curl an internal endpoint, or query a database (e.g. `psql -U postgres -c 'select 1'`, `env`, `cat /app/config.json`, `ls -la`, `ps aux`). Output is capped (~1MB, 15s). Prefer read-only/diagnostic commands; state changes to Dokploy objects still go through the dedicated tools.",
+        "STAGE a shell command (via sh -c) inside a service's running container. EVERY command, including read-only diagnostics, requires human approval in the Apply bar. Nothing executes now. The user reviews the exact command, service/container and working directory, then Approves or Rejects. Approval permits one attempt on that container; failures require a new staged command. Output is shown after approval (capture capped at ~1MB/15s). Use read_recent_logs or get_metrics for diagnostics without shell approval.",
       input_schema: {
         type: "object",
         properties: {
-          service: { type: "string", description: "Service id, name, or appName (or a full container name to target one compose container)." },
-          command: { type: "string", description: "Shell command to run inside the container." },
+          service: { type: "string", description: "Service id, name, or appName. The resolved container is pinned for approval." },
+          command: { type: "string", description: "Exact shell command to stage for approval (whitespace preserved)." },
+          workingDir: { type: "string", description: "Absolute working directory inside the container (default /)." },
         },
         required: ["service", "command"],
       },
     },
-    run: async (input) => {
+    run: async (input, ctx) => {
+      const command = input.command;
+      if (typeof command !== "string" || !command.trim() || command.includes("\0")) {
+        throw new Error("A non-empty shell command without NUL bytes is required.");
+      }
+      const workingDir = input.workingDir ?? "/";
+      if (typeof workingDir !== "string" || !workingDir.startsWith("/") || workingDir.includes("\0")) {
+        throw new Error("workingDir must be an absolute container path without NUL bytes.");
+      }
       const svc = await resolveOrThrow(input);
-      const command = reqStr(input, "command");
-      const r = await ops.execInService(svc, command);
-      if (!r) return { content: `Container for "${svc.name}" is not running — cannot exec.`, isError: true, label: `Exec in ${svc.name}` };
-      const parts = [
-        r.stdout && `stdout:\n${r.stdout}`,
-        r.stderr && `stderr:\n${r.stderr}`,
-        `exit code: ${r.exitCode ?? "unknown"}${r.truncated ? " (output truncated)" : ""}`,
-      ].filter(Boolean);
-      return { content: parts.join("\n\n").slice(0, 12000), label: `Exec in ${svc.name}` };
+      const params = await ops.prepareShellCommand(svc, command, workingDir);
+      const description = `Run shell command in "${svc.name}"`;
+      const change = addStaged(ctx.sessionKey, { kind: "exec_in_service", params, description });
+      return { content: `Staged for approval: ${description} (id ${change.id}). Nothing executed. Ask the user to review the exact command and target in the Apply bar.`, staged: change, label: `Stage: exec in ${svc.name}` };
     },
   },
 

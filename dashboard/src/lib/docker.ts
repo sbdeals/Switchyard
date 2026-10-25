@@ -312,9 +312,16 @@ export interface ExecResult {
 export async function runExec(
   appName: string,
   command: string,
-  opts: { timeoutMs?: number; maxBytes?: number } = {}
+  opts: {
+    timeoutMs?: number;
+    maxBytes?: number;
+    /** Pin an approved command to its original container; never resolve a replacement. */
+    containerId?: string;
+    workingDir?: string;
+    beforeStart?: () => Promise<void>;
+  } = {}
 ): Promise<ExecResult | null> {
-  const id = await findContainerId(appName);
+  const id = opts.containerId ?? await findContainerId(appName);
   if (!id) return null;
   const { timeoutMs = 15_000, maxBytes = 1_000_000 } = opts;
   const container = docker.getContainer(id);
@@ -326,10 +333,12 @@ export async function runExec(
       AttachStdout: true,
       AttachStderr: true,
       Tty: false,
+      ...(opts.workingDir ? { WorkingDir: opts.workingDir } : {}),
     }),
     DOCKER_OP_TIMEOUT_MS,
     `Creating exec in ${appName}`,
   );
+  await opts.beforeStart?.();
   const stream: Duplex = await withTimeout(
     exec.start({ hijack: true, stdin: false }),
     DOCKER_OP_TIMEOUT_MS,

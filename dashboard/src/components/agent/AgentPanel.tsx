@@ -238,7 +238,7 @@ export function AgentPanel() {
     }
   };
 
-  const applyChanges = async (ids?: string[]) => {
+  const applyChanges = async (ids = changes.map((c) => c.id)) => {
     setApplying(true);
     try {
       const res = await fetch("/api/agent/changes", {
@@ -246,11 +246,13 @@ export function AgentPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "apply", ids }),
       });
-      const data = (await res.json().catch(() => null)) as { results?: ApplyResult[] } | null;
+      const data = (await res.json().catch(() => null)) as { results?: ApplyResult[]; error?: string } | null;
       if (data?.results) {
         setApplyResults(data.results);
         // Auto-dismiss only all-ok results; failures stay until dismissed.
-        if (data.results.every((r) => r.ok)) setTimeout(() => setApplyResults(null), 6000);
+        if (data.results.every((r) => r.ok && !r.output)) setTimeout(() => setApplyResults(null), 6000);
+      } else if (data?.error) {
+        setApplyResults([{ id: "approval-error", description: "Approval failed", ok: false, error: data.error }]);
       }
     } finally {
       setApplying(false);
