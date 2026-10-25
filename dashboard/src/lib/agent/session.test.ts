@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   applyStaged: vi.fn(),
   listStaged: vi.fn(() => [{ id: "fixture", kind: "stop_service", description: "Fixture change", createdAt: 1, params: {} }]),
   removeStaged: vi.fn(() => []),
+  takeStaged: vi.fn(() => [{ id: "fixture", kind: "stop_service", description: "Fixture change", createdAt: 1, params: {} }]),
 }));
 
 // Exercise the real envelope, Dokploy identity lookup and route gates. All
@@ -50,6 +51,7 @@ vi.mock("./store", () => ({
   sessionKey: () => "fixture-session",
   listStaged: mocks.listStaged,
   removeStaged: mocks.removeStaged,
+  takeStaged: mocks.takeStaged,
 }));
 
 import { SESSION_COOKIE, SESSION_MAX_AGE, sealSession } from "../session";
@@ -65,7 +67,7 @@ const routes: Route[] = [
   { name: "OAuth complete", method: "POST", body: { code: "fixture-code" }, handler: async (req) => (await import("@/app/api/agent/oauth/complete/route")).POST(req) },
   { name: "chat POST", method: "POST", body: { messages: [{ role: "user", content: "hello" }] }, handler: async (req) => (await import("@/app/api/agent/chat/route")).POST(req) },
   { name: "changes GET", method: "GET", handler: async (req) => (await import("@/app/api/agent/changes/route")).GET(req) },
-  { name: "changes apply", method: "POST", body: { action: "apply" }, handler: async (req) => (await import("@/app/api/agent/changes/route")).POST(req) },
+  { name: "changes apply", method: "POST", body: { action: "apply", ids: ["fixture"] }, handler: async (req) => (await import("@/app/api/agent/changes/route")).POST(req) },
   { name: "changes discard", method: "POST", body: { action: "discard" }, handler: async (req) => (await import("@/app/api/agent/changes/route")).POST(req) },
 ];
 
@@ -81,7 +83,7 @@ function expectNoAgentAccess() {
   for (const fn of [
     mocks.startLogin, mocks.completeLogin, mocks.setOAuthCredential, mocks.setRuntimeKey,
     mocks.setProvider, mocks.setBaseUrl, mocks.setRuntimeModel, mocks.resolveAgentKey,
-    mocks.getOpenAI, mocks.runAgentTurn, mocks.applyStaged, mocks.listStaged, mocks.removeStaged,
+    mocks.getOpenAI, mocks.runAgentTurn, mocks.applyStaged, mocks.listStaged, mocks.removeStaged, mocks.takeStaged,
   ]) expect(fn).not.toHaveBeenCalled();
 }
 

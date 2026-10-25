@@ -257,7 +257,7 @@ can't route service VIPs). Details and symptoms live in
       commands), full **compose parity** (variables/domains/deploys/metrics)
 - [x] HTTP metrics (traffic / requests / error rate / latency percentiles)
       from Traefik
-- [x] In-dashboard Claude agent with staged-approval for destructive actions
+- [x] In-dashboard Claude agent with approval for every shell command and service stop/delete, domain deletion, and mount deletion ([exact boundary](docs/dashboard-guide.md#agent-approvals))
 - [ ] Per-deployment build logs in the dashboard
 - [ ] TLS for the dashboard itself (today: localhost default / HTTPS proxy for
       exposure); real Let's Encrypt custom domains need a Linux host on 80/443

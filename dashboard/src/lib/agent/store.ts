@@ -1,30 +1,40 @@
 /**
  * In-memory store of "staged" (pending-approval) changes the agent has queued
  * but not yet executed. Destructive operations (delete/stop a service, delete a
- * domain or mount) are never run by the agent directly — they land here and
- * wait for the user to click "Apply" in the Railway-style changes bar.
+ * domain or mount) and ALL shell commands land here instead of executing.
+ * They wait for approval in the existing changes bar.
  *
  * The store is a process-global singleton so it survives Next.js HMR reloads and
  * repeated imports (same pattern as lib/collector.ts). It is keyed per user so
  * two people driving the same dashboard don't see each other's queued changes.
  */
 import "server-only";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import type { SwitchyardSession } from "@/lib/session";
 
 /** The kinds of operation that must be staged rather than executed. */
-export type StagedKind = "delete_service" | "stop_service" | "delete_domain" | "delete_mount";
+export type StagedKind = "delete_service" | "stop_service" | "delete_domain" | "delete_mount" | "exec_in_service";
 
-export interface StagedChange {
+export interface ShellCommand {
+  serviceId: string;
+  serviceName: string;
+  appName: string;
+  containerId: string;
+  workingDir: string;
+  command: string;
+}
+
+type StagedOperation =
+  | { kind: "exec_in_service"; params: ShellCommand }
+  | { kind: Exclude<StagedKind, "exec_in_service">; params: Record<string, unknown> };
+
+export type StagedChange = StagedOperation & {
   id: string;
-  kind: StagedKind;
-  /** Opaque params consumed by ops.applyStaged when the user approves. */
-  params: Record<string, unknown>;
   /** Human-readable one-liner shown in the Apply bar / details modal. */
   description: string;
   createdAt: number;
-}
+};
 
 interface StagedRuntime {
   /** sessionKey -> ordered list of staged changes. */
@@ -48,22 +58,31 @@ export function sessionKey(session: SwitchyardSession): string {
 }
 
 export function listStaged(key: string): StagedChange[] {
-  return rt.byKey.get(key) ?? [];
+  return structuredClone(rt.byKey.get(key) ?? []);
 }
 
 export function addStaged(
   key: string,
-  entry: Omit<StagedChange, "id" | "createdAt">
+  entry: StagedOperation & { description: string }
 ): StagedChange {
   const change: StagedChange = {
-    ...entry,
-    id: `chg_${Math.random().toString(36).slice(2, 10)}`,
+    ...structuredClone(entry),
+    id: `chg_${randomUUID()}`,
     createdAt: Date.now(),
   };
   const list = rt.byKey.get(key) ?? [];
   list.push(change);
   rt.byKey.set(key, list);
-  return change;
+  return structuredClone(change);
+}
+
+/** Atomically consume exactly the reviewed ids, before any asynchronous work. */
+export function takeStaged(key: string, ids: string[]): StagedChange[] {
+  const list = rt.byKey.get(key) ?? [];
+  if (ids.some((id) => !list.some((change) => change.id === id))) {
+    throw new Error("A change is no longer pending. Refresh and review the pending changes again.");
+  }
+  return removeStaged(key, ids);
 }
 
 /** Remove changes by id (or all when `ids` is undefined). Returns removed ones. */

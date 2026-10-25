@@ -1,13 +1,16 @@
 import { isAgentConfigured } from "@/lib/agent/client";
 import { applyStaged } from "@/lib/agent/ops";
-import { listStaged, removeStaged, sessionKey, type StagedChange } from "@/lib/agent/store";
+import { listStaged, removeStaged, takeStaged, sessionKey, type StagedChange } from "@/lib/agent/store";
 import { requireActiveAgentSession } from "@/lib/agent/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function publicView(c: StagedChange) {
-  return { id: c.id, kind: c.kind, description: c.description, createdAt: c.createdAt };
+  return {
+    id: c.id, kind: c.kind, description: c.description, createdAt: c.createdAt,
+    ...(c.kind === "exec_in_service" ? { shell: c.params } : {}),
+  };
 }
 
 /** GET -> { configured, changes: [...] } */
@@ -25,8 +28,8 @@ export async function GET(req: Request) {
 
 /**
  * POST { action: "apply" | "discard", ids?: string[] }
- *  - apply:   execute the (selected) staged changes; return per-change results;
- *             successfully applied changes are removed from the queue.
+ *  - apply:   consume exactly the reviewed ids before executing; return results.
+ *             Even failed attempts need a fresh staged change and approval.
  *  - discard: remove the (selected) staged changes without executing.
  */
 export async function POST(req: Request) {
@@ -40,7 +43,13 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === "string") : undefined;
+  if (!body || typeof body !== "object" || Object.keys(body).some((key) => key !== "action" && key !== "ids")) {
+    return Response.json({ error: "Only action and pending change ids are accepted; commands and targets cannot be overridden." }, { status: 400 });
+  }
+  if (body.ids !== undefined && (!Array.isArray(body.ids) || body.ids.some((id) => typeof id !== "string") || new Set(body.ids).size !== body.ids.length)) {
+    return Response.json({ error: "ids must be an array of unique change ids." }, { status: 400 });
+  }
+  const ids = body.ids as string[] | undefined;
 
   if (body.action === "discard") {
     const removed = removeStaged(key, ids);
@@ -48,17 +57,25 @@ export async function POST(req: Request) {
   }
 
   if (body.action === "apply") {
-    const all = listStaged(key);
-    const idSet = ids ? new Set(ids) : null;
-    const target = idSet ? all.filter((c) => idSet.has(c.id)) : all;
+    if (!ids?.length) {
+      return Response.json({ error: "Select the pending changes you reviewed before approving." }, { status: 400 });
+    }
+    let target: StagedChange[];
+    try {
+      target = takeStaged(key, ids);
+    } catch (e) {
+      return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 409 });
+    }
+    const revalidate = async () => {
+      const current = await requireActiveAgentSession(req);
+      if ("response" in current) throw new Error(current.error);
+    };
 
-    const results: { id: string; description: string; ok: boolean; error?: string }[] = [];
-    const applied: string[] = [];
+    const results: { id: string; description: string; ok: boolean; error?: string; output?: string }[] = [];
     for (const change of target) {
       try {
-        await applyStaged(change);
-        results.push({ id: change.id, description: change.description, ok: true });
-        applied.push(change.id);
+        const output = await applyStaged(change, revalidate);
+        results.push({ id: change.id, description: change.description, ok: true, ...(output ? { output } : {}) });
       } catch (e) {
         results.push({
           id: change.id,
@@ -68,8 +85,6 @@ export async function POST(req: Request) {
         });
       }
     }
-    // Drop the ones that succeeded; leave failures queued for retry.
-    if (applied.length) removeStaged(key, applied);
     return Response.json({ results, remaining: listStaged(key).map(publicView) });
   }
 

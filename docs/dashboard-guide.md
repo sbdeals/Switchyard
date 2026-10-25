@@ -57,6 +57,14 @@ Every badge and canvas dot uses the same states:
 
 The page renders from live Dokploy state on every load, and every action (deploy, save, destroy) refreshes it — but statuses do **not** poll in the background. If a deployment finishes while you're just looking at the canvas, click **Refresh** to see the badge flip. The Logs and Metrics tabs are the genuinely live parts. If instead of the workspace you see a red "Couldn't reach Dokploy" card, Switchyard can't talk to the Dokploy API — see [troubleshooting](troubleshooting.md#switchyard-shows-the-couldnt-reach-dokploy-card).
 
+## Agent approvals
+
+The agent stages **every shell command**, including read-only diagnostics, along with service deletion, service stopping, domain deletion, and volume/mount deletion. The existing changes bar lets you review and approve or reject them. Shell review shows the exact command, service, pinned container ID, and absolute working directory (default `/`). Nothing executes when the agent stages a command.
+
+Approval permits one attempt using that exact command, container, and working directory. The dashboard revalidates your Dokploy session before each approved operation and immediately before starting shell execution. Consumed approvals cannot be replayed, even after an error or timeout; request and review a new change to retry. A replaced container is never substituted. Shell output and the exit code appear in the result. The capture timeout ends output collection; it does not guarantee termination of a command already running.
+
+Listing/inspecting services, reading logs, and sampling metrics run without approval. So do creating/deploying images, Git repos, templates and databases, saving environment variables, creating domains, starting/deploying/redeploying services, and updating replicas/resource limits. Those operations can modify deployments: this boundary is not a general guarantee against destructive effects. There is no automatic diagnostics-command tool; use logs and metrics or approve a shell command. The manually operated Console tab is separate from the agent's approval flow.
+
 ## Creating services
 
 Click **New service** to open the creation menu. Everything here is one click (or one field) away from a deployed service; all details are editable afterward in the drawer.

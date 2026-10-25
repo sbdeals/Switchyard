@@ -4,12 +4,14 @@ import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MoreVertical, Check, X, Loader2, AlertTriangle, Trash2 } from "lucide-react";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import type { ShellCommand } from "@/lib/agent/store";
 
 export interface StagedChangeView {
   id: string;
   kind: string;
   description: string;
   createdAt: number;
+  shell?: ShellCommand;
 }
 
 export interface ApplyResult {
@@ -17,6 +19,7 @@ export interface ApplyResult {
   description: string;
   ok: boolean;
   error?: string;
+  output?: string;
 }
 
 export function ChangesBar({
@@ -86,12 +89,12 @@ export function ChangesBar({
             </button>
 
             <button
-              onClick={() => onApply()}
+              onClick={() => changes.some((c) => c.shell) ? setDetailsOpen(true) : onApply(changes.map((c) => c.id))}
               disabled={busy}
               className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-60"
             >
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-              Apply {count === 1 ? "1 change" : `${count} changes`}
+              {changes.some((c) => c.shell) ? "Review" : "Apply"} {count === 1 ? "1 change" : `${count} changes`}
             </button>
 
             <div className="relative" ref={menuRef}>
@@ -124,7 +127,7 @@ export function ChangesBar({
       </AnimatePresence>
 
       {/* Apply results toast (auto-shown by parent lifetime) */}
-      {results && count === 0 && (
+      {results && (
         <div
           role="status"
           className="pointer-events-auto flex items-start gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 text-xs shadow-[0_10px_30px_-12px_#000] backdrop-blur"
@@ -137,10 +140,11 @@ export function ChangesBar({
                 ) : (
                   <AlertTriangle className="size-3.5 shrink-0 text-[var(--color-danger)]" />
                 )}
-                <span className={r.ok ? "text-[var(--color-fg-muted)]" : "text-[var(--color-danger)]"}>
+                <div className={r.ok ? "text-[var(--color-fg-muted)]" : "text-[var(--color-danger)]"}>
                   {r.description}
                   {!r.ok && r.error ? ` — ${r.error}` : ""}
-                </span>
+                  {r.output && <pre className="mt-2 max-h-64 max-w-xl overflow-auto whitespace-pre-wrap break-all">{r.output}</pre>}
+                </div>
               </div>
             ))}
           </div>
@@ -188,6 +192,10 @@ function DetailsModal({
 }) {
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
+  // Approval covers only the changes shown when this review opened. Newly
+  // staged commands must not slip into an already-open approval dialog.
+  const [snapshot] = useState(changes);
+  const reviewed = snapshot.filter((c) => changes.some((pending) => pending.id === c.id));
   return (
     <div className="pointer-events-auto fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-24" onClick={onClose}>
       <div
@@ -195,7 +203,7 @@ function DetailsModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-md rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-4 shadow-2xl"
+        className="max-h-[80vh] w-full max-w-xl overflow-auto rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-4 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
@@ -207,42 +215,54 @@ function DetailsModal({
           </button>
         </div>
         <div className="flex flex-col gap-1.5">
-          {changes.map((c) => (
+          {reviewed.map((c) => (
             <div
               key={c.id}
               className="flex items-center justify-between gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2"
             >
-              <span className="text-xs text-[var(--color-fg)]">{c.description}</span>
+              <div className="min-w-0 text-xs text-[var(--color-fg)]">
+                <span>{c.description}</span>
+                {c.shell && (
+                  <div className="mt-2 space-y-2">
+                    <p className="break-all">Service: {c.shell.serviceName} ({c.shell.serviceId})<br />App: {c.shell.appName}<br />Container: {c.shell.containerId}</p>
+                    <p className="whitespace-pre-wrap break-all">Working directory: {c.shell.workingDir}</p>
+                    <pre className="overflow-auto whitespace-pre-wrap break-all rounded bg-[var(--color-bg-elevated)] p-2">{c.shell.command}</pre>
+                    <p className="text-[var(--color-fg-muted)]">Approval allows one execution attempt. A failure needs a new request and approval.</p>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => onDiscard([c.id])}
                 className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-danger)]"
-                aria-label="Discard this change"
+                disabled={busy}
+                aria-label="Reject this change"
               >
                 <Trash2 className="size-3.5" />
               </button>
             </div>
           ))}
-          {changes.length === 0 && (
+          {reviewed.length === 0 && (
             <p className="py-4 text-center text-xs text-[var(--color-fg-subtle)]">No pending changes.</p>
           )}
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <button
-            onClick={() => onDiscard()}
+            onClick={() => onDiscard(reviewed.map((c) => c.id))}
+            disabled={busy || reviewed.length === 0}
             className="rounded-lg border border-[var(--color-border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)]"
           >
-            Discard all
+            Reject reviewed
           </button>
           <button
             onClick={() => {
-              onApply();
+              onApply(reviewed.map((c) => c.id));
               onClose();
             }}
-            disabled={busy || changes.length === 0}
+            disabled={busy || reviewed.length === 0}
             className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-60"
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-            Apply all
+            Approve reviewed
           </button>
         </div>
       </div>

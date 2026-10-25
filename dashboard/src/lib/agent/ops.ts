@@ -1,7 +1,7 @@
 /**
  * Concrete deployment operations the agent can perform, layered on the existing
- * server-only Dokploy lib. Safe operations run immediately; the four destructive
- * ones are executed here only when the user approves a staged change
+ * server-only Dokploy lib. The four destructive operations and all shell
+ * commands execute here only when the user approves a staged change
  * (`applyStaged`). Everything reuses `dokploy.ts` — the handful of procedures it
  * doesn't yet wrap (templates, compose domains, domain/mount deletion) go
  * through the exported low-level `request`.
@@ -25,10 +25,10 @@ import {
   type Service,
   type Engine,
 } from "@/lib/dokploy";
-import { readRecentLogs, runExec, sampleStatsOnce, type Sample } from "@/lib/docker";
+import { findContainerId, readRecentLogs, runExec, sampleStatsOnce, type Sample } from "@/lib/docker";
 import { randomServiceName, randomPassword } from "@/lib/names";
 import { ENGINE_META } from "@/lib/engines";
-import type { StagedChange } from "./store";
+import type { ShellCommand, StagedChange } from "./store";
 
 function isEngine(v: string): v is Engine {
   return (ENGINES as readonly string[]).includes(v);
@@ -243,20 +243,15 @@ export async function recentLogs(svc: Service, tail = 100) {
   return readRecentLogs(svc.appName, Math.min(tail, 300));
 }
 
-/**
- * Run one command inside a service's running container and return its captured
- * output — the diagnostic power behind "why is this deployment broken?". Same
- * mechanism (and 15s/1MB caps) as the dashboard's Console tab; the container is
- * resolved by the service's own appName, so the agent can only reach services
- * it can already see. For a compose stack this hits the first matching
- * container; target a specific one by passing its full container name as the
- * service (it resolves by name prefix).
- */
-export async function execInService(
+/** Resolve the exact target for review without executing anything. */
+export async function prepareShellCommand(
   svc: Service,
-  command: string
-): Promise<{ stdout: string; stderr: string; exitCode: number | null; truncated: boolean } | null> {
-  return runExec(svc.appName, command);
+  command: string,
+  workingDir: string
+): Promise<ShellCommand> {
+  const containerId = await findContainerId(svc.appName);
+  if (!containerId) throw new Error(`Container for "${svc.name}" is not running — cannot stage exec.`);
+  return { serviceId: svc.id, serviceName: svc.name, appName: svc.appName, containerId, workingDir, command };
 }
 
 /** One CPU/memory sample for a running service (null if it isn't running). */
@@ -276,7 +271,7 @@ export async function updateApplicationOp(
   await request("application.update", { method: "POST", body });
 }
 
-// --- destructive operations (executed only on approval) ---------------------
+// --- approval-gated operations ---------------------------------------------
 
 async function deleteService(kind: string, id: string, engine?: string): Promise<void> {
   if (kind === "application") return applicationAction(id, "remove");
@@ -292,8 +287,31 @@ async function stopService(kind: string, id: string, engine?: string): Promise<v
   throw new Error("Could not resolve the service to stop.");
 }
 
-/** Execute a previously-staged destructive change after user approval. */
-export async function applyStaged(change: StagedChange): Promise<void> {
+/** Execute a consumed approval, revalidating the session before each operation. */
+export async function applyStaged(change: StagedChange, revalidate: () => Promise<void>): Promise<string | void> {
+  await revalidate();
+  if (change.kind === "exec_in_service") {
+    const p = change.params;
+    const { services } = await loadWorkspace();
+    if (!services.some((svc) => svc.id === p.serviceId && svc.appName === p.appName)) {
+      throw new Error("The approved service is no longer available. Stage a new command.");
+    }
+    const r = await runExec(p.appName, p.command, {
+      containerId: p.containerId,
+      workingDir: p.workingDir,
+      beforeStart: revalidate,
+    });
+    if (!r) throw new Error("The approved container is no longer running. Stage a new command.");
+    const output = [
+      r.stdout && `stdout:\n${r.stdout}`,
+      r.stderr && `stderr:\n${r.stderr}`,
+    ].filter(Boolean).join("\n\n");
+    const truncated = r.truncated || output.length > 12000;
+    return [
+      output.slice(0, 12000),
+      `exit code: ${r.exitCode ?? "unknown"}${truncated ? " (output truncated)" : ""}`,
+    ].filter(Boolean).join("\n\n");
+  }
   const p = change.params as Record<string, string>;
   switch (change.kind) {
     case "delete_service":
