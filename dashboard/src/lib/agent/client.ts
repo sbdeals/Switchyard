@@ -17,10 +17,21 @@ import {
   isOAuthToken,
   resolveAgentKey,
   resolveAgentModel,
-  resolveBaseUrl,
   resolveProvider,
   type AgentProvider,
+  type ResolvedKey,
 } from "./key-store";
+
+/** Recheck on every SDK request/retry, including clients held by an ongoing turn. */
+function credentialFetch(credential: ResolvedKey): typeof fetch {
+  return (input, init) => {
+    const current = resolveAgentKey();
+    if (current?.key !== credential.key || current.provider !== credential.provider || current.baseUrl !== credential.baseUrl) {
+      throw new Error("The agent provider or credential changed. Retry with the current configuration.");
+    }
+    return fetch(input, init);
+  };
+}
 
 /** Which API dialect the copilot speaks right now. */
 export function activeProvider(): AgentProvider {
@@ -61,7 +72,7 @@ export async function ensureAgentCredentialFresh(): Promise<void> {
   await ensureFreshOAuth();
 }
 
-let cached: { key: string; client: Anthropic } | null = null;
+let cached: { key: string; baseUrl: string; client: Anthropic } | null = null;
 
 /** True when the active credential is a Claude-subscription OAuth token. */
 export function activeKeyIsOAuth(): boolean {
@@ -72,12 +83,13 @@ export function activeKeyIsOAuth(): boolean {
 /** Lazily construct the Anthropic client. Throws if no credential is set. */
 export function getAnthropic(): Anthropic {
   const resolved = resolveAgentKey();
-  if (!resolved) {
+  if (!resolved || resolved.provider !== "anthropic") {
     throw new Error("No Anthropic API key configured — add one in the Agent panel.");
   }
-  if (cached?.key !== resolved.key) {
+  if (cached?.key !== resolved.key || cached?.baseUrl !== resolved.baseUrl) {
     cached = {
       key: resolved.key,
+      baseUrl: resolved.baseUrl,
       // OAuth tokens (sk-ant-oat…) authenticate as a Bearer token AND require
       // the oauth beta header on /v1/messages; without it the endpoint rejects
       // them. API keys use x-api-key and need neither.
@@ -85,15 +97,24 @@ export function getAnthropic(): Anthropic {
         ? new Anthropic({
             authToken: resolved.key,
             apiKey: null,
+            baseURL: resolved.baseUrl,
+            fetch: credentialFetch(resolved),
+            fetchOptions: { redirect: "error" },
             defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
           })
-        : new Anthropic({ apiKey: resolved.key }),
+        : new Anthropic({
+            apiKey: resolved.key,
+            authToken: null,
+            baseURL: resolved.baseUrl,
+            fetch: credentialFetch(resolved),
+            fetchOptions: { redirect: "error" },
+          }),
     };
   }
   return cached.client;
 }
 
-let cachedOpenAI: { key: string; baseUrl: string | null; client: OpenAI } | null = null;
+let cachedOpenAI: { key: string; baseUrl: string; client: OpenAI } | null = null;
 
 /**
  * Lazily construct an OpenAI-compatible client for the openai provider. `baseURL`
@@ -102,17 +123,19 @@ let cachedOpenAI: { key: string; baseUrl: string | null; client: OpenAI } | null
  */
 export function getOpenAI(): OpenAI {
   const resolved = resolveAgentKey();
-  if (!resolved) {
+  if (!resolved || resolved.provider !== "openai") {
     throw new Error("No API key configured — add one in the Agent panel.");
   }
-  const baseUrl = resolveBaseUrl();
+  const baseUrl = resolved.baseUrl;
   if (cachedOpenAI?.key !== resolved.key || cachedOpenAI?.baseUrl !== baseUrl) {
     cachedOpenAI = {
       key: resolved.key,
       baseUrl,
       client: new OpenAI({
         apiKey: resolved.key,
-        baseURL: baseUrl ?? undefined,
+        baseURL: baseUrl,
+        fetch: credentialFetch(resolved),
+        fetchOptions: { redirect: "error" },
         // OpenRouter uses these for app attribution/rankings; harmless elsewhere.
         defaultHeaders: {
           "HTTP-Referer": "https://github.com/sbdeals/switchyard",

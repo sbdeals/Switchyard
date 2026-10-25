@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   ),
   applyStaged: vi.fn(),
   getOpenAI: vi.fn(),
-  sessionKey: vi.fn(() => "k"),
+  sessionKey: vi.fn<(session: unknown) => string>(() => "k"),
 }));
 
 vi.mock("@/lib/agent/oauth", () => ({
@@ -43,6 +43,7 @@ vi.mock("@/lib/agent/store", () => ({
   removeStaged: () => [],
 }));
 vi.mock("@/lib/sse", () => ({ SSE_HEADERS: { "content-type": "text/event-stream" } }));
+vi.mock("@/lib/dokploy", () => ({ getDokployRole: async () => "owner" }));
 
 import { SESSION_COOKIE, sealSession } from "@/lib/session";
 import * as changes from "./changes/route";

@@ -54,6 +54,7 @@ interface ProviderPreset {
   models: string[];
 }
 interface AgentConfig {
+  canConfigure: boolean;
   configured: boolean;
   source: "ui" | "env" | null;
   masked: string | null;
@@ -488,7 +489,7 @@ function activePreset(config: AgentConfig | null): ProviderPreset | undefined {
   return config?.presets?.find((p) => p.baseUrl && p.baseUrl === config?.baseUrl);
 }
 
-function ConnectionBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
+export function ConnectionBar({ config, onChanged }: { config: AgentConfig | null; onChanged: () => void }) {
   const presets = config?.presets ?? [];
   const provider = config?.provider ?? "anthropic";
   const [busy, setBusy] = useState(false);
@@ -553,7 +554,10 @@ function ConnectionBar({ config, onChanged }: { config: AgentConfig | null; onCh
   };
 
   return (
-    <div className="space-y-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
+    <fieldset disabled={!config?.canConfigure} className="space-y-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
+      {config && !config.canConfigure && (
+        <p className="text-[11px] text-[var(--color-fg-muted)]">Only workspace admins can change the agent provider</p>
+      )}
       <Field icon={<Server className="size-3.5" />} label="Provider">
         <select
           value={providerValue}
@@ -586,7 +590,7 @@ function ConnectionBar({ config, onChanged }: { config: AgentConfig | null; onCh
 
       <KeyField config={config} onChanged={onChanged} />
       <ModelField config={config} onChanged={onChanged} />
-    </div>
+    </fieldset>
   );
 }
 

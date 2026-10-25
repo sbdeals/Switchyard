@@ -27,6 +27,7 @@ vi.mock("@/lib/agent/key-store", () => ({
   setRuntimeModel: mocks.setRuntimeModel,
 }));
 vi.mock("@/lib/agent/client", () => ({ agentModel: () => "claude-test" }));
+vi.mock("@/lib/dokploy", () => ({ getDokployRole: async () => "owner" }));
 
 import { SESSION_COOKIE, SESSION_MAX_AGE, sealSession } from "@/lib/session";
 import { GET, POST } from "./route";

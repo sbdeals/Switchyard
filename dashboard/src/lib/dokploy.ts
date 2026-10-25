@@ -355,6 +355,29 @@ export async function signOutOfDokploy(dokployCookie: string): Promise<void> {
 }
 
 /**
+ * Current organization membership role, read from Dokploy's user.get response.
+ * Use the request's explicit session, never the background system session.
+ * The role is on the membership itself, not the nested user account.
+ */
+export async function getDokployRole(dokployCookie: string): Promise<string> {
+  for (const origin of originCandidates()) {
+    const res = await fetch(`${BASE}/api/user.get`, {
+      headers: { Origin: origin, Cookie: dokployCookie },
+      cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
+    });
+    if (await isInvalidOrigin(res)) continue;
+    if (!res.ok) throw new Error("Could not verify your workspace role with Dokploy.");
+    const member = await res.json() as { role?: unknown } | null;
+    if (!member || typeof member.role !== "string" || !member.role) break;
+    workingOrigin = origin;
+    return member.role;
+  }
+  throw new Error("Could not verify your workspace role with Dokploy.");
+}
+
+/**
  * Register a Dokploy account (better-auth sign-up) — the same call the CLI's
  * terminal-guided registration makes (cli/src/core/dokploy-api.ts). On a fresh
  * install the first sign-up becomes the admin; Dokploy rejects the call once

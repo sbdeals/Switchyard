@@ -1,9 +1,11 @@
 import { agentModel } from "@/lib/agent/client";
+import { agentConfigAccess } from "@/lib/agent/authorization";
 import {
   AGENT_MODELS,
   isLoginCredential,
   looksLikeAnthropicKey,
   maskKey,
+  normalizeBaseUrl,
   resolveAgentKey,
   resolveBaseUrl,
   resolveProvider,
@@ -71,9 +73,10 @@ const PROVIDER_PRESETS = [
 // handler below opens and verifies the sealed cookie before touching it — a
 // forged `switchyard_session=x` must not be able to set the key everyone uses.
 
-function status() {
+function status(canConfigure: boolean) {
   const resolved = resolveAgentKey();
   return {
+    canConfigure,
     configured: resolved !== null,
     source: resolved?.source ?? null,
     masked: resolved ? maskKey(resolved.key) : null,
@@ -90,73 +93,89 @@ function status() {
 
 /** GET -> credential + provider status (never the key itself). */
 export async function GET(req: Request) {
-  if (!sessionFromRequest(req)) return unauthorized();
-  return Response.json(status());
+  const session = sessionFromRequest(req);
+  if (!session) return unauthorized();
+  const access = await agentConfigAccess(session);
+  return Response.json(status(access.canConfigure));
 }
 
 /**
- * POST accepts, one at a time:
- *  { provider }  -> switch "anthropic" | "openai" (clears the model)
- *  { baseUrl }   -> set/clear the OpenAI-compatible endpoint
+ * Admin-only POST accepts:
+ *  { provider }  -> switch "anthropic" | "openai" (clears model + credential)
+ *  { baseUrl }   -> set/clear the endpoint (clears credential if changed)
  *  { model }     -> set the model (validated vs catalog for anthropic; free-text for openai)
  *  { key }       -> store a pasted key (sk-ant-… enforced only for anthropic)
  *  { clear: true } -> drop the UI-set credential
- * All take effect immediately, no restart.
+ * Fields may be combined to explicitly replace a key with its endpoint.
+ * All take effect immediately, no restart. Chat usage policy is unchanged.
  */
 export async function POST(req: Request) {
-  if (!sessionFromRequest(req)) return unauthorized();
+  const session = sessionFromRequest(req);
+  if (!session) return unauthorized();
+  const access = await agentConfigAccess(session);
+  if (!access.canConfigure) return Response.json({ error: access.error }, { status: 403 });
 
   let body: { key?: unknown; model?: unknown; provider?: unknown; baseUrl?: unknown; clear?: unknown };
   try {
     body = await req.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("Invalid body");
   } catch {
     return Response.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
   if (body.clear === true) {
     setRuntimeKey(null);
-    return Response.json(status());
+    return Response.json(status(true));
   }
 
-  if (typeof body.provider === "string") {
-    if (body.provider !== "anthropic" && body.provider !== "openai") {
-      return Response.json({ error: "Unknown provider." }, { status: 400 });
+  const provider = body.provider === undefined ? resolveProvider() : body.provider;
+  if (provider !== "anthropic" && provider !== "openai") {
+    return Response.json({ error: "Unknown provider." }, { status: 400 });
+  }
+
+  let baseUrl: string | null | undefined;
+  if (body.baseUrl !== undefined) {
+    try {
+      if (typeof body.baseUrl !== "string") throw new Error("Enter a valid base URL.");
+      baseUrl = body.baseUrl.trim() ? normalizeBaseUrl(body.baseUrl) : null;
+    } catch (e) {
+      return Response.json({ error: (e as Error).message }, { status: 400 });
     }
-    setProvider(body.provider);
-    return Response.json(status());
   }
 
-  if (typeof body.baseUrl === "string") {
-    const url = body.baseUrl.trim();
-    if (url && !/^https?:\/\//i.test(url)) {
-      return Response.json({ error: "Base URL must start with http(s)://." }, { status: 400 });
-    }
-    setBaseUrl(url || null);
-    return Response.json(status());
-  }
-
-  if (typeof body.model === "string") {
-    const model = body.model.trim();
+  let model: string | undefined;
+  if (body.model !== undefined) {
+    model = typeof body.model === "string" ? body.model.trim() : "";
     if (!model) return Response.json({ error: "Model can't be empty." }, { status: 400 });
     // Anthropic model must be from the catalog; OpenAI-compatible is free-text.
-    if (resolveProvider() === "anthropic" && !AGENT_MODELS.some((m) => m.id === model)) {
+    if (provider === "anthropic" && !AGENT_MODELS.some((m) => m.id === model)) {
       return Response.json({ error: "Unknown model." }, { status: 400 });
     }
-    setRuntimeModel(model);
-    return Response.json(status());
   }
 
-  const key = typeof body.key === "string" ? body.key.trim() : "";
-  if (resolveProvider() === "anthropic") {
-    if (!looksLikeAnthropicKey(key)) {
+  let key: string | undefined;
+  if (body.key !== undefined) {
+    key = typeof body.key === "string" ? body.key.trim() : "";
+    if (provider === "anthropic" && !looksLikeAnthropicKey(key)) {
       return Response.json(
         { error: "That doesn't look like an Anthropic key (expected sk-ant-…)." },
         { status: 400 },
       );
+    } else if (key.length < 8) {
+      return Response.json({ error: "Enter the provider's API key." }, { status: 400 });
     }
-  } else if (key.length < 8) {
-    return Response.json({ error: "Enter the provider's API key." }, { status: 400 });
   }
-  setRuntimeKey(key);
-  return Response.json(status());
+
+  if (body.provider === undefined && baseUrl === undefined && model === undefined && key === undefined) {
+    return Response.json({ error: "No agent settings provided." }, { status: 400 });
+  }
+  try {
+    if (body.provider !== undefined) setProvider(provider);
+    if (baseUrl !== undefined) setBaseUrl(baseUrl);
+    if (model !== undefined) setRuntimeModel(model);
+    if (key !== undefined) setRuntimeKey(key);
+  } catch (e) {
+    return Response.json({ error: (e as Error).message }, { status: 400 });
+  }
+  return Response.json(status(true));
 }
