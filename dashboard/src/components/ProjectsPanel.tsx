@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Plus, Pencil, Trash2, FolderGit2, Layers, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -15,6 +15,8 @@ import {
   type ActionResult,
 } from "@/app/actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { ContextMenu } from "@/components/ContextMenu";
+import { projectMenuItems, type ProjectMenuAction } from "@/lib/context-menu";
 
 export function ProjectsPanel({
   open,
@@ -30,6 +32,7 @@ export function ProjectsPanel({
   const [error, setError] = useState<string | null>(null);
   const [newProject, setNewProject] = useState("");
   const [newEnv, setNewEnv] = useState<Record<string, string>>({});
+  const environments = useRef<Record<string, HTMLDivElement | null>>({});
 
   const act = (fn: () => Promise<ActionResult>) => {
     setError(null);
@@ -78,30 +81,43 @@ export function ProjectsPanel({
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              {projects.map((p) => (
+              {projects.map((p) => {
+                const actions: Record<ProjectMenuAction, () => void> = {
+                  // Projects already show their environments inline; Open goes
+                  // to that existing detail region rather than a new route.
+                  open: () => environments.current[p.projectId]?.focus(),
+                  rename: () => rename(p.name, (n) => renameProjectAction(p.projectId, n)),
+                  delete: () => {
+                    if (confirm(`Delete project "${p.name}" and everything in it?`)) act(() => removeProjectAction(p.projectId));
+                  },
+                };
+                const items = projectMenuItems({ canRename: true, canDelete: true, pending })
+                  .map((item) => ({ ...item, onSelect: actions[item.id] }));
+                return (
+                <ContextMenu key={p.projectId} label={`${p.name} actions`} items={items}>
+                  {(trigger) => (
                 <div
-                  key={p.projectId}
+                  {...trigger}
+                  tabIndex={-1}
                   className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
                 >
                   <div className="flex items-center gap-2">
                     <FolderGit2 className="size-4 text-[var(--color-brand)]" />
-                    <span className="flex-1 truncate text-sm font-medium">{p.name}</span>
-                    <IconBtn title="Rename project" onClick={() => rename(p.name, (n) => renameProjectAction(p.projectId, n))}>
+                    <button type="button" onClick={actions.open} className="flex-1 truncate text-left text-sm font-medium">{p.name}</button>
+                    <IconBtn title="Rename project" disabled={pending} onClick={actions.rename}>
                       <Pencil className="size-3.5" />
                     </IconBtn>
                     <IconBtn
                       title="Delete project"
                       danger
-                      onClick={() => {
-                        if (confirm(`Delete project "${p.name}" and everything in it?`))
-                          act(() => removeProjectAction(p.projectId));
-                      }}
+                      disabled={pending}
+                      onClick={actions.delete}
                     >
                       <Trash2 className="size-3.5" />
                     </IconBtn>
                   </div>
 
-                  <div className="mt-2 space-y-1 pl-6">
+                  <div ref={(node) => { environments.current[p.projectId] = node; }} role="group" aria-label={`${p.name} environments`} tabIndex={-1} className="mt-2 space-y-1 pl-6 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]">
                     {p.environments.map((e) => (
                       <div key={e.environmentId} className="flex items-center gap-2 text-xs">
                         <Layers className="size-3.5 text-[var(--color-fg-subtle)]" />
@@ -149,7 +165,10 @@ export function ProjectsPanel({
                     </div>
                   </div>
                 </div>
-              ))}
+                  )}
+                </ContextMenu>
+                );
+              })}
               {projects.length === 0 && (
                 <p className="text-center text-xs text-[var(--color-fg-subtle)]">No projects yet.</p>
               )}
@@ -211,19 +230,22 @@ function IconBtn({
   onClick,
   title,
   danger,
+  disabled,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   title: string;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       title={title}
       aria-label={title}
+      disabled={disabled}
       className={
-        "rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface-hover)] " +
+        "rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 " +
         (danger ? "hover:text-[var(--color-danger)]" : "hover:text-[var(--color-fg)]")
       }
     >

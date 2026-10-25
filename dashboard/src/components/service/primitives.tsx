@@ -28,10 +28,11 @@ import {
   Network,
   Sparkles,
 } from "lucide-react";
-import type { Action, AppDomain, ServiceStatus } from "@/lib/dokploy";
-import type { ActionResult } from "@/app/actions";
+import type { Action, AppDomain, Service, ServiceStatus } from "@/lib/dokploy";
+import { lifecycleAction, appLifecycleAction, composeLifecycleAction, type ActionResult } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
+import { destroyConfirmation, runLifecycleAction } from "@/lib/context-menu";
 
 export const inputCls =
   "w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50";
@@ -42,15 +43,23 @@ export const inputCls =
 export function useLifecycle(runAction: (action: Action) => Promise<ActionResult>) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const run = (action: Action, after?: () => void) => {
+  const run = (action: Action | "restart", after?: () => void) => {
     setError(null);
     start(async () => {
-      const res = await runAction(action);
+      const res = await runLifecycleAction(action, runAction);
       if (!res.ok) setError(res.error);
       else after?.();
     });
   };
   return { pending, error, run };
+}
+
+export function useServiceLifecycle(service: Service) {
+  return useLifecycle((action) =>
+    service.kind === "database" ? lifecycleAction(service.engine, service.id, action)
+      : service.kind === "compose" ? composeLifecycleAction(service.id, action)
+        : appLifecycleAction(service.id, action)
+  );
 }
 
 /** A "Saved" indicator that shows briefly after a successful save. */
@@ -411,7 +420,7 @@ export function DangerZone({
       <button
         type="button"
         onClick={() => {
-          if (confirm(`Destroy "${name}"? This cannot be undone.`)) onDestroy();
+          if (confirm(destroyConfirmation(name))) onDestroy();
         }}
         disabled={pending}
         className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] disabled:opacity-50"

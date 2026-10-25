@@ -1,45 +1,39 @@
 "use client";
 
-import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import { Rocket, ChevronRight, ExternalLink } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
-import { lifecycleAction, appLifecycleAction, composeLifecycleAction } from "@/app/actions";
 import { serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceLogo } from "@/components/canvas/ServiceNode";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ServiceContextMenu, type ServiceSection } from "@/components/service/ServiceContextMenu";
 
 /**
  * Compact card: identity + status at a glance, click to open the drawer where
  * all config, lifecycle, logs and metrics live. A one-click Deploy shows inline
  * only when the service hasn't been deployed yet.
  */
-export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: () => void }) {
+export function ServiceCard({ service, onOpen, selected, onSelect }: {
+  service: Service;
+  onOpen: (section?: ServiceSection) => void;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const accent = serviceAccent(service);
   const domains = service.kind === "application" ||
     (service.kind === "compose" && (service.managed?.kind === "image" || service.managed?.kind === "repo")) ? service.domains : [];
   const publicDomain = domains.find((d) => d.https) ?? domains[0];
   const logos = useTemplateLogos();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  const deploy = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setError(null);
-    startTransition(async () => {
-      const res =
-        service.kind === "database"
-          ? await lifecycleAction(service.engine, service.id, "deploy")
-          : service.kind === "compose"
-            ? await composeLifecycleAction(service.id, "deploy")
-            : await appLifecycleAction(service.id, "deploy");
-      if (!res.ok) setError(res.error);
-    });
-  };
 
   return (
+    <ServiceContextMenu service={service} onOpen={onOpen} onSelect={onSelect}>
+      {(trigger, deploy, pending, error) => (
     <motion.div
+      {...trigger}
+      tabIndex={-1}
+      data-selected={selected}
+      style={selected ? { borderColor: accent, boxShadow: `0 0 0 1px ${accent}` } : undefined}
       layout
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
@@ -63,7 +57,7 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
               while Deploy below stays independently operable (z-10). */}
           <button
             type="button"
-            onClick={onOpen}
+            onClick={() => onOpen()}
             className="block w-full cursor-pointer truncate text-left font-medium leading-tight after:absolute after:inset-0 after:cursor-pointer after:content-['']"
           >
             {service.name}
@@ -95,7 +89,7 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
         {service.status === "idle" ? (
           <button
             type="button"
-            onClick={deploy}
+            onClick={(e) => { e.stopPropagation(); deploy(); }}
             disabled={pending}
             className="relative z-10 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
           >
@@ -112,5 +106,7 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
         </p>
       )}
     </motion.div>
+      )}
+    </ServiceContextMenu>
   );
 }

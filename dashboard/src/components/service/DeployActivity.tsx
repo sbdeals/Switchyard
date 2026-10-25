@@ -6,6 +6,9 @@ import type { AppDeployment, Application, ComposeService } from "@/lib/dokploy";
 import { rollbackDeploymentAction } from "@/app/actions";
 import { explainDeployError, failureLine } from "@/lib/deploy-errors";
 import { cn } from "@/lib/utils";
+import { ContextMenu } from "@/components/ContextMenu";
+import { deploymentMenuItems, serviceMenuItems, type DeploymentMenuAction } from "@/lib/context-menu";
+import { useServiceLifecycle } from "@/components/service/primitives";
 
 /** Services with deploy history (databases have none). */
 type Deployable = Application | ComposeService;
@@ -270,12 +273,15 @@ export function DeploymentHistory({
   }
   const anyRunning = deployments.some((d) => d.status === "running");
   const now = useNow(anyRunning);
+  const { pending: redeployPending, error: redeployError, run } = useServiceLifecycle(service);
+  const redeployDisabledReason = serviceMenuItems(service, { pending: redeployPending }).find((item) => item.id === "deploy")?.disabledReason;
 
   return (
     <div className="space-y-2">
       <p className="mb-1 text-xs text-[var(--color-fg-muted)]">
         Deploys, newest first. Open one to see its build and deploy log.
       </p>
+      {redeployError && <p role="alert" className="text-xs text-[var(--color-danger)]">{redeployError}</p>}
       {deployments.length === 0 ? (
         <p className="text-xs text-[var(--color-fg-subtle)]">
           No deploys yet — deploy this service to see its build log here.
@@ -292,43 +298,17 @@ export function DeploymentHistory({
                 ? formatDuration(ended - started)
                 : null;
           return (
-            <div
+            <DeploymentRow
               key={d.deploymentId}
-              className={cn(
-                "rounded-lg border bg-[var(--color-surface)]",
-                open ? "border-[var(--color-border-strong)]" : "border-[var(--color-border)]"
-              )}
-            >
-              <div className="flex items-center gap-2 px-3 py-2.5">
-                <button
-                  type="button"
-                  onClick={() => setExpanded(open ? null : d.deploymentId)}
-                  aria-expanded={open}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                >
-                  <ChevronRight
-                    className={cn(
-                      "size-3.5 shrink-0 text-[var(--color-fg-subtle)] transition-transform",
-                      open && "rotate-90"
-                    )}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm">{d.title}</div>
-                    <div className="text-[11px] text-[var(--color-fg-subtle)]">
-                      {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
-                      {duration && ` · ${duration}`}
-                    </div>
-                  </div>
-                  <StatusPill status={d.status} />
-                </button>
-                {d.rollbackId && <RollbackButton rollbackId={d.rollbackId} title={d.title} />}
-              </div>
-              {open && (
-                <div className="border-t border-[var(--color-border)] p-3">
-                  <DeployLogs service={service} deployment={d} />
-                </div>
-              )}
-            </div>
+              service={service}
+              deployment={d}
+              open={open}
+              duration={duration}
+              onToggle={() => setExpanded(open ? null : d.deploymentId)}
+              onViewLogs={() => setExpanded(d.deploymentId)}
+              onRedeploy={() => run("deploy")}
+              redeployDisabledReason={redeployDisabledReason}
+            />
           );
         })
       )}
@@ -336,30 +316,73 @@ export function DeploymentHistory({
   );
 }
 
-/** Restore a past deployment's image snapshot (image-based rollback). */
-function RollbackButton({ rollbackId, title }: { rollbackId: string; title: string }) {
+/** The button and context menu share rollback confirmation and pending state. */
+function DeploymentRow({ service, deployment: d, open, duration, onToggle, onViewLogs, onRedeploy, redeployDisabledReason }: {
+  service: Deployable;
+  deployment: AppDeployment;
+  open: boolean;
+  duration: string | null;
+  onToggle: () => void;
+  onViewLogs: () => void;
+  onRedeploy: () => void;
+  redeployDisabledReason?: string;
+}) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   function rollback() {
-    if (!confirm(`Roll back to "${title}"? This redeploys the recorded image.`)) return;
+    if (!d.rollbackId || !confirm(`Roll back to "${d.title}"? This redeploys the recorded image.`)) return;
+    const rollbackId = d.rollbackId;
     setError(null);
     start(async () => {
       const res = await rollbackDeploymentAction(rollbackId);
       if (!res.ok) setError(res.error);
     });
   }
+  const actions: Record<DeploymentMenuAction, () => void | Promise<void>> = {
+    rollback,
+    logs: onViewLogs,
+    redeploy: onRedeploy,
+    "copy-id": () => navigator.clipboard.writeText(d.deploymentId),
+  };
+  const items = deploymentMenuItems({ rollbackAvailable: !!d.rollbackId, pending, redeployDisabledReason })
+    .map((item) => ({ ...item, onSelect: actions[item.id] }));
   return (
-    <div className="flex flex-col items-end gap-1">
-      <button
-        onClick={rollback}
-        disabled={pending}
-        title="Roll back to this deployment"
-        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)] disabled:opacity-40"
-      >
-        {pending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
-        Roll back
-      </button>
-      {error && <span role="alert" className="text-[11px] text-[var(--color-danger)]">{error}</span>}
+    <div className={cn("rounded-lg border bg-[var(--color-surface)]", open ? "border-[var(--color-border-strong)]" : "border-[var(--color-border)]")}>
+      <ContextMenu label={`${d.title} actions`} items={items}>
+        {(trigger, menuButton) => (
+          <div {...trigger} tabIndex={-1} className="flex items-center gap-2 px-3 py-2.5">
+            <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+              <ChevronRight className={cn("size-3.5 shrink-0 text-[var(--color-fg-subtle)] transition-transform", open && "rotate-90")} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm">{d.title}</div>
+                <div className="text-[11px] text-[var(--color-fg-subtle)]">
+                  {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
+                  {duration && ` · ${duration}`}
+                </div>
+              </div>
+              <StatusPill status={d.status} />
+            </button>
+            {d.rollbackId && (
+              <div className="flex flex-col items-end gap-1">
+                <button onClick={rollback} disabled={pending} title="Roll back to this deployment" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)] disabled:opacity-40">
+                  {pending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+                  Roll back
+                </button>
+                {error && <span role="alert" className="text-[11px] text-[var(--color-danger)]">{error}</span>}
+              </div>
+            )}
+            <button
+              {...menuButton}
+              aria-label={`Actions for deployment ${d.deploymentId}`}
+              title="Deployment actions"
+              className="shrink-0 rounded-md px-2 py-1 text-lg leading-none text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-hover)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
+            >
+              <span aria-hidden="true">⋯</span>
+            </button>
+          </div>
+        )}
+      </ContextMenu>
+      {open && <div className="border-t border-[var(--color-border)] p-3"><DeployLogs service={service} deployment={d} /></div>}
     </div>
   );
 }

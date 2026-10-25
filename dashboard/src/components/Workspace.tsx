@@ -11,6 +11,9 @@ import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { ContextMenu } from "@/components/ContextMenu";
+import type { ServiceSection } from "@/components/service/ServiceContextMenu";
+import { workspaceMenuItems, type NewServiceKind } from "@/lib/context-menu";
 import { cn } from "@/lib/utils";
 
 type View = "canvas" | "grid";
@@ -26,7 +29,11 @@ export function Workspace({
 }) {
   const [view, setView] = useState<View>("canvas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [selectedSection, setSelectedSection] = useState<ServiceSection>("overview");
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [newServiceOpen, setNewServiceOpen] = useState(false);
+  const [newServiceKind, setNewServiceKind] = useState<NewServiceKind>();
   const router = useRouter();
   const deploying = services.some((s) => s.status === "running");
   const refreshing = useAutoRefresh(
@@ -38,8 +45,15 @@ export function Workspace({
 
   // Open the new service's drawer and pull fresh state in.
   const onDeployed = (id: string) => {
+    setSelectedSection("overview");
     setSelectedId(id);
     router.refresh();
+  };
+
+  const openService = (service: Service, section: ServiceSection = "overview") => {
+    setHighlightedId(service.id);
+    setSelectedSection(section);
+    setSelectedId(service.id);
   };
 
   return (
@@ -80,25 +94,37 @@ export function Workspace({
             <RefreshCw className={cn("size-3.5", refreshing.pending && "animate-spin")} />
             {deploying ? "Deploying…" : "Refresh"}
           </button>
-          <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
+          <QuickDeployMenu projects={projects} onDeployed={onDeployed} open={newServiceOpen} initialSection={newServiceKind} onOpenChange={(open) => {
+            setNewServiceOpen(open);
+            if (!open) setNewServiceKind(undefined);
+          }} />
         </div>
       </header>
 
+      <ContextMenu label="Add New Service" heading="Add New Service" background items={workspaceMenuItems().map((item) => ({ ...item, onSelect: () => {
+        setNewServiceKind(item.id);
+        setNewServiceOpen(true);
+      } }))}>
+        {(trigger) => (
+        <section {...trigger} aria-label="Workspace" className="min-h-64 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]">
       {services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
+        <FlowCanvas services={services} edges={edges} onSelect={openService} highlightedId={highlightedId} onHighlight={setHighlightedId} />
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {services.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => setSelectedId(s.id)} />
+              <ServiceCard key={`${s.kind}:${s.id}`} service={s} selected={highlightedId === s.id} onSelect={() => setHighlightedId(s.id)} onOpen={(section) => openService(s, section)} />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
+        </section>
+        )}
+      </ContextMenu>
 
-      <ServiceDrawer service={selected} services={services} onClose={() => setSelectedId(null)} />
+      <ServiceDrawer service={selected} services={services} initialTab={selectedSection} onClose={() => setSelectedId(null)} />
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
       <AgentPanel />
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { AlertTriangle, CheckCircle2, ChevronRight, Link2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Link2, Trash2, X } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import {
   saveEnvironmentAction,
@@ -13,6 +13,9 @@ import { decodeStoredEnv, resolveTemplate } from "@/lib/references";
 import { referenceTargets, referenceableKeys } from "@/lib/reference-vars";
 import { serviceLabel } from "@/lib/service-meta";
 import { cn } from "@/lib/utils";
+import { ContextMenu } from "@/components/ContextMenu";
+import { variableMenuItems, type VariableMenuAction } from "@/lib/context-menu";
+import { removeVariableRow, variableRows } from "@/lib/variable-rows";
 
 /**
  * Service variables with Railway-style references. The textarea edits the
@@ -31,6 +34,7 @@ export function VariablesTab({ service, services }: { service: Service; services
 
   const dirty = value !== initial;
   const count = value.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).length;
+  const rows = variableRows(value);
 
   const targets = useMemo(
     () => referenceTargets(services, service.environmentId),
@@ -118,6 +122,44 @@ export function VariablesTab({ service, services }: { service: Service; services
           onPick={insertReference}
           onClose={() => setPickerOpen(false)}
         />
+      )}
+
+      {rows.length > 0 && (
+        <div className="mb-3">
+          <p className="mb-2 text-[11px] text-[var(--color-fg-subtle)]">Row actions edit this draft. Save variables to apply changes.</p>
+          <ul aria-label="Variables" className="max-h-48 space-y-1 overflow-y-auto">
+            {rows.map((row) => {
+              const edit = () => {
+                textareaRef.current?.focus();
+                textareaRef.current?.setSelectionRange(row.start, row.end);
+              };
+              const remove = () => {
+                if (confirm(`Delete variable "${row.key}" from "${service.name}"? Save variables to apply this change.`)) {
+                  setValue((current) => removeVariableRow(current, row.index));
+                  textareaRef.current?.focus();
+                }
+              };
+              const actions: Record<VariableMenuAction, () => void | Promise<void>> = {
+                copy: () => navigator.clipboard.writeText(row.value),
+                edit,
+                delete: remove,
+              };
+              const items = variableMenuItems({ reference: row.value.includes("${{"), pending })
+                .map((item) => ({ ...item, onSelect: actions[item.id] }));
+              return (
+                <ContextMenu key={`${row.index}:${row.key}`} label={`${row.key} actions`} items={items}>
+                  {(trigger) => (
+                    <li {...trigger} tabIndex={-1} className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5">
+                      <button type="button" onClick={edit} disabled={pending} aria-label={`Edit ${row.key}`} className="min-w-0 flex-1 truncate text-left font-mono text-xs disabled:opacity-40">{row.key}</button>
+                      <span className="text-[11px] text-[var(--color-fg-subtle)]">{row.value.includes("${{") ? "Reference" : "••••••"}</span>
+                      <button type="button" onClick={remove} disabled={pending} aria-label={`Delete ${row.key}`} className="rounded p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"><Trash2 className="size-3.5" /></button>
+                    </li>
+                  )}
+                </ContextMenu>
+              );
+            })}
+          </ul>
+        </div>
       )}
 
       <textarea

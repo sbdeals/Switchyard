@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Plus,
@@ -27,6 +27,7 @@ import {
 } from "@/app/actions";
 import { GithubDeployModal } from "@/components/GithubDeployModal";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import type { NewServiceKind } from "@/lib/context-menu";
 
 /**
  * One-click provisioning: pick a database engine (auto name/password/version) or
@@ -36,11 +37,19 @@ import { useDialogFocus } from "@/components/use-focus-trap";
 export function QuickDeployMenu({
   projects,
   onDeployed,
+  open: controlledOpen,
+  onOpenChange,
+  initialSection,
 }: {
   projects: ProjectNode[];
   onDeployed: (id: string) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  initialSection?: NewServiceKind;
 }) {
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = onOpenChange ?? setLocalOpen;
   const [githubOpen, setGithubOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,11 +59,31 @@ export function QuickDeployMenu({
   const [, startTransition] = useTransition();
 
   // Template catalog — lazily loaded from Dokploy the first time it's opened.
-  const [showTemplates, setShowTemplates] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const showTemplates = initialSection === "template" || templatesOpen;
   const [templates, setTemplates] = useState<DokployTemplate[] | null>(null);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [query, setQuery] = useState("");
+  const showAll = initialSection === undefined;
+  const loadingTemplates = templates === null && !templatesError;
+
+  // Opening Template from either entry point uses the same lazy catalog load.
+  useEffect(() => {
+    if (!open || !showTemplates || templates !== null) return;
+    let cancelled = false;
+    listTemplatesAction().then((res) => {
+      if (cancelled) return;
+      if (res.ok) {
+        setTemplates(res.templates);
+        setTemplatesError(null);
+      } else setTemplatesError(res.error);
+    }).catch(() => {
+      if (!cancelled) {
+        setTemplatesError("Could not load the template catalog. Please try again.");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [open, showTemplates, templates]);
 
   const envOptions = useMemo(
     () =>
@@ -90,21 +119,6 @@ export function QuickDeployMenu({
   const deployTemplate = (id: string) =>
     run(`tpl:${id}`, () => quickDeployTemplateAction(id, targetEnv));
 
-  function toggleTemplates() {
-    const next = !showTemplates;
-    setShowTemplates(next);
-    if (next && templates === null && !loadingTemplates) {
-      setLoadingTemplates(true);
-      setTemplatesError(null);
-      startTransition(async () => {
-        const res = await listTemplatesAction();
-        setLoadingTemplates(false);
-        if (res.ok) setTemplates(res.templates);
-        else setTemplatesError(res.error);
-      });
-    }
-  }
-
   const filteredTemplates = useMemo(() => {
     if (!templates) return [];
     const q = query.trim().toLowerCase();
@@ -117,7 +131,7 @@ export function QuickDeployMenu({
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
         aria-haspopup="true"
         aria-expanded={open}
         className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)]"
@@ -126,7 +140,7 @@ export function QuickDeployMenu({
       </button>
 
       <AnimatePresence>
-        {open && (
+        {open && initialSection !== "github" && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
             <FocusTrapPanel
@@ -154,7 +168,8 @@ export function QuickDeployMenu({
                 </select>
               )}
 
-              <SectionLabel>Application</SectionLabel>
+              {(showAll || initialSection === "image" || initialSection === "empty") && <SectionLabel>Application</SectionLabel>}
+              {(showAll || initialSection === "image") && (
               <div className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1">
                 <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
                   <Box className="size-4" />
@@ -165,6 +180,7 @@ export function QuickDeployMenu({
                   onKeyDown={(e) => e.key === "Enter" && image.trim() && deployImage()}
                   placeholder="docker image, e.g. nginx:alpine"
                   aria-label="Docker image"
+                  data-autofocus={initialSection === "image" ? "" : undefined}
                   className="min-w-0 flex-1 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                 />
                 <button
@@ -182,6 +198,8 @@ export function QuickDeployMenu({
                   )}
                 </button>
               </div>
+              )}
+              {showAll && (<>
               <div className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1">
                 <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
                   <GitBranch className="size-4" />
@@ -233,8 +251,11 @@ export function QuickDeployMenu({
                 <span className="flex-1">From GitHub</span>
                 <span className="text-[11px] text-[var(--color-fg-subtle)]">private repos</span>
               </button>
+              </>)}
+              {(showAll || initialSection === "empty") && (
               <button
                 onClick={createComposeStack}
+                data-autofocus={initialSection === "empty" ? "" : undefined}
                 disabled={busy !== null}
                 className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)] disabled:opacity-50"
               >
@@ -247,10 +268,13 @@ export function QuickDeployMenu({
                 <span className="flex-1">Compose stack</span>
                 <span className="text-[11px] text-[var(--color-fg-subtle)]">docker-compose</span>
               </button>
+              )}
 
+              {(showAll || initialSection === "template") && (<>
               <SectionLabel>Templates</SectionLabel>
+              {showAll && (
               <button
-                onClick={toggleTemplates}
+                onClick={() => setTemplatesOpen((value) => !value)}
                 aria-expanded={showTemplates}
                 className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)]"
               >
@@ -267,6 +291,7 @@ export function QuickDeployMenu({
                   }`}
                 />
               </button>
+              )}
 
               {showTemplates && (
                 <div className="mb-1">
@@ -277,6 +302,7 @@ export function QuickDeployMenu({
                       onChange={(e) => setQuery(e.target.value)}
                       placeholder="Search templates (n8n, plausible, ...)"
                       aria-label="Search app catalog"
+                      data-autofocus={initialSection === "template" ? "" : undefined}
                       className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[var(--color-fg-subtle)]"
                     />
                   </div>
@@ -324,14 +350,17 @@ export function QuickDeployMenu({
                   )}
                 </div>
               )}
+              </>)}
 
+              {(showAll || initialSection === "database") && (<>
               <SectionLabel>Database</SectionLabel>
               <div className="grid grid-cols-1">
-                {ENGINE_LIST.map((e) => (
+                {ENGINE_LIST.map((e, index) => (
                   <button
                     key={e.id}
                     onClick={() => deployDb(e.id)}
                     disabled={busy !== null}
+                    data-autofocus={initialSection === "database" && index === 0 ? "" : undefined}
                     className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)] disabled:opacity-50"
                   >
                     <span
@@ -351,6 +380,7 @@ export function QuickDeployMenu({
                   </button>
                 ))}
               </div>
+              </>)}
 
               {error && (
                 <div role="alert" className="mt-1 flex items-start gap-1.5 px-2 py-1.5 text-xs text-[var(--color-danger)]">
@@ -363,8 +393,8 @@ export function QuickDeployMenu({
       </AnimatePresence>
 
       <GithubDeployModal
-        open={githubOpen}
-        onClose={() => setGithubOpen(false)}
+        open={githubOpen || (open && initialSection === "github")}
+        onClose={() => { setGithubOpen(false); setOpen(false); }}
         environmentId={targetEnv}
         onDeployed={onDeployed}
       />
