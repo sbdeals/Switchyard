@@ -1,0 +1,11 @@
+[after] right-click service node -> 1 menu(s): Config › | View Variables | View Metrics | View Settings | Open | Open URL | Copy URL | View logs | Redeploy | Restart | Stop | Delete Service
+[after] Config submenu -> 2 menu(s): Networking | Compose | Volumes
+[after] Esc closes submenu only -> 1 menu(s): Config › | View Variables | View Metrics | View Settings | Open | Open URL | Copy URL | View logs | Redeploy | Restart | Stop | Delete Service
+[after] Esc again -> no in-app menu (browser native menu only)
+[after] Shift+F10 on focused node -> 1 menu(s): Config › | View Variables | View Metrics | View Settings | Open | Open URL | Copy URL | View logs | Redeploy | Restart | Stop | Delete Service
+[after] right-click empty canvas -> 1 menu(s): GitHub Repo | Template | Database | Docker Image | Empty Service
+[after] chose Docker Image -> dialog: APPLICATION / Deploy
+[after] right-click grid card -> 1 menu(s): Config › | View Variables | View Metrics | View Settings | Open | Open URL | Copy URL | View logs | Redeploy | Restart | Stop | Delete Service
+[after] deployment kebab -> 1 menu(s): View logs | Redeploy | Copy deployment ID
+[after] native confirm shown: "Destroy "beginner-html-site-styled-rys8"? This cannot be undone." -> dismissed (Cancel)
+[after] cancelled; nodes still on canvas: 9

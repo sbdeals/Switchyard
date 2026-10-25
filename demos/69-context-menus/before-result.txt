@@ -1,0 +1,7 @@
+[before] right-click service node -> no in-app menu (browser native menu only)
+[before] Config submenu -> n/a
+[before] Shift+F10 on focused node -> no in-app menu (browser native menu only)
+[before] right-click empty canvas -> no in-app menu (browser native menu only)
+[before] right-click grid card -> no in-app menu (browser native menu only)
+[before] deployment row kebab -> none
+[before] Delete Service -> n/a
