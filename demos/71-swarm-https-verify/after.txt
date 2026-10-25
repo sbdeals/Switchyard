@@ -1,0 +1,9 @@
+$ # with fix
+$ npx vitest run src/lib/swarm-domains.test.ts src/lib/bridge-domains.test.ts
+ ✓ src/lib/swarm-domains.test.ts (9 tests) 22ms
+ ✓ src/lib/bridge-domains.test.ts (42 tests) 115ms
+ Test Files  2 passed (2)
+      Tests  51 passed (51)
+$ npm run lint && npx tsc --noEmit && npx vitest run
+ Test Files  13 passed (13)
+      Tests  441 passed (441)

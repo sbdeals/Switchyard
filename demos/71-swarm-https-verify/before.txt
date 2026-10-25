@@ -1,0 +1,29 @@
+$ git log -1 --oneline  # base (#61), fix stashed
+6b6d5d6 fix(bridge): keep the -portfix image until a later deploy so Stop/Start keeps working
+$ npx vitest run src/lib/swarm-domains.test.ts
+   × Swarm image auto-domains > routes a quick-deployed image to its exposed port 13ms
+     → expected "spy" to be called with arguments: [ 'traefik/whoami:latest', …(1) ]
+   × Swarm image auto-domains > resolves nginx:alpine with env  and metadata [] to 80 4ms
+     → expected 3000 to be 80 // Object.is equality
+   × Swarm image auto-domains > resolves example/web:latest with env PORT=8080 and metadata ["80/tcp"] to 8080 2ms
+     → expected 3000 to be 8080 // Object.is equality
+   × Swarm image auto-domains > resolves example/web:latest with env  and metadata ["9000/tcp","8080/tcp","53/udp"] to 8080 2ms
+     → expected 3000 to be 8080 // Object.is equality
+   ✓ Swarm image auto-domains > resolves example/web:latest with env  and metadata [] to 3000 1ms
+   × Swarm image auto-domains > uses the detected port for the sslip.io fallback too 6ms
+     → expected { Object (applicationId, host, ...) } to match object { port: 80, https: true, …(1) }
+   ✓ Swarm image auto-domains > preserves the repo fallback without pulling a stale Docker provider image 1ms
+   ✓ Swarm image auto-domains > keeps an existing auto-domain and its chosen port 1ms
+   ✓ Swarm image auto-domains > does not inspect or create a domain when auto-URLs are disabled 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/lib/swarm-domains.test.ts > Swarm image auto-domains > routes a quick-deployed image to its exposed port
+AssertionError: expected "spy" to be called with arguments: [ 'traefik/whoami:latest', …(1) ]
+ FAIL  src/lib/swarm-domains.test.ts > Swarm image auto-domains > resolves nginx:alpine with env  and metadata [] to 80
+AssertionError: expected 3000 to be 80 // Object.is equality
+ FAIL  src/lib/swarm-domains.test.ts > Swarm image auto-domains > resolves example/web:latest with env PORT=8080 and metadata ["80/tcp"] to 8080
+ FAIL  src/lib/swarm-domains.test.ts > Swarm image auto-domains > resolves example/web:latest with env  and metadata ["9000/tcp","8080/tcp","53/udp"] to 8080
+AssertionError: expected 3000 to be 8080 // Object.is equality
+ FAIL  src/lib/swarm-domains.test.ts > Swarm image auto-domains > uses the detected port for the sslip.io fallback too
+AssertionError: expected { Object (applicationId, host, ...) } to match object { port: 80, https: true, …(1) }
+     91|     expect(domains()[0].body).toMatchObject({ port: 80, https: true, c…
+      Tests  5 failed | 4 passed (9)
