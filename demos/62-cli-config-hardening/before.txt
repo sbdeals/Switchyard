@@ -1,0 +1,34 @@
+## [before] 01:31:55 EDT Oct 25  cli=/workspace/wt-c2c-before/cli/dist/cli.js
+$ umask 000
+$ switchyard config set --no-restart dashboardPort -- 0
+  │
+  ◆  dashboardPort = 0 (saved to <tmp>/sy/config.json)
+  │
+  ●  Skipped container restart (--no-restart). Apply later with `switchyard up`.
+  exit=0
+  persisted dashboardPort: 0
+$ switchyard config set --no-restart dashboardPort -- -1
+  │
+  ◆  dashboardPort = -1 (saved to <tmp>/sy/config.json)
+  │
+  ●  Skipped container restart (--no-restart). Apply later with `switchyard up`.
+  exit=0
+  persisted dashboardPort: -1
+$ switchyard config set --no-restart dashboardPort -- 65536
+  │
+  ◆  dashboardPort = 65536 (saved to <tmp>/sy/config.json)
+  │
+  ●  Skipped container restart (--no-restart). Apply later with `switchyard up`.
+  exit=0
+  persisted dashboardPort: 65536
+$ switchyard config set --no-restart dashboardPort 8081
+  │
+  ◆  dashboardPort = 8081 (saved to <tmp>/sy/config.json)
+  │
+$ stat -c '%a %n' config dir + file (umask 000)
+  777 <tmp>/sy
+  600 <tmp>/sy/config.json
+$ hand-edit dashboardPort=70000, then: switchyard config list
+  dashboardPort = 70000
+$ umask 022; fresh save with mode-probe.mjs preloaded (prints the file mode the moment it exists)
+  [probe] before chmod: c2.json mode 644

@@ -1,0 +1,10 @@
+## [before] 01:29:35 EDT Oct 25  dashboard http://127.0.0.1:3002  image switchyard-dash:main-1fc46d5
+synthetic access key SYNTHETIC-AK-e2e023, synthetic secret SYNTHETIC-SECRET-do-not-show-e2e023
+
+### case 1: endpoint not-a-url
+error shown (352 chars):  | Dokploy destination.testConnection failed (400): {"message":"Command execution failed: Command failed: rclone ls --s3-provider=AWS --s3-access-key-id=SYNTHETIC-AK-e2e023 --s3-secret-access-key=SYNTHETIC-SECRET-do-not-show-e2e023 --s3-region=us-east-1 --s3-endpoint=not-a-url --s3-no-check-bucket --s3-force-path-style --retries 1 --low-level-retries
+secret visible on page: true   access key visible: true
+
+### case 2: endpoint http://127.0.0.1:9
+error shown (352 chars):  | Dokploy destination.testConnection failed (400): {"message":"Command execution failed: Command failed: rclone ls --s3-provider=AWS --s3-access-key-id=SYNTHETIC-AK-e2e023 --s3-secret-access-key=SYNTHETIC-SECRET-do-not-show-e2e023 --s3-region=us-east-1 --s3-endpoint=http\\://127.0.0.1\\:9 --s3-no-check-bucket --s3-force-path-style --retries 1 --low-
+secret visible on page: true   access key visible: true

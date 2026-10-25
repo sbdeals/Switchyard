@@ -1,0 +1,28 @@
+## [after] 01:31:56 EDT Oct 25  cli=/workspace/wt-cli-config-hardening/cli/dist/cli.js
+$ umask 000
+$ switchyard config set --no-restart dashboardPort -- 0
+  
+  ✗ dashboardPort must be an integer between 1 and 65535, got: 0
+  exit=1
+  persisted dashboardPort: (no file)
+$ switchyard config set --no-restart dashboardPort -- -1
+  
+  ✗ dashboardPort must be an integer between 1 and 65535, got: -1
+  exit=1
+  persisted dashboardPort: (no file)
+$ switchyard config set --no-restart dashboardPort -- 65536
+  
+  ✗ dashboardPort must be an integer between 1 and 65535, got: 65536
+  exit=1
+  persisted dashboardPort: (no file)
+$ switchyard config set --no-restart dashboardPort 8081
+  │
+  ◆  dashboardPort = 8081 (saved to <tmp>/sy/config.json)
+  │
+$ stat -c '%a %n' config dir + file (umask 000)
+  700 <tmp>/sy
+  600 <tmp>/sy/config.json
+$ hand-edit dashboardPort=70000, then: switchyard config list
+  ✗ Invalid config file <tmp>/sy/config.json: dashboardPort must be an integer between 1 and 65535, got: 70000
+$ umask 022; fresh save with mode-probe.mjs preloaded (prints the file mode the moment it exists)
+  [probe] temp file before rename: mode 600

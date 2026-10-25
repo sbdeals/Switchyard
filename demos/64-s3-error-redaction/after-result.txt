@@ -1,0 +1,10 @@
+## [after] 01:30:16 EDT Oct 25  dashboard http://127.0.0.1:3002  image switchyard-dash:s3-after
+synthetic access key SYNTHETIC-AK-e2e023, synthetic secret SYNTHETIC-SECRET-do-not-show-e2e023
+
+### case 1: endpoint not-a-url
+error shown (98 chars):  | Enter a full HTTP(S) endpoint URL without credentials, like https://s3.us-east-1.amazonaws.com.
+secret visible on page: false   access key visible: false
+
+### case 2: endpoint http://127.0.0.1:9
+error shown (94 chars):  | Couldn't reach the S3 endpoint. Check the endpoint URL and network connection. Show details
+secret visible on page: false   access key visible: false
