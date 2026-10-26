@@ -1,0 +1,14 @@
+--- scenario 1: switchyard_session cookie deleted
+url: http://127.0.0.1:3005/
+draft after Save: "(editor gone)"
+banner/err text: couldn’t load Reload to try again, or go back
+--- scenario 2: switchyard_session cookie replaced with garbage
+url: http://127.0.0.1:3005/login
+draft after Save: "(editor gone)"
+banner/err text: Sign in to Switchyard Use your Dokploy account
+--- scenario 3: Dokploy session revoked server-side (sealed cookie still valid)
+url: http://127.0.0.1:3005/login
+draft after Save: "(editor gone)"
+banner/err text: (none)
+navigate to / after revoke -> page.goto: net::ERR_TOO_MANY_REDIRECTS at http://127.0.0.1:3005/
+navigate to / after revoke -> chrome-error://chromewebdata/ :: [before] Browser: page.goto: net::ERR_TOO_MANY_REDIRECTS at http://127.0.0.1:3005/

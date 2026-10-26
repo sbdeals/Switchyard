@@ -1,0 +1,13 @@
+--- scenario 1: switchyard_session cookie deleted
+url: http://127.0.0.1:3005/
+draft after Save: "DRAFT_1=keep-me-please\nLOG_LEVEL=debug"
+banner/err text: session expired.
+--- scenario 2: switchyard_session cookie replaced with garbage
+url: http://127.0.0.1:3005/
+draft after Save: "DRAFT_2=keep-me-please\nLOG_LEVEL=debug"
+banner/err text: session expired.
+--- scenario 3: Dokploy session revoked server-side (sealed cookie still valid)
+url: http://127.0.0.1:3005/
+draft after Save: "DRAFT_3=keep-me-please\nLOG_LEVEL=debug"
+banner/err text: session expired.
+navigate to / after revoke -> http://127.0.0.1:3005/login?expired=1 :: Sign in to Switchyard Your session expired. Sign in again. Email Password Sign in No account yet? Create one — on a fresh install it becomes the admin
