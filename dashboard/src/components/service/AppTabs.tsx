@@ -64,6 +64,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { ComposeExportButton } from "@/components/service/ComposeExportDialog";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -111,6 +112,7 @@ export function AppOverviewTab({ app }: { app: Application }) {
         <Info label="Build" value={app.buildType ?? "—"} />
         <Info label="Replicas" value={String(app.replicas ?? 1)} />
       </div>
+      <ComposeExportButton key={app.id} id={app.id} name={app.name} />
     </div>
   );
 }
