@@ -46,7 +46,7 @@ export function VariablesTab({ service }: { service: Service }) {
         aria-label="Environment variables, one KEY=value per line"
         className="min-h-64 flex-1 resize-none rounded-lg border border-[var(--color-border-control)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
       />
-      <div className="mt-3 flex items-center justify-between">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs text-[var(--color-fg-subtle)]">{count} variable{count === 1 ? "" : "s"}</span>
         <SaveRow saving={pending} saved={saved} error={error} disabled={!dirty} onSave={save} label="Save variables" />
       </div>

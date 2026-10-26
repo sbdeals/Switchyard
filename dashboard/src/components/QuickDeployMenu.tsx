@@ -14,6 +14,7 @@ import {
   LayoutTemplate,
   Search,
   ChevronDown,
+  X,
 } from "lucide-react";
 import type { Engine, ProjectNode, DokployTemplate } from "@/lib/dokploy";
 import { ENGINE_LIST } from "@/lib/engines";
@@ -113,7 +114,7 @@ export function QuickDeployMenu({
   }, [templates, query]);
 
   return (
-    <div className="relative">
+    <div className="relative max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10 max-lg:[&_input]:min-h-10 max-lg:[&_select]:min-h-10">
       <button
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="true"
@@ -135,8 +136,18 @@ export function QuickDeployMenu({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.12 }}
-              className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl"
+              className="fixed left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-50 max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] overflow-y-auto overscroll-contain rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:max-h-[calc(100dvh-8rem)] sm:w-80"
             >
+              <div className="mb-1 flex items-center justify-between pl-2 sm:hidden">
+                <span className="text-sm font-semibold">New service</span>
+                <button
+                  onClick={() => setOpen(false)}
+                  aria-label="Close new service"
+                  className="flex items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
               {envOptions.length > 1 && (
                 <select
                   value={targetEnv}
@@ -332,7 +343,7 @@ export function QuickDeployMenu({
                       )}
                     </span>
                     <span className="flex-1">{e.label}</span>
-                    <span className="text-[11px] text-[var(--color-fg-subtle)]">
+                    <span className="min-w-0 truncate text-[11px] text-[var(--color-fg-subtle)]">
                       {e.image}:{e.versions[0]}
                     </span>
                   </button>

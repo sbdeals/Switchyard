@@ -40,10 +40,10 @@ export function Workspace({
 
   return (
     <MotionConfig reducedMotion="user">
-    <div className="mx-auto max-w-7xl px-6 py-8">
+    <div className="mx-auto max-w-7xl px-4 py-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:py-8 sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))]">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 max-sm:pr-24">
             <div className="flex size-8 items-center justify-center rounded-lg bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
               <Boxes className="size-4.5" />
             </div>
@@ -53,8 +53,8 @@ export function Workspace({
             Apps and databases across your Dokploy projects.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-[var(--color-border-strong)] p-0.5">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <div className="flex rounded-lg border border-[var(--color-border-strong)] p-0.5 max-sm:w-full">
             <ViewToggle active={view === "canvas"} onClick={() => setView("canvas")}>
               <Network className="size-3.5" /> Canvas
             </ViewToggle>
@@ -64,15 +64,15 @@ export function Workspace({
           </div>
           <button
             onClick={() => setProjectsOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)] max-lg:min-h-10"
           >
             <FolderGit2 className="size-3.5" /> Projects
           </button>
           <button
             onClick={() => router.refresh()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)] max-lg:min-h-10 max-lg:min-w-10"
           >
-            <RefreshCw className="size-3.5" /> Refresh
+            <RefreshCw className="size-3.5" /> <span className="sr-only sm:not-sr-only">Refresh</span>
           </button>
           <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
         </div>
@@ -115,7 +115,7 @@ function ViewToggle({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+        "inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors max-lg:min-h-10 max-sm:flex-1",
         active
           ? "bg-[var(--color-surface-hover)] text-[var(--color-fg)]"
           : "text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"

@@ -168,13 +168,13 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
               rel="noreferrer"
               className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm hover:bg-[var(--color-surface-hover)]"
             >
-              <Globe className="size-3.5 text-[var(--color-brand)]" />
-              <span className="flex-1 truncate">{d.host}</span>
+              <Globe className="size-3.5 shrink-0 text-[var(--color-brand)]" />
+              <span className="min-w-0 flex-1 truncate">{d.host}</span>
               {d.serviceName && (
-                <span className="text-xs text-[var(--color-fg-subtle)]">→ {d.serviceName}</span>
+                <span className="max-w-24 truncate text-xs text-[var(--color-fg-subtle)]" title={d.serviceName}>→ {d.serviceName}</span>
               )}
               {d.port && <span className="text-xs text-[var(--color-fg-subtle)]">:{d.port}</span>}
-              <ExternalLink className="size-3 text-[var(--color-fg-subtle)]" />
+              <ExternalLink className="size-3 shrink-0 text-[var(--color-fg-subtle)]" />
             </a>
           ))}
         </div>
@@ -182,8 +182,8 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
         <p className="text-xs text-[var(--color-fg-subtle)]">No domains attached.</p>
       )}
 
-      <div className="flex items-end gap-2">
-        <div className="w-32">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-0 w-32">
           <Field label="Service" hint="in this stack">
             <input
               value={serviceName}
@@ -199,7 +199,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
             </datalist>
           </Field>
         </div>
-        <div className="flex-1">
+        <div className="min-w-40 flex-1">
           <Field label="Host">
             <input
               value={host}
@@ -229,7 +229,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
         </button>
       </div>
       {generated && (
-        <p role="status" className="text-xs text-[var(--color-ok)]">
+        <p role="status" className="break-words text-xs text-[var(--color-ok)]">
           Attached {generated} → {serviceName} — it appears in the list above.
         </p>
       )}

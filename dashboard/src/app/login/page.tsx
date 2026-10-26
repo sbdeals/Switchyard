@@ -15,7 +15,7 @@ export default async function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-full items-center justify-center px-6 py-16">
+    <main className="flex min-h-full items-center justify-center px-6 py-16 pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(4rem,env(safe-area-inset-top))] pb-[max(4rem,env(safe-area-inset-bottom))]">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="mb-3 flex size-11 items-center justify-center rounded-xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">

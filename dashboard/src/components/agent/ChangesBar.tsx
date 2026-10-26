@@ -61,7 +61,7 @@ export function ChangesBar({
   if (count === 0 && !results) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-4 z-40 flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-[max(1rem,env(safe-area-inset-top))] z-40 max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))] max-sm:top-auto flex justify-center px-4 max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10">
       <AnimatePresence mode="popLayout">
         {count > 0 && (
           <motion.div
@@ -69,7 +69,7 @@ export function ChangesBar({
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            className="pointer-events-auto flex items-center gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-2 py-1.5 shadow-[0_10px_30px_-12px_#000] backdrop-blur"
+            className="pointer-events-auto flex max-w-full items-center gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-2 py-1.5 shadow-[0_10px_30px_-12px_#000] backdrop-blur max-sm:flex-wrap"
           >
             <span className="flex items-center gap-2 pl-1.5 pr-1 text-xs font-medium text-[var(--color-fg)]">
               <span className="flex size-5 items-center justify-center rounded-md bg-[var(--color-warn-soft)] text-[var(--color-warn)]">
@@ -94,19 +94,19 @@ export function ChangesBar({
               Apply {count === 1 ? "1 change" : `${count} changes`}
             </button>
 
-            <div className="relative" ref={menuRef}>
+            <div className="relative max-sm:ml-auto max-sm:shrink-0" ref={menuRef}>
               <button
                 ref={menuTriggerRef}
                 onClick={() => setMenuOpen((v) => !v)}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                className="rounded-lg p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+                className="flex items-center justify-center rounded-lg p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
                 aria-label="More"
               >
                 <MoreVertical className="size-4" />
               </button>
               {menuOpen && (
-                <div className="absolute right-0 top-full mt-1 w-44 overflow-hidden rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] py-1 shadow-[0_10px_30px_-12px_#000]">
+                <div className="absolute right-0 top-full mt-1 w-44 overflow-hidden rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] py-1 shadow-[0_10px_30px_-12px_#000] max-sm:bottom-full max-sm:top-auto max-sm:mb-1 max-sm:mt-0">
                   <button
                     onClick={() => {
                       setMenuOpen(false);
@@ -127,9 +127,9 @@ export function ChangesBar({
       {results && count === 0 && (
         <div
           role="status"
-          className="pointer-events-auto flex items-start gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 text-xs shadow-[0_10px_30px_-12px_#000] backdrop-blur"
+          className="pointer-events-auto flex max-w-full items-start gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 text-xs shadow-[0_10px_30px_-12px_#000] backdrop-blur [overflow-wrap:anywhere]"
         >
-          <div className="flex flex-col gap-1">
+          <div className="flex min-w-0 flex-col gap-1">
             {results.map((r) => (
               <div key={r.id} className="flex items-center gap-2">
                 {r.ok ? (
@@ -147,7 +147,7 @@ export function ChangesBar({
           <button
             onClick={onDismissResults}
             aria-label="Dismiss results"
-            className="-mr-1 shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+            className="-mr-1 flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
           >
             <X className="size-3.5" />
           </button>
@@ -189,20 +189,20 @@ function DetailsModal({
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
   return (
-    <div className="pointer-events-auto fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-24" onClick={onClose}>
+    <div className="pointer-events-auto fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-24" onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-md rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-4 shadow-2xl"
+        className="max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] w-full max-w-md overflow-y-auto overscroll-contain rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-4 shadow-2xl sm:max-h-[calc(100dvh-7rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
           <h3 id={titleId} className="text-sm font-semibold">
             Pending changes
           </h3>
-          <button onClick={onClose} aria-label="Close" className="rounded-md p-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)]">
+          <button onClick={onClose} aria-label="Close" className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)]">
             <X className="size-4" />
           </button>
         </div>
@@ -212,10 +212,10 @@ function DetailsModal({
               key={c.id}
               className="flex items-center justify-between gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2"
             >
-              <span className="text-xs text-[var(--color-fg)]">{c.description}</span>
+              <span className="min-w-0 text-xs text-[var(--color-fg)] [overflow-wrap:anywhere]">{c.description}</span>
               <button
                 onClick={() => onDiscard([c.id])}
-                className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-danger)]"
+                className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-danger)]"
                 aria-label="Discard this change"
               >
                 <Trash2 className="size-3.5" />

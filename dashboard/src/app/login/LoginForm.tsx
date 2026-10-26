@@ -7,7 +7,7 @@ import { loginAction, signupAction, type LoginState } from "./actions";
 const initialState: LoginState = {};
 
 const inputClass =
-  "rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50";
+  "min-w-0 rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 max-lg:min-h-10 max-sm:text-base";
 
 export function LoginForm() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -20,7 +20,7 @@ export function LoginForm() {
   const pending = signup ? signupPending : loginPending;
 
   return (
-    <form action={signup ? signupFormAction : loginFormAction} className="flex flex-col gap-3">
+    <form action={signup ? signupFormAction : loginFormAction} className="flex flex-col gap-3 max-lg:[&_button]:min-h-10">
       {signup ? (
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-[var(--color-fg-muted)]">Name</span>

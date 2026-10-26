@@ -146,8 +146,8 @@ function RedirectsSection({ app }: { app: Application }) {
       ) : (
         <Empty>No redirects.</Empty>
       )}
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
+      <div className="grid grid-cols-2 items-end gap-2 sm:flex">
+        <div className="min-w-0 flex-1">
           <Field label="Regex">
             <input
               value={regex}
@@ -157,7 +157,7 @@ function RedirectsSection({ app }: { app: Application }) {
             />
           </Field>
         </div>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Field label="Replacement">
             <input
               value={replacement}
@@ -167,7 +167,7 @@ function RedirectsSection({ app }: { app: Application }) {
             />
           </Field>
         </div>
-        <label className="flex items-center gap-1.5 pb-2 text-xs text-[var(--color-fg-muted)]">
+        <label className="flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)] max-lg:min-h-10 sm:pb-2">
           <input
             type="checkbox"
             checked={permanent}
@@ -247,8 +247,8 @@ function PortsSection({ app }: { app: Application }) {
       ) : (
         <Empty>No published ports.</Empty>
       )}
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
+      <div className="grid grid-cols-2 items-end gap-2 sm:flex">
+        <div className="min-w-0 flex-1">
           <Field label="Published">
             <input
               value={published}
@@ -258,7 +258,7 @@ function PortsSection({ app }: { app: Application }) {
             />
           </Field>
         </div>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Field label="Target">
             <input
               value={target}
@@ -268,7 +268,7 @@ function PortsSection({ app }: { app: Application }) {
             />
           </Field>
         </div>
-        <div className="w-24">
+        <div className="min-w-0 sm:w-24">
           <Field label="Protocol">
             <select
               value={protocol}
@@ -345,8 +345,8 @@ function SecuritySection({ app }: { app: Application }) {
       ) : (
         <Empty>No basic-auth users — the app is publicly reachable.</Empty>
       )}
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
+      <div className="grid grid-cols-2 items-end gap-2 sm:flex">
+        <div className="min-w-0 flex-1">
           <Field label="Username">
             <input
               value={username}
@@ -356,7 +356,7 @@ function SecuritySection({ app }: { app: Application }) {
             />
           </Field>
         </div>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Field label="Password">
             <input
               type="password"

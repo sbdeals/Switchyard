@@ -138,14 +138,14 @@ export function DataTab({ service }: { service: Service }) {
 
   return (
     <div className="flex h-full flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {targets.length > 1 ? (
             <select
               aria-label="Postgres container"
               value={target.key}
               onChange={(e) => setTargetKey(e.target.value)}
-              className={cn(inputCls, "h-8 w-auto py-1 text-xs")}
+              className={cn(inputCls, "h-8 max-w-full w-auto py-1 text-xs")}
             >
               {targets.map((t) => (
                 <option key={t.key} value={t.key}>
@@ -159,7 +159,7 @@ export function DataTab({ service }: { service: Service }) {
               <span className="truncate font-mono" title={`${target.db} as ${target.user} · ${target.image}`}>
                 {target.db}
               </span>
-              <span className="text-[var(--color-fg-subtle)]">as {target.user}</span>
+              <span className="truncate text-[var(--color-fg-subtle)]">as {target.user}</span>
             </div>
           )}
         </div>
@@ -233,8 +233,8 @@ function BrowseView({ app, targetKey }: { app: string; targetKey: string }) {
   const busy = loading || (schemas === null && error === null);
 
   return (
-    <div className="flex min-h-0 flex-1 gap-3">
-      <aside className="flex w-44 shrink-0 flex-col overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row">
+      <aside className="flex max-h-40 w-full shrink-0 flex-col overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] sm:max-h-none sm:w-44">
         {busy ? (
           <div className="flex items-center gap-1.5 p-3 text-[11px] text-[var(--color-fg-subtle)]">
             <Loader2 className="size-3.5 animate-spin" /> loading…
@@ -360,8 +360,8 @@ function TableRows({
   }, [app, targetKey, schema, table, offset]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 truncate text-xs font-medium text-[var(--color-fg)]">
           <span className="text-[var(--color-fg-subtle)]">{schema}.</span>
           {table}
@@ -376,7 +376,7 @@ function TableRows({
             onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
             disabled={loading || offset === 0}
             aria-label="Previous page"
-            className="rounded-md border border-[var(--color-border-strong)] p-1 hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
+            className="flex items-center justify-center rounded-md border border-[var(--color-border-strong)] p-1 hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
           >
             <ChevronLeft className="size-3.5" />
           </button>
@@ -385,7 +385,7 @@ function TableRows({
             onClick={() => setOffset((o) => o + PAGE_SIZE)}
             disabled={loading || !page?.hasMore}
             aria-label="Next page"
-            className="rounded-md border border-[var(--color-border-strong)] p-1 hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
+            className="flex items-center justify-center rounded-md border border-[var(--color-border-strong)] p-1 hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
           >
             <ChevronRight className="size-3.5" />
           </button>
@@ -469,9 +469,9 @@ function SqlView({ app, targetKey }: { app: string; targetKey: string }) {
         />
       </div>
 
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <WritesToggle on={allowWrites} onChange={setAllowWrites} />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {result && !error && (
             <span aria-live="polite" className="text-[11px] text-[var(--color-fg-subtle)]">
               {result.rowCount} row{result.rowCount === 1 ? "" : "s"} · {result.ms} ms
@@ -618,7 +618,7 @@ function ResultGrid({ columns, rows }: { columns: string[]; rows: (string | null
     );
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[#0b0b10]">
+    <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[#0b0b10]">
       <table className="w-full border-collapse text-left font-mono text-[11px]">
         <thead className="sticky top-0 z-10 bg-[var(--color-bg-elevated)]">
           <tr>

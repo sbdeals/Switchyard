@@ -178,7 +178,7 @@ function MountRow({
           onClick={onEdit}
           disabled={pending}
           aria-label={`Edit mount ${mount.mountPath}`}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
         >
           <Pencil className="size-3.5" />
         </button>
@@ -186,7 +186,7 @@ function MountRow({
           onClick={remove}
           disabled={pending}
           aria-label={`Remove mount ${mount.mountPath}`}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
         >
           {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
         </button>
@@ -258,7 +258,7 @@ function MountForm({
         <button
           onClick={onCancel}
           aria-label="Cancel"
-          className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
         >
           <X className="size-3.5" />
         </button>

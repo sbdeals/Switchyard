@@ -50,7 +50,7 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
   return (
     <div className="flex h-full flex-col">
       <div className="mb-3 flex items-center gap-2">
-        <div className="relative flex-1">
+        <div className="relative min-w-0 flex-1">
           <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-fg-subtle)]" />
           <input
             value={filter}
@@ -60,7 +60,7 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
             className="w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] py-1.5 pl-8 pr-3 text-xs outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
           />
         </div>
-        <span role="status" className="flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
+        <span role="status" className="flex shrink-0 items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
           <span
             aria-hidden="true"
             className={`size-1.5 rounded-full ${connected ? "bg-[var(--color-ok)]" : "bg-[var(--color-idle)]"}`}
@@ -90,7 +90,7 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
               <span className="shrink-0 select-none text-[var(--color-fg-subtle)]">
                 {new Date(l.ts).toLocaleTimeString()}
               </span>
-              <span className="text-[var(--color-fg-muted)]">{l.text}</span>
+              <span className="min-w-0 text-[var(--color-fg-muted)]">{l.text}</span>
             </div>
           ))
         )}
