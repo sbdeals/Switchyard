@@ -23,6 +23,7 @@ import { redirect } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
+import { validateServiceName, type ServiceDetailsPatch } from "./service-name";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
 import {
   deriveComposeRuntime,
@@ -88,6 +89,7 @@ export interface ServiceBase {
   kind: ServiceKind;
   id: string;
   name: string;
+  description: string | null;
   appName: string;
   status: ServiceStatus;
   projectId: string;
@@ -219,7 +221,6 @@ export interface Application extends ServiceBase {
   kind: "application";
   sourceType: AppSource | null;
   buildType: BuildType | null;
-  description: string | null;
   /** Source repo/image reference for display (git URL or owner/repo). */
   repository: string | null;
   // Build configuration (used to prefill the Build settings tab).
@@ -539,10 +540,50 @@ export async function removeEnvironment(environmentId: string): Promise<void> {
   await request("environment.remove", { method: "POST", body: { environmentId } });
 }
 
+/**
+ * Rename metadata only. Dokploy v0.30.10 accepts `name` and `description` on
+ * application/compose/<engine>.update; `appName` is deliberately never sent.
+ * Resolve the target through the current user's project tree, not client input.
+ */
+export async function updateServiceDetails(id: string, patch: ServiceDetailsPatch): Promise<void> {
+  const { name, error } = validateServiceName(patch?.name);
+  if (error) throw new Error(error);
+  if (patch.description !== undefined && typeof patch.description !== "string") {
+    throw new Error("Description must be text.");
+  }
+  const metadata = {
+    name,
+    ...(patch.description !== undefined ? { description: patch.description } : {}),
+  };
+  for (const project of await rawTree()) {
+    for (const env of project.environments) {
+      let type: "application" | "compose" | Engine | undefined;
+      if ((env.applications ?? []).some((app) => app.applicationId === id)) {
+        type = "application";
+      } else if ((env.compose ?? []).some((compose) => compose.composeId === id)) {
+        type = "compose";
+      } else {
+        type = ENGINES.find((engine) =>
+          ((env[engine] ?? []) as Record<string, string>[]).some((db) => db[idKey(engine)] === id)
+        );
+      }
+      if (type) {
+        await request(`${type}.update`, {
+          method: "POST",
+          body: { [`${type}Id`]: id, ...metadata },
+        });
+        return;
+      }
+    }
+  }
+  throw new Error("Service not found or access denied.");
+}
+
 // --- databases --------------------------------------------------------------
 
 interface RawDatabaseDetail {
   name?: string;
+  description?: string | null;
   appName?: string;
   applicationStatus?: DatabaseStatus;
   dockerImage?: string | null;
@@ -576,6 +617,7 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
         ...s,
         kind: "database",
         name: d.name ?? s.id,
+        description: d.description ?? null,
         appName: d.appName ?? "",
         status: d.applicationStatus ?? "idle",
         dockerImage: d.dockerImage ?? null,
@@ -1628,6 +1670,7 @@ export async function removeMount(mountId: string): Promise<void> {
 
 interface RawComposeDetail {
   name?: string;
+  description?: string | null;
   appName?: string;
   composeStatus?: ServiceStatus;
   composeType?: string | null;
@@ -1658,6 +1701,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         kind: "compose",
         id,
         name: d.name ?? id,
+        description: d.description ?? null,
         appName: d.appName ?? "",
         status: d.composeStatus ?? "idle",
         dockerImage: null,

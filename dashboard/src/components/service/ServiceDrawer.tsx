@@ -39,6 +39,7 @@ import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { ServiceDetailsSettings, ServiceName, type RenameState } from "@/components/service/ServiceDetails";
 import {
   AppOverviewTab,
   AppBuildTab,
@@ -344,17 +345,23 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
+export function ServiceDrawer({ service, services, onClose }: { service: Service | null; services: Service[]; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
+  const [renaming, setRenaming] = useState<RenameState>(null);
   const titleId = useId();
-  const dialogRef = useDialogFocus<HTMLElement>(onClose);
+  const dialogRef = useDialogFocus<HTMLElement>(() => {
+    if (renaming === "saving") return;
+    if (renaming) setRenaming(null);
+    else onClose();
+  });
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
   // Reset to Overview when a different service is opened (adjust state during
   // render — the React-recommended alternative to a resetting effect).
   const [shownId, setShownId] = useState<string | null>(null);
-  if (service && service.id !== shownId) {
-    setShownId(service.id);
+  if ((service?.id ?? null) !== shownId) {
+    setShownId(service?.id ?? null);
     setTab("overview");
+    setRenaming(null);
   }
   const baseTabs =
     service?.kind === "application"
@@ -391,7 +398,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             className="fixed inset-y-0 right-0 z-50 flex flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
           >
             <ResizeHandle width={width} apply={applyWidth} reset={resetWidth} />
-            <Header service={service} onClose={onClose} titleId={titleId} />
+            <Header key={service.id} service={service} services={services} onClose={onClose} titleId={titleId} renaming={renaming} onRenamingChange={setRenaming} />
             <nav
               role="tablist"
               aria-label="Service sections"
@@ -477,14 +484,18 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               {tab === "logs" && <LogsTab key={service.appName} appName={service.appName} active />}
               {tab === "console" && <ConsoleTab key={service.appName} appName={service.appName} />}
               {tab === "backups" && service.kind === "database" && <BackupsTab db={service} />}
-              {tab === "settings" &&
-                (service.kind === "database" ? (
-                  <SettingsTab db={service} onClose={onClose} />
-                ) : service.kind === "compose" ? (
-                  <ComposeSettingsTab compose={service} onClose={onClose} />
-                ) : (
-                  <AppSettingsTab app={service} onClose={onClose} />
-                ))}
+              {tab === "settings" && (
+                <>
+                  <ServiceDetailsSettings key={service.id} service={service} services={services} />
+                  {service.kind === "database" ? (
+                    <SettingsTab db={service} onClose={onClose} />
+                  ) : service.kind === "compose" ? (
+                    <ComposeSettingsTab compose={service} onClose={onClose} />
+                  ) : (
+                    <AppSettingsTab app={service} onClose={onClose} />
+                  )}
+                </>
+              )}
             </div>
           </motion.aside>
         </>
@@ -495,29 +506,33 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
 
 function Header({
   service,
+  services,
   onClose,
   titleId,
+  renaming,
+  onRenamingChange,
 }: {
   service: Service;
+  services: Service[];
   onClose: () => void;
   titleId: string;
+  renaming: RenameState;
+  onRenamingChange: (state: RenameState) => void;
 }) {
   const accent = serviceAccent(service);
   const Icon = service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <div
-          className="flex size-11 items-center justify-center rounded-xl"
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl"
           style={{ backgroundColor: `${accent}1a`, color: accent }}
         >
           <Icon className="size-5.5" />
         </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 id={titleId} className="font-semibold">
-              {service.name}
-            </h2>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <ServiceName service={service} services={services} titleId={titleId} renaming={renaming} onRenamingChange={onRenamingChange} />
             <StatusBadge status={service.status} runtime={service.runtime} />
           </div>
           <div className="text-xs text-[var(--color-fg-muted)]">
@@ -587,7 +602,6 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
   const meta = ENGINE_META[db.engine];
   const currentVersion = db.dockerImage?.split(":")[1] ?? meta.versions[0];
 
-  const [name, setName] = useState(db.name);
   const [version, setVersion] = useState(currentVersion);
   const [port, setPort] = useState(db.externalPort != null ? String(db.externalPort) : "");
   const [cpu, setCpu] = useState(db.cpuLimit ?? "");
@@ -597,7 +611,6 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const dirty =
-    name !== db.name ||
     version !== currentVersion ||
     port !== (db.externalPort != null ? String(db.externalPort) : "") ||
     cpu !== (db.cpuLimit ?? "") ||
@@ -606,7 +619,6 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
   function save() {
     setSaveError(null);
     const patch: DatabasePatch = {};
-    if (name !== db.name) patch.name = name.trim();
     if (version !== currentVersion) patch.dockerImage = `${meta.image}:${version}`;
     if (port !== (db.externalPort != null ? String(db.externalPort) : ""))
       patch.externalPort = port ? Number(port) : null;
@@ -622,9 +634,6 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
   return (
     <div className="space-y-5">
       <div className="space-y-3">
-        <Field label="Name">
-          <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
-        </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Version" hint="changing redeploys">
             <select value={version} onChange={(e) => setVersion(e.target.value)} className={inputCls}>
