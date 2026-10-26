@@ -1,0 +1,67 @@
+{
+  "canvas-overview.png": {
+    "original": "de336746fbf7e9bbb4f19e581b2e36ee83a854cc1b19a642514b75d848f6e0f3",
+    "round1_before": "de336746fbf7e9bbb4f19e581b2e36ee83a854cc1b19a642514b75d848f6e0f3",
+    "after": "7cdfdbc5f858248b2be55d62b9e6ab4002b3af7a2a5b2dec55959125e3d8fb56"
+  },
+  "new-service-menu.png": {
+    "original": "e101024d37b5cfe470c8edf9cae698ee7470c4979d05ce12a4607423b9931f17",
+    "round1_before": "e101024d37b5cfe470c8edf9cae698ee7470c4979d05ce12a4607423b9931f17",
+    "after": "dbc715cca258947311f5cd5f708616198d0c190212e700f9868ddb9a6b99629d"
+  },
+  "deploy-image-filled.png": {
+    "original": "49527707433474234cea8093f5aa70d9b93dfe8347c319749803e9fd6b54d304",
+    "round1_before": "49527707433474234cea8093f5aa70d9b93dfe8347c319749803e9fd6b54d304",
+    "after": "18716ed2b0ff444c45395421540dac9212051eb0538d689db68409f81467c958"
+  },
+  "db-overview.png": {
+    "original": "d5c54680aff8bb1013b1d1f701a4c7f44d504253dc53e9edafad81cbb1379bda",
+    "round1_before": "2247818387c8a27c39d0a37000dcce2f2419efa6dabb98028c41aa05a01c24d8",
+    "after": "07de9613858c0c8092c53db220d7c06d04925db1476748cd01ddc47dafb1cc8d"
+  },
+  "db-logs.png": {
+    "original": "b8c61ec7b39d634721a895b4c27261e50609f13b4c1b7fbd4b56bf76daa75a24",
+    "round1_before": "4875f6256192d77b37aee841ea6ca1748cc2f44abdc299e6a1eab5ea3f81d786",
+    "after": "621a3ceb505686d0d221a609da59b97160cb4b82c472402cbeedc866cb8a74d1"
+  },
+  "db-metrics.png": {
+    "original": "72ece5c11c7f8759d4e81183602a49f17315f2720eeee41dde99c616e29ab3dc",
+    "round1_before": "e3da8fb8ebab390974f2a35a1cd483880c7f31f34db29a552e86d13a32452332",
+    "after": "0905565d2f8d0b8103dc2f7377889de12c11df8dad1001959008351a71d470b1"
+  },
+  "db-settings.png": {
+    "original": "0bda6601f32887c29519f91809f9cd7b4c5e0fec263332816ce8fb2118d2f808",
+    "round1_before": "7e0a442705f77e77dfc4c2425d73f8294da75f449a8b857772faec74b4a0f926",
+    "after": "d2935cf6d7ff74d7d055f783a60e779245aa275d8dc4b5e38dd99af3e34aa6aa"
+  },
+  "app-overview.png": {
+    "original": "78e92bac3b8ecccadc96f699430837847708f339a78303df728e380640a658de",
+    "round1_before": "a2d5dac1fec1516a7db72bc9d152b93969b9631878456763ac8addc620c419fd",
+    "after": "09f2dbe230ed24508e04c7687731398afedc853fd32f951150e16a295c3ffa33"
+  },
+  "app-variables.png": {
+    "original": "444a7b9528809c49cb3c043edb22a09575a38607fe938ebcc48bf52971207695",
+    "round1_before": "3ae302857cd2a5292898fe1ff58513209b5ae14ff41632bb9afc4fc7681d981f",
+    "after": "14ebdc63f2ff7efb86642b7cb5ec2670d411fb73a49ac819edb9c06b1a0acecd"
+  },
+  "app-domains.png": {
+    "original": "535375c22654b47f2a3c9268a6bba286d5a99c5215d553db8b3fec38e1765024",
+    "round1_before": "3c174e51ec56497b2912b90f236fb85165e52419d03370c97eb3e2afcae4faf4",
+    "after": "a46c17c28895ad0a0887077a27c514d469fbc9294e666202eb339607e79b0f74"
+  },
+  "compose-editor.png": {
+    "original": "964f24866fd19f62bcbd912d740250a29ef657f6bef47714eb4605d651bcc0a9",
+    "round1_before": "964f24866fd19f62bcbd912d740250a29ef657f6bef47714eb4605d651bcc0a9",
+    "after": "c11887d982ab787c28a0170d0cab0f9d47f51e1069b7acb50db1ceacfb842b2e"
+  },
+  "grid-view.png": {
+    "original": "c959d8fee5f302537437d194b2993ce77fa78e13b3fd3312f11549458dd80692",
+    "round1_before": "c959d8fee5f302537437d194b2993ce77fa78e13b3fd3312f11549458dd80692",
+    "after": "ff9c4919825594ff910e8536db017bb0750861b73ef8cffcd262ecad34c0e8c8"
+  },
+  "projects-view.png": {
+    "original": "73dba255a5d3f201cd1f26f89159be9ccc1e9ee71d4c87ea81709225e6d18f09",
+    "round1_before": "73dba255a5d3f201cd1f26f89159be9ccc1e9ee71d4c87ea81709225e6d18f09",
+    "after": "f8770bb20b66b69e3b4ce2e1db1f991fbdb834b333873cd8367f8cb25979d2ab"
+  }
+}

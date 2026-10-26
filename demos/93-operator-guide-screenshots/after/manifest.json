@@ -1,0 +1,67 @@
+[
+  {
+    "file": "canvas-overview.png",
+    "title": "Canvas view",
+    "shows": "Canvas centered on ogs-web (nginx:alpine) and ogs-redis (redis:7), both running as bridge-managed Compose stacks in ogs-guide-r1 / ogs-demo. An animated edge is inferred from the web stack's saved REDIS_URL. Includes the minimap, zoom controls, and Canvas/Grid, Projects, Refresh, and New service header actions. Only the two throwaway nodes were repositioned through the canvas controls."
+  },
+  {
+    "file": "new-service-menu.png",
+    "title": "New service menu",
+    "shows": "The open New service menu targeting ogs-guide-r1 / ogs-demo, over the running Compose examples. Application inputs, From GitHub, Compose stack, App catalog, and PostgreSQL, MySQL, MariaDB, MongoDB, and Redis engine rows with version tags."
+  },
+  {
+    "file": "deploy-image-filled.png",
+    "title": "Deploy from a Docker image",
+    "shows": "The New service menu targeting ogs-guide-r1 / ogs-demo, with nginx:alpine entered in the docker-image input and Deploy enabled. The form was not submitted; the running ogs-web example was deployed through Compose."
+  },
+  {
+    "file": "db-overview.png",
+    "title": "Redis Compose drawer — Overview",
+    "shows": "ogs-redis Compose Overview: Running, Last deploy: Succeeded, Public URL empty state, Stop/Redeploy controls, Type (docker-compose), and App name. Redis runs from redis:7 with a passing health check. This is a Compose drawer; native managed-database connection and configuration fields are described separately in the guide."
+  },
+  {
+    "file": "db-logs.png",
+    "title": "Redis Compose drawer — Logs",
+    "shows": "ogs-redis Compose Logs: Running and Last deploy: Succeeded, real timestamped Redis startup output ending with Ready to accept connections, Filter logs input, and green Live indicator."
+  },
+  {
+    "file": "db-metrics.png",
+    "title": "Redis Compose drawer — Metrics",
+    "shows": "ogs-redis Compose Metrics: Running and Last deploy: Succeeded, live CPU (0.2%) and Memory (12 MB of 128 MB) cards, and CPU/Memory charts populated with real Docker samples. Live is selected; history is off. The HTTP section has empty cards because the local dashboard has no Traefik metrics endpoint."
+  },
+  {
+    "file": "db-settings.png",
+    "title": "Redis Compose drawer — Settings",
+    "shows": "ogs-redis Compose Settings: Running and Last deploy: Succeeded, App name, Created timestamp, and Danger zone with Destroy ogs-redis. Compose configuration is edited in Compose/Variables; this screen does not show native managed-database version, password, or resource controls."
+  },
+  {
+    "file": "app-overview.png",
+    "title": "Web Compose drawer — Overview",
+    "shows": "ogs-web Compose Overview: Running and Last deploy: Succeeded, Public URL empty state pointing at Networking, Stop/Redeploy controls, Type (docker-compose), and App name. The web container runs nginx:alpine with a passing HTTP health check."
+  },
+  {
+    "file": "app-variables.png",
+    "title": "Web Compose drawer — Variables",
+    "shows": "ogs-web Compose Variables: Running and Last deploy: Succeeded, saved REDIS_URL=redis://ogs-redis:6379, the 1 variable counter, and disabled Save variables button. The two stacks share a private bridge network, and Redis connectivity was checked from the web container. Nginx itself does not use Redis."
+  },
+  {
+    "file": "app-domains.png",
+    "title": "Web Compose drawer — Networking",
+    "shows": "ogs-web Compose Networking: Running and Last deploy: Succeeded, No domains attached, DNS/auto-SSL hint, Service set to ogs-web, Host and Port (80) fields, Generate URL and Add buttons. No domain or host port was attached."
+  },
+  {
+    "file": "compose-editor.png",
+    "title": "Compose stack editor",
+    "shows": "ogs-web Compose editor: Running and Last deploy: Succeeded, saved nginx:alpine YAML with a 128 MB memory limit, REDIS_URL interpolation, an HTTP health check, and the private ogs-r1-network bridge shared with Redis. Save is disabled and Save & deploy is available. No host ports are published."
+  },
+  {
+    "file": "grid-view.png",
+    "title": "Grid view",
+    "shows": "Grid view including ogs-redis and ogs-web Compose cards, each with a Running badge and ogs-guide-r1 / ogs-demo scope, alongside other existing local demo services."
+  },
+  {
+    "file": "projects-view.png",
+    "title": "Projects & environments",
+    "shows": "Projects & environments panel showing ogs-guide-r1 with the ogs-demo environment and Dokploy's default production environment, rename/delete controls, inline new-environment input with Add env, and the new-project input. Other local demo projects remain visible."
+  }
+]
