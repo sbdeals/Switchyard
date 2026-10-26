@@ -99,6 +99,7 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { validateComposeFile } from "@/lib/compose-validation";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -638,6 +639,10 @@ export async function saveComposeFileAction(
   composeFile: string,
   redeploy = false
 ): Promise<ActionResult> {
+  if (redeploy) {
+    const error = validateComposeFile(composeFile, true);
+    if (error) return { ok: false, error };
+  }
   return wrap(async () => {
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { validateComposeFile } from "@/lib/compose-validation";
 import {
   composeLifecycleAction,
   saveComposeFileAction,
@@ -52,10 +53,17 @@ export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
 
   function save(redeploy: boolean) {
     setError(null);
+    const issue = validateComposeFile(value, redeploy);
+    if (redeploy && issue) {
+      setError(issue);
+      return;
+    }
     start(async () => {
       const res = await saveComposeFileAction(compose.id, value, redeploy);
-      if (res.ok) flashSaved();
-      else setError(res.error);
+      if (res.ok) {
+        if (issue) setError(`Saved as draft. ${issue} Fix the YAML before deploying.`);
+        else flashSaved();
+      } else setError(res.error);
     });
   }
 
@@ -77,7 +85,7 @@ export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
         >
           Save
         </button>
-        <SaveRow saving={pending} saved={saved} error={error} onSave={() => save(true)} label="Save & deploy" />
+        <SaveRow saving={pending} saved={saved && !error} error={error} onSave={() => save(true)} label="Save & deploy" />
       </div>
     </div>
   );
