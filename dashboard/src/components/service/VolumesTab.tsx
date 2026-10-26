@@ -21,6 +21,7 @@ import {
 } from "@/app/actions";
 import { inputCls, Field } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { formatVolumeBytes, type VolumeUsage } from "@/lib/volume-usage";
 
 const TYPE_META: Record<MountType, { label: string; icon: React.ReactNode }> = {
   volume: { label: "Volume", icon: <VolumeIcon className="size-3.5" /> },
@@ -39,6 +40,8 @@ export function VolumesTab({ service }: { service: Service }) {
   const serviceType: MountServiceType =
     service.kind === "database" ? service.engine : service.kind;
   const [mounts, setMounts] = useState<Mount[] | null>(null);
+  const [usage, setUsage] = useState<VolumeUsage[]>([]);
+  const [usageAvailable, setUsageAvailable] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -46,6 +49,8 @@ export function VolumesTab({ service }: { service: Service }) {
   const applyResult = useCallback((res: MountsResult) => {
     if (res.ok) {
       setMounts(res.mounts);
+      setUsage(res.usage);
+      setUsageAvailable(res.usageAvailable);
       setLoadError(null);
     } else {
       setLoadError(res.error);
@@ -77,6 +82,7 @@ export function VolumesTab({ service }: { service: Service }) {
       </p>
 
       {loadError && <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>}
+      {!usageAvailable && <p className="text-xs text-[var(--color-fg-subtle)]">Volume disk usage: unknown. Docker usage is unavailable.</p>}
 
       {mounts === null && !loadError ? (
         <div className="flex items-center justify-center gap-2 py-6 text-xs text-[var(--color-fg-subtle)]">
@@ -101,6 +107,7 @@ export function VolumesTab({ service }: { service: Service }) {
               <MountRow
                 key={m.mountId}
                 mount={m}
+                sizeBytes={usage.find((v) => v.mountId === m.mountId)?.sizeBytes ?? null}
                 onEdit={() => {
                   setAdding(false);
                   setEditing(m.mountId);
@@ -112,9 +119,19 @@ export function VolumesTab({ service }: { service: Service }) {
         </div>
       ) : (
         mounts && (
-          <p className="text-xs text-[var(--color-fg-subtle)]">No mounts attached.</p>
+          usage.length === 0 && <p className="text-xs text-[var(--color-fg-subtle)]">No mounts attached.</p>
         )
       )}
+
+      {usage.filter((v) => !v.mountId).map((volume) => (
+        <div key={volume.dockerName} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="min-w-0 truncate font-mono" title={volume.dockerName ?? volume.volumeName}>{volume.volumeName}</span>
+            <span className="shrink-0 text-[var(--color-fg-muted)]">{formatVolumeBytes(volume.sizeBytes)} on disk</span>
+          </div>
+          <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">Managed in the Compose file</p>
+        </div>
+      ))}
 
       {adding ? (
         <MountForm
@@ -143,10 +160,12 @@ export function VolumesTab({ service }: { service: Service }) {
 
 function MountRow({
   mount,
+  sizeBytes,
   onEdit,
   onDeleted,
 }: {
   mount: Mount;
+  sizeBytes: number | null;
   onEdit: () => void;
   onDeleted: () => void;
 }) {
@@ -194,6 +213,9 @@ function MountRow({
       <div className="mt-1 truncate font-mono text-[11px] text-[var(--color-fg-subtle)]" title={mountSource(mount)}>
         {mountSource(mount)}
       </div>
+      {mount.type === "volume" && (
+        <p className="mt-1 text-xs text-[var(--color-fg-muted)]">{formatVolumeBytes(sizeBytes)} on disk</p>
+      )}
       {error && <p role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );

@@ -12,6 +12,7 @@ import {
   renameEnvironment,
   removeEnvironment,
   listProjects,
+  loadWorkspace,
   saveEnvironment,
   updateDatabase,
   reloadDatabase,
@@ -55,7 +56,6 @@ import {
   updateSchedule,
   deleteSchedule,
   runSchedule,
-  listMounts,
   createMount,
   updateMount,
   removeMount,
@@ -99,6 +99,8 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { readServiceVolumes } from "@/lib/volume-usage.server";
+import type { VolumeUsage } from "@/lib/volume-usage";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -775,7 +777,7 @@ export async function quickDeployTemplateAction(
 
 // --- mounts (persistent volumes) --------------------------------------------
 
-export type MountsResult = { ok: true; mounts: Mount[] } | { ok: false; error: string };
+export type MountsResult = { ok: true; mounts: Mount[]; usage: VolumeUsage[]; usageAvailable: boolean } | { ok: false; error: string };
 
 /** Read-only: the mounts attached to a service (fetched when the tab opens). */
 export async function listMountsAction(
@@ -783,8 +785,13 @@ export async function listMountsAction(
   serviceId: string
 ): Promise<MountsResult> {
   try {
-    return { ok: true, mounts: await listMounts(serviceType, serviceId) };
+    const { services } = await loadWorkspace();
+    const service = services.find((s) => s.id === serviceId &&
+      (s.kind === "database" ? s.engine : s.kind) === serviceType);
+    if (!service) return { ok: false, error: "Unknown service." };
+    return { ok: true, ...(await readServiceVolumes(service)) };
   } catch (e) {
+    unstable_rethrow(e);
     return fail(e);
   }
 }

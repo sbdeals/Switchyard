@@ -4,6 +4,7 @@ import { loadWorkspace, inferEdges } from "@/lib/dokploy";
 import { ensureCollector } from "@/lib/collector";
 import { Workspace } from "@/components/Workspace";
 import { LogoutButton } from "@/components/LogoutButton";
+import { readProjectVolumeUsage } from "@/lib/volume-usage.server";
 
 // Always fetch fresh state from Dokploy.
 export const dynamic = "force-dynamic";
@@ -25,12 +26,17 @@ export default async function Page() {
   }
 
   if (result) {
+    const volumeUsage = await readProjectVolumeUsage(result.services);
+    const projects = result.projects.map((project) => ({
+      ...project,
+      volumeSizeBytes: volumeUsage[project.projectId] === undefined ? 0 : volumeUsage[project.projectId],
+    }));
     return (
       <>
         <LogoutButton />
         <Workspace
           services={result.services}
-          projects={result.projects}
+          projects={projects}
           edges={inferEdges(result.services)}
         />
       </>
