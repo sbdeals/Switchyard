@@ -1,0 +1,57 @@
+Local-only PR preview build-settings proof. No real webhook was configured.
+2026-10-26T06:48:34.317Z dashboard build and launch {"build":"sudo docker build -q -t switchyard-dash:preview-build-settings dashboard","launch":"/tmp/runsy.sh sy-preview-build-settings 3006 preview-build-settings","loginHTTP":200}
+2026-10-26T06:48:34.319Z checks {"command":"cd dashboard && npm run lint && npx tsc --noEmit && npx vitest run","result":"PASS: lint, tsc, 22 test files, 625 tests"}
+2026-10-26T06:48:35.181Z dashboard login {"base":"http://127.0.0.1:3006","result":"success using demo-tools/lib.mjs"}
+2026-10-26T06:48:35.206Z PROOF ERROR {"message":"local Dokploy login HTTP 403"}
+2026-10-26T06:49:08.654Z dashboard build and launch {"build":"sudo docker build -q -t switchyard-dash:preview-build-settings dashboard","launch":"/tmp/runsy.sh sy-preview-build-settings 3006 preview-build-settings","loginHTTP":200}
+2026-10-26T06:49:08.671Z checks {"command":"cd dashboard && npm run lint && npx tsc --noEmit && npx vitest run","result":"PASS: lint, tsc, 22 test files, 625 tests"}
+2026-10-26T06:49:09.905Z dashboard login {"base":"http://127.0.0.1:3006","result":"success using demo-tools/lib.mjs"}
+2026-10-26T06:49:09.968Z local Dokploy login origin probe {"origin":"http://dokploy:3000","status":403,"code":"INVALID_ORIGIN"}
+2026-10-26T06:49:12.120Z public repository auto-detection (unauthenticated requests) {"repoUrl":"https://github.com/heroku/node-js-getting-started","sha":"8b8dec11fcf027522a857e0c831ee01b7124f673","files":["package.json","Procfile","package-lock.json","index.js"],"buildKind":"node","buildPort":3000,"reason":"package.json (npm)","dockerfilePresent":false}
+2026-10-26T06:49:12.246Z PROOF ERROR {"message":"The expression evaluated to a falsy value:\n\n  assert(state.projectId)\n"}
+2026-10-26T06:49:27.974Z dashboard build and launch {"build":"sudo docker build -q -t switchyard-dash:preview-build-settings dashboard","launch":"/tmp/runsy.sh sy-preview-build-settings 3006 preview-build-settings","loginHTTP":200}
+2026-10-26T06:49:27.985Z checks {"command":"cd dashboard && npm run lint && npx tsc --noEmit && npx vitest run","result":"PASS: lint, tsc, 22 test files, 625 tests"}
+2026-10-26T06:49:28.772Z dashboard login {"base":"http://127.0.0.1:3006","result":"success using demo-tools/lib.mjs"}
+2026-10-26T06:49:28.797Z local Dokploy login origin probe {"origin":"http://dokploy:3000","status":403,"code":"INVALID_ORIGIN"}
+2026-10-26T06:49:30.182Z public repository auto-detection (unauthenticated requests) {"repoUrl":"https://github.com/heroku/node-js-getting-started","sha":"8b8dec11fcf027522a857e0c831ee01b7124f673","files":["package.json","Procfile","package-lock.json","index.js"],"buildKind":"node","buildPort":3000,"reason":"package.json (npm)","dockerfilePresent":false}
+2026-10-26T06:49:30.297Z PROOF ERROR {"message":"environment.update HTTP 400"}
+2026-10-26T06:53:04.524Z dashboard build and launch {"build":"sudo docker build -q -t switchyard-dash:preview-build-settings dashboard","launch":"/tmp/runsy.sh sy-preview-build-settings 3006 preview-build-settings","loginHTTP":200}
+2026-10-26T06:53:04.526Z checks {"command":"cd dashboard && npm run lint && npx tsc --noEmit && npx vitest run","result":"PASS: lint, tsc, 22 test files, 625 tests"}
+2026-10-26T06:53:05.234Z dashboard login {"base":"http://127.0.0.1:3006","result":"success using demo-tools/lib.mjs"}
+2026-10-26T06:53:05.291Z local Dokploy login origin probe {"origin":"http://dokploy:3000","status":403,"code":"INVALID_ORIGIN"}
+2026-10-26T06:53:07.014Z public repository auto-detection (unauthenticated requests) {"repoUrl":"https://github.com/heroku/node-js-getting-started","sha":"8b8dec11fcf027522a857e0c831ee01b7124f673","files":["package.json","Procfile","package-lock.json","index.js"],"buildKind":"node","buildPort":3000,"reason":"package.json (npm)","dockerfilePresent":false}
+2026-10-26T06:53:07.081Z local API error {"procedure":"environment.update","status":400,"message":"Error updating the environment: You cannot rename the default environment"}
+2026-10-26T06:53:07.081Z PROOF ERROR {"message":"environment.update HTTP 400"}
+2026-10-26T06:53:31.478Z dashboard build and launch {"build":"sudo docker build -q -t switchyard-dash:preview-build-settings dashboard","launch":"/tmp/runsy.sh sy-preview-build-settings 3006 preview-build-settings","loginHTTP":200}
+2026-10-26T06:53:31.480Z checks {"command":"cd dashboard && npm run lint && npx tsc --noEmit && npx vitest run","result":"PASS: lint, tsc, 22 test files, 625 tests"}
+2026-10-26T06:53:32.219Z dashboard login {"base":"http://127.0.0.1:3006","result":"success using demo-tools/lib.mjs"}
+2026-10-26T06:53:32.247Z local Dokploy login origin probe {"origin":"http://dokploy:3000","status":403,"code":"INVALID_ORIGIN"}
+2026-10-26T06:53:33.851Z public repository auto-detection (unauthenticated requests) {"repoUrl":"https://github.com/heroku/node-js-getting-started","sha":"8b8dec11fcf027522a857e0c831ee01b7124f673","files":["package.json","Procfile","package-lock.json","index.js"],"buildKind":"node","buildPort":3000,"reason":"package.json (npm)","dockerfilePresent":false}
+2026-10-26T06:53:34.055Z created and deployed throwaway parent via Dokploy API {"projectId":"fa7fHGBgwHJI9kFDc0h9Z","composeId":"X9nOQZ9RXgnEsPRiCa7IZ","appName":"preview-build-settings-parent-w39bk9","buildKind":"node","buildPort":3000,"inlineDockerfile":true}
+2026-10-26T06:53:34.102Z parent build state {"status":"running/running"}
+2026-10-26T06:53:40.206Z parent build state {"status":"done/done"}
+2026-10-26T06:53:40.442Z parent HTTP GET / via local dokploy-network {"appName":"preview-build-settings-parent-w39bk9","port":3000,"status":200,"bodyBytes":9109}
+2026-10-26T06:53:41.279Z enabled deploy hook and PR previews through dashboard server actions {"previewsEnabled":true,"allowForks":false}
+2026-10-26T06:53:41.506Z locally signed pull_request opened {"status":202,"result":{"result":"preview deployment queued"}}
+2026-10-26T06:53:41.577Z preview inherited complete generated build configuration {"composeId":"EU38pStnDNLNAkK6eK6r9","appName":"preview-build-settings-parent-pr-63-a5vyad","buildKind":"node","buildPort":3000,"commit":"8b8dec11fcf027522a857e0c831ee01b7124f673","inlineRecipeMatchesParent":true,"domainPort":3000}
+2026-10-26T06:53:41.603Z preview build state {"status":"running/running"}
+2026-10-26T06:53:44.872Z preview build state {"status":"done/done"}
+2026-10-26T06:53:45.067Z preview HTTP GET / via local dokploy-network {"appName":"preview-build-settings-parent-pr-63-a5vyad","port":3000,"status":200,"bodyBytes":9109}
+2026-10-26T06:53:45.301Z PROOF ERROR {"message":"Expected values to be strictly equal:\n\n404 !== 200\n"}
+2026-10-26T06:54:32.866Z dashboard build and launch {"build":"sudo docker build -q -t switchyard-dash:preview-build-settings dashboard","launch":"/tmp/runsy.sh sy-preview-build-settings 3006 preview-build-settings","loginHTTP":200}
+2026-10-26T06:54:32.867Z checks {"command":"cd dashboard && npm run lint && npx tsc --noEmit && npx vitest run","result":"PASS: lint, tsc, 22 test files, 625 tests"}
+2026-10-26T06:54:33.578Z dashboard login {"base":"http://127.0.0.1:3006","result":"success using demo-tools/lib.mjs"}
+2026-10-26T06:54:33.604Z local Dokploy login origin probe {"origin":"http://dokploy:3000","status":403,"code":"INVALID_ORIGIN"}
+2026-10-26T06:54:33.801Z preview inherited complete generated build configuration {"composeId":"EU38pStnDNLNAkK6eK6r9","appName":"preview-build-settings-parent-pr-63-a5vyad","buildKind":"node","buildPort":3000,"commit":"8b8dec11fcf027522a857e0c831ee01b7124f673","inlineRecipeMatchesParent":true,"domainPort":3000}
+2026-10-26T06:54:33.822Z preview build state {"status":"done/done"}
+2026-10-26T06:54:34.008Z preview HTTP GET / via local dokploy-network {"appName":"preview-build-settings-parent-pr-63-a5vyad","port":3000,"status":200,"bodyBytes":9109}
+2026-10-26T06:54:34.121Z preview generated URL through local Traefik {"url":"http://preview-build-settings-parent-pr-63-a5vy-fbd366-104-28-215-142.sslip.io","status":200,"bodyBytes":9109}
+2026-10-26T06:54:35.422Z locally signed pull_request closed {"status":202,"result":{"result":"preview deleted"}}
+2026-10-26T06:54:35.551Z closed preview removed {"composeRowAbsent":true,"containersRemaining":0,"activePreviews":0}
+2026-10-26T06:54:36.899Z cleanup via dashboard/Dokploy APIs {"parentDeleted":true,"projectDeleted":true,"previewAutomationAccessRevoked":true}
+2026-10-26T06:54:36.900Z PROOF PASS
+2026-10-26T06:56:20.889952+00:00 final cleanup verified: no parent/preview containers or parent volumes remain; own dashboard container, data volume, and three session-created image tags removed.
+Cleanup command: sudo docker rm -f sy-preview-build-settings && sudo docker volume rm sy-preview-build-settings-data && sudo docker image rm switchyard-dash:preview-build-settings preview-build-settings-parent-w39bk9-app:latest preview-build-settings-parent-pr-63-a5vyad-app:latest (exit 0).
+Harness notes: repeated build/launch entries reference the same image/fixture. Setup retries handled the project.create response and immutable default environment. The successful routed HTTP probe used node:http with an explicit Host header over the local Docker network; no request was made to the public generated hostname.
+Limits: live proof covers Node; Python/Go/static/Dockerfile builds, paths, synchronization, PORT overrides, malformed recipes, and ownership-safe cleanup are covered by Vitest. Recipe extraction supports the canonical generated repoStack format, not arbitrary user-reformatted YAML.
+Changed source files: deploy-commit.test.ts, managed-compose.ts, preview-lifecycle.test.ts, preview-lifecycle.ts, service-meta.test.ts. No git commands or lockfile edits.
