@@ -614,6 +614,7 @@ export function inferEdges(services: Service[]): ServiceEdge[] {
     if (!haystack) continue;
     for (const b of services) {
       if (a.id === b.id) continue;
+      if (a.projectId !== b.projectId || a.environmentId !== b.environmentId) continue;
       const needles = [b.appName, b.name].filter(Boolean).map((s) => s.toLowerCase());
       if (needles.some((n) => n.length > 2 && haystack.includes(n))) {
         const key = `${a.id}->${b.id}`;
