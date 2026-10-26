@@ -14,6 +14,11 @@ const repo: ComposeService = {
 };
 
 describe("managed repo presentation", () => {
+  it("labels preview services on both the canvas and project cards", () => {
+    expect(serviceSubtitle({ ...repo, managed: { kind: "repo", image: "image", repoUrl: "https://github.com/acme/web",
+      branch: "feature/header", preview: { parentId: "parent", number: 12, marker: "marker", title: "Header" } } }))
+      .toBe("PR #12 · feature/header");
+  });
   it("presents a repo as an application with its source and branch", () => {
     expect(presentedKind(repo)).toBe("application");
     expect(serviceAccent(repo)).toBe(APP_ACCENT);

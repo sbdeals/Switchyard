@@ -20,10 +20,17 @@ export interface ManagedAutoDomain {
   port: number;
 }
 
+export interface ManagedPreview {
+  parentId: string;
+  number: number;
+  title: string;
+  marker: string;
+}
+
 export type ManagedMeta =
   | { kind: "database"; engine: Engine; image: string }
   | { kind: "image"; image: string; autoDomain?: ManagedAutoDomain }
-  | { kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string; autoDomain?: ManagedAutoDomain };
+  | { kind: "repo"; image: string; repoUrl: string; branch: string; commit?: string; preview?: ManagedPreview; subdirectory?: string; dockerfile?: string; autoDomain?: ManagedAutoDomain };
 
 const ENGINES = new Set<string>(Object.keys(ENGINE_META));
 const MANAGED_BLOCK = /^x-switchyard:[ \t]*\r?\n((?:[ \t]+\S.*(?:\r?\n|$))+)/m;
@@ -68,6 +75,10 @@ export function parseManaged(composeFile: string | null | undefined): ManagedMet
       kind: "repo", image: fields.image, repoUrl: fields.repoUrl, branch: fields.branch,
       ...(fields.subdirectory ? { subdirectory: fields.subdirectory } : {}),
       ...(fields.dockerfile ? { dockerfile: fields.dockerfile } : {}),
+      ...(/^[a-f0-9]{40}$/.test(fields.commit ?? "") ? { commit: fields.commit } : {}),
+      ...(fields.previewParent && /^[1-9]\d*$/.test(fields.previewNumber ?? "") && fields.previewMarker ? {
+        preview: { parentId: fields.previewParent, number: Number(fields.previewNumber), title: (fields.previewTitle ?? "").replace(/\$\$/g, "$"), marker: fields.previewMarker },
+      } : {}),
       ...autoDomain,
     };
   }
@@ -129,10 +140,13 @@ export interface RepoStackInput {
   branch: string;
   subdirectory?: string;
   dockerfile?: string;
+  commit?: string;
+  preview?: ManagedPreview;
 }
 
 /** Validate a public Git source before creating a bridge stack. */
 export function validateRepoSource(input: Omit<RepoStackInput, "appName">): void {
+  if (input.commit !== undefined && !/^[a-f0-9]{40}$/.test(input.commit)) throw new Error("Invalid Git commit.");
   if ([input.repoUrl, input.branch, input.subdirectory, input.dockerfile].some((value) => value?.includes("$"))) {
     throw new Error("Repository URL, branch, subdirectory, and Dockerfile path must not contain $ (Compose interpolation is unsupported).");
   }
@@ -291,7 +305,7 @@ export function repoStack(input: RepoStackInput): string {
   const repoUrl = new URL(input.repoUrl);
   const path = repoUrl.pathname.replace(/\/+$/, "");
   repoUrl.pathname = path.endsWith(".git") ? path : `${path}.git`;
-  const context = `${repoUrl.href}#${input.branch}${input.subdirectory ? `:${input.subdirectory}` : ""}`;
+  const context = `${repoUrl.href}#${input.commit ?? input.branch}${input.subdirectory ? `:${input.subdirectory}` : ""}`;
   const lines = [
     `x-switchyard:`,
     `  kind: repo`,
@@ -301,6 +315,13 @@ export function repoStack(input: RepoStackInput): string {
   ];
   if (input.subdirectory) lines.push(`  subdirectory: ${scalar(input.subdirectory)}`);
   if (input.dockerfile) lines.push(`  dockerfile: ${scalar(input.dockerfile)}`);
+  if (input.commit) lines.push(`  commit: ${scalar(input.commit)}`);
+  if (input.preview) lines.push(
+    `  previewParent: ${JSON.stringify(input.preview.parentId)}`,
+    `  previewNumber: ${input.preview.number}`,
+    `  previewTitle: ${JSON.stringify(input.preview.title.replace(/\$/g, () => "$$"))}`,
+    `  previewMarker: ${JSON.stringify(input.preview.marker)}`,
+  );
   lines.push(
     `services:`,
     `  app:`,
@@ -310,6 +331,7 @@ export function repoStack(input: RepoStackInput): string {
   if (input.dockerfile && input.dockerfile !== "Dockerfile") {
     lines.push(`      dockerfile: ${scalar(input.dockerfile)}`);
   }
+  if (input.preview) lines.push(`    labels:`, `      io.switchyard.preview: ${JSON.stringify(input.preview.marker)}`);
   lines.push(
     `    image: ${image}`,
     `    restart: unless-stopped`,

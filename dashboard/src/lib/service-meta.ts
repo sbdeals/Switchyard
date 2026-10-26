@@ -51,6 +51,7 @@ export function presentedKind(s: Service): "database" | "application" | "compose
 /** Secondary line under the name (image tag, or label). */
 export function serviceSubtitle(s: Service): string {
   if (s.kind === "compose" && s.managed?.kind === "repo") {
+    if (s.managed.preview) return `PR #${s.managed.preview.number} · ${s.managed.branch}`;
     return `${serviceLabel(s)} · ${s.managed.branch}`;
   }
   return s.dockerImage ?? serviceLabel(s);

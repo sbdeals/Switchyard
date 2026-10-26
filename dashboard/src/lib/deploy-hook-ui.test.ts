@@ -6,7 +6,7 @@ vi.mock("@/app/actions", () => ({ composeLifecycleAction: vi.fn(), rollbackDeplo
 vi.mock("@/app/deploy-hook-actions", () => ({ getDeployHookAction: vi.fn(), updateDeployHookAction: vi.fn() }));
 vi.mock("@/components/service/AppTabs", () => ({ DomainRow: () => null }));
 
-import { DeployHookInstructions } from "@/components/service/DeployHookPanel";
+import { DeployHookInstructions, PreviewSettings } from "@/components/service/DeployHookPanel";
 import { ComposeOverviewTab, ComposeSettingsTab } from "@/components/service/ComposeTabs";
 import { DeploymentHistory } from "@/components/service/DeployActivity";
 import type { ComposeService } from "./dokploy";
@@ -35,6 +35,20 @@ const compose: ComposeService = {
 };
 
 describe("deploy-on-push settings", () => {
+  it("shows opt-in preview/fork switches, env/access disclosure, active URLs and manual cleanup", () => {
+    const hook = { enabled: true, path: "/hook", secret: "test", previewsEnabled: true, allowForks: false,
+      previews: [{ number: 12, branch: "feature/header", title: "Header", url: "http://preview.example.test" }] };
+    const markup = renderToStaticMarkup(createElement(PreviewSettings, { hook, pending: false, onChange() {}, onDelete() {} }));
+    expect(markup).toContain('aria-label="PR previews"');
+    expect(markup).toContain('aria-label="Allow fork PR previews"');
+    expect(markup).toContain("fork code receives the parent");
+    expect(markup).toContain("encrypted automation API key");
+    expect(markup).toContain("PR #12 · feature/header");
+    expect(markup).toContain('href="http://preview.example.test"');
+    expect(markup).toContain("Delete preview");
+    const instructions = renderToStaticMarkup(createElement(DeployHookInstructions, { hook, origin: "http://dashboard.test" }));
+    expect(instructions).toContain("Pushes and Pull requests");
+  });
   it("shows exact GitHub setup with a masked, copyable secret and session-independent authorization", () => {
     const markup = renderToStaticMarkup(createElement(DeployHookInstructions, {
       origin: "https://switchyard.example.com",

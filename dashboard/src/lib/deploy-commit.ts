@@ -9,6 +9,10 @@ export async function repoDeploymentLabel(composeFile: string | null | undefined
 }> {
   const managed = parseManaged(composeFile);
   if (managed?.kind !== "repo") return {};
+  if (managed.preview && managed.commit) return {
+    title: `PR #${managed.preview.number} · ${managed.commit.slice(0, 7)} · ${managed.preview.title}`,
+    description: `Preview of ${managed.preview.parentId}: ${managed.commit}`,
+  };
   try {
     const commit = await resolveRepoCommit(managed.repoUrl, managed.branch);
     if (!commit) return {};

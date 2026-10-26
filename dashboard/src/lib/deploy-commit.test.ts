@@ -75,6 +75,14 @@ afterEach(() => {
 const deployments = () => requests.filter(({ procedure }) => procedure === "compose.deploy");
 
 describe("repoDeploymentLabel", () => {
+  it("uses the pinned preview SHA/title without sampling a moving branch", async () => {
+    const file = repoStack({ appName: "preview", repoUrl, branch: "feature", commit: sha,
+      preview: { parentId: "parent", number: 12, marker: "marker", title: "Fix header" } });
+    expect(await repoDeploymentLabel(file)).toEqual({
+      title: "PR #12 · a1b2c3d · Fix header", description: `Preview of parent: ${sha}`,
+    });
+    expect(resolveRepoCommit).not.toHaveBeenCalled();
+  });
   it("uses a short SHA and headline in the title and preserves full attribution in the description", async () => {
     expect(await repoDeploymentLabel(composeFile)).toEqual({
       title: "Deploy a1b2c3d · Fix header",
