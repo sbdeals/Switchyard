@@ -1,0 +1,14 @@
+Created two isolated local compose fixtures in deploy-notify-proof-mvoypdlg; initial deployments completed.
+First load: both historical successful deployments were suppressed.
+Successful redeploy toast included service, Succeeded status, duration and View logs (5CZCcKJRbCesJyjpJqfHP).
+View logs opened exact done deployment 5CZCcKJRbCesJyjpJqfHP with recorded logs.
+Failed redeploy toast included service, Failed status, duration and View logs (TFXbA8XM0-uWRmF2BVJ8a).
+Switching away from the project and back did not resurrect its prior toast.
+Bell list contains one success and one failure across two services; viewed success is read and failure is unread.
+View logs opened exact error deployment TFXbA8XM0-uWRmF2BVJ8a with recorded logs.
+Mark all read cleared the unread count; browser reload preserved exactly three events without duplicate toasts (CWfRk61Vbov8HgWqD_GSi).
+PASS: live local success/failure toasts, project activity, unread/read persistence, deduplication and exact deployment logs.
+Deleted session fixture deploy-notify-bad-mvoypdlg.
+Deleted session fixture deploy-notify-good-mvoypdlg.
+Deleted session project deploy-notify-proof-mvoypdlg.
+Verified the session project and both compose IDs are absent from Dokploy project.all.

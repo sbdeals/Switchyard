@@ -1,0 +1,10 @@
+Created isolated idle application deploy-notify-r1-app-mvozb8m2 in deploy-notify-r1-project-mvozb8m2; no deployment, ports or domains.
+Current project selector initially defaults to All projects.
+variables: unsaved text survived 2 completed real workspace refreshes over 20.3s; idle interval after prior response was 10003ms.
+settings: unsaved text survived 2 completed real workspace refreshes over 20.3s; idle interval after prior response was 10003ms.
+Dokploy confirmed both drafts were unsaved: persisted name and variables stayed at their original values.
+Browser-only injected 503: next real refresh started after 19952ms, then success restored 10010ms interval; unsaved Settings draft remained intact.
+Synthetic visibility handler check: zero refreshes during 12s hidden; refresh began 5ms after visible event.
+PASS: Variables and Settings drafts survived two real periodic refreshes each; All projects default, failed-refresh backoff/recovery and visibility handler verified.
+Deleted exact session application deploy-notify-r1-app-mvozb8m2.
+Deleted exact session project deploy-notify-r1-project-mvozb8m2; final API read confirms both created IDs are absent.
