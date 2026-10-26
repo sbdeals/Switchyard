@@ -1,0 +1,26 @@
+{
+  "name": "deploy-commit-info-mvoyqi3k",
+  "projectName": "deploy-commit-info-mvoyqi3k-project",
+  "projectId": "Xl-YWhB9h6iTpYaravUsx",
+  "environmentId": "8R7xfTxBl-bpnRG_8kDwT",
+  "composeId": "aDAvOi0gDYbbiZ5mcg-_a",
+  "appName": "deploy-commit-info-mvoyqi3k-kk0em7",
+  "configured": true,
+  "composeStatus": "done",
+  "deployments": [
+    {
+      "deploymentId": "afySbN6rixmDHcP9vsAkC",
+      "title": "test: Set stop_signal to SIGTERM\n\nThe official nginx images set STOPSIGNAL to SIGQUIT which dumps core.\nSet it to SIGTERM to avoid dumping core on e2e tests.\n\nSigned-off-by: Ricardo Branco <rbranco@suse.de>",
+      "description": "Commit: a32dc3da722e6b2e4fbfc72e40b1a697c4686460",
+      "status": "done",
+      "createdAt": "2026-10-26T07:58:02.151Z"
+    },
+    {
+      "deploymentId": "T8sJ4TFigqM-TlC5owX6m",
+      "title": "test: Set stop_signal to SIGTERM\n\nThe official nginx images set STOPSIGNAL to SIGQUIT which dumps core.\nSet it to SIGTERM to avoid dumping core on e2e tests.\n\nSigned-off-by: Ricardo Branco <rbranco@suse.de>",
+      "description": "Commit: a32dc3da722e6b2e4fbfc72e40b1a697c4686460",
+      "status": "done",
+      "createdAt": "2026-10-26T07:56:37.895Z"
+    }
+  ]
+}
