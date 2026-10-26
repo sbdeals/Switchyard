@@ -1,0 +1,189 @@
+[
+  {
+    "name": "01-created Docker state",
+    "detail": [
+      {
+        "Names": "bulk-actions-a",
+        "Image": "busybox:1.37",
+        "State": "running",
+        "Status": "Up 1 second"
+      },
+      {
+        "Names": "bulk-actions-b",
+        "Image": "busybox:1.37",
+        "State": "running",
+        "Status": "Up Less than a second"
+      },
+      {
+        "Names": "bulk-actions-c",
+        "Image": "busybox:1.37",
+        "State": "running",
+        "Status": "Up Less than a second"
+      }
+    ]
+  },
+  {
+    "name": "Grid shift-click range selects only three own services",
+    "detail": true
+  },
+  {
+    "name": "Selection retained through dashboard refresh",
+    "detail": true
+  },
+  {
+    "name": "Cancel preserves selection without execution",
+    "detail": true
+  },
+  {
+    "name": "Selection retained from Grid to Canvas",
+    "detail": true
+  },
+  {
+    "name": "Canvas Shift-click selects own services without drawer",
+    "detail": true
+  },
+  {
+    "name": "Initial progress visible before first action response",
+    "detail": {
+      "elapsedMs": 109
+    }
+  },
+  {
+    "name": "Restart results",
+    "detail": [
+      "bulk-actions-aOKbulk-actions-proof / productionCompleted",
+      "bulk-actions-bOKbulk-actions-proof / productionCompleted",
+      "bulk-actions-cOKbulk-actions-proof / productionCompleted"
+    ]
+  },
+  {
+    "name": "04-restart Docker state",
+    "detail": [
+      {
+        "Names": "bulk-actions-a",
+        "Image": "busybox:1.37",
+        "State": "running",
+        "Status": "Up 11 seconds"
+      },
+      {
+        "Names": "bulk-actions-b",
+        "Image": "busybox:1.37",
+        "State": "running",
+        "Status": "Up 11 seconds"
+      },
+      {
+        "Names": "bulk-actions-c",
+        "Image": "busybox:1.37",
+        "State": "running",
+        "Status": "Up Less than a second"
+      }
+    ]
+  },
+  {
+    "name": "Stop results",
+    "detail": [
+      "bulk-actions-aOKbulk-actions-proof / productionCompleted",
+      "bulk-actions-bOKbulk-actions-proof / productionCompleted",
+      "bulk-actions-cOKbulk-actions-proof / productionCompleted"
+    ]
+  },
+  {
+    "name": "05-stop Docker state",
+    "detail": [
+      {
+        "Names": "bulk-actions-a",
+        "Image": "busybox:1.37",
+        "State": "exited",
+        "Status": "Exited (137) 21 seconds ago"
+      },
+      {
+        "Names": "bulk-actions-b",
+        "Image": "busybox:1.37",
+        "State": "exited",
+        "Status": "Exited (137) 11 seconds ago"
+      },
+      {
+        "Names": "bulk-actions-c",
+        "Image": "busybox:1.37",
+        "State": "exited",
+        "Status": "Exited (137) Less than a second ago"
+      }
+    ]
+  },
+  {
+    "name": "Start results",
+    "detail": [
+      "bulk-actions-aOKbulk-actions-proof / productionCompleted",
+      "bulk-actions-bOKbulk-actions-proof / productionCompleted",
+      "bulk-actions-cOKbulk-actions-proof / productionCompleted"
+    ]
+  },
+  {
+    "name": "06-start Docker state",
+    "detail": [
+      {
+        "Names": "bulk-actions-a",
+        "Image": "busybox:1.37",
+        "State": "running",
+        "Status": "Up 2 seconds"
+      },
+      {
+        "Names": "bulk-actions-b",
+        "Image": "busybox:1.37",
+        "State": "running",
+        "Status": "Up 1 second"
+      },
+      {
+        "Names": "bulk-actions-c",
+        "Image": "busybox:1.37",
+        "State": "running",
+        "Status": "Up Less than a second"
+      }
+    ]
+  },
+  {
+    "name": "Forced failure prepared by deleting own selected service",
+    "detail": "bulk-actions-b"
+  },
+  {
+    "name": "Restart results",
+    "detail": [
+      "bulk-actions-aOKbulk-actions-proof / productionCompleted",
+      "bulk-actions-bFailedbulk-actions-proof / productionDokploy compose.stop failed (404): {\"message\":\"Compose not found\",\"code\":\"NOT_FOUND\",\"data\":{\"code\":\"NOT_FOUND\",\"httpStatus\":404,\"path\":\"compose.stop\",\"zodError\":null}}",
+      "bulk-actions-cOKbulk-actions-proof / productionCompleted"
+    ]
+  },
+  {
+    "name": "07-forced-failure Docker state",
+    "detail": [
+      {
+        "Names": "bulk-actions-a",
+        "Image": "busybox:1.37",
+        "State": "running",
+        "Status": "Up 11 seconds"
+      },
+      {
+        "Names": "bulk-actions-c",
+        "Image": "busybox:1.37",
+        "State": "running",
+        "Status": "Up Less than a second"
+      }
+    ]
+  },
+  {
+    "name": "Deleted service reconciled out of selection after refresh",
+    "detail": true
+  },
+  {
+    "name": "Deleted own fixture",
+    "detail": "bulk-actions-a"
+  },
+  {
+    "name": "Deleted own fixture",
+    "detail": "bulk-actions-c"
+  },
+  {
+    "name": "Deleted own project",
+    "detail": "bulk-actions-proof"
+  }
+]

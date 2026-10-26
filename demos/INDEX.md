@@ -87,3 +87,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#114](https://github.com/sbdeals/Switchyard/pull/114) | codex/logs-download (main) | Logs copy/download | [114-logs-download](114-logs-download/) | Codex mp4+pngs | 5k exact range, 403, cap ✓ |
 | [#115](https://github.com/sbdeals/Switchyard/pull/115) | codex/autodeploy-settings (main) | Deploy triggers settings | [115-autodeploy-settings](115-autodeploy-settings/) | Codex mp4+pngs | off/on + watch paths + tag preserved ✓ |
 | [#116](https://github.com/sbdeals/Switchyard/pull/116) | codex/canvas-auto-layout (main) | Canvas Tidy up | [116-canvas-auto-layout](116-canvas-auto-layout/) | Codex mp4+pngs | tidy/undo/reload ✓ |
+| [#117](https://github.com/sbdeals/Switchyard/pull/117) | codex/bulk-actions (main) | Bulk service actions | [117-bulk-actions](117-bulk-actions/) | Codex mp4+pngs | 3/3 restart/stop/start + isolated failure ✓ |

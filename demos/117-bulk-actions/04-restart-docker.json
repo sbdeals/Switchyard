@@ -1,0 +1,75 @@
+{
+  "capturedAt": "2026-10-26T09:23:00.370Z",
+  "source": "Local sudo docker ps -a (exact container names) and docker inspect .State",
+  "expected": "running",
+  "rows": [
+    {
+      "Names": "bulk-actions-a",
+      "Image": "busybox:1.37",
+      "State": "running",
+      "Status": "Up 11 seconds"
+    },
+    {
+      "Names": "bulk-actions-b",
+      "Image": "busybox:1.37",
+      "State": "running",
+      "Status": "Up 11 seconds"
+    },
+    {
+      "Names": "bulk-actions-c",
+      "Image": "busybox:1.37",
+      "State": "running",
+      "Status": "Up Less than a second"
+    }
+  ],
+  "inspect": [
+    {
+      "name": "bulk-actions-a",
+      "state": {
+        "Status": "running",
+        "Running": true,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 925243,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-10-26T09:22:48.260083897Z",
+        "FinishedAt": "2026-10-26T09:22:37.407719872Z"
+      }
+    },
+    {
+      "name": "bulk-actions-b",
+      "state": {
+        "Status": "running",
+        "Running": true,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 925508,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-10-26T09:22:48.809675319Z",
+        "FinishedAt": "2026-10-26T09:22:47.648745344Z"
+      }
+    },
+    {
+      "name": "bulk-actions-c",
+      "state": {
+        "Status": "running",
+        "Running": true,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 925991,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-10-26T09:22:59.521093986Z",
+        "FinishedAt": "2026-10-26T09:22:59.061452046Z"
+      }
+    }
+  ]
+}
