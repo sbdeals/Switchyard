@@ -1,0 +1,17 @@
+$ codex/cli-up
+$ switchyard deploy --help
+Usage: switchyard deploy [options] [path]
+
+Deploy a directory to Dokploy (the Railway up equivalent)
+
+Arguments:
+  path              directory to deploy (default: ".")
+
+Options:
+  --service <name>  application name (default: directory name)
+  --project <name>  project to reuse or create (default: the only project)
+  --detach          return once the upload has queued a deployment
+  -h, --help        display help for command
+
+$ switchyard --help | grep -i deploy
+  deploy [options] [path]                  Deploy a directory to Dokploy (the Railway up equivalent)

@@ -1,0 +1,152 @@
+Local directory deployment proof 2026-10-26T06:53:06.267Z
+Target: http://localhost:3000, local Dokploy v0.30.10; no production access.
+Auth: supplied demo-tools helper, held only in memory; no credential file created or displayed.
+Invoking built CLI command parser and deployment workflow with the local authenticated client.
+$ switchyard deploy /tmp/cli-up-RTU6IZ --service cli-up-1792997586264 --project cli-up-1792997586264
+Packed 3 files (421 bytes); build: dockerfile.
+API GET project.all
+API POST project.create
+API GET project.all
+API POST application.create
+API GET deployment.all?applicationId=3DP_39lqi32X3-J7v5ZG4
+Deploying cli-up-1792997586264/production/cli-up-1792997586264 (3DP_39lqi32X3-J7v5ZG4).
+API POST application.update
+API POST application.dropDeployment ZIP 421 bytes
+Drop upload/trigger HTTP success
+Upload accepted; deployment queued.
+API GET deployment.all?applicationId=3DP_39lqi32X3-J7v5ZG4
+Deployment 3nmYIkIVqwT83ya4_tyxZ: running
+API GET deployment.all?applicationId=3DP_39lqi32X3-J7v5ZG4
+Deployment 3nmYIkIVqwT83ya4_tyxZ: error
+Deploy workflow error: Deployment 3nmYIkIVqwT83ya4_tyxZ failed (error). Check its build logs in the dashboard.
+{"applicationId":"3DP_39lqi32X3-J7v5ZG4","name":"cli-up-1792997586264","sourceType":"drop","buildType":"dockerfile","applicationStatus":"error","domains":[]}
+Throwaway deployment build logs:
+Initializing deployment
+Building app-transmit-primary-interface-2aofj6
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 114B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/nginx:alpine
+#4 CACHED
+
+#5 [internal] load build context
+#5 transferring context: 67B done
+#5 DONE 0.0s
+
+#6 [2/2] COPY index.html /usr/share/nginx/html/index.html
+#6 DONE 0.0s
+
+#7 exporting to image
+#7 exporting layers done
+#7 writing image sha256:bcb55f77fb92d54119ba5eadc917d49a074adef14188691e8a72a7a8a46bc6ef done
+#7 naming to docker.io/library/app-transmit-primary-interface-2aofj6 done
+#7 DONE 0.0s
+✅ Docker build completed.
+(HTTP code 503) unexpected - This node is not a swarm manager. Use "docker swarm init" or "docker swarm join" to connect this node to swarm and try again. 
+Error occurred ❌, check the logs for details.
+
+HTTP 200 not proven: application has no reachable domain; native deploy result recorded above. No swarm init or extra host port used.
+Cleanup API POST application.delete 3DP_39lqi32X3-J7v5ZG4
+Cleanup API POST project.remove dYyFaVVssIpqJSkT70zlb
+Throwaway project removed: true
+Throwaway source directory removed.
+Local directory deployment proof 2026-10-26T06:55:08.191Z
+Target: http://localhost:3000, local Dokploy v0.30.10; no production access.
+Auth: supplied demo-tools helper, held only in memory; no credential file created or displayed.
+Invoking built CLI command parser and deployment workflow with the local authenticated client.
+$ switchyard deploy /tmp/cli-up-UZKiZW --service cli-up-1792997708187 --project cli-up-1792997708187
+Packed 3 files (421 bytes); build: dockerfile.
+API GET project.all
+API POST project.create
+API GET project.all
+API POST application.create
+API GET deployment.all?applicationId=8mJF9MMTNuE4IJlKBhXFS
+Deploying cli-up-1792997708187/production/cli-up-1792997708187 (8mJF9MMTNuE4IJlKBhXFS).
+API POST application.update
+API POST application.dropDeployment ZIP 421 bytes
+Drop upload/trigger HTTP success
+Upload accepted; deployment queued.
+API GET deployment.all?applicationId=8mJF9MMTNuE4IJlKBhXFS
+API GET deployment.all?applicationId=8mJF9MMTNuE4IJlKBhXFS
+Deployment reAuz9-xjWg7noN2jg8Zs: error
+Deploy workflow error: Deployment reAuz9-xjWg7noN2jg8Zs failed (error). Check its build logs in the dashboard.
+$ switchyard deploy /tmp/cli-up-UZKiZW --service cli-up-1792997708187 --project cli-up-1792997708187 --detach
+Packed 3 files (421 bytes); build: dockerfile.
+API GET project.all
+API GET deployment.all?applicationId=8mJF9MMTNuE4IJlKBhXFS
+Deploying cli-up-1792997708187/production/cli-up-1792997708187 (8mJF9MMTNuE4IJlKBhXFS).
+API POST application.update
+API POST application.dropDeployment ZIP 421 bytes
+Drop upload/trigger HTTP success
+Upload accepted; deployment queued.
+API GET application.one?applicationId=8mJF9MMTNuE4IJlKBhXFS
+No domain configured. Add one in the dashboard to expose this application.
+Detach returned after upload; project and application reused (no create API calls).
+Detached deployment wizoyBM7cza5Ie7wfS5ra: error; total deploy records: 2
+{"applicationId":"8mJF9MMTNuE4IJlKBhXFS","name":"cli-up-1792997708187","sourceType":"drop","buildType":"dockerfile","applicationStatus":"error","domains":[]}
+Throwaway deployment build logs:
+Initializing deployment
+Building cli-up-1792997708187-f9mgn1
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 114B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/nginx:alpine
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 67B done
+#5 DONE 0.0s
+
+#6 [2/2] COPY index.html /usr/share/nginx/html/index.html
+#6 CACHED
+
+#7 exporting to image
+#7 exporting layers done
+#7 writing image sha256:3bd8de9e3a394d45016b313d2f53571d4e01c210cd3284d101cadcb26c9fa5ef done
+#7 naming to docker.io/library/cli-up-1792997708187-f9mgn1 done
+#7 DONE 0.0s
+✅ Docker build completed.
+(HTTP code 503) unexpected - This node is not a swarm manager. Use "docker swarm init" or "docker swarm join" to connect this node to swarm and try again. 
+Error occurred ❌, check the logs for details.
+
+HTTP 200 not proven: application has no reachable domain; native deploy result recorded above. No swarm init or extra host port used.
+Cleanup API POST application.delete 8mJF9MMTNuE4IJlKBhXFS
+Cleanup API POST project.remove Biy5qJVUpj9wS20tz75o1
+Throwaway project removed: true
+Throwaway source directory removed.
+Cleanup REST dockerImage.removeImage app-transmit-primary-interface-2aofj6:latest -> HTTP 200
+
+Cleanup REST dockerImage.removeImage cli-up-1792997708187-f9mgn1:latest -> HTTP 200
+
+
+Final validation:
+$ cd /workspace/wt-cli-up/cli && npm run typecheck && npm test
+PASS: TypeScript; build; node:test 79 tests, 79 pass, 0 fail.
+$ node cli/dist/cli.js deploy --help
+PASS: deploy [options] [path], --service, --project, --detach registered.
+$ node cli/dist/cli.js up --help
+PASS: up retains Install/converge the whole stack; deploy flags absent.
+$ git diff --check
+PASS.
+Read-only image inventory confirms both session-created build image tags are absent after API cleanup.
+Limitations: native application HTTP 200 unproven because this host is not a Swarm manager. Nixpacks behavior is unit-tested, not live-proven. Live proof invoked the built CLI parser, auth client, packer, and workflow with demo auth supplied in memory; no saved-credential CLI process was needed.

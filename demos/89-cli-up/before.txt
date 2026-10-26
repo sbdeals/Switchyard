@@ -1,0 +1,27 @@
+$ git rev-parse --short HEAD  # main
+1fc46d5
+$ switchyard deploy --help
+Usage: switchyard [options] [command]
+
+One-command install & management for the Dokploy + Switchyard stack.
+Stands up Dokploy, registers the admin, and runs the Switchyard dashboard as a
+managed container.
+
+Options:
+  -V, --version                            output the version number
+  -h, --help                               display help for command
+
+Commands:
+  up [options]                             Install/converge the whole stack (idempotent — also upgrades)
+  status                                   Show stack status, container health, and URLs
+  down [options]                           Stop the stack; --purge also deletes network, secrets, and data volumes
+  config [options] <action> [key] [value]  Read or change persisted settings (set recreates the container)
+  local-ingress <action>                   Opt-in demo Traefik on alternate ports (Docker Desktop; HTTP-only, NOT real TLS)
+  doctor                                   Check prerequisites and stack health (read-only)
+  logs [options] [target]                  Tail logs: switchyard (container) or dokploy (service)
+  open                                     Open the dashboard in your browser
+  claude [args...]                         Launch Claude Code here (installs the CLI first if needed)
+  help [command]                           display help for command
+(exit 0)
+$ switchyard --help | grep -i deploy
+(no deploy command)
