@@ -1,0 +1,25 @@
+{
+  "base": "http://127.0.0.1:3042",
+  "projectId": "N3e9ete6MLSXgjQovxv4-",
+  "originalName": "project-settings-20261026b",
+  "renamed": "project-settings-renamed-20261026b",
+  "descriptionPersisted": true,
+  "environmentRenamed": "project-settings-staging",
+  "exactNameGuard": true,
+  "runningAcknowledgementGuard": true,
+  "deletedThroughDashboard": true,
+  "dashboardProjectAbsent": true,
+  "dashboardServiceAbsent": true,
+  "dokployProjectAllStatus": 200,
+  "dokployProjectAllAbsent": true,
+  "verifiedAt": "2026-10-26T09:05:18.066Z",
+  "screenshots": [
+    "01-general-before.png",
+    "02-general-saved.png",
+    "03-general-after-reload.png",
+    "04-danger-blocked.png",
+    "05-danger-confirmed.png",
+    "06-dashboard-project-gone.png",
+    "07-dashboard-service-gone.png"
+  ]
+}
