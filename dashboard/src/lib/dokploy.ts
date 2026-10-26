@@ -95,7 +95,7 @@ export interface ServiceBase {
   environmentId: string;
   environmentName: string;
   dockerImage: string | null;
-  /** Raw env block ("KEY=value\n..."). */
+  /** Raw env block on the server; redacted to null in workspace page props. */
   env: string | null;
   createdAt: string | null;
   // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
@@ -513,6 +513,24 @@ function projectsFromTree(tree: RawProject[]): ProjectNode[] {
 
 export async function listProjects(): Promise<ProjectNode[]> {
   return projectsFromTree(await rawTree());
+}
+
+/** Read env only after finding the service in the current user's workspace. */
+export async function getServiceEnvironment(type: MountServiceType, id: string): Promise<string> {
+  if (!["application", "compose", ...ENGINES].includes(type) || !id) {
+    throw new Error("Invalid service.");
+  }
+  const tree = await rawTree();
+  const refs = collectIds(tree, (env) => {
+    if (type === "application") return (env.applications ?? []).map((a) => a.applicationId);
+    if (type === "compose") return (env.compose ?? []).map((c) => c.composeId);
+    return ((env[type] ?? []) as Record<string, string>[]).map((item) => item[idKey(type)]);
+  });
+  if (!refs.some((ref) => ref.id === id)) throw new Error("Service unavailable.");
+  const detail = await request<{ env?: string | null }>(
+    `${type}.one?${type}Id=${encodeURIComponent(id)}`
+  );
+  return detail.env ?? "";
 }
 
 export async function createProject(name: string): Promise<void> {
