@@ -116,8 +116,11 @@ export interface Database extends ServiceBase {
   engine: Engine;
   databaseName: string | null;
   databaseUser: string | null;
+  /** Always null in workspace data; fetched explicitly by the Connect action. */
   databasePassword: string | null;
   externalPort: number | null;
+  /** Host-facing address, when known, for this database's server. */
+  externalHost?: string | null;
   command: string | null;
 }
 
@@ -550,6 +553,8 @@ interface RawDatabaseDetail {
   databaseUser?: string | null;
   databasePassword?: string | null;
   externalPort?: number | null;
+  serverId?: string | null;
+  server?: { ipAddress?: string | null } | null;
   createdAt?: string | null;
   env?: string | null;
   cpuLimit?: string | null;
@@ -560,6 +565,32 @@ interface RawDatabaseDetail {
 
 async function getDetail(engine: Engine, id: string): Promise<RawDatabaseDetail> {
   return request<RawDatabaseDetail>(`${engine}.one?${idKey(engine)}=${encodeURIComponent(id)}`);
+}
+
+/** Read a password only after checking the current user's database ownership. */
+export async function getDatabasePassword(engine: Engine, id: string): Promise<string> {
+  if (!ENGINES.includes(engine) || typeof id !== "string" || !id.trim() || id.length > 256) {
+    throw new Error("Invalid database.");
+  }
+  const tree = await rawTree();
+  const owned = collectIds(tree, (env) =>
+    ((env[engine] ?? []) as Record<string, string>[]).map((item) => item[idKey(engine)])
+  ).some((ref) => ref.id === id);
+  if (!owned) throw new Error("Database unavailable.");
+  const detail = await getDetail(engine, id);
+  if (typeof detail.databasePassword !== "string") throw new Error("Password unavailable.");
+  return detail.databasePassword;
+}
+
+function databaseExternalHost(detail: RawDatabaseDetail): string | null {
+  if (detail.serverId) return detail.server?.ipAddress?.trim() || null;
+  const hostIp = process.env.SWITCHYARD_HOST_IP?.trim();
+  if (hostIp) return hostIp;
+  try {
+    return process.env.DOKPLOY_ORIGIN ? new URL(process.env.DOKPLOY_ORIGIN).hostname : null;
+  } catch {
+    return null;
+  }
 }
 
 /** List every database in the tree, enriched with detail. */
@@ -581,8 +612,9 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
         dockerImage: d.dockerImage ?? null,
         databaseName: d.databaseName ?? null,
         databaseUser: d.databaseUser ?? null,
-        databasePassword: d.databasePassword ?? null,
+        databasePassword: null,
         externalPort: d.externalPort ?? null,
+        externalHost: databaseExternalHost(d),
         createdAt: d.createdAt ?? null,
         env: d.env ?? null,
         cpuLimit: d.cpuLimit ?? null,
