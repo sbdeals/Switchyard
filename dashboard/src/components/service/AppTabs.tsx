@@ -64,6 +64,8 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { FeatureNotice, useHostCapabilities } from "@/components/HostCapabilities";
+import { featureUnavailableReason, type HostFeature } from "@/lib/host-capabilities";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -91,7 +93,7 @@ export function AppOverviewTab({ app }: { app: Application }) {
     <div className="space-y-5">
       <PublicUrlBar domains={app.domains} status={app.status} />
 
-      <LifecycleButtons status={app.status} pending={pending} error={error} run={run} />
+      <LifecycleButtons status={app.status} pending={pending} error={error} run={run} requiredFeature="nativeApplication" />
 
       <PrivateNetwork host={app.appName} />
 
@@ -370,7 +372,7 @@ export function DeploymentsTab({ app }: { app: Application }) {
   return (
     <div className="space-y-6">
       {app.sourceType === "git" && <AutoDeployPanel app={app} />}
-      <DeploymentHistory deployments={app.deployments} />
+      <DeploymentHistory deployments={app.deployments} application />
     </div>
   );
 }
@@ -380,6 +382,7 @@ export function DeploymentsTab({ app }: { app: Application }) {
  * webhook to wire into a Git host, plus branch / watch-paths / auto-deploy.
  */
 function AutoDeployPanel({ app }: { app: Application }) {
+  const unavailable = featureUnavailableReason(useHostCapabilities(), "nativeApplication");
   const [branch, setBranch] = useState(app.branch ?? "main");
   const [autoDeploy, setAutoDeploy] = useState(app.autoDeploy);
   const [watch, setWatch] = useState(app.watchPaths.join("\n"));
@@ -414,6 +417,7 @@ function AutoDeployPanel({ app }: { app: Application }) {
         <Webhook className="size-4 text-[var(--color-brand)]" />
         <h3 className="text-sm font-semibold">Push to deploy</h3>
       </div>
+      <FeatureNotice feature="nativeApplication" />
 
       <Field label="Deploy webhook URL" hint="add to your Git host">
         {app.webhookUrl ? (
@@ -455,6 +459,8 @@ function AutoDeployPanel({ app }: { app: Application }) {
             role="switch"
             aria-checked={autoDeploy}
             onClick={() => setAutoDeploy((v) => !v)}
+            disabled={!!unavailable && !autoDeploy}
+            title={unavailable ?? undefined}
             className={`inline-flex h-9 w-full items-center justify-between rounded-lg border px-3 text-xs font-medium transition-colors ${
               autoDeploy
                 ? "border-[var(--color-brand)] text-[var(--color-fg)]"
@@ -487,18 +493,21 @@ function AutoDeployPanel({ app }: { app: Application }) {
         />
       </Field>
 
-      <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
+      <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty || (autoDeploy && !!unavailable)} onSave={save} />
     </div>
   );
 }
 
-export function DeploymentHistory({ deployments: history }: { deployments: AppDeployment[] }) {
+export function DeploymentHistory({ deployments: history, application = false }: { deployments: AppDeployment[]; application?: boolean }) {
+  const host = useHostCapabilities();
+  const unavailable = application ? featureUnavailableReason(host, "nativeApplication") : null;
   const deployments = [...history].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const color = (s: string) =>
     s === "done" ? "var(--color-ok)" : s === "error" ? "var(--color-danger)" : s === "running" ? "var(--color-warn)" : "var(--color-idle)";
   return (
     <div className="space-y-2">
       <p className="mb-1 text-xs text-[var(--color-fg-muted)]">Deployment history (newest first).</p>
+      {application && <FeatureNotice feature="nativeApplication" />}
       {deployments.length === 0 ? (
         <p className="text-xs text-[var(--color-fg-subtle)]">No deployments yet.</p>
       ) : (
@@ -516,7 +525,7 @@ export function DeploymentHistory({ deployments: history }: { deployments: AppDe
               </div>
             </div>
             {d.rollbackId ? (
-              <RollbackButton rollbackId={d.rollbackId} title={d.title} />
+              <RollbackButton rollbackId={d.rollbackId} title={d.title} unavailable={unavailable} />
             ) : (
               <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
             )}
@@ -528,7 +537,7 @@ export function DeploymentHistory({ deployments: history }: { deployments: AppDe
 }
 
 /** Restore a past deployment's image snapshot (Dokploy image-based rollback). */
-function RollbackButton({ rollbackId, title }: { rollbackId: string; title: string }) {
+function RollbackButton({ rollbackId, title, unavailable }: { rollbackId: string; title: string; unavailable: string | null }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   function rollback() {
@@ -543,8 +552,8 @@ function RollbackButton({ rollbackId, title }: { rollbackId: string; title: stri
     <div className="flex flex-col items-end gap-1">
       <button
         onClick={rollback}
-        disabled={pending}
-        title="Roll back to this deployment"
+        disabled={pending || !!unavailable}
+        title={unavailable ?? "Roll back to this deployment"}
         className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)] disabled:opacity-40"
       >
         {pending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
@@ -563,11 +572,13 @@ function RedeployToggle({
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const unavailable = featureUnavailableReason(useHostCapabilities(), "nativeApplication");
   return (
-    <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
+    <label title={unavailable ?? undefined} className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
       <input
         type="checkbox"
         checked={checked}
+        disabled={!!unavailable && !checked}
         onChange={(e) => onChange(e.target.checked)}
         className="accent-[var(--color-brand)]"
       />
@@ -587,6 +598,7 @@ export function AppBuildTab({ app }: { app: Application }) {
   const isDocker = app.sourceType === "docker";
   return (
     <div className="space-y-6">
+      <FeatureNotice feature="nativeApplication" />
       {isDocker ? <DockerSourceForm app={app} /> : <BuildStrategyForm app={app} />}
       <StartCommandForm app={app} />
     </div>
@@ -840,19 +852,25 @@ function decodeTest(test?: string[]): string {
 function DeploySection({
   title,
   hint,
+  feature,
   children,
 }: {
   title: string;
   hint?: string;
+  feature: HostFeature;
   children: React.ReactNode;
 }) {
+  const unavailable = featureUnavailableReason(useHostCapabilities(), feature);
   return (
     <section className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
       <div>
         <h3 className="text-sm font-semibold text-[var(--color-fg)]">{title}</h3>
         {hint && <p className="mt-0.5 text-xs text-[var(--color-fg-subtle)]">{hint}</p>}
       </div>
-      {children}
+      <FeatureNotice feature={feature} />
+      <fieldset disabled={!!unavailable} title={unavailable ?? undefined} className="space-y-3">
+        {children}
+      </fieldset>
     </section>
   );
 }
@@ -883,6 +901,7 @@ function ReplicasForm({ app }: { app: Application }) {
   return (
     <DeploySection
       title="Replicas"
+      feature="replicas"
       hint="Number of container instances Swarm keeps running. 0 stops all tasks without deleting the service."
     >
       <div className="w-32">
@@ -935,6 +954,7 @@ function RestartPolicyForm({ app }: { app: Application }) {
   return (
     <DeploySection
       title="Restart policy"
+      feature="nativeApplication"
       hint="How Swarm reacts when a task exits. Applied on the next deploy."
     >
       <div className="grid grid-cols-2 gap-3">
@@ -1010,6 +1030,7 @@ function HealthCheckForm({ app }: { app: Application }) {
   return (
     <DeploySection
       title="Healthcheck"
+      feature="swarmHealthcheck"
       hint="Swarm runs this inside the container to gate traffic and rolling deploys. Applied on the next deploy."
     >
       <Field label="Test command" hint="wrapped as CMD-SHELL">
@@ -1089,6 +1110,7 @@ export function AppDeployTab({ app }: { app: Application }) {
 }
 
 export function AppSettingsTab({ app, onClose }: { app: Application; onClose: () => void }) {
+  const unavailable = featureUnavailableReason(useHostCapabilities(), "nativeApplication");
   const { pending: lifePending, error: lifeError, run } = useAppLifecycle(app);
   const [name, setName] = useState(app.name);
   const [cpu, setCpu] = useState(app.cpuLimit ?? "");
@@ -1132,7 +1154,8 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
         <Field label="Name">
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <FeatureNotice feature="nativeApplication" />
+        <fieldset disabled={!!unavailable} title={unavailable ?? undefined} className="grid grid-cols-2 gap-3">
           <Field label="CPU limit" hint='e.g. "0.5"'>
             <input value={cpu} onChange={(e) => setCpu(e.target.value)} placeholder="unlimited" className={inputCls} />
           </Field>
@@ -1145,8 +1168,8 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
           <Field label="Memory reservation" hint="soft floor">
             <input value={memRes} onChange={(e) => setMemRes(e.target.value)} placeholder="none" className={inputCls} />
           </Field>
-        </div>
-        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
+        </fieldset>
+        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty || (resourcesDirty && !!unavailable)} onSave={save} />
       </div>
 
       <Info label="App name" value={app.appName} mono />
@@ -1189,6 +1212,7 @@ export function SchedulesTab({ app }: { app: Application }) {
         Cron jobs run a command inside this app&apos;s container on a schedule (times are UTC). The
         container must be running when the job fires.
       </p>
+      <FeatureNotice feature="schedules" />
 
       <CreateScheduleForm applicationId={app.id} onCreated={reload} />
 
@@ -1223,6 +1247,7 @@ function CreateScheduleForm({
   applicationId: string;
   onCreated: () => void;
 }) {
+  const unavailable = featureUnavailableReason(useHostCapabilities(), "schedules");
   const [name, setName] = useState("");
   const [cron, setCron] = useState("");
   const [command, setCommand] = useState("");
@@ -1301,7 +1326,8 @@ function CreateScheduleForm({
         </div>
         <button
           onClick={create}
-          disabled={pending || !valid}
+          disabled={pending || !valid || !!unavailable}
+          title={unavailable ?? undefined}
           className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
         >
           {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
@@ -1314,6 +1340,7 @@ function CreateScheduleForm({
 }
 
 function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: () => void }) {
+  const unavailable = featureUnavailableReason(useHostCapabilities(), "schedules");
   const [editing, setEditing] = useState(false);
   const [busy, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -1382,13 +1409,14 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
           </code>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <IconBtn title="Run now" onClick={() => act(() => runScheduleAction(schedule.scheduleId))} disabled={busy}>
+          <IconBtn title="Run now" disabledReason={unavailable} onClick={() => act(() => runScheduleAction(schedule.scheduleId))} disabled={busy || !!unavailable}>
             <Play className="size-3.5" />
           </IconBtn>
           <IconBtn
             title={schedule.enabled ? "Disable" : "Enable"}
+            disabledReason={!schedule.enabled ? unavailable : null}
             onClick={() => runUpdate({ enabled: !schedule.enabled }, onChanged)}
-            disabled={busy}
+            disabled={busy || (!schedule.enabled && !!unavailable)}
           >
             <Power className={cn("size-3.5", schedule.enabled && "text-[var(--color-ok)]")} />
           </IconBtn>
@@ -1446,7 +1474,7 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
               saving={busy}
               saved={false}
               error={null}
-              disabled={!name.trim() || !cron.trim() || !command.trim()}
+              disabled={!name.trim() || !cron.trim() || !command.trim() || (schedule.enabled && !!unavailable)}
               onSave={() => runUpdate({}, () => {
                 setEditing(false);
                 onChanged();
@@ -1466,17 +1494,19 @@ function IconBtn({
   title,
   onClick,
   disabled,
+  disabledReason,
   ariaExpanded,
 }: {
   children: React.ReactNode;
   title: string;
   onClick: () => void;
   disabled?: boolean;
+  disabledReason?: string | null;
   ariaExpanded?: boolean;
 }) {
   return (
     <button
-      title={title}
+      title={disabledReason ?? title}
       aria-label={title}
       aria-expanded={ariaExpanded}
       onClick={onClick}

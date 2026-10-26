@@ -27,6 +27,8 @@ import {
 } from "@/app/actions";
 import { GithubDeployModal } from "@/components/GithubDeployModal";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { FeatureNotice, useHostCapabilities } from "@/components/HostCapabilities";
+import { featureUnavailableReason } from "@/lib/host-capabilities";
 
 /**
  * One-click provisioning: pick a database engine (auto name/password/version) or
@@ -40,6 +42,7 @@ export function QuickDeployMenu({
   projects: ProjectNode[];
   onDeployed: (id: string) => void;
 }) {
+  const nativeReason = featureUnavailableReason(useHostCapabilities(), "nativeApplication");
   const [open, setOpen] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -82,8 +85,12 @@ export function QuickDeployMenu({
 
   const deployDb = (engine: Engine) =>
     run(`db:${engine}`, () => quickDeployDatabaseAction(engine, targetEnv));
-  const deployImage = () => run("app", () => quickDeployImageAction(image, undefined, targetEnv));
-  const deployRepo = () => run("repo", () => quickDeployRepoAction(repo, undefined, targetEnv));
+  const deployImage = () => {
+    if (!nativeReason) run("app", () => quickDeployImageAction(image, undefined, targetEnv));
+  };
+  const deployRepo = () => {
+    if (!nativeReason) run("repo", () => quickDeployRepoAction(repo, undefined, targetEnv));
+  };
   const createComposeStack = () => run("compose", () => createComposeAction(undefined, targetEnv));
   const deployTemplate = (id: string) =>
     run(`tpl:${id}`, () => quickDeployTemplateAction(id, targetEnv));
@@ -153,6 +160,7 @@ export function QuickDeployMenu({
               )}
 
               <SectionLabel>Application</SectionLabel>
+              <FeatureNotice feature="nativeApplication" />
               <div className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1">
                 <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
                   <Box className="size-4" />
@@ -167,7 +175,8 @@ export function QuickDeployMenu({
                 />
                 <button
                   onClick={deployImage}
-                  disabled={!image.trim() || busy !== null}
+                  disabled={!image.trim() || busy !== null || !!nativeReason}
+                  title={nativeReason ?? undefined}
                   className="shrink-0 rounded-md bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
                 >
                   {busy === "app" ? (
@@ -194,7 +203,8 @@ export function QuickDeployMenu({
                 />
                 <button
                   onClick={deployRepo}
-                  disabled={!repo.trim() || busy !== null}
+                  disabled={!repo.trim() || busy !== null || !!nativeReason}
+                  title={nativeReason ?? undefined}
                   className="shrink-0 rounded-md bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
                 >
                   {busy === "repo" ? (
@@ -212,7 +222,9 @@ export function QuickDeployMenu({
                   setOpen(false);
                   setGithubOpen(true);
                 }}
-                className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)]"
+                disabled={!!nativeReason}
+                title={nativeReason ?? undefined}
+                className="disabled:opacity-50 mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)]"
               >
                 <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-surface)] text-[var(--color-fg)]">
                   <GitFork className="size-4" />

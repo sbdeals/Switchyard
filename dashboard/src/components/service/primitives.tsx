@@ -31,6 +31,8 @@ import {
 import type { Action, AppDomain, ServiceStatus } from "@/lib/dokploy";
 import type { ActionResult } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
+import { FeatureNotice, useHostCapabilities } from "@/components/HostCapabilities";
+import { featureUnavailableReason, type HostFeature } from "@/lib/host-capabilities";
 import { cn } from "@/lib/utils";
 
 export const inputCls =
@@ -70,17 +72,20 @@ export function Btn({
   onClick,
   disabled,
   primary,
+  title,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
   primary?: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-40",
         primary
@@ -304,17 +309,22 @@ export function LifecycleButtons({
   pending,
   error,
   run,
+  requiredFeature,
 }: {
   status: ServiceStatus;
   pending: boolean;
   error: string | null;
   run: (action: Action) => void;
+  requiredFeature?: HostFeature;
 }) {
+  const host = useHostCapabilities();
+  const unavailable = requiredFeature ? featureUnavailableReason(host, requiredFeature) : null;
   return (
     <>
+      {requiredFeature && <FeatureNotice feature={requiredFeature} />}
       <div className="flex flex-wrap gap-2">
         {status === "idle" ? (
-          <Btn onClick={() => run("deploy")} disabled={pending} primary>
+          <Btn onClick={() => run("deploy")} disabled={pending || !!unavailable} title={unavailable ?? undefined} primary>
             <Rocket className="size-3.5" /> Deploy
           </Btn>
         ) : status === "done" ? (
@@ -322,12 +332,12 @@ export function LifecycleButtons({
             <Square className="size-3.5" /> Stop
           </Btn>
         ) : (
-          <Btn onClick={() => run("start")} disabled={pending}>
+          <Btn onClick={() => run("start")} disabled={pending || !!unavailable} title={unavailable ?? undefined}>
             <Play className="size-3.5" /> Start
           </Btn>
         )}
         {status !== "idle" && (
-          <Btn onClick={() => run("deploy")} disabled={pending}>
+          <Btn onClick={() => run("deploy")} disabled={pending || !!unavailable} title={unavailable ?? undefined}>
             <RefreshCw className="size-3.5" /> Redeploy
           </Btn>
         )}

@@ -34,6 +34,8 @@ import {
   restoreBackupAction,
 } from "@/app/actions";
 import { inputCls, Field, useSavedFlash } from "@/components/service/primitives";
+import { FeatureNotice, useHostCapabilities } from "@/components/HostCapabilities";
+import { featureUnavailableReason } from "@/lib/host-capabilities";
 import { cn } from "@/lib/utils";
 
 export function BackupsTab({ db }: { db: Database }) {
@@ -315,6 +317,7 @@ function ScheduleSection({
   backups: DatabaseBackup[];
   onChange: () => Promise<void>;
 }) {
+  const unavailable = featureUnavailableReason(useHostCapabilities(), "s3Backups");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
@@ -330,6 +333,7 @@ function ScheduleSection({
   return (
     <section className="space-y-3">
       <SectionTitle icon={<Archive className="size-3.5" />} title="Scheduled backups" />
+      <FeatureNotice feature="s3Backups" />
 
       {backups.length > 0 ? (
         <div className="space-y-2">
@@ -353,7 +357,8 @@ function ScheduleSection({
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 <RowBtn
-                  disabled={busyId === b.backupId}
+                  disabled={busyId === b.backupId || !!unavailable}
+                  title={unavailable ?? undefined}
                   onClick={() => runRow(() => runDatabaseBackupAction(engine, b.backupId), b.backupId)}
                 >
                   {busyId === b.backupId ? (
@@ -364,7 +369,8 @@ function ScheduleSection({
                   Back up now
                 </RowBtn>
                 <RowBtn
-                  disabled={busyId === b.backupId}
+                  disabled={busyId === b.backupId || (!b.enabled && !!unavailable)}
+                  title={!b.enabled ? unavailable ?? undefined : undefined}
                   onClick={() =>
                     runRow(
                       () =>
@@ -424,6 +430,7 @@ function NewScheduleForm({
   destinations: S3Destination[];
   onChange: () => Promise<void>;
 }) {
+  const unavailable = featureUnavailableReason(useHostCapabilities(), "s3Backups");
   const [destinationId, setDestinationId] = useState(destinations[0]?.destinationId ?? "");
   const [database, setDatabase] = useState(db.databaseName ?? "");
   const [schedule, setSchedule] = useState("0 5 * * *");
@@ -436,6 +443,7 @@ function NewScheduleForm({
   const complete = destinationId && database.trim() && schedule.trim() && prefix.trim();
 
   function create() {
+    if (unavailable) return;
     setError(null);
     start(async () => {
       const res = await createDatabaseBackupAction({
@@ -492,7 +500,8 @@ function NewScheduleForm({
           {error && <span role="alert" className="text-xs text-[var(--color-danger)]">{error}</span>}
           <button
             onClick={create}
-            disabled={pending || !complete}
+            disabled={pending || !complete || !!unavailable}
+            title={unavailable ?? undefined}
             className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
           >
             {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
@@ -515,6 +524,7 @@ function RestoreSection({
   engine: BackupEngine;
   destinations: S3Destination[];
 }) {
+  const unavailable = featureUnavailableReason(useHostCapabilities(), "s3Backups");
   const [destinationId, setDestinationId] = useState(destinations[0]?.destinationId ?? "");
   const [search, setSearch] = useState("");
   const [files, setFiles] = useState<BackupFile[] | null>(null);
@@ -538,7 +548,7 @@ function RestoreSection({
   }
 
   function restore() {
-    if (!selected || !target.trim()) return;
+    if (unavailable || !selected || !target.trim()) return;
     if (
       !confirm(
         `Restore "${selected}" into ${target}? This overwrites the current database and cannot be undone.`
@@ -562,6 +572,7 @@ function RestoreSection({
   return (
     <section className="space-y-3">
       <SectionTitle icon={<RotateCcw className="size-3.5" />} title="Restore" hint="destructive" />
+      <FeatureNotice feature="s3Backups" />
       <div className="rounded-xl border border-[var(--color-danger)]/30 bg-[var(--color-danger-soft)]/40 p-3 space-y-3">
         <div className="flex items-end gap-2">
           <div className="flex-1">
@@ -611,7 +622,8 @@ function RestoreSection({
           {done && <span role="status" className="mr-auto text-xs text-[var(--color-ok)]">Restore finished</span>}
           <button
             onClick={restore}
-            disabled={restoring || !selected || !target.trim()}
+            disabled={restoring || !selected || !target.trim() || !!unavailable}
+            title={unavailable ?? undefined}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-semibold text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] disabled:opacity-40"
           >
             {restoring ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
@@ -647,15 +659,18 @@ function RowBtn({
   children,
   onClick,
   disabled,
+  title,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border-strong)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)] disabled:opacity-40"
     >
       {children}

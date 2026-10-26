@@ -414,6 +414,12 @@ export async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
   return (text ? JSON.parse(text) : null) as T;
 }
 
+/** Public version metadata, read with the current user's Dokploy session. */
+export async function getDokployVersion(): Promise<string | null> {
+  const version = await request<unknown>("settings.getDokployVersion");
+  return typeof version === "string" && version.trim() ? version.trim() : null;
+}
+
 // --- system probe (admin session) -------------------------------------------
 // The ONLY consumer of the env admin credentials. Kept fully separate from the
 // user-serving path above so an anonymous /api/health?deep=1 probe still works.
