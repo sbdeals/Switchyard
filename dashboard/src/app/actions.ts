@@ -55,6 +55,7 @@ import {
   updateSchedule,
   deleteSchedule,
   runSchedule,
+  listScheduleExecutions,
   listMounts,
   createMount,
   updateMount,
@@ -67,6 +68,7 @@ import {
   type Engine,
   type DokployTemplate,
   type Schedule,
+  type AppDeployment,
   type CreateScheduleInput,
   type UpdateScheduleInput,
   type Mount,
@@ -613,8 +615,51 @@ export async function deleteScheduleAction(scheduleId: string): Promise<ActionRe
   return wrap(() => deleteSchedule(scheduleId));
 }
 
-export async function runScheduleAction(scheduleId: string): Promise<ActionResult> {
-  return wrap(() => runSchedule(scheduleId));
+export type ScheduleExecution = Pick<AppDeployment, "deploymentId" | "status" | "createdAt">;
+export type ScheduleExecutionsResult =
+  | { ok: true; executions: ScheduleExecution[] }
+  | { ok: false; error: string };
+
+export async function listScheduleExecutionsAction(scheduleId: string): Promise<ScheduleExecutionsResult> {
+  try {
+    const executions = await listScheduleExecutions(scheduleId);
+    return {
+      ok: true,
+      executions: executions.map(({ deploymentId, status, createdAt }) => ({
+        deploymentId, status, createdAt,
+      })),
+    };
+  } catch (e) {
+    unstable_rethrow(e);
+    return fail(e);
+  }
+}
+
+export type RunScheduleResult = { ok: true; message: string } | { ok: false; error: string };
+
+function scheduleRunResult(status: string | undefined): RunScheduleResult {
+  if (status === "error") {
+    return {
+      ok: false,
+      error: "Schedule failed. Make sure the service is running and check the command and shell. See execution history below.",
+    };
+  }
+  return {
+    ok: true,
+    message: status === "done" ? "Completed — see history below." : "Started — see history below.",
+  };
+}
+
+export async function runScheduleAction(scheduleId: string): Promise<RunScheduleResult> {
+  try {
+    // Dokploy can return HTTP 200 with status "error"; surface it.
+    const result = await runSchedule(scheduleId);
+    revalidatePath("/");
+    return scheduleRunResult(result?.status);
+  } catch (e) {
+    unstable_rethrow(e);
+    return fail(e);
+  }
 }
 
 // --- compose ----------------------------------------------------------------
