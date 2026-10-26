@@ -1,0 +1,39 @@
+{
+  "revision": "r1",
+  "dashboard": "http://127.0.0.1:3064",
+  "fixturesCreated": 0,
+  "existingServicesReadOnly": true,
+  "catalogLogo": "https://templates.dokploy.com/blueprints/nginx/nginx.png",
+  "screenshots": [
+    "canvas.png",
+    "drawer-catalog.png",
+    "drawer-local.png"
+  ],
+  "catalogService": "nginx-g9se, nginx:alpine, Not running (0/0 containers running) \u2014 open details",
+  "localService": "postgres-d4rm, postgres:18, Not running (0/0 containers running) \u2014 open details",
+  "catalogImageLoaded": {
+    "complete": true,
+    "naturalWidth": 60,
+    "naturalHeight": 60
+  },
+  "nodeLayout": {
+    "width": 240,
+    "height": 78,
+    "badgeWidth": 36
+  },
+  "drawerBadgeWidth": 44,
+  "catalogResponseStatuses": [
+    200
+  ],
+  "videoSource": "/workspace/sy-codex-notes/fix/service-icons-proof/page@9f5c9ff142980bcca0bfaed72f30dd1a.webm",
+  "failedCatalogFallsBackToLocal": true,
+  "browserAssertions": "passed",
+  "video": "service-icons.mp4",
+  "checks": {
+    "lint": "passed",
+    "typescript": "passed",
+    "vitest": "157 passed",
+    "dockerBuild": "passed",
+    "gitDiffCheck": "passed"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "dashboard": "http://127.0.0.1:3064",
+  "deployed": false,
+  "fixtures": [
+    {
+      "kind": "application",
+      "id": "SH00mrhQxJNDgZu5JreZv",
+      "name": "service-icons-nginx",
+      "dockerImage": "nginx:alpine",
+      "label": "NGINX"
+    },
+    {
+      "kind": "application",
+      "id": "KLMezYgpI6pQBCxtCgpHt",
+      "name": "service-icons-whoami",
+      "dockerImage": "traefik/whoami",
+      "label": "whoami"
+    },
+    {
+      "kind": "redis",
+      "id": "2_gcHOtnX4THF8MJdRq4j",
+      "name": "service-icons-redis",
+      "label": "Redis",
+      "dockerImage": "redis:7-alpine"
+    }
+  ],
+  "screenshots": [
+    "canvas-existing.png",
+    "drawer-existing.png",
+    "canvas.png",
+    "drawer-nginx.png",
+    "drawer-whoami.png",
+    "drawer-redis.png"
+  ],
+  "cleanup": [
+    {
+      "name": "service-icons-redis",
+      "deleted": true
+    },
+    {
+      "name": "service-icons-whoami",
+      "deleted": true
+    },
+    {
+      "name": "service-icons-nginx",
+      "deleted": true
+    }
+  ],
+  "existingProjectCount": 1,
+  "project": {
+    "name": "service-icons-proof-1793010739664",
+    "projectId": "flXQl75Py_nrweOfyy_ep"
+  },
+  "serviceCount": 16,
+  "existingIconLabels": [
+    "Compose stack",
+    "NGINX",
+    "PostgreSQL",
+    "whoami"
+  ],
+  "nodeLayout": {
+    "width": 240,
+    "height": 78,
+    "badgeWidth": 36
+  },
+  "drawerBadgeWidth": 44,
+  "externalImageRequests": [],
+  "browserAssertions": "passed",
+  "videoSource": "/workspace/sy-codex-notes/fix/service-icons-proof/page@1f7913662963c4dff7cebf3033cde60f.webm",
+  "projectDeleted": true,
+  "video": "service-icons.mp4",
+  "videoDurationSeconds": 12.36,
+  "checks": {
+    "lint": "passed",
+    "typescript": "passed",
+    "vitest": "118 passed",
+    "dockerBuild": "passed",
+    "gitDiffCheck": "passed"
+  }
+}
