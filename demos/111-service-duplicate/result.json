@@ -1,0 +1,43 @@
+{
+  "projectName": "service-duplicate-proof-mvp0whzg",
+  "sourceName": "service-duplicate-source-mvp0whzg",
+  "copyName": "service-duplicate-source-mvp0whzg-copy",
+  "environmentName": "service-duplicate-env-mvp0whzg",
+  "sourceVolumeName": "service-duplicate-volume-mvp0whzg",
+  "screenshots": [
+    "01-source-compose-volume.png",
+    "02-source-variables.png",
+    "03-source-running.png",
+    "04-duplicate-defaults.png",
+    "05-name-collision.png",
+    "06-created-before-deploy.png",
+    "07-copy-variables.png",
+    "08-copy-compose-fresh-volume.png",
+    "09-copy-no-domain.png",
+    "10-both-running.png",
+    "11-canvas-duplicate-dialog.png",
+    "12-cleaned-up.png"
+  ],
+  "checks": {
+    "sourceRunning": true,
+    "defaultNameAndCurrentEnvironment": true,
+    "environmentOptionsStayWithinProject": true,
+    "nameCollisionRejected": true,
+    "createdWithoutDeploying": true,
+    "copyRunning": true,
+    "environmentCopied": true,
+    "freshVolumeName": true,
+    "noCopiedDomain": true,
+    "canvasContextMenu": true
+  },
+  "cleanup": {
+    "project": "deleted via dashboard",
+    "service-duplicate-source-mvp0whzg-copy": "deleted via dashboard project cascade",
+    "service-duplicate-source-mvp0whzg": "deleted via dashboard project cascade",
+    "runtimeContainersAndVolumes": "Deleted through dedicated Dokploy APIs; Docker verification confirms absent.",
+    "dashboard": "Session dashboard and data volume deleted through Dokploy APIs."
+  },
+  "environmentId": "kcM10BBQiccattnzT-Plp",
+  "copiedVolumeName": "service-duplicate-source-mvp0whz-793d756e-a72e-4c91-9dce-eb42ead89c80-1",
+  "video": "service-duplicate-proof.mp4"
+}

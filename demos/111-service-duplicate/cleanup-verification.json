@@ -1,0 +1,11 @@
+{
+  "method": "Dokploy docker.stopContainer, docker.removeContainer, dockerVolume.removeVolume APIs",
+  "containersAbsent": [
+    "2fe3697ef271",
+    "e06c11b85876",
+    "47d948ea5428",
+    "sy-service-duplicate"
+  ],
+  "remainingProofVolumes": [],
+  "dashboardRemoved": true
+}
