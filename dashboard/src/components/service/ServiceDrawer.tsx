@@ -67,6 +67,8 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
+import { DiagnosisCard } from "@/components/service/DiagnosisCard";
 
 type TabId =
   | "overview"
@@ -363,6 +365,13 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
         ? COMPOSE_TABS
         : DB_TABS;
   const tabs = service && isPostgresService(service) ? withDataTab(baseTabs) : baseTabs;
+  const latestDeployment = service && service.kind !== "database"
+    ? [...service.deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    : undefined;
+  function openDiagnosisTab(target: DiagnosisTab) {
+    setTab(target);
+    document.getElementById(`drawer-tab-${target}`)?.focus();
+  }
 
   return (
     <AnimatePresence>
@@ -442,6 +451,16 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               tabIndex={0}
               className="flex-1 overflow-auto p-5"
             >
+              {tab === "overview" && service.kind !== "database" && latestDeployment?.status === "error" && (
+                <div className="mb-5">
+                  <DiagnosisCard
+                    key={latestDeployment.deploymentId}
+                    deploymentId={latestDeployment.deploymentId}
+                    serviceKind={service.kind}
+                    onNavigate={openDiagnosisTab}
+                  />
+                </div>
+              )}
               {tab === "overview" &&
                 (service.kind === "database" ? (
                   <OverviewTab db={service} />
@@ -461,10 +480,10 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 <ComposeDomainsTab compose={service} />
               )}
               {tab === "deployments" && service.kind === "application" && (
-                <DeploymentsTab app={service} />
+                <DeploymentsTab app={service} onNavigate={openDiagnosisTab} />
               )}
               {tab === "deployments" && service.kind === "compose" && (
-                <DeploymentHistory deployments={service.deployments} />
+                <DeploymentHistory deployments={service.deployments} serviceKind="compose" onNavigate={openDiagnosisTab} />
               )}
               {tab === "schedules" && service.kind === "application" && (
                 <SchedulesTab app={service} />

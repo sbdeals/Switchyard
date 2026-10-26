@@ -64,6 +64,8 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
+import { DiagnosisCard } from "@/components/service/DiagnosisCard";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -366,11 +368,11 @@ export function DomainsTab({ app }: { app: Application }) {
   );
 }
 
-export function DeploymentsTab({ app }: { app: Application }) {
+export function DeploymentsTab({ app, onNavigate }: { app: Application; onNavigate: (tab: DiagnosisTab) => void }) {
   return (
     <div className="space-y-6">
       {app.sourceType === "git" && <AutoDeployPanel app={app} />}
-      <DeploymentHistory deployments={app.deployments} />
+      <DeploymentHistory deployments={app.deployments} serviceKind="application" onNavigate={onNavigate} />
     </div>
   );
 }
@@ -492,7 +494,11 @@ function AutoDeployPanel({ app }: { app: Application }) {
   );
 }
 
-export function DeploymentHistory({ deployments: history }: { deployments: AppDeployment[] }) {
+export function DeploymentHistory({ deployments: history, serviceKind, onNavigate }: {
+  deployments: AppDeployment[];
+  serviceKind: "application" | "compose";
+  onNavigate: (tab: DiagnosisTab) => void;
+}) {
   const deployments = [...history].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const color = (s: string) =>
     s === "done" ? "var(--color-ok)" : s === "error" ? "var(--color-danger)" : s === "running" ? "var(--color-warn)" : "var(--color-idle)";
@@ -505,20 +511,25 @@ export function DeploymentHistory({ deployments: history }: { deployments: AppDe
         deployments.map((d) => (
           <div
             key={d.deploymentId}
-            className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
+            className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
           >
-            <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
-            {d.rollbackId && <span className="sr-only">{d.status}</span>}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm">{d.title}</div>
-              <div className="text-[11px] text-[var(--color-fg-subtle)]">
-                {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
+            <div className="flex items-center gap-3">
+              <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
+              {d.rollbackId && <span className="sr-only">{d.status}</span>}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm">{d.title}</div>
+                <div className="text-[11px] text-[var(--color-fg-subtle)]">
+                  {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
+                </div>
               </div>
+              {d.rollbackId ? (
+                <RollbackButton rollbackId={d.rollbackId} title={d.title} />
+              ) : (
+                <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
+              )}
             </div>
-            {d.rollbackId ? (
-              <RollbackButton rollbackId={d.rollbackId} title={d.title} />
-            ) : (
-              <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
+            {d.status === "error" && (
+              <DiagnosisCard deploymentId={d.deploymentId} serviceKind={serviceKind} onNavigate={onNavigate} />
             )}
           </div>
         ))
