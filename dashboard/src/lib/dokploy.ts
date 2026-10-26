@@ -153,6 +153,9 @@ export interface AppDeployment {
   status: string;
   title: string;
   createdAt: string;
+  description: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
   /**
    * Non-null when this deployment produced a restorable image snapshot
    * (Dokploy only records these when the app deploys to a registry). Feeds
@@ -777,6 +780,9 @@ interface RawDeployment {
   status?: string;
   title?: string;
   createdAt?: string;
+  description?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
   rollbackId?: string | null;
 }
 
@@ -798,8 +804,11 @@ function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment
   return (deployments ?? []).map((dp) => ({
     deploymentId: dp.deploymentId,
     status: dp.status ?? "idle",
-    title: dp.title ?? "Deployment",
+    title: dp.title ?? dp.description ?? "Deployment",
     createdAt: dp.createdAt ?? "",
+    description: dp.description ?? null,
+    startedAt: dp.startedAt ?? null,
+    finishedAt: dp.finishedAt ?? null,
     rollbackId: dp.rollbackId ?? null,
   }));
 }

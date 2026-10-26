@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
+import { Activity, Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
+import { ActivityPanel } from "@/components/ActivityPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
@@ -26,15 +27,22 @@ export function Workspace({
 }) {
   const [view, setView] = useState<View>("canvas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedTab, setSelectedTab] = useState<"overview" | "deployments">("overview");
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const router = useRouter();
 
   // Re-resolve the selected service from fresh props so the drawer updates.
   const selected = services.find((s) => s.id === selectedId) ?? null;
 
+  const openService = (id: string) => {
+    setSelectedTab("overview");
+    setSelectedId(id);
+  };
+
   // Open the new service's drawer and pull fresh state in.
   const onDeployed = (id: string) => {
-    setSelectedId(id);
+    openService(id);
     router.refresh();
   };
 
@@ -53,7 +61,7 @@ export function Workspace({
             Apps and databases across your Dokploy projects.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-[var(--color-border-strong)] p-0.5">
             <ViewToggle active={view === "canvas"} onClick={() => setView("canvas")}>
               <Network className="size-3.5" /> Canvas
@@ -69,6 +77,12 @@ export function Workspace({
             <FolderGit2 className="size-3.5" /> Projects
           </button>
           <button
+            onClick={() => setActivityOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+          >
+            <Activity className="size-3.5" /> Activity
+          </button>
+          <button
             onClick={() => router.refresh()}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
           >
@@ -81,19 +95,31 @@ export function Workspace({
       {services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
+        <FlowCanvas services={services} edges={edges} onSelect={(s) => openService(s.id)} />
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {services.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => setSelectedId(s.id)} />
+              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => openService(s.id)} />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
 
-      <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
+      <ServiceDrawer service={selected} initialTab={selectedTab} onClose={() => setSelectedId(null)} />
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
+      {activityOpen && (
+        <ActivityPanel
+          projects={projects}
+          onClose={() => setActivityOpen(false)}
+          onSelect={(entry) => {
+            setActivityOpen(false);
+            setSelectedTab("deployments");
+            setSelectedId(entry.serviceId);
+            router.refresh();
+          }}
+        />
+      )}
       <AgentPanel />
     </div>
     </MotionConfig>
