@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
+import { BUILD_LABELS } from "@/lib/build-plan";
 import { isStopped, serviceLabel } from "@/lib/service-meta";
 import { BRIDGE_NETWORK, managedConnectionString, type ManagedMeta } from "@/lib/managed-compose";
 import { DomainRow } from "@/components/service/AppTabs";
@@ -90,7 +91,9 @@ function ManagedOverview({ compose, managed }: { compose: ComposeService; manage
             <Info label="Source" value={serviceLabel(compose)} />
             <Info label="Repository" value={managed.repoUrl} mono />
             <Info label="Branch" value={managed.branch} mono />
-            <Info label="Build" value={managed.dockerfile ?? "Dockerfile"} mono />
+            <Info label="Built with" value={managed.buildKind
+              ? `${BUILD_LABELS[managed.buildKind]} (auto-detected)` : managed.dockerfile ?? "Dockerfile"} />
+            {managed.buildPort && <Info label="Detected port" value={String(managed.buildPort)} />}
             {managed.subdirectory && <Info label="Subdirectory" value={managed.subdirectory} mono />}
           </>
         ) : <Info label="Image" value={managed.image} mono />}

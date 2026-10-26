@@ -282,7 +282,7 @@ export async function quickDeployImageAction(
   });
 }
 
-/** Deploy a public Git repo: Dockerfile on bridge hosts, Nixpacks on Swarm. */
+/** Deploy a public Git repo: auto-detected builds on bridge hosts, Nixpacks on Swarm. */
 export async function quickDeployRepoAction(
   repoUrl: string,
   branch?: string,
@@ -386,7 +386,7 @@ export async function quickDeployGithubAction(input: {
       throw new Error("Installation, repository and branch are required.");
     if ((await deployTarget()) === "bridge") {
       throw new Error(
-        "GitHub App deploys need Swarm. On this host, deploy a public repo URL with a Dockerfile, or push an image to a registry and deploy the image."
+        "GitHub App deploys need Swarm. On this host, deploy a public repo URL (Dockerfile or auto-detected Node/Python/Go/static app), or push an image to a registry and deploy the image."
       );
     }
     const id = await createApplication(

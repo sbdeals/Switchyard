@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { detectBuildPlan } from "./build-plan";
 import { bridgeImageDomain, imageStack, parseManaged, repoStack, validateRepoSource, withImageEnvFile, withManagedAutoDomain } from "./managed-compose";
 
 const repoInput = { appName: "web-x1", repoUrl: "https://github.com/docker/welcome-to-docker", branch: "main" };
@@ -124,6 +125,34 @@ describe("managed automatic domain metadata", () => {
 });
 
 describe("repoStack", () => {
+  it("embeds the generated Dockerfile with the same remote context and records the builder", () => {
+    const plan = detectBuildPlan({ files: ["requirements.txt", "app.py"], contents: { "requirements.txt": "flask" } });
+    const compose = repoStack({ ...repoInput, subdirectory: "apps/web" }, plan);
+    expect(compose).toContain('      context: "https://github.com/docker/welcome-to-docker.git#main:apps/web"\n');
+    expect(compose).toContain("      dockerfile_inline: |\n        FROM python:3.12-slim\n");
+    expect(compose).toContain("0.0.0.0:$$PORT");
+    expect(compose).not.toContain("      dockerfile:");
+    expect(parseManaged(compose)).toMatchObject({ buildKind: "python", buildPort: 8000 });
+    // Reverse Compose's interpolation escape to recover the exact Dockerfile.
+    const inline = compose.split("      dockerfile_inline: |\n")[1].split("    image:")[0]
+      .split("\n").filter(Boolean).map((line) => line.slice(8).replaceAll("$$", "$")).join("\n") + "\n";
+    expect(inline).toBe(plan.dockerfileInline);
+  });
+
+  it("leaves Dockerfile compose output byte-for-byte unchanged", () => {
+    const plan = detectBuildPlan({ files: ["Dockerfile"], contents: {} });
+    expect(repoStack(repoInput, plan)).toBe(repoStack(repoInput));
+    const custom = { ...repoInput, dockerfile: "docker/Production" };
+    expect(repoStack(custom, plan)).toBe(repoStack(custom));
+  });
+
+  it("ignores invalid or nested builder metadata", () => {
+    const compose = repoStack(repoInput);
+    for (const fields of ["  buildKind: rust\n  buildPort: 8080", "  buildKind: node\n  buildPort: 0", "  buildKind: node\n  buildPort: 65536", "  nested:\n    buildKind: node\n    buildPort: 80"]) {
+      expect(parseManaged(compose.replace("services:", `${fields}\nservices:`))).not.toHaveProperty("buildKind");
+    }
+  });
+
   it("builds the branch head with the shared bridge, variables, and a local image", () => {
     const compose = repoStack(repoInput);
     expect(parseManaged(compose)).toEqual({

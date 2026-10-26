@@ -48,12 +48,101 @@ describe("parseDockerfileExposedPorts", () => {
 
 const source = { repoUrl: "https://github.com/team/app", branch: "main" };
 let fetchRepoExposedPorts: typeof import("./repo-port").fetchRepoExposedPorts;
+let fetchRepoBuildFiles: typeof import("./repo-port").fetchRepoBuildFiles;
 
 beforeEach(async () => {
   vi.resetModules();
   vi.stubEnv("REPO_DOCKERFILE_TIMEOUT_MS", "25");
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("FROM alpine\nEXPOSE 8080")));
-  ({ fetchRepoExposedPorts } = await import("./repo-port"));
+  ({ fetchRepoExposedPorts, fetchRepoBuildFiles } = await import("./repo-port"));
+});
+
+describe("fetchRepoBuildFiles", () => {
+  function publicFiles(contents: Record<string, string>) {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const path = new URL(String(input)).pathname.split("/main/")[1];
+      return path in contents ? new Response(contents[path]) : new Response("missing", { status: 404 });
+    });
+  }
+
+  it("stops after finding a Dockerfile without inspecting other manifests", async () => {
+    publicFiles({ Dockerfile: "FROM nginx:alpine", "package.json": "{}" });
+    expect(await fetchRepoBuildFiles(source)).toEqual({ files: ["Dockerfile"], contents: {} });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["https://github.com/team/app", "https://raw.githubusercontent.com/team/app/main/apps/web/package.json"],
+    ["https://gitlab.com/team/group/app", "https://gitlab.com/team/group/app/-/raw/main/apps/web/package.json"],
+    ["https://bitbucket.org/team/app", "https://bitbucket.org/team/app/raw/main/apps/web/package.json"],
+  ])("discovers manifests in the selected subdirectory on %s", async (repoUrl, rawUrl) => {
+    publicFiles({ "apps/web/package.json": '{"main":"index.js"}', "apps/web/index.js": "" });
+    expect(await fetchRepoBuildFiles({ ...source, repoUrl, subdirectory: "apps/web" })).toEqual({
+      files: ["package.json", "index.js"], contents: { "package.json": '{"main":"index.js"}', "index.js": "" },
+    });
+    expect(fetch).toHaveBeenCalledWith(rawUrl, expect.objectContaining({ credentials: "omit", redirect: "error" }));
+    expect(fetch).toHaveBeenCalledTimes(17);
+  });
+
+  it("checks lockfile presence without downloading a large body", async () => {
+    publicFiles({ "package.json": "{}" });
+    const otherFiles = vi.mocked(fetch).getMockImplementation()!;
+    const cancel = vi.fn();
+    vi.mocked(fetch).mockImplementation((input, init) => String(input).endsWith("/package-lock.json")
+      ? Promise.resolve(new Response(new ReadableStream({ cancel }), { headers: { "Content-Length": "999999" } }))
+      : otherFiles(input, init));
+    expect((await fetchRepoBuildFiles(source))?.files).toContain("package-lock.json");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("checks Django's WSGI path from manage.py without listing a tree", async () => {
+    publicFiles({ "requirements.txt": "django", "manage.py": 'os.environ.setdefault("DJANGO_SETTINGS_MODULE", "project.settings")', "project/wsgi.py": "" });
+    expect((await fetchRepoBuildFiles(source))?.files).toContain("project/wsgi.py");
+    expect(fetch).toHaveBeenLastCalledWith("https://raw.githubusercontent.com/team/app/main/project/wsgi.py", expect.any(Object));
+    expect(fetch).toHaveBeenCalledTimes(18);
+  });
+
+  it("returns confirmed absence for the detector to explain", async () => {
+    publicFiles({});
+    expect(await fetchRepoBuildFiles(source)).toEqual({ files: [], contents: {} });
+  });
+
+  it.each([
+    { repoUrl: "https://git.example.com/team/app" },
+    { dockerfile: "docker/production.Dockerfile" },
+    { subdirectory: "../web" },
+  ])("preserves the Dockerfile path for unsupported or explicit sources: %j", async (patch) => {
+    expect(await fetchRepoBuildFiles({ ...source, ...patch })).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([403, 429, 500])("does not treat HTTP %s as absence", async (status) => {
+    vi.mocked(fetch).mockResolvedValue(new Response("unavailable", { status }));
+    expect(await fetchRepoBuildFiles(source)).toBeNull();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("falls back if a manifest exceeds the content cap or a lookup fails", async () => {
+    publicFiles({ "package.json": "x".repeat(128 * 1024 + 1) });
+    expect(await fetchRepoBuildFiles(source)).toBeNull();
+    vi.mocked(fetch).mockRejectedValue(new Error("offline"));
+    expect(await fetchRepoBuildFiles(source)).toBeNull();
+  });
+
+  it("shares one deadline across Dockerfile and manifest discovery", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).endsWith("/Dockerfile")) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return new Response("missing", { status: 404 });
+      }
+      return new Promise<Response>(() => {});
+    });
+    const result = fetchRepoBuildFiles(source);
+    await vi.advanceTimersByTimeAsync(25);
+    expect(await result).toBeNull();
+    expect(vi.mocked(fetch).mock.calls.every(([, init]) => init?.signal?.aborted)).toBe(true);
+  });
 });
 
 afterEach(() => {
