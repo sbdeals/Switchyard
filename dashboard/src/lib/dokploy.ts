@@ -401,14 +401,16 @@ export async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
     res = attempt!;
   } catch (e) {
     if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
-      throw new Error(`Dokploy ${path} timed out after ${DOKPLOY_TIMEOUT_MS}ms.`);
+      throw new Error(`Dokploy ${path} timed out after ${DOKPLOY_TIMEOUT_MS}ms.`, { cause: e });
     }
     throw e;
   }
   if (res.status === 401) redirect("/login");
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Dokploy ${path} failed (${res.status}): ${body.slice(0, 300)}`);
+    throw Object.assign(new Error(`Dokploy ${path} failed (${res.status}): ${body.slice(0, 300)}`), {
+      status: res.status,
+    });
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : null) as T;

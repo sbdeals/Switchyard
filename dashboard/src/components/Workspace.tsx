@@ -10,6 +10,7 @@ import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
+import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { cn } from "@/lib/utils";
 
@@ -81,7 +82,9 @@ export function Workspace({
       {services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
+        <PanelErrorBoundary>
+          <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
+        </PanelErrorBoundary>
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
