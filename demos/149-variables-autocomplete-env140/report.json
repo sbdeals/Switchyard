@@ -1,0 +1,138 @@
+{
+  "base": "http://127.0.0.1:3080",
+  "slug": "variables-autocomplete-env140-mvp7i8aa-3a6c",
+  "startedAt": "2026-10-26T12:02:04.786Z",
+  "checks": [
+    {
+      "name": "Dashboard server action identifiers discovered from its own scripts",
+      "passed": true
+    },
+    {
+      "name": "Before opening Variables: HTML has both fixtures and neither sentinel",
+      "passed": true,
+      "bytes": 94937,
+      "sha256": "03a827b23303082ab1a06a3d690d02815b3ea27c4e5cd00275ca625618679670"
+    },
+    {
+      "name": "Before opening Variables: RSC has both fixtures and neither sentinel",
+      "passed": true,
+      "bytes": 32729,
+      "sha256": "4e21c083beab3213bfaea5231d7082873c9731948b421d453b5cc488b443818b"
+    },
+    {
+      "name": "Before opening Variables: all service envs and database passwords are null; sibling suggestions carry key names only",
+      "passed": true,
+      "services": 15
+    },
+    {
+      "name": "Created two isolated compose resources via dashboard API; no published ports or domains",
+      "passed": true
+    },
+    {
+      "name": "Overview opens without any environment-load action",
+      "passed": true
+    },
+    {
+      "name": "Current service loads on demand; table/raw modes share a clean loaded baseline",
+      "passed": true
+    },
+    {
+      "name": "Sibling SOURCE_KEY is suggested by name and inserts its reference without loading sibling values",
+      "passed": true
+    },
+    {
+      "name": "Unsaved local key autocomplete works with Tab; table/raw round trips preserve references and comments",
+      "passed": true
+    },
+    {
+      "name": "Staged review masks values; edits neither save nor deploy before Deploy is clicked",
+      "passed": true
+    },
+    {
+      "name": "One staged deployment applies all edits; running throwaway container receives resolved sibling and local references",
+      "passed": true
+    },
+    {
+      "name": "After saving and reloading: HTML has both fixtures and neither sentinel",
+      "passed": true,
+      "bytes": 95292,
+      "sha256": "49ddcf638a91437ed40bfc3fcf3f590289ec5f12fac24b0706338fc0a3f009b0"
+    },
+    {
+      "name": "After saving and reloading: RSC has both fixtures and neither sentinel",
+      "passed": true,
+      "bytes": 33054,
+      "sha256": "62f6fb2525130bd383ea614fe65de27ee86454ea9b0c2a53fa09dbe8516d961f"
+    },
+    {
+      "name": "After saving and reloading: all service envs and database passwords are null; sibling suggestions carry key names only",
+      "passed": true,
+      "services": 15
+    },
+    {
+      "name": "Reload preserves editable templates; editing and reverting uses the new saved baseline",
+      "passed": true
+    },
+    {
+      "name": "No browser request ever loads sibling env, and validation never returns sibling values",
+      "passed": true,
+      "currentEnvLoads": 3,
+      "validationRequests": 6
+    },
+    {
+      "name": "All created resources deleted through dashboard API and absent from fresh RSC",
+      "passed": true
+    }
+  ],
+  "screenshots": [
+    "01-before-variables.png",
+    "02-loading-clean.png",
+    "03-loaded-clean.png",
+    "04-sibling-key-autocomplete.png",
+    "05-unsaved-local-key-autocomplete.png",
+    "06-raw-table-parity.png",
+    "07-masked-staged-review.png",
+    "08-saved-clean.png",
+    "09-one-deployment.png",
+    "10-reloaded-clean-baseline.png"
+  ],
+  "cleanup": [
+    {
+      "kind": "target",
+      "id": "AYCFFqZs-96jns2WZogq4",
+      "deleted": true
+    },
+    {
+      "kind": "source",
+      "id": "VeENvsTu5k3Lj5LxYBFDw",
+      "deleted": true
+    },
+    {
+      "kind": "project",
+      "id": "NnIXvwO662vZ1tyGYKaDx",
+      "deleted": true
+    }
+  ],
+  "fixtures": {
+    "names": {
+      "project": "variables-autocomplete-env140-mvp7i8aa-3a6c-project",
+      "source": "variables-autocomplete-env140-mvp7i8aa-3a6c-source",
+      "target": "variables-autocomplete-env140-mvp7i8aa-3a6c-target"
+    },
+    "projectId": "NnIXvwO662vZ1tyGYKaDx",
+    "environmentId": "vNo0kXAFQpTozrazWPQ-r",
+    "sourceId": "VeENvsTu5k3Lj5LxYBFDw",
+    "targetId": "AYCFFqZs-96jns2WZogq4",
+    "targetAppName": "compose-bypass-primary-circuit-ucsw3b"
+  },
+  "passed": true,
+  "video": "flow.mp4",
+  "finishedAt": "2026-10-26T12:02:58.421Z",
+  "globalCleanupCheck": {
+    "checkedAt": "2026-10-26T12:04:28.849Z",
+    "status": 200,
+    "rsc": true,
+    "fixturePrefix": "variables-autocomplete-env140-",
+    "matchingResourcePrefixAbsent": true
+  }
+}
