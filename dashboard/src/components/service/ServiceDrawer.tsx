@@ -39,6 +39,7 @@ import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { ImageUpdatePanel } from "@/components/service/ImageUpdatePanel";
 import {
   AppOverviewTab,
   AppBuildTab,
@@ -450,6 +451,14 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
+              {tab === "overview" && (service.kind !== "application" || service.sourceType === "docker") && (
+                <ImageUpdatePanel
+                  key={`${service.kind}:${service.id}:${service.dockerImage}`}
+                  kind={service.kind}
+                  id={service.id}
+                  image={service.dockerImage}
+                />
+              )}
               {tab === "variables" && <VariablesTab service={service} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
               {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
