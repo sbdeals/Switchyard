@@ -1,0 +1,20 @@
+{
+  "origin": "http://127.0.0.1:3047",
+  "checks": [
+    "Fresh canvas does not create a positions key before Tidy",
+    "Existing messy saved positions stay unchanged after reload and idle",
+    "Tidy persists final positions, animates all nodes, and produces no overlapping measured cards",
+    "Undo restores every displayed coordinate and the exact original saved value",
+    "Undo persists through reload",
+    "Repeated Tidy is deterministic and the tidy layout survives reload",
+    "No browser page errors"
+  ],
+  "screenshots": [
+    "01-messy-before.png",
+    "02-tidy-after.png",
+    "03-undo.png",
+    "04-reload-persistence.png"
+  ],
+  "nodeCount": 13,
+  "edgeCount": 0
+}
