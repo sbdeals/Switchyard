@@ -1,0 +1,39 @@
+{
+  "dashboard": "http://127.0.0.1:3052",
+  "projectName": "image-update-check-proof",
+  "composeName": "image-update-check-public-images",
+  "image": "nginx:1.25-alpine",
+  "startedAt": "2026-10-26T09:43:31.999Z",
+  "screenshots": [
+    "01-before-check.png",
+    "02-public-tag-and-pinned.png",
+    "03-manual-recheck.png"
+  ],
+  "publicDigest": "sha256:516475cc129da42866742567714ddc681e5eed7b9ee0b9e9c015e464b4221a00",
+  "images": [
+    {
+      "image": "nginx:1.25-alpine",
+      "runningDigest": "sha256:516475cc129da42866742567714ddc681e5eed7b9ee0b9e9c015e464b4221a00",
+      "registryDigest": "sha256:516475cc129da42866742567714ddc681e5eed7b9ee0b9e9c015e464b4221a00",
+      "status": "up-to-date",
+      "reason": null,
+      "checkedAt": "2026-10-26T09:43:39.501Z",
+      "serviceName": "image-update-check-tag"
+    },
+    {
+      "image": "nginx@sha256:516475cc129da42866742567714ddc681e5eed7b9ee0b9e9c015e464b4221a00",
+      "runningDigest": "sha256:516475cc129da42866742567714ddc681e5eed7b9ee0b9e9c015e464b4221a00",
+      "registryDigest": null,
+      "status": "unknown",
+      "reason": "This image is pinned by digest; its tag is not checked for updates.",
+      "checkedAt": null,
+      "serviceName": "image-update-check-pinned"
+    }
+  ],
+  "noBackgroundPollingObservedMs": 7000,
+  "manualRecheck": true,
+  "video": "image-update-check.mp4",
+  "composeDeletedViaApi": true,
+  "projectDeletedViaApi": true,
+  "finishedAt": "2026-10-26T09:43:54.115Z"
+}
