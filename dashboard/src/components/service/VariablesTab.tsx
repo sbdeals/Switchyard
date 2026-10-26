@@ -6,7 +6,7 @@ import {
   saveEnvironmentAction,
   saveApplicationEnvAction,
   saveComposeEnvAction,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import { SaveRow, useSavedFlash } from "@/components/service/primitives";
 
 export function VariablesTab({ service }: { service: Service }) {

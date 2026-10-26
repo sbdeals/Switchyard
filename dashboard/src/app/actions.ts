@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
+import { getURLFromRedirectError } from "next/dist/client/components/redirect";
 import {
   createDatabase,
   databaseAction,
@@ -99,13 +101,25 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/action-call";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
-export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
+type ActionFailure = { ok: false; error: string; code?: "unauthenticated" };
+export type ActionResult = { ok: true } | ActionFailure;
+export type QuickDeployResult = { ok: true; id: string } | ActionFailure;
 /** Result of the "Generate URL" action: the freshly-attached host on success. */
-export type GenerateUrlResult = { ok: true; host: string } | { ok: false; error: string };
+export type GenerateUrlResult = { ok: true; host: string } | ActionFailure;
 
-function fail(e: unknown): { ok: false; error: string } {
+function isLoginRedirect(url: string | null): boolean {
+  return url === "/login" || url === "/login?expired=1";
+}
+
+function fail(e: unknown): ActionFailure {
+  // Auth failures during actions must keep the editor mounted. Page/RSC loads
+  // still use Dokploy's redirects directly; all other redirects propagate.
+  if (isRedirectError(e) && isLoginRedirect(getURLFromRedirectError(e))) {
+    return { ok: false, error: SESSION_EXPIRED_MESSAGE, code: "unauthenticated" };
+  }
+  unstable_rethrow(e);
   return { ok: false, error: e instanceof Error ? e.message : String(e) };
 }
 
@@ -116,7 +130,6 @@ async function wrap(fn: () => Promise<unknown>): Promise<ActionResult> {
     revalidatePath("/");
     return { ok: true };
   } catch (e) {
-    unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
   }
 }
@@ -128,7 +141,6 @@ async function wrapId(fn: () => Promise<string>): Promise<QuickDeployResult> {
     revalidatePath("/");
     return { ok: true, id };
   } catch (e) {
-    unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
   }
 }
@@ -140,7 +152,6 @@ async function wrapHost(fn: () => Promise<string>): Promise<GenerateUrlResult> {
     revalidatePath("/");
     return { ok: true, host };
   } catch (e) {
-    unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
   }
 }

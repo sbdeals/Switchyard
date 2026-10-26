@@ -405,7 +405,9 @@ export async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
     }
     throw e;
   }
-  if (res.status === 401) redirect("/login");
+  // Dokploy rejected a locally valid session (revoked/expired upstream). The
+  // marker stops /login bouncing straight back to / on the still-sealed cookie.
+  if (res.status === 401) redirect("/login?expired=1");
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Dokploy ${path} failed (${res.status}): ${body.slice(0, 300)}`);
@@ -2008,7 +2010,9 @@ export async function restoreBackup(input: RestoreBackupInput): Promise<void> {
     headers: { Accept: "text/event-stream", Origin: workingOrigin, Cookie: await userCookie() },
     cache: "no-store",
   });
-  if (res.status === 401) redirect("/login");
+  // Dokploy rejected a locally valid session (revoked/expired upstream). The
+  // marker stops /login bouncing straight back to / on the still-sealed cookie.
+  if (res.status === 401) redirect("/login?expired=1");
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Dokploy restore failed (${res.status}): ${body.slice(0, 300)}`);

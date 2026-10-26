@@ -13,7 +13,7 @@ import {
   renameEnvironmentAction,
   removeEnvironmentAction,
   type ActionResult,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
 
 export function ProjectsPanel({

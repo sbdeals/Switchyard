@@ -30,7 +30,7 @@ import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { connectionString } from "@/lib/connection";
-import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
+import { lifecycleAction, updateDatabaseAction } from "@/lib/client-actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
 import { BackupsTab } from "@/components/service/BackupsTab";

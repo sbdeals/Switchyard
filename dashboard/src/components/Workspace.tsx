@@ -12,6 +12,7 @@ import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { cn } from "@/lib/utils";
+import { SessionExpiredBanner } from "@/lib/client-actions";
 
 type View = "canvas" | "grid";
 
@@ -40,6 +41,7 @@ export function Workspace({
 
   return (
     <MotionConfig reducedMotion="user">
+    <SessionExpiredBanner />
     <div className="mx-auto max-w-7xl px-6 py-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>

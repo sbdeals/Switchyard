@@ -32,7 +32,7 @@ import {
   runDatabaseBackupAction,
   listBackupFilesAction,
   restoreBackupAction,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import { inputCls, Field, useSavedFlash } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
 

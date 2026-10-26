@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from "react";
 import type { Service } from "@/lib/dokploy";
-import { listTemplatesAction } from "@/app/actions";
+import { listTemplatesAction } from "@/lib/client-actions";
 
 // The catalog has no plain database templates (Dokploy deploys engines
 // natively), so databases get official brand marks from devicon (MIT,

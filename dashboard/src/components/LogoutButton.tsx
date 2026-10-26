@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { LogOut } from "lucide-react";
 
-import { logoutAction } from "@/app/login/actions";
+import { logoutAction } from "@/lib/client-actions";
 
 /** Small sign-out control; posts the logout Server Action. */
 export function LogoutButton() {
@@ -12,7 +12,7 @@ export function LogoutButton() {
     <button
       type="button"
       disabled={pending}
-      onClick={() => startTransition(() => logoutAction())}
+      onClick={() => startTransition(async () => { await logoutAction(); })}
       title="Sign out"
       className="fixed right-4 top-4 z-50 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)] disabled:opacity-60"
     >

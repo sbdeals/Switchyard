@@ -18,7 +18,7 @@ import {
   updateMountAction,
   removeMountAction,
   type MountsResult,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import { inputCls, Field } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
 

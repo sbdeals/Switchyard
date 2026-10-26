@@ -48,7 +48,7 @@ import {
   updateScheduleAction,
   deleteScheduleAction,
   runScheduleAction,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import {
   inputCls,
   Field,

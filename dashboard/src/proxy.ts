@@ -15,6 +15,7 @@
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { SESSION_EXPIRED_MESSAGE, signInHref } from "@/lib/action-call";
 
 // Mirror of SESSION_COOKIE in src/lib/session.ts (kept a literal so the proxy
 // bundle stays free of node:crypto).
@@ -31,24 +32,48 @@ function isPublic(pathname: string): boolean {
   return pathname === "/login" || pathname === "/api/health";
 }
 
+export function authDecision(
+  pathname: string,
+  method: string,
+  hasSession: boolean,
+  hasActionHeader: boolean,
+): "allow" | "unauthorized" | "expired-action" | "login" {
+  if (isPublic(pathname) || hasSession) return "allow";
+  // A Next-Action header must never bypass authentication on an API route.
+  if (pathname === "/api" || pathname.startsWith("/api/")) return "unauthorized";
+  if (method === "POST" && hasActionHeader) return "expired-action";
+  return "login";
+}
+
 export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
+  const decision = authDecision(
+    pathname,
+    request.method,
+    request.cookies.has(SESSION_COOKIE),
+    request.headers.has("next-action"),
+  );
 
-  if (isPublic(pathname)) return NextResponse.next();
-  if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next();
+  if (decision === "allow") return NextResponse.next();
 
-  // Unauthenticated. API routes and Server Actions get a 401 (they are called
-  // programmatically); page navigations get a redirect to the login screen.
-  const isApi = pathname.startsWith("/api/");
-  const isServerAction = request.headers.has("next-action");
-  if (isApi || isServerAction) {
+  if (decision === "expired-action") {
+    // Next's action client preserves a text/plain error body (with this exact
+    // content type). callAction catches it and keeps the editor mounted. JSON
+    // would become the generic "unexpected response" error seen in E2E-028.
+    return new NextResponse(SESSION_EXPIRED_MESSAGE, {
+      status: 401,
+      headers: { "Content-Type": "text/plain", "Cache-Control": "no-store" },
+    });
+  }
+
+  if (decision === "unauthorized") {
     return NextResponse.json(
       { error: "Unauthorized. Sign in at /login." },
       { status: 401 },
     );
   }
 
-  const loginUrl = new URL("/login", request.url);
+  const loginUrl = new URL(signInHref(pathname + request.nextUrl.search), request.url);
   return NextResponse.redirect(loginUrl);
 }
 

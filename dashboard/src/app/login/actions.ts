@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { signInToDokploy, signUpToDokploy } from "@/lib/dokploy";
 import { SESSION_COOKIE, SESSION_MAX_AGE, sealSession } from "@/lib/session";
+import { safeReturnTo } from "@/lib/action-call";
 
 export interface LoginState {
   error?: string;
@@ -20,7 +21,7 @@ export interface LoginState {
  * surface, so an unauthenticated POST to /login can reach nothing but these
  * actions.
  */
-async function establishSession(email: string, password: string): Promise<LoginState> {
+async function establishSession(email: string, password: string, next: string): Promise<LoginState> {
   let dokployCookie: string;
   try {
     dokployCookie = await signInToDokploy(email, password);
@@ -45,7 +46,7 @@ async function establishSession(email: string, password: string): Promise<LoginS
   });
 
   // Outside the try/catch: redirect() throws NEXT_REDIRECT by design.
-  redirect("/");
+  redirect(next);
 }
 
 /** Sign in with the user's OWN Dokploy account. */
@@ -55,7 +56,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   if (!email || !password) {
     return { error: "Enter your Dokploy email and password." };
   }
-  return establishSession(email, password);
+  return establishSession(email, password, safeReturnTo(formData.get("next")));
 }
 
 /**
@@ -84,7 +85,7 @@ export async function signupAction(_prev: LoginState, formData: FormData): Promi
         : "Sign-up failed. Is Dokploy running and reachable?",
     };
   }
-  return establishSession(email, password);
+  return establishSession(email, password, safeReturnTo(formData.get("next")));
 }
 
 /** Clear the session and return to the login screen. */

@@ -22,7 +22,7 @@ import {
   deletePortAction,
   createSecurityAction,
   deleteSecurityAction,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 
 export function NetworkingTab({ app }: { app: Application }) {
   return (

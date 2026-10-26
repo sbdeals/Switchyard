@@ -24,7 +24,7 @@ import {
   createComposeAction,
   listTemplatesAction,
   quickDeployTemplateAction,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import { GithubDeployModal } from "@/components/GithubDeployModal";
 import { useDialogFocus } from "@/components/use-focus-trap";
 
