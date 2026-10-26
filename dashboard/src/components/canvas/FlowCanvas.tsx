@@ -16,6 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import type { Service, ServiceEdge } from "@/lib/dokploy";
 import { serviceAccent } from "@/lib/service-meta";
+import { serviceFilterOpacity } from "@/lib/service-filter";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
 
@@ -58,10 +59,12 @@ const nodeTypes = { service: ServiceNode };
 export function FlowCanvas({
   services,
   edges: serviceEdges,
+  matchingIds,
   onSelect,
 }: {
   services: Service[];
   edges: ServiceEdge[];
+  matchingIds: ReadonlySet<string>;
   onSelect: (service: Service) => void;
 }) {
   // Catalog logos for Railway-style node icons (null while the catalog loads).
@@ -176,11 +179,20 @@ export function FlowCanvas({
     <div
       role="region"
       aria-label="Service canvas"
-      className="h-[calc(100vh-9rem)] w-full overflow-hidden rounded-2xl border border-[var(--color-border)]"
+      className="h-[calc(100vh-13rem)] min-h-80 w-full overflow-hidden rounded-2xl border border-[var(--color-border)]"
     >
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={nodes.map((node) => ({
+          ...node,
+          style: { ...node.style, opacity: serviceFilterOpacity(matchingIds.has(node.id)) },
+        }))}
+        edges={edges.map((edge) => ({
+          ...edge,
+          style: {
+            ...edge.style,
+            opacity: serviceFilterOpacity(matchingIds.has(edge.source), matchingIds.has(edge.target)),
+          },
+        }))}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}

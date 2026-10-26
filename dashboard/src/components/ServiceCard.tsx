@@ -70,7 +70,7 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
             {serviceSubtitle(service)}
           </div>
         </div>
-        <StatusBadge status={service.status} />
+        <StatusBadge status={service.status} runtime={service.runtime} />
       </div>
 
       <div className="mt-3 flex items-center justify-between">

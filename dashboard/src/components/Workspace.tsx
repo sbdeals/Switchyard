@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, Search } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
@@ -12,6 +12,14 @@ import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { cn } from "@/lib/utils";
+import {
+  SERVICE_FILTERS,
+  filterServices,
+  readServiceFilter,
+  serviceFilterShortcut,
+  serviceFilterUrl,
+  type ServiceFilter,
+} from "@/lib/service-filter";
 
 type View = "canvas" | "grid";
 
@@ -28,6 +36,41 @@ export function Workspace({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const params = searchParams.toString();
+  const [previousParams, setPreviousParams] = useState(params);
+  const [filter, setFilter] = useState(() => readServiceFilter(searchParams));
+  // Keep typing synchronous (including the caret), while accepting URL changes
+  // from reloads and browser navigation. History updates use a React transition.
+  if (params !== previousParams) {
+    setPreviousParams(params);
+    setFilter(readServiceFilter(searchParams));
+  }
+  const searchRef = useRef<HTMLInputElement>(null);
+  const { matches, counts } = filterServices(services, filter);
+  const matchingIds = new Set(matches.map((service) => service.id));
+  const updateFilter = useCallback((next: ServiceFilter) => {
+    setFilter(next);
+    window.history.replaceState(null, "", serviceFilterUrl(window.location.href, next));
+  }, []);
+  const onSelect = useCallback((service: Service) => setSelectedId(service.id), []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const action = serviceFilterShortcut(event, {
+        editable: !!target?.closest("input, textarea, select, [role='textbox']") || !!target?.isContentEditable,
+        overlayOpen: !!document.querySelector("[role='dialog'], [aria-modal='true'], [role='menu'], [role='combobox'][aria-expanded='true']"),
+        searchFocused: target === searchRef.current,
+      });
+      if (!action) return;
+      event.preventDefault();
+      if (action === "focus") searchRef.current?.focus();
+      else updateFilter({ ...readServiceFilter(new URLSearchParams(window.location.search)), q: "" });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [updateFilter]);
 
   // Re-resolve the selected service from fresh props so the drawer updates.
   const selected = services.find((s) => s.id === selectedId) ?? null;
@@ -76,21 +119,82 @@ export function Workspace({
           </button>
           <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
         </div>
+        <div className="flex w-full flex-wrap items-center gap-3">
+          <div className="relative w-full sm:w-72">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-2.5 size-4 text-[var(--color-fg-subtle)]" />
+            <input
+              ref={searchRef}
+              type="search"
+              aria-label="Search services"
+              aria-describedby="service-search-hint"
+              aria-keyshortcuts="/ Escape"
+              placeholder="Search services…"
+              value={filter.q}
+              onChange={(event) => updateFilter({ ...filter, q: event.target.value })}
+              className="w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] py-2 pl-9 pr-3 text-sm outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
+            />
+          </div>
+          <span id="service-search-hint" className="text-xs text-[var(--color-fg-subtle)]">
+            / to search · Esc to clear
+          </span>
+          <div role="group" aria-label="Filter services by status" className="flex flex-wrap gap-1.5">
+            {SERVICE_FILTERS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={filter.status === value}
+                onClick={() => updateFilter({ ...filter, status: value })}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  filter.status === value
+                    ? "border-[var(--color-brand)] bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                    : "border-[var(--color-border-strong)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+                )}
+              >
+                {label} <span className="tabular-nums">{counts[value]}</span>
+              </button>
+            ))}
+          </div>
+          <span role="status" className="text-xs text-[var(--color-fg-muted)]">
+            {matches.length} of {services.length} services
+          </span>
+        </div>
       </header>
 
-      {services.length === 0 ? (
-        <EmptyState projects={projects} onDeployed={onDeployed} />
-      ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
-      ) : (
-        <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <AnimatePresence mode="popLayout">
-            {services.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => setSelectedId(s.id)} />
-            ))}
-          </AnimatePresence>
-        </motion.div>
-      )}
+      <div className="relative">
+        {services.length > 0 && matches.length === 0 && (
+          <div className={cn(
+            "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-[var(--color-border-strong)] bg-[var(--color-surface)] p-5",
+            view === "canvas" ? "absolute inset-x-4 top-4 z-10" : "mb-4"
+          )}>
+            <div>
+              <h2 className="text-sm font-medium">No services match your filters</h2>
+              <p className="mt-1 text-xs text-[var(--color-fg-muted)]">Try another search or status.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateFilter({ q: "", status: "all" })}
+              className="rounded-lg bg-[var(--color-brand-soft)] px-3 py-2 text-xs font-medium text-[var(--color-brand)] hover:bg-[var(--color-surface-hover)]"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+
+        {services.length === 0 ? (
+          <EmptyState projects={projects} onDeployed={onDeployed} />
+        ) : view === "canvas" ? (
+          <FlowCanvas services={services} edges={edges} matchingIds={matchingIds} onSelect={onSelect} />
+        ) : (
+          <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <AnimatePresence mode="popLayout">
+              {matches.map((s) => (
+                <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => setSelectedId(s.id)} />
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </div>
 
       <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
