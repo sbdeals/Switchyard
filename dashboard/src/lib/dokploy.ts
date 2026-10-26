@@ -2118,7 +2118,7 @@ export async function deployTemplate(
  * services of all kinds (enriched with per-service detail) plus the
  * project/environment tree.
  */
-export async function loadWorkspace(): Promise<{
+export async function loadWorkspace({ includeRuntime = true }: { includeRuntime?: boolean } = {}): Promise<{
   services: Service[];
   projects: ProjectNode[];
 }> {
@@ -2135,6 +2135,7 @@ export async function loadWorkspace(): Promise<{
   // tie containers to services (compose project / swarm service name — both
   // equal the service's appName). Best-effort: with no reachable Docker
   // socket every badge falls back to the deploy status alone.
+  if (!includeRuntime) return { services, projects: projectsFromTree(tree) };
   try {
     const runtime = await listRuntimeStates();
     for (const s of services) {
