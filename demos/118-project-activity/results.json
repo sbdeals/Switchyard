@@ -1,0 +1,31 @@
+{
+  "base": "http://127.0.0.1:3050",
+  "existingDeployments": 26,
+  "services": 12,
+  "projects": 1,
+  "statuses": [
+    "done",
+    "error"
+  ],
+  "requests": 4,
+  "openRefreshSpacingMs": 10227,
+  "cacheControl": "private, max-age=10, must-revalidate",
+  "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch, Cookie",
+  "checks": [
+    "closed before open: zero requests",
+    "newest first",
+    "project/status filters",
+    "empty filter",
+    "absolute time title",
+    "10s open polling",
+    "entry opens service Deploys",
+    "normal service selection resets to Overview",
+    "closed after navigation: no polling",
+    "Escape closes and restores focus",
+    "close button stops polling",
+    "mobile header fits",
+    "unauthenticated request: 401",
+    "no browser exceptions"
+  ],
+  "createdDemoResources": 0
+}
