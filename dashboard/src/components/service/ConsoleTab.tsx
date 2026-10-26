@@ -11,6 +11,9 @@ interface Entry {
   exitCode: number | null;
   truncated: boolean;
   error?: string;
+  shellMissing?: boolean;
+  notice?: string;
+  details?: string;
 }
 
 interface ExecResponse {
@@ -19,13 +22,16 @@ interface ExecResponse {
   exitCode?: number | null;
   truncated?: boolean;
   error?: string;
+  shellMissing?: boolean;
+  notice?: string;
+  details?: string;
 }
 
 /**
  * A non-interactive, in-deployment console: each submitted line runs as
- * `sh -c <cmd>` inside the service's container (via /api/services/exec) and the
- * output is appended to the transcript. Not a live PTY — see the route handler
- * for why — but it covers "run commands inside the container".
+ * `sh -c <cmd>` inside the service's container, falling back to direct argv
+ * when sh is absent. Output is appended to the transcript. Not a live PTY — see
+ * the route handler for why — but it covers "run commands inside the container".
  */
 export function ConsoleTab({ appName }: { appName: string }) {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -37,6 +43,7 @@ export function ConsoleTab({ appName }: { appName: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const hasRun = useRef(false);
+  const shellMissing = entries[entries.length - 1]?.shellMissing;
 
   // The input is disabled while a command runs, which drops focus to <body>;
   // give it back when the command finishes. Skip the initial render so the
@@ -72,6 +79,9 @@ export function ConsoleTab({ appName }: { appName: string }) {
         exitCode: data.exitCode ?? null,
         truncated: data.truncated ?? false,
         error: res.ok ? undefined : data.error ?? `HTTP ${res.status}`,
+        shellMissing: data.shellMissing,
+        notice: data.notice,
+        details: data.details,
       };
     } catch (e) {
       entry = {
@@ -126,10 +136,14 @@ export function ConsoleTab({ appName }: { appName: string }) {
     <div className="flex h-full flex-col">
       <div className="mb-3 flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
         <TerminalSquare className="size-4" />
-        <span>
+        {shellMissing ? <span>
+          This image has no shell (distroless/scratch). Commands run directly, without pipes or
+          variables: call the image&apos;s own executable by path, e.g.{" "}
+          <code className="font-mono text-[var(--color-fg)]">/app --help</code>.
+        </span> : <span>
           Runs <code className="font-mono text-[var(--color-fg)]">sh -c</code> inside the container.
           One command per line.
-        </span>
+        </span>}
       </div>
 
       <div
@@ -141,8 +155,7 @@ export function ConsoleTab({ appName }: { appName: string }) {
       >
         {entries.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[var(--color-fg-subtle)]">
-            Try <span className="mx-1 text-[var(--color-fg-muted)]">ls -la</span> or
-            <span className="ml-1 text-[var(--color-fg-muted)]">env</span>
+            Run a command included in your image (for example, /whoami --help for the whoami sample).
           </div>
         ) : (
           entries.map((en) => (
@@ -167,6 +180,13 @@ export function ConsoleTab({ appName }: { appName: string }) {
                   <span className="sr-only">error: </span>
                   {en.error}
                 </pre>
+              )}
+              {en.notice && <p className="text-[var(--color-fg-muted)]">{en.notice}</p>}
+              {en.details && (
+                <details className="text-[var(--color-fg-subtle)]">
+                  <summary className="cursor-pointer">Details</summary>
+                  <pre className="whitespace-pre-wrap break-all">{en.details}</pre>
+                </details>
               )}
               {(en.exitCode ?? 0) !== 0 && en.exitCode !== null && (
                 <div className="text-[10px] text-[var(--color-fg-subtle)]">

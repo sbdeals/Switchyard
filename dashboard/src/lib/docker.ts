@@ -299,9 +299,9 @@ export interface ExecResult {
 
 /**
  * Run a single command inside a container (non-interactive) and return its
- * captured output. We use `sh -c` — the most universal shell — so pipes and
- * builtins work; images without even `sh` surface Docker's "exec failed" error,
- * which the caller relays. `Tty:false` keeps stdout/stderr on Docker's
+ * captured output. Strings run via `sh -c` so pipes and builtins work; an argv
+ * array runs directly, including in images without a shell.
+ * `Tty:false` keeps stdout/stderr on Docker's
  * multiplexed frame format so we can demux them apart. Output is capped and the
  * exec is abandoned after `timeoutMs` to bound a runaway command.
  *
@@ -311,7 +311,7 @@ export interface ExecResult {
  */
 export async function runExec(
   appName: string,
-  command: string,
+  command: string | string[],
   opts: { timeoutMs?: number; maxBytes?: number } = {}
 ): Promise<ExecResult | null> {
   const id = await findContainerId(appName);
@@ -321,7 +321,7 @@ export async function runExec(
 
   const exec = await withTimeout(
     container.exec({
-      Cmd: ["sh", "-c", command],
+      Cmd: Array.isArray(command) ? command : ["sh", "-c", command],
       AttachStdin: false,
       AttachStdout: true,
       AttachStderr: true,

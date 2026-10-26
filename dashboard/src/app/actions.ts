@@ -34,6 +34,7 @@ import {
   saveApplicationEnvironment,
   createDomain,
   createComposeDomain,
+  domainHttpsConfigured,
   ensureAutoDomain,
   generateHostFor,
   updateDomain,
@@ -99,6 +100,7 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { domainTlsOptions } from "@/lib/domain-https";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -423,7 +425,21 @@ export async function createDomainAction(
   applicationId: string,
   input: DomainInput
 ): Promise<ActionResult> {
-  return wrap(() => createDomain(applicationId, { ...input, host: input.host.trim() }));
+  return wrap(() => createDomain(applicationId, {
+    ...input,
+    host: input.host.trim(),
+    https: input.https === true,
+    certificateType: input.https === true ? input.certificateType : "none",
+  }));
+}
+
+export async function domainHttpsConfiguredAction(): Promise<boolean | null> {
+  try {
+    return await domainHttpsConfigured();
+  } catch (e) {
+    unstable_rethrow(e);
+    return null;
+  }
 }
 
 export async function updateDomainAction(
@@ -466,9 +482,10 @@ export async function createComposeDomainAction(
   composeId: string,
   serviceName: string,
   host: string,
-  port: number
+  port: number,
+  https: boolean
 ): Promise<ActionResult> {
-  return wrap(() => createComposeDomain(composeId, serviceName.trim(), host.trim(), port));
+  return wrap(() => createComposeDomain(composeId, serviceName.trim(), host.trim(), port, domainTlsOptions(https)));
 }
 
 /**
