@@ -1,0 +1,32 @@
+{
+  "slug": "secret-redaction-d1b50270d9",
+  "base": "http://127.0.0.1:3073",
+  "checks": [
+    "Created undeployed app, its webhook, and inline-secret compose fixture through local API",
+    "Initial HTML and RSC contain no fixture credentials or inline sentinels",
+    "Webhook remains masked until Reveal; Copy fetches and copies while masked",
+    "Git settings save preserves stored credential-bearing URL",
+    "Build and health-check editors fetch inline commands on opening",
+    "Server-computed compose metadata retains Data tab and Networking service suggestions",
+    "Compose save round-trips inline secret and edited YAML; reopening refetches exact text",
+    "Neither fixture was cloned or deployed (zero deployments)",
+    "Initial HTML and RSC contain no fixture credentials or inline sentinels"
+  ],
+  "cleanup": [
+    "application.delete",
+    "compose.delete",
+    "project.remove",
+    "Verified throwaway project absent from project.all"
+  ],
+  "video": "/workspace/sy-codex-notes/fix/secret-redaction-proof/secret-redaction-proof.mp4",
+  "review": "r1: restored sanitized workspace and settings error details",
+  "validation": {
+    "dashboard": "cd dashboard && npm run lint && npx tsc --noEmit && npx vitest run",
+    "result": "PASS: lint, TypeScript, 9 test files / 244 tests",
+    "dockerBuild": "sudo docker build -q -t switchyard-dash:secret-redaction dashboard",
+    "dockerBuildResult": "PASS",
+    "localStart": "/tmp/runsy.sh sy-secret-redaction 3073 secret-redaction",
+    "localStartResult": "HTTP 200",
+    "diffCheck": "git diff --check: PASS"
+  }
+}
