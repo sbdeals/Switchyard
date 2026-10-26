@@ -1,0 +1,23 @@
+domain host demo.localhost: HTTPS checked=false, certificate=None (HTTP); hints=["Certificate","Let's Encrypt","HTTPS"]
+domain host app.127.0.0.1.sslip.io: HTTPS checked=false, certificate=None (HTTP); hints=["Certificate","Let's Encrypt","HTTPS"]
+domain host shop.example.com: HTTPS checked=false, certificate=None (HTTP); hints=["Certificate","Let's Encrypt","HTTPS"]
+--- console: printf x
+exit 126
+--- console: /whoami --help
+/whoami --help
+stderr:
+Usage of /whoami:
+  -cacert string
+    	give me a CA chain, enforces mutual TLS
+  -cert string
+    	give me a certificate
+  -key string
+    	give me a key
+  -name string
+    	give me a name
+  -port string
+    	give me a port number (default "80")
+  -verbose
+    	Enable verbose logging
+
+Details
