@@ -1,0 +1,58 @@
+{
+  "base": "http://127.0.0.1:3055",
+  "service": "beginner-html-site-styled-rys8",
+  "checks": [
+    "Missing preference stays dark even on light system",
+    "Light placeholders use the tested subtle-text token",
+    "Light selection persists across reload",
+    "Inline script sets persisted light palette with hydration scripts blocked",
+    "Local demo login succeeded",
+    "light: canvas, grid, drawer Overview/Logs/Variables/Settings, QuickDeployMenu, dialog",
+    "dark: canvas, grid, drawer Overview/Logs/Variables/Settings, QuickDeployMenu, dialog",
+    "Canvas background, dots, MiniMap and mask resolve themed colors",
+    "System switches live via emulateMedia and updates React Flow",
+    "Explicit Dark ignores live system changes",
+    "Preference updates propagate across tabs",
+    "375px header reserves room for theme and sign-out controls",
+    "Blocked storage still allows current-page selection and safely reloads dark",
+    "Invalid stored value reloads dark",
+    "No browser page errors"
+  ],
+  "screenshots": [
+    "login-dark.png",
+    "login-light.png",
+    "canvas-light.png",
+    "grid-light.png",
+    "drawer-overview-light.png",
+    "drawer-logs-light.png",
+    "drawer-variables-light.png",
+    "drawer-settings-light.png",
+    "quick-deploy-light.png",
+    "dialog-light.png",
+    "canvas-dark.png",
+    "grid-dark.png",
+    "drawer-overview-dark.png",
+    "drawer-logs-dark.png",
+    "drawer-variables-dark.png",
+    "drawer-settings-dark.png",
+    "quick-deploy-dark.png",
+    "dialog-dark.png",
+    "system-light.png",
+    "system-dark.png",
+    "mobile-light.png"
+  ],
+  "pageErrors": [],
+  "lightCanvasColors": {
+    "background": "rgb(250, 249, 252)",
+    "minimap": "rgb(255, 255, 255)",
+    "mask": "rgba(250, 249, 252, 0.8)",
+    "dots": "rgba(101, 94, 114, 0.25)"
+  },
+  "darkCanvasColors": {
+    "background": "rgb(10, 10, 15)",
+    "minimap": "rgb(18, 18, 26)",
+    "mask": "rgba(10, 10, 15, 0.8)",
+    "dots": "rgba(255, 255, 255, 0.17)"
+  },
+  "video": "/workspace/sy-codex-notes/fix/light-theme-proof/video/page@f8c176e917e212cc581290beca1889de.webm"
+}
