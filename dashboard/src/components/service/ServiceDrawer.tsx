@@ -49,6 +49,8 @@ import {
   SchedulesTab,
 } from "@/components/service/AppTabs";
 import { NetworkingTab } from "@/components/service/networking";
+import { PortConflictWarning, type PortConflictProps } from "@/components/service/PortConflictWarning";
+import { getPortWarnings, isValidPort } from "@/lib/port-conflicts";
 import {
   ComposeOverviewTab,
   ComposeEditorTab,
@@ -344,7 +346,7 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
+export function ServiceDrawer({ service, services, onSelectService, onClose }: PortConflictProps & { service: Service | null; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
@@ -455,7 +457,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
               {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
               {tab === "domains" && service.kind === "application" && (
-                <NetworkingTab app={service} />
+                <NetworkingTab app={service} services={services} onSelectService={onSelectService} />
               )}
               {tab === "domains" && service.kind === "compose" && (
                 <ComposeDomainsTab compose={service} />
@@ -470,7 +472,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 <SchedulesTab app={service} />
               )}
               {tab === "editor" && service.kind === "compose" && (
-                <ComposeEditorTab compose={service} />
+                <ComposeEditorTab compose={service} services={services} onSelectService={onSelectService} />
               )}
               {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
@@ -479,7 +481,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               {tab === "backups" && service.kind === "database" && <BackupsTab db={service} />}
               {tab === "settings" &&
                 (service.kind === "database" ? (
-                  <SettingsTab db={service} onClose={onClose} />
+                  <SettingsTab db={service} services={services} onSelectService={onSelectService} onClose={onClose} />
                 ) : service.kind === "compose" ? (
                   <ComposeSettingsTab compose={service} onClose={onClose} />
                 ) : (
@@ -582,7 +584,7 @@ function OverviewTab({ db }: { db: Database }) {
   );
 }
 
-function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
+function SettingsTab({ db, services, onSelectService, onClose }: PortConflictProps & { db: Database; onClose: () => void }) {
   const { pending: lifePending, error: lifeError, run } = useDbLifecycle(db);
   const meta = ENGINE_META[db.engine];
   const currentVersion = db.dockerImage?.split(":")[1] ?? meta.versions[0];
@@ -595,20 +597,24 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [saveError, setSaveError] = useState<string | null>(null);
+  const portChanged = port !== (db.externalPort != null ? String(db.externalPort) : "");
+  const validPort = !port || isValidPort(Number(port));
+  const warnings = getPortWarnings(services, db.id, portChanged && port ? [{ port: Number(port), protocol: "tcp" }] : []);
 
   const dirty =
     name !== db.name ||
     version !== currentVersion ||
-    port !== (db.externalPort != null ? String(db.externalPort) : "") ||
+    portChanged ||
     cpu !== (db.cpuLimit ?? "") ||
     mem !== (db.memoryLimit ?? "");
 
   function save() {
+    if (!validPort) return;
     setSaveError(null);
     const patch: DatabasePatch = {};
     if (name !== db.name) patch.name = name.trim();
     if (version !== currentVersion) patch.dockerImage = `${meta.image}:${version}`;
-    if (port !== (db.externalPort != null ? String(db.externalPort) : ""))
+    if (portChanged)
       patch.externalPort = port ? Number(port) : null;
     if (cpu !== (db.cpuLimit ?? "")) patch.cpuLimit = cpu || null;
     if (mem !== (db.memoryLimit ?? "")) patch.memoryLimit = mem || null;
@@ -650,7 +656,9 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
             <input value={mem} onChange={(e) => setMem(e.target.value)} placeholder="unlimited" className={inputCls} />
           </Field>
         </div>
-        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
+        <PortConflictWarning warnings={warnings} onSelectService={onSelectService} />
+        {!validPort && <p role="alert" className="text-xs text-[var(--color-danger)]">Use a port from 1 to 65535, or leave it blank.</p>}
+        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty || !validPort} onSave={save} label={warnings.length ? "Save anyway" : "Save changes"} />
       </div>
 
       <PasswordRow db={db} />
