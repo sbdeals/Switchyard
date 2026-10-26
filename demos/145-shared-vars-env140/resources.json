@@ -1,0 +1,16 @@
+{
+  "projectId": "ARLCJBrpJIqifEDq-RImD",
+  "environmentId": "tcL-ICJmH1RLbQ0kvq4Hp",
+  "created": [
+    {
+      "type": "compose",
+      "id": "_NLIiIIutw9aShUDGlln6",
+      "name": "shared-vars-env140-mvp72adu-compose"
+    },
+    {
+      "type": "postgres",
+      "id": "TXpKoqK_pOFsQTHJBIPhM",
+      "name": "shared-vars-env140-mvp72adu-postgres"
+    }
+  ]
+}

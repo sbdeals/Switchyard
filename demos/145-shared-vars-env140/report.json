@@ -1,0 +1,77 @@
+{
+  "base": "http://127.0.0.1:3075",
+  "name": "shared-vars-env140-mvp72adu",
+  "checks": [
+    "Undeployed DB Overview loads/copies connection credentials on demand; Settings reveals/copies its password",
+    "Service Variables loads only its env plus shared key names; shared full-value action remains uncalled; loaded baseline clean",
+    "Unsaved project/environment drafts survive A to B to A; loading disables switching and restoring exact baseline clears dirty",
+    "Shared full values load only after Settings opens; both scopes reveal/copy/edit/save with clean saved baselines and redacted revalidation",
+    "Both reference picker scopes insert exact syntax; Defined/Missing badges work; service save round trips and reopens clean",
+    "This session deployed Alpine container resolves both edited shared values; postgres fixture was never deployed"
+  ],
+  "cleanup": [
+    {
+      "type": "postgres",
+      "id": "TXpKoqK_pOFsQTHJBIPhM",
+      "deletedViaApi": true
+    },
+    {
+      "type": "compose",
+      "id": "_NLIiIIutw9aShUDGlln6",
+      "deletedViaApi": true
+    },
+    {
+      "type": "project",
+      "id": "ARLCJBrpJIqifEDq-RImD",
+      "deletedViaApi": true,
+      "absenceVerified": true
+    }
+  ],
+  "startedAt": "2026-10-26T11:49:41.430Z",
+  "beforePanels": {
+    "html": {
+      "bytes": 79725,
+      "sha256": "6b2eed8f9726a5c69eef6eb5395fcb20549315376d714aa9f793844051e7fb1b",
+      "fixturesPresent": true,
+      "sentinelsAbsent": true
+    },
+    "rsc": {
+      "bytes": 26611,
+      "sha256": "9dd298f26e88345b058e74fbaee98d6fa838a16cfe1a156c2fdf0537eed0d919",
+      "fixturesPresent": true,
+      "sentinelsAbsent": true
+    }
+  },
+  "afterSharedSave": {
+    "html": {
+      "bytes": 79725,
+      "sha256": "6b2eed8f9726a5c69eef6eb5395fcb20549315376d714aa9f793844051e7fb1b",
+      "fixturesPresent": true,
+      "sentinelsAbsent": true
+    },
+    "rsc": {
+      "bytes": 26611,
+      "sha256": "8e0349db8fe6264644e73a8d42d9d0472a5c0e73d8c08f35b6f6f308468538ab",
+      "fixturesPresent": true,
+      "sentinelsAbsent": true
+    }
+  },
+  "afterServiceSave": {
+    "html": {
+      "bytes": 79725,
+      "sha256": "6b2eed8f9726a5c69eef6eb5395fcb20549315376d714aa9f793844051e7fb1b",
+      "fixturesPresent": true,
+      "sentinelsAbsent": true
+    },
+    "rsc": {
+      "bytes": 26611,
+      "sha256": "f9100cf8d8016d82a5044ecee6205f7631d9b8af50fc96368adc5f00f4d12dc3",
+      "fixturesPresent": true,
+      "sentinelsAbsent": true
+    }
+  },
+  "passed": true,
+  "video": "/workspace/sy-codex-notes/fix/shared-vars-env140-proof/video/page@d6dd405a02e5dc5c18595d1db7f3e9bd.webm",
+  "mp4": "/workspace/sy-codex-notes/fix/shared-vars-env140-proof/proof.mp4",
+  "completedAt": "2026-10-26T11:50:20.699Z"
+}
