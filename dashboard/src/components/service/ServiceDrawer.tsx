@@ -67,6 +67,8 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { ResourceSettings } from "@/components/service/ResourceSettings";
+import { resourceInputs } from "@/lib/resource-limits";
 
 type TabId =
   | "overview"
@@ -547,6 +549,7 @@ function OverviewTab({ db }: { db: Database }) {
   const meta = ENGINE_META[db.engine];
   const { pending, error, run } = useDbLifecycle(db);
   const conn = connectionString(db);
+  const resources = resourceInputs(db);
 
   return (
     <div className="space-y-5">
@@ -572,8 +575,8 @@ function OverviewTab({ db }: { db: Database }) {
         <Info
           label="Resources"
           value={
-            db.cpuLimit || db.memoryLimit
-              ? `${db.cpuLimit ?? "∞"} CPU · ${db.memoryLimit ?? "∞"} mem`
+            resources.cpuLimit || resources.memoryLimit
+              ? `${resources.cpuLimit || "∞"} CPU · ${resources.memoryLimit || "unlimited memory"}`
               : "unlimited"
           }
         />
@@ -590,8 +593,6 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
   const [name, setName] = useState(db.name);
   const [version, setVersion] = useState(currentVersion);
   const [port, setPort] = useState(db.externalPort != null ? String(db.externalPort) : "");
-  const [cpu, setCpu] = useState(db.cpuLimit ?? "");
-  const [mem, setMem] = useState(db.memoryLimit ?? "");
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -599,9 +600,7 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
   const dirty =
     name !== db.name ||
     version !== currentVersion ||
-    port !== (db.externalPort != null ? String(db.externalPort) : "") ||
-    cpu !== (db.cpuLimit ?? "") ||
-    mem !== (db.memoryLimit ?? "");
+    port !== (db.externalPort != null ? String(db.externalPort) : "");
 
   function save() {
     setSaveError(null);
@@ -610,8 +609,6 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
     if (version !== currentVersion) patch.dockerImage = `${meta.image}:${version}`;
     if (port !== (db.externalPort != null ? String(db.externalPort) : ""))
       patch.externalPort = port ? Number(port) : null;
-    if (cpu !== (db.cpuLimit ?? "")) patch.cpuLimit = cpu || null;
-    if (mem !== (db.memoryLimit ?? "")) patch.memoryLimit = mem || null;
     startSave(async () => {
       const res = await updateDatabaseAction(db.engine, db.id, db.appName, patch);
       if (res.ok) flashSaved();
@@ -643,15 +640,11 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
               className={inputCls}
             />
           </Field>
-          <Field label="CPU limit" hint='e.g. "0.5"'>
-            <input value={cpu} onChange={(e) => setCpu(e.target.value)} placeholder="unlimited" className={inputCls} />
-          </Field>
-          <Field label="Memory limit" hint='e.g. "256m"'>
-            <input value={mem} onChange={(e) => setMem(e.target.value)} placeholder="unlimited" className={inputCls} />
-          </Field>
         </div>
         <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
       </div>
+
+      <ResourceSettings key={db.id} service={db} />
 
       <PasswordRow db={db} />
 

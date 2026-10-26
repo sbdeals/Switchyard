@@ -253,6 +253,13 @@ export function ComposeSettingsTab({
         label="Created"
         value={compose.createdAt ? new Date(compose.createdAt).toLocaleString() : "—"}
       />
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold">Resources</h3>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          Compose limits and reservations live in <code className="font-mono">deploy.resources</code>
+          {" "}in the compose file. Edit them in the Compose tab.
+        </p>
+      </section>
       <DangerZone
         name={compose.name}
         message="Destroying removes the stack and all its containers."

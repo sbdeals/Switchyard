@@ -99,6 +99,8 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { updateResourceSettings } from "@/lib/resource-settings";
+import type { ResourceInputs } from "@/lib/resource-limits";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -216,6 +218,15 @@ export async function saveEnvironmentAction(
   env: string
 ): Promise<ActionResult> {
   return wrap(() => saveEnvironment(engine, id, env));
+}
+
+/** Persist resource settings without deploying or reloading a container. */
+export async function updateResourcesAction(
+  kind: "application" | Engine,
+  id: string,
+  input: ResourceInputs
+): Promise<ActionResult> {
+  return wrap(() => updateResourceSettings(kind, id, input));
 }
 
 // --- projects & environments ------------------------------------------------
