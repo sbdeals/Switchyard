@@ -1,0 +1,4 @@
+Container: shared-vars-proof-1793003358417-proof
+Command: printenv PROJECT_PROOF ENVIRONMENT_PROOF
+hello-from-shared-project
+hello-from-shared-environment
