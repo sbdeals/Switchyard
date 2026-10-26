@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
-import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
+import { LAST_DEPLOY_LABEL, resolveServiceState, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -346,15 +346,27 @@ function ResizeHandle({
 
 export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
+  const [variablesDirty, setVariablesDirty] = useState(false);
+  const [composeDirty, setComposeDirty] = useState(false);
+  const requestClose = () => {
+    if ((variablesDirty || composeDirty) && !confirm("Discard unsaved variable or Compose edits and close?")) return;
+    onClose();
+  };
   const titleId = useId();
-  const dialogRef = useDialogFocus<HTMLElement>(onClose);
+  const dialogRef = useDialogFocus<HTMLElement>(requestClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
   // Reset to Overview when a different service is opened (adjust state during
   // render — the React-recommended alternative to a resetting effect).
   const [shownId, setShownId] = useState<string | null>(null);
-  if (service && service.id !== shownId) {
-    setShownId(service.id);
+  const [editorSession, setEditorSession] = useState(0);
+  const serviceKey = service ? `${service.kind}:${service.id}` : null;
+  if (serviceKey !== shownId) {
+    setShownId(serviceKey);
+    // A quick reopen during the exit animation must also discard old drafts.
+    setEditorSession((session) => session + 1);
     setTab("overview");
+    setVariablesDirty(false);
+    setComposeDirty(false);
   }
   const baseTabs =
     service?.kind === "application"
@@ -373,7 +385,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={requestClose}
           />
           <motion.aside
             ref={dialogRef}
@@ -391,7 +403,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             className="fixed inset-y-0 right-0 z-50 flex flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
           >
             <ResizeHandle width={width} apply={applyWidth} reset={resetWidth} />
-            <Header service={service} onClose={onClose} titleId={titleId} />
+            <Header service={service} onClose={requestClose} titleId={titleId} />
             <nav
               role="tablist"
               aria-label="Service sections"
@@ -450,7 +462,10 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && <VariablesTab service={service} />}
+              {/* Keep text editors mounted for this service so tab changes retain drafts. */}
+              <div key={`${serviceKey}:${editorSession}:variables`} hidden={tab !== "variables"} className="h-full">
+                <VariablesTab service={service} onDirtyChange={setVariablesDirty} />
+              </div>
               {tab === "data" && <DataTab key={service.id} service={service} />}
               {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
               {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
@@ -469,8 +484,10 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               {tab === "schedules" && service.kind === "application" && (
                 <SchedulesTab app={service} />
               )}
-              {tab === "editor" && service.kind === "compose" && (
-                <ComposeEditorTab compose={service} />
+              {service.kind === "compose" && (
+                <div key={`${serviceKey}:${editorSession}:editor`} hidden={tab !== "editor"} className="h-full">
+                  <ComposeEditorTab compose={service} onDirtyChange={setComposeDirty} />
+                </div>
               )}
               {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
@@ -524,7 +541,9 @@ function Header({
             {serviceLabel(service)} · {service.projectName} / {service.environmentName}
           </div>
           <div className="text-[11px] text-[var(--color-fg-subtle)]">
-            Last deploy: {LAST_DEPLOY_LABEL[service.status] ?? service.status}
+            {resolveServiceState(service.status, service.runtime) === "stopped"
+              ? "Stopped"
+              : `Last deploy: ${LAST_DEPLOY_LABEL[service.status] ?? service.status}`}
           </div>
         </div>
       </div>
@@ -550,7 +569,7 @@ function OverviewTab({ db }: { db: Database }) {
 
   return (
     <div className="space-y-5">
-      <LifecycleButtons status={db.status} pending={pending} error={error} run={run} />
+      <LifecycleButtons status={db.status} runtime={db.runtime} pending={pending} error={error} run={run} />
 
       {conn && (
         <Field label="Connection string">

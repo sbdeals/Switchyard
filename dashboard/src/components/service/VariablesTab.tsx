@@ -7,15 +7,20 @@ import {
   saveApplicationEnvAction,
   saveComposeEnvAction,
 } from "@/app/actions";
-import { SaveRow, useSavedFlash } from "@/components/service/primitives";
+import { SaveRow, useSavedFlash, useEditorDraft } from "@/components/service/primitives";
 
-export function VariablesTab({ service }: { service: Service }) {
-  const [value, setValue] = useState(service.env ?? "");
+export function VariablesTab({
+  service,
+  onDirtyChange,
+}: {
+  service: Service;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
+  const { value, setValue, dirty, markSaved } = useEditorDraft(service.env ?? "", onDirtyChange);
   const [pending, start] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
 
-  const dirty = value !== (service.env ?? "");
   const count = value.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).length;
 
   function save() {
@@ -27,8 +32,10 @@ export function VariablesTab({ service }: { service: Service }) {
           : service.kind === "compose"
             ? await saveComposeEnvAction(service.id, value)
             : await saveApplicationEnvAction(service.id, value);
-      if (res.ok) flashSaved();
-      else setError(res.error);
+      if (res.ok) {
+        markSaved(value);
+        flashSaved();
+      } else setError(res.error);
     });
   }
 

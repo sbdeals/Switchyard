@@ -10,7 +10,9 @@ import {
   Children,
   cloneElement,
   isValidElement,
+  useEffect,
   useId,
+  useReducer,
   useState,
   useTransition,
 } from "react";
@@ -28,9 +30,11 @@ import {
   Network,
   Sparkles,
 } from "lucide-react";
-import type { Action, AppDomain, ServiceStatus } from "@/lib/dokploy";
+import type { Action, AppDomain, ServiceRuntime, ServiceStatus } from "@/lib/dokploy";
 import type { ActionResult } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
+import { reduceEditorDraft } from "@/lib/editor-draft";
+import { resolveServiceAction } from "@/lib/service-meta";
 import { cn } from "@/lib/utils";
 
 export const inputCls =
@@ -61,6 +65,24 @@ export function useSavedFlash(ms = 1800) {
     setTimeout(() => setSaved(false), ms);
   };
   return [saved, flash] as const;
+}
+
+/** Retain edits on refresh, and acknowledge only the text that was saved. */
+export function useEditorDraft(savedValue: string, onDirtyChange: (dirty: boolean) => void) {
+  const [draft, dispatch] = useReducer(reduceEditorDraft, { value: savedValue, savedValue });
+  const [previousValue, setPreviousValue] = useState(savedValue);
+  if (savedValue !== previousValue) {
+    setPreviousValue(savedValue);
+    dispatch({ type: "refresh", value: savedValue });
+  }
+  const dirty = draft.value !== draft.savedValue;
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  return {
+    value: draft.value,
+    dirty,
+    setValue: (value: string) => dispatch({ type: "edit", value }),
+    markSaved: (value: string) => dispatch({ type: "saved", value }),
+  };
 }
 
 // --- primitives ---------------------------------------------------------------
@@ -238,9 +260,11 @@ export function RemoveBtn({
 export function PublicUrlBar({
   domains,
   status,
+  runtime,
 }: {
   domains: AppDomain[];
   status: ServiceStatus;
+  runtime?: ServiceRuntime;
 }) {
   const primary = domains.find((d) => d.https) ?? domains[0];
   const url = primary ? `${primary.https ? "https" : "http"}://${primary.host}` : null;
@@ -268,7 +292,7 @@ export function PublicUrlBar({
         )}
       </div>
       <div className="shrink-0">
-        <StatusBadge status={status} />
+        <StatusBadge status={status} runtime={runtime} />
       </div>
     </div>
   );
@@ -301,33 +325,36 @@ export function PrivateNetwork({ host }: { host: string }) {
 /** Deploy / Start / Stop / Redeploy buttons driven by the service status. */
 export function LifecycleButtons({
   status,
+  runtime,
   pending,
   error,
   run,
 }: {
   status: ServiceStatus;
+  runtime?: ServiceRuntime;
   pending: boolean;
   error: string | null;
   run: (action: Action) => void;
 }) {
+  const action = resolveServiceAction(status, runtime);
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        {status === "idle" ? (
+        {action === "deploy" ? (
           <Btn onClick={() => run("deploy")} disabled={pending} primary>
             <Rocket className="size-3.5" /> Deploy
           </Btn>
-        ) : status === "done" ? (
+        ) : action === "stop" ? (
           <Btn onClick={() => run("stop")} disabled={pending}>
             <Square className="size-3.5" /> Stop
           </Btn>
-        ) : (
+        ) : action === "start" ? (
           <Btn onClick={() => run("start")} disabled={pending}>
             <Play className="size-3.5" /> Start
           </Btn>
-        )}
-        {status !== "idle" && (
-          <Btn onClick={() => run("deploy")} disabled={pending}>
+        ) : null}
+        {action !== "deploy" && (
+          <Btn onClick={() => run("deploy")} disabled={pending || !action}>
             <RefreshCw className="size-3.5" /> Redeploy
           </Btn>
         )}

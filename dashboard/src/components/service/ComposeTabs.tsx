@@ -20,6 +20,7 @@ import {
   GenerateUrlBtn,
   useLifecycle,
   useSavedFlash,
+  useEditorDraft,
 } from "@/components/service/primitives";
 
 const useComposeLifecycle = (c: ComposeService) =>
@@ -29,8 +30,8 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   const { pending, error, run } = useComposeLifecycle(compose);
   return (
     <div className="space-y-5">
-      <PublicUrlBar domains={compose.domains} status={compose.status} />
-      <LifecycleButtons status={compose.status} pending={pending} error={error} run={run} />
+      <PublicUrlBar domains={compose.domains} status={compose.status} runtime={compose.runtime} />
+      <LifecycleButtons status={compose.status} runtime={compose.runtime} pending={pending} error={error} run={run} />
       <p className="text-xs text-[var(--color-fg-muted)]">
         A raw <code className="font-mono">docker-compose</code> stack. Edit the file in the Compose
         tab, then deploy.
@@ -43,19 +44,26 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   );
 }
 
-export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
-  const [value, setValue] = useState(compose.composeFile ?? "");
+export function ComposeEditorTab({
+  compose,
+  onDirtyChange,
+}: {
+  compose: ComposeService;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
+  const { value, setValue, dirty, markSaved } = useEditorDraft(compose.composeFile ?? "", onDirtyChange);
   const [pending, start] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
-  const dirty = value !== (compose.composeFile ?? "");
 
   function save(redeploy: boolean) {
     setError(null);
     start(async () => {
       const res = await saveComposeFileAction(compose.id, value, redeploy);
-      if (res.ok) flashSaved();
-      else setError(res.error);
+      if (res.ok) {
+        markSaved(value);
+        flashSaved();
+      } else setError(res.error);
     });
   }
 
