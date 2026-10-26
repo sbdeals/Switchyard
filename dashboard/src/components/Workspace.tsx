@@ -40,7 +40,7 @@ export function Workspace({
 
   return (
     <MotionConfig reducedMotion="user">
-    <div className="mx-auto max-w-7xl px-6 py-8">
+    <div className="mx-auto max-w-7xl px-6 pb-8 pt-20 sm:pt-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">

@@ -137,7 +137,7 @@ export function ConsoleTab({ appName }: { appName: string }) {
         tabIndex={0}
         role="log"
         aria-label="Console output"
-        className="flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-3 font-mono text-[11px] leading-relaxed"
+        className="flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-3 font-mono text-[11px] leading-relaxed"
       >
         {entries.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[var(--color-fg-subtle)]">

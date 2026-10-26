@@ -282,7 +282,7 @@ export function PublicUrlBar({
 export function PrivateNetwork({ host }: { host: string }) {
   return (
     <Field label="Private networking" hint="internal DNS">
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
+      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-2.5">
         <Network className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
         <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
           {host}

@@ -509,7 +509,7 @@ function Header({
       <div className="flex items-center gap-3">
         <div
           className="flex size-11 items-center justify-center rounded-xl"
-          style={{ backgroundColor: `${accent}1a`, color: accent }}
+          style={{ backgroundColor: `color-mix(in srgb, ${accent} 10%, transparent)`, color: accent }}
         >
           <Icon className="size-5.5" />
         </div>
@@ -554,7 +554,7 @@ function OverviewTab({ db }: { db: Database }) {
 
       {conn && (
         <Field label="Connection string">
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-2.5">
             <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
               {conn}
             </code>
@@ -674,7 +674,7 @@ function PasswordRow({ db }: { db: Database }) {
   if (!db.databasePassword) return null;
   return (
     <Field label="Password" hint="rotation coming soon">
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2">
+      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-2">
         <code className="flex-1 truncate font-mono text-xs text-[var(--color-fg-muted)]">
           {show ? db.databasePassword : "•".repeat(16)}
         </code>

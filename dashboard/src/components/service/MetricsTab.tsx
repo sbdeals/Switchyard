@@ -156,19 +156,19 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
               icon={<Cpu className="size-4" />}
               label="CPU"
               value={last ? `${last.cpu.toFixed(1)}%` : "—"}
-              accent="#a06bff"
+              accent="var(--color-brand)"
             />
             <Stat
               icon={<MemoryStick className="size-4" />}
               label="Memory"
               value={last ? fmtMB(last.memUsed) : "—"}
               sub={last && last.memLimit ? `of ${fmtMB(last.memLimit)}` : undefined}
-              accent="#3ecf8e"
+              accent="var(--color-ok)"
             />
           </div>
 
-          <Chart title="CPU %" data={data} dataKey="cpu" color="#a06bff" unit="%" />
-          <Chart title="Memory" data={data} dataKey="memUsed" color="#3ecf8e" formatter={fmtMB} />
+          <Chart title="CPU %" data={data} dataKey="cpu" color="var(--color-brand)" unit="%" />
+          <Chart title="Memory" data={data} dataKey="memUsed" color="var(--color-ok)" formatter={fmtMB} />
         </>
       )}
 
@@ -261,8 +261,8 @@ function Chart({
             <YAxis hide domain={[0, "auto"]} />
             <Tooltip
               contentStyle={{
-                background: "#12121a",
-                border: "1px solid #34344a",
+                background: "var(--color-bg-elevated)",
+                border: "1px solid var(--color-border-strong)",
                 borderRadius: 8,
                 fontSize: 11,
               }}
@@ -289,19 +289,19 @@ function Chart({
 // --- HTTP (Traefik) metrics -------------------------------------------------
 
 const TOOLTIP_STYLE = {
-  background: "#12121a",
-  border: "1px solid #34344a",
+  background: "var(--color-bg-elevated)",
+  border: "1px solid var(--color-border-strong)",
   borderRadius: 8,
   fontSize: 11,
 } as const;
 
 // Railway-like status/traffic palette.
-const C2XX = "#4a9eff"; // blue
-const C3XX = "#a06bff"; // purple
-const C4XX = "#f5a623"; // yellow
-const C5XX = "#ff5c5c"; // red
-const INGRESS = "#4a9eff"; // blue
-const EGRESS = "#f5a623"; // yellow
+const C2XX = "var(--color-info)"; // blue
+const C3XX = "var(--color-brand)"; // purple
+const C4XX = "var(--color-warn)"; // yellow
+const C5XX = "var(--color-danger)"; // red
+const INGRESS = "var(--color-info)"; // blue
+const EGRESS = "var(--color-warn)"; // yellow
 
 interface HttpPoint {
   ts: number;
@@ -414,8 +414,8 @@ function HttpSection({ appName, active }: { appName: string; active: boolean }) 
       ) : !available ? (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <Stat icon={<span aria-hidden="true">↕</span>} label="Requests" value="—" accent="#4a9eff" />
-            <Stat icon={<span aria-hidden="true">⚠</span>} label="Error rate" value="—" accent="#ff5c5c" />
+            <Stat icon={<span aria-hidden="true">↕</span>} label="Requests" value="—" accent="var(--color-info)" />
+            <Stat icon={<span aria-hidden="true">⚠</span>} label="Error rate" value="—" accent="var(--color-danger)" />
             <Stat icon={<span aria-hidden="true">↓</span>} label="Ingress" value="—" accent={INGRESS} />
             <Stat icon={<span aria-hidden="true">↑</span>} label="Egress" value="—" accent={EGRESS} />
           </div>
@@ -426,7 +426,7 @@ function HttpSection({ appName, active }: { appName: string; active: boolean }) 
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <Stat icon={<span aria-hidden="true">↕</span>} label="Requests" value={fmtNum(totals.reqs)} accent="#4a9eff" />
+            <Stat icon={<span aria-hidden="true">↕</span>} label="Requests" value={fmtNum(totals.reqs)} accent="var(--color-info)" />
             <Stat
               icon={<span aria-hidden="true">⚠</span>}
               label="Error rate"
@@ -436,7 +436,7 @@ function HttpSection({ appName, active }: { appName: string; active: boolean }) 
                   {errorRate > 1 && <span className="sr-only"> high</span>}
                 </>
               }
-              accent={errorRate > 1 ? "#ff5c5c" : "#3ecf8e"}
+              accent={errorRate > 1 ? "var(--color-danger)" : "var(--color-ok)"}
             />
             <Stat icon={<span aria-hidden="true">↓</span>} label="Ingress" value={fmtBytes(totals.ingress)} accent={INGRESS} />
             <Stat icon={<span aria-hidden="true">↑</span>} label="Egress" value={fmtBytes(totals.egress)} accent={EGRESS} />
@@ -537,7 +537,7 @@ function RequestsPanel({ points, total }: { points: HttpPoint[]; total: number }
           <YAxis hide domain={[0, "auto"]} />
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
-            cursor={{ fill: "#ffffff08" }}
+            cursor={{ fill: "var(--color-chart-cursor)" }}
             labelFormatter={(ts) => timeLabel(ts as number)}
             formatter={(value, name) => [fmtNum(Number(value)), String(name).toUpperCase()]}
           />
@@ -591,10 +591,10 @@ function ResponseTimePanel({ points, lastP95 }: { points: HttpPoint[]; lastP95: 
             formatter={(value, name) => [fmtMs(Number(value)), String(name)]}
           />
           <Legend wrapperStyle={LEGEND_STYLE} iconType="plainline" />
-          <Line type="monotone" name="p50" dataKey="p50" stroke="#3ecf8e" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-          <Line type="monotone" name="p90" dataKey="p90" stroke="#4a9eff" strokeWidth={1.5} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
-          <Line type="monotone" name="p95" dataKey="p95" stroke="#f5a623" strokeWidth={1.5} strokeDasharray="3 3" dot={false} isAnimationActive={false} />
-          <Line type="monotone" name="p99" dataKey="p99" stroke="#ff5c5c" strokeWidth={1.5} strokeDasharray="1 3" dot={false} isAnimationActive={false} />
+          <Line type="monotone" name="p50" dataKey="p50" stroke="var(--color-ok)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+          <Line type="monotone" name="p90" dataKey="p90" stroke="var(--color-info)" strokeWidth={1.5} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
+          <Line type="monotone" name="p95" dataKey="p95" stroke="var(--color-warn)" strokeWidth={1.5} strokeDasharray="3 3" dot={false} isAnimationActive={false} />
+          <Line type="monotone" name="p99" dataKey="p99" stroke="var(--color-danger)" strokeWidth={1.5} strokeDasharray="1 3" dot={false} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </PanelCard>

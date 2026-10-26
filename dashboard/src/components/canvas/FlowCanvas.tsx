@@ -18,6 +18,7 @@ import type { Service, ServiceEdge } from "@/lib/dokploy";
 import { serviceAccent } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
+import { useTheme } from "@/components/ThemeProvider";
 
 // v2: key bumped when the default layout became a grid — pre-grid saves froze
 // every auto-position (not just drags), which would pin the old horizontal
@@ -64,6 +65,7 @@ export function FlowCanvas({
   edges: ServiceEdge[];
   onSelect: (service: Service) => void;
 }) {
+  const { theme } = useTheme();
   // Catalog logos for Railway-style node icons (null while the catalog loads).
   const logos = useTemplateLogos();
 
@@ -115,7 +117,7 @@ export function FlowCanvas({
       serviceEdges.map((e) => {
         const source = services.find((s) => s.id === e.source);
         const target = services.find((s) => s.id === e.target);
-        const accent = target ? serviceAccent(target) : "#a06bff";
+        const accent = target ? serviceAccent(target) : "var(--color-brand)";
         return {
           id: `${e.source}->${e.target}`,
           source: e.source,
@@ -184,14 +186,14 @@ export function FlowCanvas({
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
-        colorMode="dark"
+        colorMode={theme}
         fitView
         fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
         proOptions={{ hideAttribution: true }}
         minZoom={0.3}
         maxZoom={1.5}
       >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#ffffff2b" />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="var(--color-canvas-dots)" bgColor="var(--color-bg)" />
         <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
         <MiniMap
           pannable
@@ -201,7 +203,7 @@ export function FlowCanvas({
               ? serviceAccent((n.data as ServiceNodeData).service)
               : "transparent"
           }
-          maskColor="#0a0a0fcc"
+          maskColor="var(--color-canvas-mask)"
           className="!bg-[var(--color-bg-elevated)]"
         />
       </ReactFlow>
