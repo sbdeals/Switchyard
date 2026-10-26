@@ -1,0 +1,44 @@
+{
+  "name": "compose-export-proof",
+  "networks": {
+    "default": {
+      "name": "compose-export-proof_default",
+      "ipam": {}
+    }
+  },
+  "services": {
+    "compose-export-mvp5bqlo-8xohig": {
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "COMPOSE_EXPORT_MESSAGE": "compose-export-proof-value-9p7",
+        "COMPOSE_EXPORT_SPECIAL": "hash # colon: quote ' dollar $$HOME"
+      },
+      "image": "nginx:alpine",
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "host",
+          "target": 80,
+          "published": "3068",
+          "protocol": "tcp"
+        }
+      ],
+      "restart": "always",
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "volume-1",
+          "target": "/var/cache/nginx"
+        }
+      ]
+    }
+  },
+  "volumes": {
+    "volume-1": {
+      "name": "compose-export-proof-data"
+    }
+  }
+}
