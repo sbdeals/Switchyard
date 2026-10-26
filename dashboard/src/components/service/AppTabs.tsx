@@ -1090,7 +1090,6 @@ export function AppDeployTab({ app }: { app: Application }) {
 
 export function AppSettingsTab({ app, onClose }: { app: Application; onClose: () => void }) {
   const { pending: lifePending, error: lifeError, run } = useAppLifecycle(app);
-  const [name, setName] = useState(app.name);
   const [cpu, setCpu] = useState(app.cpuLimit ?? "");
   const [mem, setMem] = useState(app.memoryLimit ?? "");
   const [cpuRes, setCpuRes] = useState(app.cpuReservation ?? "");
@@ -1104,7 +1103,6 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
     mem !== (app.memoryLimit ?? "") ||
     cpuRes !== (app.cpuReservation ?? "") ||
     memRes !== (app.memoryReservation ?? "");
-  const dirty = name !== app.name || resourcesDirty;
 
   function save() {
     setSaveError(null);
@@ -1112,7 +1110,6 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
       const res = await updateApplicationAction(
         app.id,
         {
-          name: name.trim(),
           cpuLimit: cpu || null,
           memoryLimit: mem || null,
           cpuReservation: cpuRes || null,
@@ -1129,9 +1126,6 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
   return (
     <div className="space-y-5">
       <div className="space-y-3">
-        <Field label="Name">
-          <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
-        </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="CPU limit" hint='e.g. "0.5"'>
             <input value={cpu} onChange={(e) => setCpu(e.target.value)} placeholder="unlimited" className={inputCls} />
@@ -1146,7 +1140,7 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
             <input value={memRes} onChange={(e) => setMemRes(e.target.value)} placeholder="none" className={inputCls} />
           </Field>
         </div>
-        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
+        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!resourcesDirty} onSave={save} />
       </div>
 
       <Info label="App name" value={app.appName} mono />

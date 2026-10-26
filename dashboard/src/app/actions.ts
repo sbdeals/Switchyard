@@ -14,6 +14,7 @@ import {
   listProjects,
   saveEnvironment,
   updateDatabase,
+  updateServiceDetails,
   reloadDatabase,
   createApplication,
   setAppDockerSource,
@@ -99,6 +100,7 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import type { ServiceDetailsPatch } from "@/lib/service-name";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -216,6 +218,14 @@ export async function saveEnvironmentAction(
   env: string
 ): Promise<ActionResult> {
   return wrap(() => saveEnvironment(engine, id, env));
+}
+
+/** Save display metadata without changing Docker identity or restarting anything. */
+export async function updateServiceDetailsAction(
+  id: string,
+  patch: ServiceDetailsPatch
+): Promise<ActionResult> {
+  return wrap(() => updateServiceDetails(id, patch));
 }
 
 // --- projects & environments ------------------------------------------------
