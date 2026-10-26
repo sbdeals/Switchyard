@@ -12,6 +12,7 @@
 import type { DomainInput, Engine } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import type { BuildKind, BuildPlan } from "@/lib/build-plan";
+import { GIT_PROVIDER_LABELS, PRIVATE_SOURCE_DIR, privateRepoSourceCommand, type GitProviderKind } from "@/lib/private-repo";
 
 /** Shared bridge network every Dokploy-managed container joins (Traefik lives here). */
 export const BRIDGE_NETWORK = "dokploy-network";
@@ -24,7 +25,7 @@ export interface ManagedAutoDomain {
 export type ManagedMeta =
   | { kind: "database"; engine: Engine; image: string }
   | { kind: "image"; image: string; autoDomain?: ManagedAutoDomain }
-  | { kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string; buildKind?: BuildKind; buildPort?: number; autoDomain?: ManagedAutoDomain };
+  | { kind: "repo"; image: string; repoUrl: string; branch: string; subdirectory?: string; dockerfile?: string; repoProvider?: GitProviderKind; buildKind?: BuildKind; buildPort?: number; autoDomain?: ManagedAutoDomain };
 
 const ENGINES = new Set<string>(Object.keys(ENGINE_META));
 const MANAGED_BLOCK = /^x-switchyard:[ \t]*\r?\n((?:[ \t]+\S.*(?:\r?\n|$))+)/m;
@@ -44,7 +45,7 @@ export function parseManaged(composeFile: string | null | undefined): ManagedMet
   for (const line of block[1].split("\n")) {
     const m = line.match(/^[ \t]+([\w-]+):[ \t]*(.*?)[ \t\r]*$/);
     if (!m) continue;
-    if (["autoDomainHost", "autoDomainPort", "buildKind", "buildPort"].includes(m[1]) && !line.startsWith(`${indent}${m[1]}:`)) continue;
+    if (["autoDomainHost", "autoDomainPort", "buildKind", "buildPort", "repoProvider"].includes(m[1]) && !line.startsWith(`${indent}${m[1]}:`)) continue;
     const value = m[2];
     if (value.startsWith('"')) {
       try {
@@ -65,13 +66,17 @@ export function parseManaged(composeFile: string | null | undefined): ManagedMet
     ? { autoDomain: marker } : {};
   if (fields.kind === "image" && fields.image) return { kind: "image", image: fields.image, ...autoDomain };
   if (fields.kind === "repo" && fields.image && fields.repoUrl && fields.branch) {
-    const build = ["node", "python", "go", "static"].includes(fields.buildKind) &&
+    const repoProvider = Object.hasOwn(GIT_PROVIDER_LABELS, fields.repoProvider)
+      ? fields.repoProvider as GitProviderKind : undefined;
+    const build = (["node", "python", "go", "static"].includes(fields.buildKind) ||
+      (repoProvider && fields.buildKind === "dockerfile")) &&
       /^\d+$/.test(fields.buildPort ?? "") && Number(fields.buildPort) >= 1 && Number(fields.buildPort) <= 65535
       ? { buildKind: fields.buildKind as BuildKind, buildPort: Number(fields.buildPort) } : {};
     return {
       kind: "repo", image: fields.image, repoUrl: fields.repoUrl, branch: fields.branch,
       ...(fields.subdirectory ? { subdirectory: fields.subdirectory } : {}),
       ...(fields.dockerfile ? { dockerfile: fields.dockerfile } : {}),
+      ...(repoProvider ? { repoProvider } : {}),
       ...build,
       ...autoDomain,
     };
@@ -291,12 +296,23 @@ export function imageStack(input: { appName: string; image: string }): string {
 /** Build a public repository as a local image on the bridge network. */
 export function repoStack(input: RepoStackInput, plan?: BuildPlan): string {
   validateRepoSource(input);
-  const image = scalar(`${input.appName}-app:latest`);
   // BuildKit needs the .git suffix to distinguish a Git context from an HTTP file.
   const repoUrl = new URL(input.repoUrl);
   const path = repoUrl.pathname.replace(/\/+$/, "");
   repoUrl.pathname = path.endsWith(".git") ? path : `${path}.git`;
   const context = `${repoUrl.href}#${input.branch}${input.subdirectory ? `:${input.subdirectory}` : ""}`;
+  return repoCompose(input, context, plan);
+}
+
+/** Dokploy clones with its own credentials; only tracked source enters the build. */
+export function providerRepoStack(input: RepoStackInput & { repoProvider: GitProviderKind; port: number }, plan?: BuildPlan): string {
+  return repoCompose(input, `./${PRIVATE_SOURCE_DIR}${input.subdirectory ? `/${input.subdirectory}` : ""}`, plan ?? {
+    kind: "dockerfile", port: input.port, dockerfileInline: null, reason: "Dockerfile from Dokploy clone",
+  }, input.repoProvider);
+}
+
+function repoCompose(input: RepoStackInput, context: string, plan?: BuildPlan, repoProvider?: GitProviderKind): string {
+  const image = scalar(`${input.appName}-app:latest`);
   const lines = [
     `x-switchyard:`,
     `  kind: repo`,
@@ -307,7 +323,8 @@ export function repoStack(input: RepoStackInput, plan?: BuildPlan): string {
   if (input.subdirectory) lines.push(`  subdirectory: ${scalar(input.subdirectory)}`);
   if (input.dockerfile) lines.push(`  dockerfile: ${scalar(input.dockerfile)}`);
   const generated = plan && plan.kind !== "dockerfile" && plan.dockerfileInline;
-  if (generated) lines.push(`  buildKind: ${plan.kind}`, `  buildPort: ${plan.port}`);
+  if (repoProvider) lines.push(`  repoProvider: ${repoProvider}`);
+  if (plan && (generated || repoProvider)) lines.push(`  buildKind: ${plan.kind}`, `  buildPort: ${plan.port}`);
   lines.push(
     `services:`,
     `  app:`,
@@ -327,8 +344,25 @@ export function repoStack(input: RepoStackInput, plan?: BuildPlan): string {
     `    env_file:`,
     `      - .env`,
     networkBlock(input.appName),
-    FOOTER,
   );
+  if (repoProvider) {
+    // A provider clone can have an authenticated remote in .git/config. Archive
+    // HEAD into a separate context instead of copying the clone or replacing the
+    // repo's .dockerignore. No keys, generated .env, or clone metadata get built.
+    lines.push(
+      `  switchyard-source:`,
+      `    image: alpine/git:2.49.1`,
+      `    profiles: [switchyard-build]`,
+      `    network_mode: none`,
+      `    entrypoint: ["/bin/sh", "-ec"]`,
+      `    command:`,
+      `      - ${JSON.stringify(privateRepoSourceCommand(input.subdirectory).replaceAll("$", "$$$$"))}`,
+      `    volumes:`,
+      `      - ./code:/repo:ro`,
+      `      - ./${PRIVATE_SOURCE_DIR}:/source`,
+    );
+  }
+  lines.push(FOOTER);
   return lines.join("\n");
 }
 

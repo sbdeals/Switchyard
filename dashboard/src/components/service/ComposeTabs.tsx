@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { GIT_PROVIDER_LABELS } from "@/lib/private-repo";
 import { ENGINE_META } from "@/lib/engines";
 import { BUILD_LABELS } from "@/lib/build-plan";
 import { isStopped, serviceLabel } from "@/lib/service-meta";
@@ -87,12 +88,14 @@ function ManagedOverview({ compose, managed }: { compose: ComposeService; manage
       <div className="grid grid-cols-2 gap-3">
         {managed.kind === "repo" ? (
           <>
-            <Info label="Source" value={serviceLabel(compose)} />
+            <Info label="Source" value={managed.repoProvider === "ssh" ? "Custom Git (SSH)"
+              : managed.repoProvider ? `${GIT_PROVIDER_LABELS[managed.repoProvider]} repo` : serviceLabel(compose)} />
             <Info label="Repository" value={managed.repoUrl} mono />
             <Info label="Branch" value={managed.branch} mono />
-            <Info label="Built with" value={managed.buildKind
-              ? `${BUILD_LABELS[managed.buildKind]} (auto-detected)` : managed.dockerfile ?? "Dockerfile"} />
-            {managed.buildPort && <Info label="Detected port" value={String(managed.buildPort)} />}
+            <Info label="Built with" value={managed.buildKind && managed.buildKind !== "dockerfile"
+              ? `${BUILD_LABELS[managed.buildKind]} (auto-detected${managed.repoProvider ? " after Dokploy clone" : ""})`
+              : `${managed.dockerfile ?? "Dockerfile"}${managed.repoProvider ? " (Dokploy clone)" : ""}`} />
+            {managed.buildPort && <Info label={managed.repoProvider ? "App port" : "Detected port"} value={String(managed.buildPort)} />}
             {managed.subdirectory && <Info label="Subdirectory" value={managed.subdirectory} mono />}
           </>
         ) : <Info label="Image" value={managed.image} mono />}

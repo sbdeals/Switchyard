@@ -234,7 +234,7 @@ export function QuickDeployMenu({
                 <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-surface)] text-[var(--color-fg)]">
                   <GitFork className="size-4" />
                 </span>
-                <span className="flex-1">From GitHub</span>
+                <span className="flex-1">Connected Git repo</span>
                 <span className="text-[11px] text-[var(--color-fg-subtle)]">private repos</span>
               </button>
               <button
