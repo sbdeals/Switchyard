@@ -97,3 +97,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#124](https://github.com/sbdeals/Switchyard/pull/124) | codex/mobile-polish (main) | mobile responsive pass | [124-mobile-polish](124-mobile-polish/) | 4-viewport live audit on :3053 | pass; 0 overflow in 116 states |
 | [#125](https://github.com/sbdeals/Switchyard/pull/125) | codex/domain-status (main) | domain health checks | [125-domain-status](125-domain-status/) | live throwaway domains on :3051 | pass; SSRF refusal verified |
 | [#126](https://github.com/sbdeals/Switchyard/pull/126) | codex/ansi-logs (main) | ANSI log colors | [126-ansi-logs](126-ansi-logs/) | live before/after on :3059 | pass; HTML inert |
+| [#127](https://github.com/sbdeals/Switchyard/pull/127) | codex/build-args (main) | build arguments editor | [127-build-args](127-build-args/) | live UI + API readback on :3057 + docker build fixture | pass; deploy unproven (no swarm) |

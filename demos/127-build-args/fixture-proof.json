@@ -1,0 +1,29 @@
+{
+  "command": [
+    "sudo",
+    "docker",
+    "build",
+    "--build-arg",
+    "CUSTOM_ARG=Hello from build-args UI",
+    "-t",
+    "build-args-fixture:proof",
+    "-f",
+    "/workspace/sy-codex-notes/fix/build-args-proof/Dockerfile",
+    "/workspace/sy-codex-notes/fix/build-args-proof"
+  ],
+  "runCommand": [
+    "sudo",
+    "docker",
+    "run",
+    "--rm",
+    "--name",
+    "build-args-fixture-proof",
+    "build-args-fixture:proof",
+    "cat",
+    "/test.txt"
+  ],
+  "file": "/test.txt",
+  "expected": "Hello from build-args UI",
+  "actual": "Hello from build-args UI",
+  "passed": true
+}

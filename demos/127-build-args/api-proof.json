@@ -1,0 +1,12 @@
+{
+  "applicationId": "4Tfj8PDklN_Ej2_weGMKy",
+  "appName": "build-args-demo-mvp3bz3z",
+  "buildArgs": "GREETING=Hello from build-args UI\nCUSTOM_ARG=Hello from build-args UI\nDEMO_TOKEN=demo-only-placeholder",
+  "buildSecretsSupported": true,
+  "runtimeVariablesPreservedOnBuildArgSave": true,
+  "buildSettingsPreservedOnRuntimeSave": true,
+  "noAutomaticDeployment": true,
+  "secretKeyWarningNonBlocking": true,
+  "reviewValuesMasked": true,
+  "dirtyStateClearedAfterSave": true
+}
