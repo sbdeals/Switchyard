@@ -402,20 +402,18 @@ export async function saveAppBuildTypeAction(
 
 /**
  * Point a docker-image application at an image, optionally with private
- * registry credentials. Empty credentials mean a public image.
+ * registry credentials. Empty credentials mean a public image. Applies on next deploy.
  */
 export async function setAppDockerSourceAction(
   id: string,
   dockerImage: string,
-  registry?: { username: string; password: string; registryUrl: string },
-  redeploy = false
+  registry?: { username: string; password: string; registryUrl: string }
 ): Promise<ActionResult> {
   return wrap(async () => {
     const image = dockerImage.trim();
     if (!image) throw new Error("Image is required.");
     const hasCreds = registry && (registry.username || registry.password || registry.registryUrl);
     await setAppDockerSource(id, image, hasCreds ? registry : undefined);
-    if (redeploy) await applicationAction(id, "deploy");
   });
 }
 

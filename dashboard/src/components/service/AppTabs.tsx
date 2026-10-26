@@ -64,6 +64,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { ImageTagPicker } from "@/components/service/ImageTagPicker";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -580,8 +581,7 @@ function RedeployToggle({
  * Build configuration: the build strategy (Nixpacks / Dockerfile / Railpack /
  * …) and Dockerfile options for source-built apps, private registry
  * credentials for docker-image apps, and the custom start command for either.
- * Build-strategy and image changes only take effect on the next deploy, so each
- * sub-form offers an optional redeploy.
+ * Image changes apply on the next deploy. Source builds offer an optional redeploy.
  */
 export function AppBuildTab({ app }: { app: Application }) {
   const isDocker = app.sourceType === "docker";
@@ -687,7 +687,6 @@ function DockerSourceForm({ app }: { app: Application }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [redeploy, setRedeploy] = useState(false);
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
@@ -706,8 +705,7 @@ function DockerSourceForm({ app }: { app: Application }) {
       const res = await setAppDockerSourceAction(
         app.id,
         image,
-        { username: username.trim(), password, registryUrl: registryUrl.trim() },
-        redeploy
+        { username: username.trim(), password, registryUrl: registryUrl.trim() }
       );
       if (res.ok) {
         setUsername("");
@@ -720,14 +718,7 @@ function DockerSourceForm({ app }: { app: Application }) {
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-[var(--color-fg)]">Image &amp; registry</h3>
-      <Field label="Image" hint="repo:tag">
-        <input
-          value={image}
-          onChange={(e) => setImage(e.target.value)}
-          placeholder="registry.example.com/app:latest"
-          className={inputCls}
-        />
-      </Field>
+      <ImageTagPicker image={image} currentImage={app.dockerImage ?? ""} onChange={setImage} />
       <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
         <p className="text-[11px] text-[var(--color-fg-subtle)]">
           Private registry credentials (leave blank for public images).
@@ -771,8 +762,7 @@ function DockerSourceForm({ app }: { app: Application }) {
           </Field>
         </div>
       </div>
-      <div className="flex items-center justify-between">
-        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
+      <div className="flex justify-end">
         <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
       </div>
     </div>
