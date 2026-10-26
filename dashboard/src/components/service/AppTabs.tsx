@@ -54,7 +54,6 @@ import {
   Field,
   Info,
   CopyButton,
-  LifecycleButtons,
   SaveRow,
   DangerZone,
   PublicUrlBar,
@@ -64,6 +63,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { AppDeployControls } from "@/components/service/AppDeployControls";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -85,13 +85,11 @@ const useAppLifecycle = (app: Application) =>
   useLifecycle((action) => appLifecycleAction(app.id, action));
 
 export function AppOverviewTab({ app }: { app: Application }) {
-  const { pending, error, run } = useAppLifecycle(app);
-
   return (
     <div className="space-y-5">
       <PublicUrlBar domains={app.domains} status={app.status} />
 
-      <LifecycleButtons status={app.status} pending={pending} error={error} run={run} />
+      <AppDeployControls app={app} />
 
       <PrivateNetwork host={app.appName} />
 
@@ -511,6 +509,9 @@ export function DeploymentHistory({ deployments: history }: { deployments: AppDe
             {d.rollbackId && <span className="sr-only">{d.status}</span>}
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm">{d.title}</div>
+              {d.description && (
+                <p className="whitespace-pre-wrap break-words text-xs text-[var(--color-fg-muted)]">{d.description}</p>
+              )}
               <div className="text-[11px] text-[var(--color-fg-subtle)]">
                 {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
               </div>

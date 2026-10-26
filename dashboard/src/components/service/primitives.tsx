@@ -304,17 +304,19 @@ export function LifecycleButtons({
   pending,
   error,
   run,
+  deployControl,
 }: {
   status: ServiceStatus;
   pending: boolean;
   error: string | null;
   run: (action: Action) => void;
+  deployControl?: React.ReactNode;
 }) {
   return (
     <>
       <div className="flex flex-wrap gap-2">
         {status === "idle" ? (
-          <Btn onClick={() => run("deploy")} disabled={pending} primary>
+          deployControl ?? <Btn onClick={() => run("deploy")} disabled={pending} primary>
             <Rocket className="size-3.5" /> Deploy
           </Btn>
         ) : status === "done" ? (
@@ -327,7 +329,7 @@ export function LifecycleButtons({
           </Btn>
         )}
         {status !== "idle" && (
-          <Btn onClick={() => run("deploy")} disabled={pending}>
+          deployControl ?? <Btn onClick={() => run("deploy")} disabled={pending}>
             <RefreshCw className="size-3.5" /> Redeploy
           </Btn>
         )}

@@ -23,6 +23,7 @@ import { redirect } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
+import { buildDeployOptionsPayload, getDeployOptionsState, type DeployOptionsRequest } from "./deploy-options";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
 import {
   deriveComposeRuntime,
@@ -152,6 +153,7 @@ export interface AppDeployment {
   deploymentId: string;
   status: string;
   title: string;
+  description: string | null;
   createdAt: string;
   /**
    * Non-null when this deployment produced a restorable image snapshot
@@ -244,6 +246,8 @@ export interface Application extends ServiceBase {
   // --- push-to-deploy config (custom-git source); see setAppGitSource ---------
   /** When true, hitting the deploy webhook redeploys the app. */
   autoDeploy: boolean;
+  /** Persistent: every build skips its cache until disabled. */
+  cleanCache: boolean;
   /** Branch the webhook must match to trigger a deploy (customGitBranch). */
   branch: string | null;
   /** Build path within the repo (customGitBuildPath). */
@@ -723,6 +727,7 @@ interface RawApplicationDetail {
   customGitBuildPath?: string | null;
   watchPaths?: string[] | null;
   autoDeploy?: boolean | null;
+  cleanCache?: boolean | null;
   refreshToken?: string | null;
   owner?: string | null;
   repository?: string | null;
@@ -776,6 +781,7 @@ interface RawDeployment {
   deploymentId: string;
   status?: string;
   title?: string;
+  description?: string | null;
   createdAt?: string;
   rollbackId?: string | null;
 }
@@ -799,6 +805,7 @@ function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment
     deploymentId: dp.deploymentId,
     status: dp.status ?? "idle",
     title: dp.title ?? "Deployment",
+    description: dp.description ?? null,
     createdAt: dp.createdAt ?? "",
     rollbackId: dp.rollbackId ?? null,
   }));
@@ -859,6 +866,7 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
         })),
         deployments: mapDeployments(d.deployments),
         autoDeploy: d.autoDeploy ?? false,
+        cleanCache: d.cleanCache ?? false,
         branch: d.branch ?? d.customGitBranch ?? null,
         buildPath: d.customGitBuildPath ?? null,
         gitUrl: d.customGitUrl ?? null,
@@ -1166,6 +1174,31 @@ export async function applicationAction(id: string, action: Action): Promise<voi
   // does not exist — it 404s, which used to break the Destroy button).
   const proc = action === "remove" ? "delete" : action;
   await request(`application.${proc}`, { method: "POST", body: { applicationId: id } });
+}
+
+/** Check the user's project tree before applying a narrowly scoped deploy option. */
+export async function applyDeployOptions(id: string, input: DeployOptionsRequest): Promise<void> {
+  const { procedure, body } = buildDeployOptionsPayload(id, input);
+  const applications = collectIds(await rawTree(), (env) =>
+    (env.applications ?? []).map((app) => app.applicationId)
+  );
+  if (!applications.some((app) => app.id === id)) throw new Error("Unknown application.");
+  const app = await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(id)}`
+  );
+  const state = getDeployOptionsState({
+    pending: false,
+    status: app.applicationStatus ?? "idle",
+    sourceType: app.sourceType ?? null,
+  });
+  const disabled = input.kind === "clean-cache" ? state.cacheDisabled
+    : input.kind === "deploy" ? state.deployDisabled : state.redeployDisabled;
+  if (disabled) {
+    throw new Error("Application is not ready.");
+  }
+  // cleanCache is persistent in Dokploy 0.30.10. Saving never queues a build;
+  // temporarily toggling it around an asynchronous deploy would race the worker.
+  await request(procedure, { method: "POST", body });
 }
 
 export interface DomainInput {
