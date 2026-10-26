@@ -1,0 +1,12 @@
+--- invalid YAML "services:\n  e2e: [": Save
+UI: (no message)
+deployments: 0 -> 0
+--- invalid YAML: Save & deploy
+UI: (no message)
+deployments: 0 -> 1
+--- services: []: Save & deploy
+UI: (no message)
+deployments: 1 -> 2
+--- restore original (valid): Save
+UI: (no message)
+deployments: 2 -> 2

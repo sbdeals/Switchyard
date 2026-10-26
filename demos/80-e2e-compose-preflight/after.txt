@@ -1,0 +1,12 @@
+--- invalid YAML "services:\n  e2e: [": Save
+UI: Saved as draft. Invalid YAML at line 3, column 1: unexpected end of the stream within a flow collection. Fix the YAML before deploying.
+deployments: 2 -> 2
+--- invalid YAML: Save & deploy
+UI: Invalid YAML at line 3, column 1: unexpected end of the stream within a flow collection.
+deployments: 2 -> 2
+--- services: []: Save & deploy
+UI: Cannot deploy: the Compose file must contain a top-level "services" mapping.
+deployments: 2 -> 2
+--- restore original (valid): Save
+UI: (no message)
+deployments: 2 -> 2
