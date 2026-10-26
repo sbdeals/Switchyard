@@ -1,0 +1,77 @@
+{
+  "base": "http://127.0.0.1:3076",
+  "slug": "env-compare-env140-0737",
+  "checks": [
+    {
+      "name": "before-opening-tabs: html excludes env sentinel and DB password",
+      "passed": true,
+      "bytes": 100165,
+      "sha256": "cdc234f8f991168c01a3a15e18a25bd723c03ffc58a1f3dbfc9b5a41fb7fe56b"
+    },
+    {
+      "name": "before-opening-tabs: rsc excludes env sentinel and DB password",
+      "passed": true,
+      "bytes": 32340,
+      "sha256": "e653cdc1fa67d0c386f5b13115748f87346de42c5f64de203469d4809d8366cd",
+      "redactedEnvFields": 21
+    },
+    {
+      "name": "Compare action returns keys and all four diff statuses with masked values",
+      "passed": true
+    },
+    {
+      "name": "Explicit comparison reveal loads the unique env sentinel",
+      "passed": true
+    },
+    {
+      "name": "Hiding comparison values removes the revealed sentinel from view",
+      "passed": true
+    },
+    {
+      "name": "Variables tab loads via action and starts with a clean baseline",
+      "passed": true
+    },
+    {
+      "name": "Saving persists env and resets the dirty baseline",
+      "passed": true
+    },
+    {
+      "name": "Reverting to the saved value clears dirty state",
+      "passed": true
+    },
+    {
+      "name": "Reopening Variables reloads the saved env as a clean baseline",
+      "passed": true
+    },
+    {
+      "name": "Database connection string starts masked and reveals on demand",
+      "passed": true
+    },
+    {
+      "name": "Database connection-string copy loads on demand and keeps the display masked",
+      "passed": true
+    },
+    {
+      "name": "Database Settings password reveal/hide/copy works on demand",
+      "passed": true
+    },
+    {
+      "name": "after-saving-and-revealing: html excludes env sentinel and DB password",
+      "passed": true,
+      "bytes": 83693,
+      "sha256": "6f642698b0d55101006a347145909dd0a75571deb3dbc1d516fc0c5fc4a149fe"
+    },
+    {
+      "name": "after-saving-and-revealing: rsc excludes env sentinel and DB password",
+      "passed": true,
+      "bytes": 28155,
+      "sha256": "f82b84233458c149c9565bcafd6db09709495bfa008d6462655b9f2616e5ed49",
+      "redactedEnvFields": 16
+    },
+    {
+      "name": "Fresh comparison reflects saved key with values still masked",
+      "passed": true
+    }
+  ],
+  "passed": true
+}

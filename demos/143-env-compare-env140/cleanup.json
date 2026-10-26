@@ -1,0 +1,21 @@
+{
+  "projectRemovedViaApi": true,
+  "projectId": "eNDPxdHEp1LLs3ajesPc_",
+  "childResources": [
+    {
+      "kind": "application",
+      "id": "grmeperZSsDTTBeUVAjUj",
+      "absent": true
+    },
+    {
+      "kind": "application",
+      "id": "uzRnt5yPW_5DSVLAqd9eC",
+      "absent": true
+    },
+    {
+      "kind": "postgres",
+      "id": "kTVIZVihawgVkf8JlbefF",
+      "absent": true
+    }
+  ]
+}
