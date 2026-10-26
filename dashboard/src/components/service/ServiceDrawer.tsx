@@ -13,8 +13,6 @@ import {
   Settings2,
   SlidersHorizontal,
   KeyRound,
-  Eye,
-  EyeOff,
   Box,
   Globe,
   Layers,
@@ -30,10 +28,10 @@ import {
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
-import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
+import { DatabaseCredentials } from "@/components/service/DatabaseCredentials";
 import { BackupsTab } from "@/components/service/BackupsTab";
 import { VolumesTab } from "@/components/service/VolumesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
@@ -60,7 +58,6 @@ import {
   inputCls,
   Field,
   Info,
-  CopyButton,
   LifecycleButtons,
   SaveRow,
   DangerZone,
@@ -455,7 +452,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "variables" && <VariablesTab key={`${service.kind}:${service.id}`} service={service} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
               {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
               {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
@@ -551,22 +548,12 @@ const useDbLifecycle = (db: Database) =>
 function OverviewTab({ db }: { db: Database }) {
   const meta = ENGINE_META[db.engine];
   const { pending, error, run } = useDbLifecycle(db);
-  const conn = connectionString(db);
 
   return (
     <div className="space-y-5">
       <LifecycleButtons status={db.status} pending={pending} error={error} run={run} />
 
-      {conn && (
-        <Field label="Connection string">
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
-            <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
-              {conn}
-            </code>
-            <CopyButton text={conn} />
-          </div>
-        </Field>
-      )}
+      <DatabaseCredentials key={db.id} db={db} />
 
       <div className="grid grid-cols-2 gap-3">
         <Info label="Image" value={db.dockerImage ?? "—"} mono />
@@ -659,7 +646,7 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
         <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
       </div>
 
-      <PasswordRow db={db} />
+      <DatabaseCredentials key={db.id} db={db} passwordOnly />
 
       <Info label="App name" value={db.appName} mono />
       <Info label="Created" value={db.createdAt ? new Date(db.createdAt).toLocaleString() : "—"} />
@@ -672,29 +659,5 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
         onDestroy={() => run("remove", onClose)}
       />
     </div>
-  );
-}
-
-function PasswordRow({ db }: { db: Database }) {
-  const [show, setShow] = useState(false);
-  if (!db.databasePassword) return null;
-  return (
-    <Field label="Password" hint="rotation coming soon">
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2">
-        <code className="flex-1 truncate font-mono text-xs text-[var(--color-fg-muted)]">
-          {show ? db.databasePassword : "•".repeat(16)}
-        </code>
-        <button
-          type="button"
-          onClick={() => setShow((s) => !s)}
-          aria-label={show ? "Hide password" : "Show password"}
-          aria-pressed={show}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
-        >
-          {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-        </button>
-        <CopyButton text={db.databasePassword} />
-      </div>
-    </Field>
   );
 }
