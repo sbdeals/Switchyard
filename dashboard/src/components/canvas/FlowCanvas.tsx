@@ -1,28 +1,34 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { LayoutGrid, Undo2 } from "lucide-react";
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
   Controls,
   MiniMap,
+  Panel,
   type Node,
   type Edge,
   useNodesState,
   useEdgesState,
   type NodeChange,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { Service, ServiceEdge } from "@/lib/dokploy";
 import { serviceAccent } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
+import { canvasAutoLayout, type Positions } from "@/lib/canvas-auto-layout";
+import {
+  createCanvasLayoutActions,
+  loadPositions,
+  positionsForCanvasSync,
+  savePositions,
+} from "@/lib/canvas-layout-actions";
 
-// v2: key bumped when the default layout became a grid — pre-grid saves froze
-// every auto-position (not just drags), which would pin the old horizontal
-// layout forever.
-const POS_KEY = "switchyard:positions:v2";
 const COL_W = 300;
 const ROW_H = 104;
 /**
@@ -34,24 +40,6 @@ const ROW_H = 104;
 const GRID_COLS = 4;
 /** Vertical padding between grid rows — room for the next row's group label. */
 const ROW_GAP = 72;
-
-type Positions = Record<string, { x: number; y: number }>;
-
-function loadPositions(): Positions {
-  if (typeof window === "undefined") return {};
-  try {
-    return JSON.parse(localStorage.getItem(POS_KEY) ?? "{}");
-  } catch {
-    return {};
-  }
-}
-function savePositions(p: Positions) {
-  try {
-    localStorage.setItem(POS_KEY, JSON.stringify(p));
-  } catch {
-    /* ignore */
-  }
-}
 
 const nodeTypes = { service: ServiceNode };
 
@@ -69,7 +57,7 @@ export function FlowCanvas({
 
   const buildNodes = useCallback(
     (overrides?: Positions): Node[] => {
-      const saved = { ...loadPositions(), ...(overrides ?? {}) };
+      const saved = overrides ?? {};
       // Group by project / environment for a tidy default layout. The group
       // name renders inside each card (nodes are draggable — a label pinned to
       // the background would stay behind when its services move).
@@ -131,15 +119,61 @@ export function FlowCanvas({
 
   const [nodes, setNodes, onNodesChange] = useNodesState(buildNodes());
   const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges());
+  const flow = useRef<ReactFlowInstance | null>(null);
+  const layoutActions = useRef<ReturnType<typeof createCanvasLayoutActions> | null>(null);
+  const positionsLoaded = useRef(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [animating, setAnimating] = useState(false);
+
+  useEffect(() => {
+    const actions = createCanvasLayoutActions({
+      getPositions: () => Object.fromEntries(
+        (flow.current?.getNodes() ?? []).map((node) => [node.id, node.position])
+      ),
+      setPositions: (positions) => setNodes((current) => current.map((node) => (
+        positions[node.id] ? { ...node, position: positions[node.id] } : node
+      ))),
+      onUndoAvailable: setCanUndo,
+      onAnimating: setAnimating,
+      onSettled: () => {
+        void flow.current?.fitView({
+          padding: 0.3,
+          maxZoom: 1,
+          duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 200,
+        });
+      },
+    });
+    layoutActions.current = actions;
+    return () => actions.dispose();
+  }, [setNodes]);
+
+  const tidyUp = () => {
+    const current = flow.current?.getNodes();
+    if (!current?.length) return;
+    const positions = canvasAutoLayout(current.map((node) => {
+      const { service } = node.data as ServiceNodeData;
+      return {
+        id: node.id,
+        name: service.name,
+        kind: service.kind,
+        width: node.measured?.width,
+        height: node.measured?.height,
+      };
+    }), serviceEdges);
+    layoutActions.current?.tidy(positions);
+  };
 
   // Re-sync with fresh server data (added/removed services, status changes)
   // while keeping any in-session node positions. Standard React Flow
   // controlled-data pattern.
   useEffect(() => {
+    // Restore browser storage after hydration. Reading it during the first
+    // render disagrees with the server's default positions.
+    const preserveCurrent = positionsLoaded.current;
+    positionsLoaded.current = true;
     setNodes((curr) => {
-      const pos: Positions = {};
-      for (const n of curr) if (n.type === "service") pos[n.id] = n.position;
-      return buildNodes(pos);
+      const current = curr.filter((node) => node.type === "service");
+      return buildNodes(positionsForCanvasSync(current, preserveCurrent));
     });
     setEdges(buildEdges());
   }, [buildNodes, buildEdges, setNodes, setEdges]);
@@ -184,6 +218,8 @@ export function FlowCanvas({
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
+        onInit={(instance) => { flow.current = instance; }}
+        nodesDraggable={!animating}
         colorMode="dark"
         fitView
         fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
@@ -193,6 +229,33 @@ export function FlowCanvas({
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#ffffff2b" />
         <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
+        <Panel position="top-right">
+          <button
+            type="button"
+            onClick={tidyUp}
+            disabled={animating || nodes.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)] disabled:opacity-50"
+          >
+            <LayoutGrid className="size-3.5" /> Tidy up
+          </button>
+        </Panel>
+        {canUndo && (
+          <Panel position="bottom-center">
+            <div
+              role="status"
+              className="flex items-center gap-3 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-3 py-2 text-xs shadow-lg"
+            >
+              <span>Canvas tidied up</span>
+              <button
+                type="button"
+                onClick={() => layoutActions.current?.undo()}
+                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-medium text-[var(--color-brand)] hover:bg-[var(--color-surface-hover)]"
+              >
+                <Undo2 className="size-3.5" /> Undo
+              </button>
+            </div>
+          </Panel>
+        )}
         <MiniMap
           pannable
           zoomable
