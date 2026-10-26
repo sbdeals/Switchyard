@@ -1,0 +1,106 @@
+{
+  "appName": "service-metrics-burner-wjhafy",
+  "uniqueSamples": 8,
+  "samples": [
+    {
+      "status": "running",
+      "sample": {
+        "ts": 1793005093988,
+        "cpu": 48.561652490887,
+        "memUsed": 495616,
+        "memLimit": 33554432,
+        "memPct": 1.47705078125
+      },
+      "containers": 1
+    },
+    {
+      "status": "running",
+      "sample": {
+        "ts": 1793005098966,
+        "cpu": 49.68148514851485,
+        "memUsed": 495616,
+        "memLimit": 33554432,
+        "memPct": 1.47705078125
+      },
+      "containers": 1
+    },
+    {
+      "status": "running",
+      "sample": {
+        "ts": 1793005103874,
+        "cpu": 49.846069651741296,
+        "memUsed": 495616,
+        "memLimit": 33554432,
+        "memPct": 1.47705078125
+      },
+      "containers": 1
+    },
+    {
+      "status": "running",
+      "sample": {
+        "ts": 1793005108824,
+        "cpu": 49.725869297163996,
+        "memUsed": 495616,
+        "memLimit": 33554432,
+        "memPct": 1.47705078125
+      },
+      "containers": 1
+    },
+    {
+      "status": "running",
+      "sample": {
+        "ts": 1793005113784,
+        "cpu": 49.159654747225645,
+        "memUsed": 495616,
+        "memLimit": 33554432,
+        "memPct": 1.47705078125
+      },
+      "containers": 1
+    },
+    {
+      "status": "running",
+      "sample": {
+        "ts": 1793005122988,
+        "cpu": 48.587834549878345,
+        "memUsed": 495616,
+        "memLimit": 33554432,
+        "memPct": 1.47705078125
+      },
+      "containers": 1
+    },
+    {
+      "status": "running",
+      "sample": {
+        "ts": 1793005128005,
+        "cpu": 49.296490797546014,
+        "memUsed": 495616,
+        "memLimit": 33554432,
+        "memPct": 1.47705078125
+      },
+      "containers": 1
+    },
+    {
+      "status": "running",
+      "sample": {
+        "ts": 1793005132948,
+        "cpu": 48.70268948655257,
+        "memUsed": 495616,
+        "memLimit": 33554432,
+        "memPct": 1.47705078125
+      },
+      "containers": 1
+    }
+  ],
+  "requestIntervalsMs": [
+    5007,
+    5000,
+    4994,
+    4999,
+    9200,
+    4999,
+    5001
+  ],
+  "drawerTabPaused": true,
+  "unknownServiceStatus": 403,
+  "pageErrors": []
+}

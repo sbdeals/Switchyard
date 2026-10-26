@@ -79,3 +79,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#106](https://github.com/sbdeals/Switchyard/pull/106) | codex/service-rename (main) | Service rename | [106-service-rename](106-service-rename/) | Codex mp4+pngs | appName/container unchanged ✓ |
 | [#107](https://github.com/sbdeals/Switchyard/pull/107) | codex/shortcuts-help (main) | Keyboard shortcuts overlay | [107-shortcuts-help](107-shortcuts-help/) | Codex mp4+pngs | browser checks ✓ |
 | [#108](https://github.com/sbdeals/Switchyard/pull/108) | codex/env-compare (main) | Compare environments | [108-env-compare](108-env-compare/) | Codex mp4+pngs | masked/reveal/authz ✓ |
+| [#109](https://github.com/sbdeals/Switchyard/pull/109) | codex/service-metrics (main) | Live service metrics totals | [109-service-metrics](109-service-metrics/) | Codex mp4+pngs | ~49% CPU on 0.5 cpus ✓ |
