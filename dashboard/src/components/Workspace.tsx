@@ -4,7 +4,8 @@ import { useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
+import type { Service, ProjectNode } from "@/lib/dokploy";
+import type { ServiceReferenceGraph } from "@/lib/service-references";
 import { ServiceCard } from "@/components/ServiceCard";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
@@ -18,11 +19,11 @@ type View = "canvas" | "grid";
 export function Workspace({
   services,
   projects,
-  edges,
+  graph,
 }: {
   services: Service[];
   projects: ProjectNode[];
-  edges: ServiceEdge[];
+  graph: ServiceReferenceGraph;
 }) {
   const [view, setView] = useState<View>("canvas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -81,7 +82,7 @@ export function Workspace({
       {services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
+        <FlowCanvas services={services} graph={graph} onSelect={(s) => setSelectedId(s.id)} />
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">

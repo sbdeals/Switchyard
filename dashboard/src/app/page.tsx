@@ -1,6 +1,7 @@
 import { unstable_rethrow } from "next/navigation";
 
-import { loadWorkspace, inferEdges } from "@/lib/dokploy";
+import { loadWorkspace } from "@/lib/dokploy";
+import { buildServiceReferenceGraph } from "@/lib/service-references";
 import { ensureCollector } from "@/lib/collector";
 import { Workspace } from "@/components/Workspace";
 import { LogoutButton } from "@/components/LogoutButton";
@@ -31,7 +32,7 @@ export default async function Page() {
         <Workspace
           services={result.services}
           projects={result.projects}
-          edges={inferEdges(result.services)}
+          graph={buildServiceReferenceGraph(result.services)}
         />
       </>
     );

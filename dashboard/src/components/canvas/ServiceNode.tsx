@@ -2,27 +2,32 @@
 
 import { memo, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Database as DatabaseIcon, Box, Layers } from "lucide-react";
+import { Database as DatabaseIcon, Box, Layers, TriangleAlert } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
+import type { ReferenceWarning } from "@/lib/service-references";
 import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 
 export interface ServiceNodeData extends Record<string, unknown> {
   service: Service;
   /** Catalog logo URL for the app (Railway-style), or null for the generic icon. */
   logo: string | null;
+  referenceWarnings: ReferenceWarning[];
   onSelect: (service: Service) => void;
 }
 
 function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData }) {
-  const { service, logo, onSelect } = data;
+  const { service, logo, referenceWarnings, onSelect } = data;
   const accent = serviceAccent(service);
   const status = resolveServiceDisplay(service.status, service.runtime);
+  const warningLabel = referenceWarnings.length > 0
+    ? `${referenceWarnings.length} broken ref${referenceWarnings.length === 1 ? "" : "s"}`
+    : null;
 
   return (
     <div
       role="button"
       tabIndex={0}
-      aria-label={`${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""} — open details`}
+      aria-label={`${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""}${warningLabel ? `, ${warningLabel}` : ""} — open details`}
       onClick={() => onSelect(service)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -68,6 +73,15 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
           />
         )}
       </div>
+      {warningLabel && (
+        <span
+          className="mt-1 flex w-fit items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400"
+          title={referenceWarnings.map((ref) => `${ref.serviceName}.${ref.variable}: ${ref.reason === "missing" ? "service not found" : "multiple services match"} in this project/environment`).join("\n")}
+        >
+          <TriangleAlert className="size-3" aria-hidden="true" />
+          {warningLabel}
+        </span>
+      )}
     </div>
   );
 }

@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
   Controls,
   MiniMap,
+  MarkerType,
+  Panel,
   type Node,
   type Edge,
   useNodesState,
@@ -14,7 +16,8 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { Service, ServiceEdge } from "@/lib/dokploy";
+import type { Service } from "@/lib/dokploy";
+import type { ServiceReferenceGraph } from "@/lib/service-references";
 import { serviceAccent } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
@@ -57,15 +60,16 @@ const nodeTypes = { service: ServiceNode };
 
 export function FlowCanvas({
   services,
-  edges: serviceEdges,
+  graph,
   onSelect,
 }: {
   services: Service[];
-  edges: ServiceEdge[];
+  graph: ServiceReferenceGraph;
   onSelect: (service: Service) => void;
 }) {
   // Catalog logos for Railway-style node icons (null while the catalog loads).
   const logos = useTemplateLogos();
+  const [hoveredEdge, setHoveredEdge] = useState<{ id: string; x: number; y: number } | null>(null);
 
   const buildNodes = useCallback(
     (overrides?: Positions): Node[] => {
@@ -99,7 +103,12 @@ export function FlowCanvas({
             id: service.id,
             type: "service",
             position: saved[service.id] ?? { x, y: rowY + row * ROW_H },
-            data: { service, logo: resolveServiceLogo(service, logos), onSelect } as ServiceNodeData,
+            data: {
+              service,
+              logo: resolveServiceLogo(service, logos),
+              referenceWarnings: graph.warnings[service.id] ?? [],
+              onSelect,
+            } as ServiceNodeData,
           });
         });
         rowMaxServices = Math.max(rowMaxServices, svcs.length);
@@ -107,30 +116,40 @@ export function FlowCanvas({
       }
       return nodes;
     },
-    [services, onSelect, logos]
+    [services, onSelect, logos, graph.warnings]
   );
 
   const buildEdges = useCallback(
     (): Edge[] =>
-      serviceEdges.map((e) => {
+      graph.edges.map((e) => {
         const source = services.find((s) => s.id === e.source);
         const target = services.find((s) => s.id === e.target);
-        const accent = target ? serviceAccent(target) : "#a06bff";
+        const inferred = e.kind === "inferred";
+        const accent = inferred ? "var(--color-fg-subtle)" : target ? serviceAccent(target) : "#a06bff";
+        const description = e.kind === "reference"
+          ? `${source?.name} references ${target?.name}: ${e.variables.map((v) => `${target?.name}.${v}`).join(", ")}`
+          : `inferred: ${source?.name} mentions ${target?.name} in its env (heuristic)`;
         return {
           id: `${e.source}->${e.target}`,
           source: e.source,
           target: e.target,
-          animated: true,
-          ariaLabel:
-            source && target ? `${source.name} connects to ${target.name}` : undefined,
-          style: { stroke: accent, strokeWidth: 1.5 },
+          ariaLabel: description,
+          label: e.kind === "reference" ? e.variables.join(", ") : undefined,
+          labelStyle: { fill: "var(--color-fg)", fontSize: 11 },
+          labelBgStyle: { fill: "var(--color-surface)", stroke: "var(--color-border-strong)" },
+          labelBgPadding: [6, 4] as [number, number],
+          labelBgBorderRadius: 4,
+          markerEnd: { type: MarkerType.ArrowClosed, color: accent, width: 18, height: 18 },
+          deletable: false,
+          style: { stroke: accent, strokeWidth: 1.5, strokeDasharray: inferred ? "5 5" : undefined },
         };
       }),
-    [serviceEdges, services]
+    [graph.edges, services]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(buildNodes());
   const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges());
+  const hoveredDescription = edges.find((e) => e.id === hoveredEdge?.id)?.ariaLabel;
 
   // Re-sync with fresh server data (added/removed services, status changes)
   // while keeping any in-session node positions. Standard React Flow
@@ -183,6 +202,10 @@ export function FlowCanvas({
         edges={edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
+        onEdgeMouseEnter={(event, edge) => setHoveredEdge({ id: edge.id, x: event.clientX, y: event.clientY })}
+        onEdgeMouseMove={(event, edge) => setHoveredEdge({ id: edge.id, x: event.clientX, y: event.clientY })}
+        onEdgeMouseLeave={() => setHoveredEdge(null)}
+        onMoveStart={() => setHoveredEdge(null)}
         nodeTypes={nodeTypes}
         colorMode="dark"
         fitView
@@ -192,6 +215,20 @@ export function FlowCanvas({
         maxZoom={1.5}
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#ffffff2b" />
+        {edges.length > 0 && (
+          <Panel position="top-left">
+            <div aria-label="Connection legend" className="flex gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[11px] text-[var(--color-fg-muted)]">
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden="true" className="w-5 border-t-2 border-[var(--color-fg)]" />
+                Reference
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden="true" className="w-5 border-t-2 border-dashed border-[var(--color-fg-subtle)]" />
+                Inferred
+              </span>
+            </div>
+          </Panel>
+        )}
         <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
         <MiniMap
           pannable
@@ -205,6 +242,18 @@ export function FlowCanvas({
           className="!bg-[var(--color-bg-elevated)]"
         />
       </ReactFlow>
+      {hoveredEdge && hoveredDescription && (
+        <div
+          role="tooltip"
+          className="pointer-events-none fixed z-50 max-w-xs rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-3 py-2 text-xs text-[var(--color-fg)] shadow-lg"
+          style={{
+            left: Math.max(8, Math.min(hoveredEdge.x + 12, window.innerWidth - 332)),
+            top: Math.max(8, Math.min(hoveredEdge.y + 12, window.innerHeight - 100)),
+          }}
+        >
+          {hoveredDescription}
+        </div>
+      )}
     </div>
   );
 }

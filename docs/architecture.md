@@ -58,7 +58,7 @@ Databases come in five engines — `postgres`, `mysql`, `mariadb`, `mongo`, `red
 3. Each ref is **enriched in parallel** (`Promise.all`) via the matching detail endpoint: `<engine>.one` for databases, `application.one` for apps, `compose.one` for compose stacks.
 4. The three lists are merged, sorted by name, and returned together with the project tree.
 
-This is a deliberate N+1 fan-out — one detail request per service — which is fine at dashboard scale and keeps the client dumb: [`src/app/page.tsx`](../dashboard/src/app/page.tsx) just calls `loadWorkspace()` and hands `services`, `projects`, and inferred `edges` to the client-side `Workspace` component.
+This is a deliberate N+1 fan-out — one detail request per service — which is fine at dashboard scale and keeps the client dumb: [`src/app/page.tsx`](../dashboard/src/app/page.tsx) calls `loadWorkspace()` and hands `services`, `projects`, and a variable-reference graph to the client-side `Workspace` component.
 
 `page.tsx` exports `dynamic = "force-dynamic"`, so the page is rendered per request from live Dokploy state (verified against the bundled Next 16 docs: `force-dynamic` forces request-time rendering). If `loadWorkspace()` throws — Dokploy down, bad credentials — the page renders an inline error panel showing the message and pointing at `DOKPLOY_URL` / `DOKPLOY_EMAIL` / `DOKPLOY_PASSWORD` in `.env.local` instead of crashing.
 
@@ -143,11 +143,15 @@ mode), persistence is simply off and live behaviour is unchanged.
   configured webhook (Slack/Discord/Telegram/Mattermost/Lark/Teams/custom) and
   the alert is POSTed there — no new notification infra.
 
-## Canvas: edge inference and layout persistence
+## Canvas: variable references and layout persistence
 
 The Railway-style canvas ([`src/components/canvas/FlowCanvas.tsx`](../dashboard/src/components/canvas/FlowCanvas.tsx), built on React Flow / `@xyflow/react`) renders one node per service and draws arrows between related services.
 
-**Edge inference** (`inferEdges()` in `dokploy.ts`). Dokploy has no native "connection" concept, so edges are a heuristic over env vars: if service A's raw env block contains service B's `appName` or `name` (case-insensitive substring, needles longer than 2 characters to cut noise), an edge A → B is drawn, deduplicated by pair. In practice this catches the common case — a `DATABASE_URL` whose host is the database's `appName` — but as a substring match it can produce false positives. Edges render animated, stroked in the *target* service's accent color.
+**Reference graph** ([`src/lib/service-references.ts`](../dashboard/src/lib/service-references.ts)). The pure parser reads `${{ServiceName.VAR}}` tokens from env assignment values, excluding comments. Names resolve exactly within the source's project and environment. The graph groups variables into one directed edge per consumer/target pair, ignores self references, and reports missing or ambiguous targets as node warnings. Solid reference arrows use the target's accent color, variable labels, and tooltips saying "references".
+
+**Inferred fallback.** `inferEdges()` retains the case-insensitive env-substring heuristic for service `appName` or `name` longer than two characters. It ignores comments and explicit reference tokens, so unresolved tokens cannot create inferred edges. The graph merges one inferred edge per pair only when no explicit edge exists. These hints remain available for today's plain connection strings, are muted and dashed with no variable label, and have an "inferred: … (heuristic)" tooltip. Inference can produce false positives, including across project/environment boundaries. Both tooltip types expose names only, never env values. A legend appears only when there are edges.
+
+This is visualization only: `${{…}}` references are not resolved at deployment time, and target-variable existence/runtime connectivity are not validated. Colocated Vitest tests cover parsing, scope, warnings, explicit precedence, inferred deduplication, and self references.
 
 **Default layout.** Nodes are grouped by `project / environment`: each group gets a column (320 px apart) with a non-draggable label node on top, and services stack in 104 px rows.
 
