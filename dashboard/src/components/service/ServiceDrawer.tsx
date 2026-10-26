@@ -30,6 +30,7 @@ import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { connectionString } from "@/lib/connection";
+import { newestDeployment } from "@/lib/deployment-commit";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
@@ -39,6 +40,7 @@ import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { DeploymentCommitInfo } from "@/components/service/DeploymentCommitInfo";
 import {
   AppOverviewTab,
   AppBuildTab,
@@ -504,16 +506,17 @@ function Header({
 }) {
   const accent = serviceAccent(service);
   const Icon = service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
+  const latest = service.kind === "database" ? null : newestDeployment(service.deployments);
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <div
-          className="flex size-11 items-center justify-center rounded-xl"
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl"
           style={{ backgroundColor: `${accent}1a`, color: accent }}
         >
           <Icon className="size-5.5" />
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h2 id={titleId} className="font-semibold">
               {service.name}
@@ -526,13 +529,14 @@ function Header({
           <div className="text-[11px] text-[var(--color-fg-subtle)]">
             Last deploy: {LAST_DEPLOY_LABEL[service.status] ?? service.status}
           </div>
+          <DeploymentCommitInfo commit={latest?.commit ?? null} />
         </div>
       </div>
       <button
         type="button"
         onClick={onClose}
         aria-label="Close service details"
-        className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+        className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
       >
         <X className="size-4" />
       </button>

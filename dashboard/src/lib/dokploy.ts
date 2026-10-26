@@ -25,6 +25,12 @@ import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
 import {
+  normalizeDeploymentCommit,
+  type DeploymentCommit,
+  type DeploymentCommitFields,
+  type DeploymentSource,
+} from "./deployment-commit";
+import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
   listRuntimeStates,
@@ -153,6 +159,7 @@ export interface AppDeployment {
   status: string;
   title: string;
   createdAt: string;
+  commit: DeploymentCommit | null;
   /**
    * Non-null when this deployment produced a restorable image snapshot
    * (Dokploy only records these when the app deploys to a registry). Feeds
@@ -711,7 +718,7 @@ export async function reloadDatabase(engine: Engine, id: string, appName: string
 
 // --- applications -----------------------------------------------------------
 
-interface RawApplicationDetail {
+interface RawApplicationDetail extends DeploymentSource {
   name?: string;
   appName?: string;
   applicationStatus?: ServiceStatus;
@@ -772,7 +779,7 @@ interface RawDomain {
 }
 
 /** Deployment shape returned nested under `application.one` / `compose.one`. */
-interface RawDeployment {
+interface RawDeployment extends DeploymentCommitFields {
   deploymentId: string;
   status?: string;
   title?: string;
@@ -794,12 +801,13 @@ function mapDomains(domains: RawDomain[] | undefined): AppDomain[] {
 }
 
 /** Normalize a nested deployments array (shared by applications and compose). */
-function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment[] {
+function mapDeployments(deployments: RawDeployment[] | undefined, source: DeploymentSource): AppDeployment[] {
   return (deployments ?? []).map((dp) => ({
     deploymentId: dp.deploymentId,
     status: dp.status ?? "idle",
     title: dp.title ?? "Deployment",
     createdAt: dp.createdAt ?? "",
+    commit: normalizeDeploymentCommit(dp, source),
     rollbackId: dp.rollbackId ?? null,
   }));
 }
@@ -857,7 +865,7 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
           securityId: s.securityId,
           username: s.username ?? "",
         })),
-        deployments: mapDeployments(d.deployments),
+        deployments: mapDeployments(d.deployments, d),
         autoDeploy: d.autoDeploy ?? false,
         branch: d.branch ?? d.customGitBranch ?? null,
         buildPath: d.customGitBuildPath ?? null,
@@ -1626,7 +1634,7 @@ export async function removeMount(mountId: string): Promise<void> {
 
 // --- compose ----------------------------------------------------------------
 
-interface RawComposeDetail {
+interface RawComposeDetail extends DeploymentSource {
   name?: string;
   appName?: string;
   composeStatus?: ServiceStatus;
@@ -1669,7 +1677,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         composeFile: d.composeFile ?? null,
         composeType: d.composeType ?? null,
         domains: mapDomains(d.domains),
-        deployments: mapDeployments(d.deployments),
+        deployments: mapDeployments(d.deployments, d),
       } satisfies ComposeService;
     })
   );

@@ -64,6 +64,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { DeploymentCommitInfo } from "@/components/service/DeploymentCommitInfo";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -510,7 +511,8 @@ export function DeploymentHistory({ deployments: history }: { deployments: AppDe
             <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
             {d.rollbackId && <span className="sr-only">{d.status}</span>}
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm">{d.title}</div>
+              {!d.commit?.subject && <div className="truncate text-sm">{d.title}</div>}
+              <DeploymentCommitInfo commit={d.commit} />
               <div className="text-[11px] text-[var(--color-fg-subtle)]">
                 {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
               </div>
