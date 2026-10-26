@@ -1,0 +1,1 @@
+PASS: real-browser textarea, inherited contenteditable, plaintext-only, Ctrl/Alt guards, backdrop dismissal, focus restoration, simulated macOS key labels, and 390px viewport bounds. Browser-only editor fixtures removed. No resources created.
