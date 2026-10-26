@@ -1,0 +1,24 @@
+PASS idle and stopped runtimes require 'Start the service first'
+PASS running/degraded services and unavailable runtime remain runnable
+PASS done, running, and legacy empty replies have explicit success feedback
+PASS HTTP-200 error status is a failure with service/command/shell guidance
+PASS Run now posts the schedule ID and revalidates after completion
+PASS Run now preserves error status instead of reporting HTTP success
+PASS empty legacy response acknowledges a start without claiming completion
+PASS backend failure is returned as an inline error
+PASS history reads only the selected schedule and returns display fields
+PASS empty history and read failures return explicit results
+PASS both actions preserve framework redirects
+PASS disabled Run now renders a tooltip and prevents even a direct handler call
+PASS pending Run now disables duplicate submissions and displays a spinner
+PASS completion renders a status message and opens refreshed execution history
+PASS a failed run clears success feedback and refreshes history again
+PASS client transport failure explains uncertainty and still refreshes history
+PASS retry success clears the prior error and reports Started for an accepted run
+PASS existing execution history can be opened without running a command
+PASS history loads on open and renders newest execution first
+PASS a new run refreshes already-open history
+PASS history failure is visible and preserves the last loaded executions
+PASS manual history refresh recovers from failure and shows an empty state
+PASS history transport failure has retry guidance and does not claim an empty history
+RESULT: 23 checks passed; no network, services, containers, or credentials accessed.
