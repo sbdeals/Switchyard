@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useState,
   useTransition,
@@ -23,6 +24,7 @@ import {
 import type { Service } from "@/lib/dokploy";
 import { inputCls } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { nextTabIndex } from "@/lib/tab-navigation";
 
 const PAGE_SIZE = 50;
 
@@ -81,6 +83,7 @@ async function api<T>(body: Record<string, unknown>): Promise<T> {
  */
 export function DataTab({ service }: { service: Service }) {
   const app = service.appName;
+  const viewId = useId();
   const [mode, setMode] = useState<"browse" | "sql">("browse");
 
   const [targets, setTargets] = useState<PgTarget[] | null>(null);
@@ -163,14 +166,22 @@ export function DataTab({ service }: { service: Service }) {
             </div>
           )}
         </div>
-        <ModeToggle mode={mode} onChange={setMode} />
+        <ModeToggle mode={mode} onChange={setMode} viewId={viewId} />
       </div>
 
-      {mode === "browse" ? (
-        <BrowseView app={app} targetKey={target.key} />
-      ) : (
-        <SqlView app={app} targetKey={target.key} />
-      )}
+      <div
+        id={`${viewId}-panel`}
+        role="tabpanel"
+        aria-labelledby={`${viewId}-${mode}`}
+        tabIndex={0}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        {mode === "browse" ? (
+          <BrowseView app={app} targetKey={target.key} />
+        ) : (
+          <SqlView app={app} targetKey={target.key} />
+        )}
+      </div>
     </div>
   );
 }
@@ -178,22 +189,35 @@ export function DataTab({ service }: { service: Service }) {
 function ModeToggle({
   mode,
   onChange,
+  viewId,
 }: {
   mode: "browse" | "sql";
   onChange: (m: "browse" | "sql") => void;
+  viewId: string;
 }) {
+  const modes = ["browse", "sql"] as const;
   return (
     <div
       role="tablist"
       aria-label="Data view"
+      onKeyDown={(e) => {
+        const next = nextTabIndex(e.key, modes.indexOf(mode), modes.length);
+        if (next === null) return;
+        e.preventDefault();
+        onChange(modes[next]);
+        e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+      }}
       className="flex shrink-0 rounded-lg border border-[var(--color-border-strong)] p-0.5 text-xs"
     >
-      {(["browse", "sql"] as const).map((m) => (
+      {modes.map((m) => (
         <button
           key={m}
           type="button"
           role="tab"
+          id={`${viewId}-${m}`}
+          aria-controls={`${viewId}-panel`}
           aria-selected={mode === m}
+          tabIndex={mode === m ? 0 : -1}
           onClick={() => onChange(m)}
           className={cn(
             "rounded-md px-2.5 py-1 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50",
@@ -664,7 +688,7 @@ function ResultGrid({ columns, rows }: { columns: string[]; rows: (string | null
                   className="max-w-[22rem] border-b border-[var(--color-border)]/50 px-2 py-1 align-top text-[var(--color-fg)]"
                 >
                   {cell === null ? (
-                    <span className="rounded bg-[var(--color-idle-soft)] px-1 text-[10px] italic text-[var(--color-fg-subtle)]">
+                    <span className="rounded bg-[var(--color-idle-soft)] px-1 text-[10px] italic text-[var(--color-idle)]">
                       NULL
                     </span>
                   ) : cell === "" ? (

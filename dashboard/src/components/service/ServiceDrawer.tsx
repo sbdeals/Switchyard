@@ -67,6 +67,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { nextTabIndex } from "@/lib/tab-navigation";
 
 type TabId =
   | "overview"
@@ -375,7 +376,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             exit={{ opacity: 0 }}
             onClick={onClose}
           />
-          <motion.aside
+          <motion.div
             ref={dialogRef}
             role="dialog"
             aria-modal="true"
@@ -396,12 +397,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               role="tablist"
               aria-label="Service sections"
               onKeyDown={(e) => {
-                const idx = tabs.indexOf(tab);
-                let next: number | null = null;
-                if (e.key === "ArrowRight") next = (idx + 1) % tabs.length;
-                else if (e.key === "ArrowLeft") next = (idx - 1 + tabs.length) % tabs.length;
-                else if (e.key === "Home") next = 0;
-                else if (e.key === "End") next = tabs.length - 1;
+                const next = nextTabIndex(e.key, tabs.indexOf(tab), tabs.length);
                 if (next === null) return;
                 e.preventDefault();
                 setTab(tabs[next]);
@@ -486,7 +482,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                   <AppSettingsTab app={service} onClose={onClose} />
                 ))}
             </div>
-          </motion.aside>
+          </motion.div>
         </>
       )}
     </AnimatePresence>

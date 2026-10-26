@@ -15,7 +15,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { Service, ServiceEdge } from "@/lib/dokploy";
-import { serviceAccent } from "@/lib/service-meta";
+import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
 
@@ -95,11 +95,15 @@ export function FlowCanvas({
         }
         const x = col * COL_W;
         svcs.forEach((service, row) => {
+          const status = resolveServiceDisplay(service.status, service.runtime);
           nodes.push({
             id: service.id,
             type: "service",
+            ariaRole: "button",
+            ariaLabel: `${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""} — open details`,
+            className: "rounded-xl focus-visible:!outline-2 focus-visible:!outline-offset-2 focus-visible:!outline-[var(--color-brand)]",
             position: saved[service.id] ?? { x, y: rowY + row * ROW_H },
-            data: { service, logo: resolveServiceLogo(service, logos), onSelect } as ServiceNodeData,
+            data: { service, logo: resolveServiceLogo(service, logos) } as ServiceNodeData,
           });
         });
         rowMaxServices = Math.max(rowMaxServices, svcs.length);
@@ -107,7 +111,7 @@ export function FlowCanvas({
       }
       return nodes;
     },
-    [services, onSelect, logos]
+    [services, logos]
   );
 
   const buildEdges = useCallback(
@@ -183,6 +187,19 @@ export function FlowCanvas({
         edges={edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeClick={(_, node) => onSelect((node.data as ServiceNodeData).service)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          const target = e.target as HTMLElement;
+          if (!target.classList.contains("react-flow__node")) return;
+          const service = services.find((s) => s.id === target.dataset.id);
+          if (!service) return;
+          e.preventDefault();
+          onSelect(service);
+        }}
+        ariaLabelConfig={{
+          "node.a11yDescription.keyboardDisabled": "Press Enter or Space to open service details. Use arrow keys to move a selected service; Escape clears selection.",
+        }}
         nodeTypes={nodeTypes}
         colorMode="dark"
         fitView
@@ -192,7 +209,9 @@ export function FlowCanvas({
         maxZoom={1.5}
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#ffffff2b" />
-        <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
+        <div role="group" aria-label="Canvas controls">
+          <Controls aria-label="" className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
+        </div>
         <MiniMap
           pannable
           zoomable

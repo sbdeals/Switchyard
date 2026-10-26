@@ -10,27 +10,16 @@ export interface ServiceNodeData extends Record<string, unknown> {
   service: Service;
   /** Catalog logo URL for the app (Railway-style), or null for the generic icon. */
   logo: string | null;
-  onSelect: (service: Service) => void;
 }
 
 function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData }) {
-  const { service, logo, onSelect } = data;
+  const { service, logo } = data;
   const accent = serviceAccent(service);
   const status = resolveServiceDisplay(service.status, service.runtime);
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-label={`${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""} — open details`}
-      onClick={() => onSelect(service)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect(service);
-        }
-      }}
-      className="w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+      className="w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)]"
       style={{
         borderColor: selected ? accent : "var(--color-border-strong)",
         boxShadow: selected ? `0 0 0 1px ${accent}, 0 8px 30px -12px ${accent}80` : undefined,

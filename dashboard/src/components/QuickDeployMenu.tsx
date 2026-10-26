@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Plus,
@@ -40,6 +40,8 @@ export function QuickDeployMenu({
   projects: ProjectNode[];
   onDeployed: (id: string) => void;
 }) {
+  const dialogId = useId();
+  const catalogId = useId();
   const [open, setOpen] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -116,8 +118,9 @@ export function QuickDeployMenu({
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        aria-haspopup="true"
+        aria-haspopup="dialog"
         aria-expanded={open}
+        aria-controls={open ? dialogId : undefined}
         className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)]"
       >
         <Plus className="size-4" /> New service
@@ -129,7 +132,9 @@ export function QuickDeployMenu({
             <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
             <FocusTrapPanel
               onClose={() => setOpen(false)}
+              id={dialogId}
               role="dialog"
+              aria-modal="true"
               aria-label="New service"
               initial={{ opacity: 0, y: -6, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -239,6 +244,7 @@ export function QuickDeployMenu({
               <button
                 onClick={toggleTemplates}
                 aria-expanded={showTemplates}
+                aria-controls={showTemplates ? catalogId : undefined}
                 className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)]"
               >
                 <span
@@ -256,7 +262,7 @@ export function QuickDeployMenu({
               </button>
 
               {showTemplates && (
-                <div className="mb-1">
+                <div id={catalogId} className="mb-1">
                   <div className="mb-1 flex items-center gap-1.5 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 focus-within:border-[var(--color-brand)]">
                     <Search className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
                     <input
@@ -269,15 +275,15 @@ export function QuickDeployMenu({
                   </div>
 
                   {loadingTemplates ? (
-                    <div className="flex items-center gap-1.5 px-2 py-3 text-xs text-[var(--color-fg-subtle)]">
+                    <div role="status" className="flex items-center gap-1.5 px-2 py-3 text-xs text-[var(--color-fg-subtle)]">
                       <Loader2 className="size-3.5 animate-spin" /> Loading catalog…
                     </div>
                   ) : templatesError ? (
-                    <div className="flex items-start gap-1.5 px-2 py-2 text-xs text-[var(--color-danger)]">
+                    <div role="alert" className="flex items-start gap-1.5 px-2 py-2 text-xs text-[var(--color-danger)]">
                       <AlertCircle className="mt-0.5 size-3.5 shrink-0" /> {templatesError}
                     </div>
                   ) : templates && filteredTemplates.length === 0 ? (
-                    <div className="px-2 py-3 text-xs text-[var(--color-fg-subtle)]">
+                    <div role="status" className="px-2 py-3 text-xs text-[var(--color-fg-subtle)]">
                       {templates.length === 0
                         ? "No templates available (Dokploy could not reach its template source)."
                         : "No templates match your search."}

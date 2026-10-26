@@ -17,13 +17,16 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { focusBoundaryIndex, removeDialog, type DialogEntry } from "@/lib/dialog-focus";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-const stack: HTMLElement[] = [];
+const stack: DialogEntry<HTMLElement>[] = [];
 
-const visible = (el: HTMLElement) => el.getClientRects().length > 0;
+const tabbable = (el: HTMLElement) =>
+  el.tabIndex >= 0 && !el.matches(":disabled") && el.getClientRects().length > 0 &&
+  getComputedStyle(el).visibility !== "hidden";
 
 export function useDialogFocus<T extends HTMLElement>(onClose: () => void) {
   const nodeRef = useRef<T | null>(null);
@@ -44,45 +47,43 @@ export function useDialogFocus<T extends HTMLElement>(onClose: () => void) {
   useEffect(() => {
     const panel = nodeRef.current;
     if (!panel) return;
-    stack.push(panel);
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const entry = { panel, opener };
+    stack.push(entry);
 
     const initial = panel.querySelector<HTMLElement>("[data-autofocus]") ?? panel;
     if (initial === panel && !panel.hasAttribute("tabindex")) panel.tabIndex = -1;
     initial.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (stack[stack.length - 1] !== panel) return;
+      if (stack[stack.length - 1] !== entry) return;
       if (e.key === "Escape") {
-        e.stopPropagation();
+        e.preventDefault();
+        e.stopImmediatePropagation();
         closeRef.current();
         return;
       }
       if (e.key !== "Tab") return;
-      const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(visible);
+      const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(tabbable);
       if (items.length === 0) {
         e.preventDefault();
+        panel.focus();
         return;
       }
-      const first = items[0];
-      const last = items[items.length - 1];
-      const active = document.activeElement;
-      const inside = active instanceof HTMLElement && panel.contains(active);
-      if (e.shiftKey && (active === first || !inside)) {
+      const index = items.findIndex((item) => item === document.activeElement);
+      const boundary = focusBoundaryIndex(index, items.length, e.shiftKey);
+      if (boundary !== null) {
         e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && (active === last || !inside)) {
-        e.preventDefault();
-        first.focus();
+        items[boundary].focus();
       }
     };
 
     document.addEventListener("keydown", onKey, true);
     return () => {
       document.removeEventListener("keydown", onKey, true);
-      stack.splice(stack.indexOf(panel), 1);
-      // No-op if the opener unmounted with the dialog.
-      opener?.focus();
+      const target = removeDialog(stack, entry, (parent, child) => parent.contains(child));
+      // An outgoing overlay must not steal focus from the dialog it opened.
+      if (target?.isConnected) target.focus();
     };
   }, [version]);
 

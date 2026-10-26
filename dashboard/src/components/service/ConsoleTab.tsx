@@ -201,6 +201,7 @@ export function ConsoleTab({ appName }: { appName: string }) {
         </div>
         <button
           type="submit"
+          aria-label="Run command"
           disabled={running || !command.trim()}
           className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
         >

@@ -26,19 +26,19 @@ export default async function Page() {
 
   if (result) {
     return (
-      <>
+      <main>
         <LogoutButton />
         <Workspace
           services={result.services}
           projects={result.projects}
           edges={inferEdges(result.services)}
         />
-      </>
+      </main>
     );
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-24">
+    <main className="mx-auto max-w-2xl px-6 py-24">
       <div className="rounded-2xl border border-[var(--color-danger)]/40 bg-[var(--color-danger-soft)] p-6">
         <h1 className="text-lg font-semibold text-[var(--color-danger)]">
           Couldn&apos;t reach Dokploy
@@ -54,6 +54,6 @@ export default async function Page() {
           {message}
         </pre>
       </div>
-    </div>
+    </main>
   );
 }
