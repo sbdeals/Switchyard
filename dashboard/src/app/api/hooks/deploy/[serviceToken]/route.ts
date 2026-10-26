@@ -1,6 +1,8 @@
 import { dispatchDeployHook } from "@/lib/deploy-hook-dispatch";
 import { hookDeliveryKey, matchesHookRef, verifyHookSignature } from "@/lib/deploy-hooks";
 import { claimDeployHook, releaseDeployHook, resolveDeployHook } from "@/lib/deploy-hook-store";
+import { parsePullRequest } from "@/lib/pr-previews";
+import { handlePullRequest } from "@/lib/preview-lifecycle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +49,17 @@ export async function POST(request: Request, context: { params: Promise<{ servic
       return reply(403, "invalid signature");
     }
     const event = request.headers.get("x-github-event");
+    if (event === "pull_request") {
+      let pullRequest;
+      try {
+        pullRequest = parsePullRequest(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body)), hook.repoUrl);
+      } catch {
+        return reply(400, "invalid pull request payload");
+      }
+      if (!pullRequest) return reply(200, "ignored pull request action");
+      const result = await handlePullRequest(hook, pullRequest, request.headers.get("x-github-delivery"));
+      return reply(result.status, result.result);
+    }
     if (event && event !== "push") return reply(200, "ignored event");
     let payload: { ref?: unknown; after?: unknown; deleted?: unknown };
     try {

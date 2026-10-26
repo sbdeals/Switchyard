@@ -12,7 +12,7 @@ vi.mock("./deploy-hook-dispatch", () => ({ dispatchDeployHook: vi.fn() }));
 
 import { cookies } from "next/headers";
 import { POST } from "@/app/api/hooks/deploy/[serviceToken]/route";
-import { getDeployHookAction, updateDeployHookAction } from "@/app/deploy-hook-actions";
+import { deletePreviewAction, getDeployHookAction, updateDeployHookAction, updatePreviewSettingsAction } from "@/app/deploy-hook-actions";
 import { request } from "./dokploy";
 import { dispatchDeployHook } from "./deploy-hook-dispatch";
 import { openSession } from "./session";
@@ -174,6 +174,48 @@ describe("anonymous signed deployment endpoint", () => {
 });
 
 describe("owner-only hook settings", () => {
+  it("requires the hook owner before changing preview/fork settings or deleting a preview", async () => {
+    userId = "other-owner";
+    expect((await updatePreviewSettingsAction(hook.serviceId, { enabled: true, allowForks: true })).ok).toBe(false);
+    expect((await deletePreviewAction(hook.serviceId, 12)).ok).toBe(false);
+    expect(vi.mocked(request).mock.calls.some(([procedure]) => procedure === "user.createApiKey" || procedure === "compose.delete")).toBe(false);
+  });
+
+  it("defaults previews/forks off, encrypts opt-in access, hides credentials, and revokes on disable", async () => {
+    hook = { ...hook, serviceId: "a-real-service-id-with-21-characters", token: "c".repeat(64) };
+    saveDeployHook(hook);
+    vi.stubEnv("SWITCHYARD_SESSION_SECRET", "local-test-secret");
+    const original = vi.mocked(request).getMockImplementation()!;
+    vi.mocked(request).mockImplementation(async (procedure, init) => {
+      if (procedure === "auth/get-session") return { user: { id: userId }, session: { activeOrganizationId: "organization" } };
+      if (procedure.startsWith("compose.one?")) return { composeFile, environment: { projectId: "project" } };
+      if (procedure === "user.createApiKey") {
+        expect((init?.body as { name: string }).name.length).toBeLessThanOrEqual(32);
+        return { id: "automation-id", key: "automation-secret" };
+      }
+      if (procedure === "user.deleteApiKey") return true;
+      return original(procedure, init);
+    });
+    expect(await getDeployHookAction(hook.serviceId)).toMatchObject({ ok: true, hook: { previewsEnabled: false, allowForks: false, previews: [] } });
+    const result = await updatePreviewSettingsAction(hook.serviceId, { enabled: true, allowForks: false });
+    expect(result).toMatchObject({ ok: true, hook: { previewsEnabled: true, allowForks: false } });
+    expect(JSON.stringify(result)).not.toContain("automation");
+    expect(findDeployHook(hook.serviceId)?.previewAccess?.sealedKey).not.toContain("automation-secret");
+    expect(findDeployHook(hook.serviceId)?.previewAccess?.projectId).toBe("project");
+    await updatePreviewSettingsAction(hook.serviceId, { enabled: true, allowForks: true });
+    expect(vi.mocked(request).mock.calls.filter(([name]) => name === "user.createApiKey")).toHaveLength(1);
+    expect(await updatePreviewSettingsAction(hook.serviceId, { enabled: false, allowForks: false })).toMatchObject({ ok: true, hook: { previewsEnabled: false } });
+    expect(request).toHaveBeenCalledWith("user.deleteApiKey", { method: "POST", body: { apiKeyId: "automation-id" } });
+    expect(findDeployHook(hook.serviceId)?.previewAccess).toBeUndefined();
+  });
+
+  it("never mints automation access without encryption or an enabled hook", async () => {
+    vi.stubEnv("SWITCHYARD_SESSION_SECRET", "");
+    expect((await updatePreviewSettingsAction(hook.serviceId, { enabled: true, allowForks: false })).ok).toBe(false);
+    saveDeployHook({ ...hook, enabled: false });
+    expect((await updatePreviewSettingsAction(hook.serviceId, { enabled: true, allowForks: false })).ok).toBe(false);
+    expect(vi.mocked(request).mock.calls.some(([name]) => name === "user.createApiKey")).toBe(false);
+  });
   it("only returns the view to an authenticated owner with service management access", async () => {
     const result = await getDeployHookAction(hook.serviceId);
     expect(result).toMatchObject({ ok: true, hook: { secret: hook.secret, path: `/api/hooks/deploy/${hook.token}` } });

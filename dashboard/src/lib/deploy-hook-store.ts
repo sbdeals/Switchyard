@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseManaged } from "./managed-compose";
+import { PREVIEW_LIMIT, type PreviewRecord } from "./pr-previews";
 
 export interface DeployHookRecord {
   serviceId: string;
@@ -14,6 +15,10 @@ export interface DeployHookRecord {
   repoUrl: string;
   branch: string;
   recent?: { key: string; at: number }[];
+  previewsEnabled?: boolean;
+  allowForks?: boolean;
+  previewAccess?: { id: string; sealedKey: string; projectId: string };
+  previews?: PreviewRecord[];
 }
 
 const DEBOUNCE_MS = 60_000;
@@ -41,6 +46,22 @@ function validRecord(value: unknown): value is DeployHookRecord {
     typeof record.enabled === "boolean" && boundedString(record.refreshToken, 256) &&
     /^[A-Za-z0-9_-]+$/.test(record.refreshToken) && boundedString(record.repoUrl, 4096) &&
     boundedString(record.branch, 1024) && !("sessionToken" in record) && !("dokployCookie" in record) &&
+    (record.previewsEnabled === undefined || typeof record.previewsEnabled === "boolean") &&
+    (record.allowForks === undefined || typeof record.allowForks === "boolean") &&
+    (record.previewAccess === undefined || (boundedString(record.previewAccess.id, 256) &&
+      boundedString(record.previewAccess.sealedKey, 4096) && boundedString(record.previewAccess.projectId, 256))) &&
+    (record.previews === undefined || (Array.isArray(record.previews) && record.previews.length <= PREVIEW_LIMIT &&
+      new Set(record.previews.map((preview) => preview.number)).size === record.previews.length &&
+      record.previews.every((preview) => Number.isSafeInteger(preview.number) && preview.number > 0 &&
+        boundedString(preview.marker, 256) && boundedString(preview.name, 1024) &&
+        boundedString(preview.environmentId, 256) && boundedString(preview.repoUrl, 4096) &&
+        boundedString(preview.branch, 1024) && /^[a-f0-9]{40}$/.test(preview.sha) &&
+        typeof preview.title === "string" && preview.title.length <= 240 &&
+        (preview.serviceId === undefined || boundedString(preview.serviceId, 256)) &&
+        (preview.appName === undefined || /^[a-zA-Z0-9_-]{1,256}$/.test(preview.appName)) &&
+        (preview.url === undefined || /^https?:\/\/[A-Za-z0-9.-]+$/.test(preview.url)) &&
+        (preview.lastAction === undefined || boundedString(preview.lastAction, 256)) &&
+        (preview.deleting === undefined || typeof preview.deleting === "boolean")))) &&
     (record.recent === undefined || (
       Array.isArray(record.recent) && record.recent.length <= MAX_RECENT &&
       record.recent.every((entry) => entry && boundedString(entry.key, 1024) && timestamp(entry.at))
@@ -120,22 +141,35 @@ export function syncDeployHookSource(serviceId: string, composeFile: string): vo
 }
 
 /** Synchronous read/edit/rename is atomic within one dashboard process. */
-export function claimDeployHook(token: string, key: string, now = Date.now()): boolean {
-  if (!boundedString(key, 1024) || !timestamp(now)) return false;
+export function claimDeployHook(token: string, key: string | string[], now = Date.now()): boolean {
+  const keys = [...new Set(typeof key === "string" ? [key] : key)];
+  if (!keys.length || !keys.every((value) => boundedString(value, 1024)) || !timestamp(now)) return false;
   const records = readStore();
   const record = records.find((current) => current.token === token && current.enabled);
   if (!record) return false;
   const recent = (record.recent ?? []).filter((entry) => entry.at > now - DEBOUNCE_MS);
-  if (recent.some((entry) => entry.key === key) || recent.length >= MAX_RECENT) return false;
-  record.recent = [...recent, { key, at: now }];
+  if (recent.some((entry) => keys.includes(entry.key)) || recent.length + keys.length > MAX_RECENT) return false;
+  record.recent = [...recent, ...keys.map((value) => ({ key: value, at: now }))];
   writeStore(records);
   return true;
 }
 
-export function releaseDeployHook(token: string, key: string): void {
+export function releaseDeployHook(token: string, key: string | string[]): void {
+  const keys = typeof key === "string" ? [key] : key;
   const records = readStore();
   const record = records.find((current) => current.token === token);
-  if (!record?.recent?.some((entry) => entry.key === key)) return;
-  record.recent = record.recent.filter((entry) => entry.key !== key);
+  if (!record?.recent?.some((entry) => keys.includes(entry.key))) return;
+  record.recent = record.recent.filter((entry) => !keys.includes(entry.key));
   writeStore(records);
+}
+
+// Settings and preview lifecycle share the same lock. A pending request cannot
+// restore a rotated token, exceed the cap, or race deletion with an update.
+const updates = new Map<string, Promise<unknown>>();
+export async function withDeployHookLock<T>(id: string, update: () => Promise<T>): Promise<T> {
+  const previous = updates.get(id) ?? Promise.resolve();
+  const pending = previous.catch(() => {}).then(update);
+  updates.set(id, pending);
+  try { return await pending; }
+  finally { if (updates.get(id) === pending) updates.delete(id); }
 }
