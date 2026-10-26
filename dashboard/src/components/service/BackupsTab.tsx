@@ -34,6 +34,7 @@ import {
   restoreBackupAction,
 } from "@/app/actions";
 import { inputCls, Field, useSavedFlash } from "@/components/service/primitives";
+import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { cn } from "@/lib/utils";
 
 export function BackupsTab({ db }: { db: Database }) {
@@ -124,6 +125,7 @@ function DestinationsSection({
   onChange: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState<S3Destination | null>(null);
   return (
     <section className="space-y-3">
       <SectionTitle
@@ -145,12 +147,7 @@ function DestinationsSection({
                 {d.bucket}
               </span>
               <button
-                onClick={async () => {
-                  if (confirm(`Remove destination "${d.name}"?`)) {
-                    await removeDestinationAction(d.destinationId);
-                    await onChange();
-                  }
-                }}
+                onClick={() => setDeleting(d)}
                 aria-label={`Remove destination ${d.name}`}
                 className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
               >
@@ -163,6 +160,18 @@ function DestinationsSection({
         <p className="text-xs text-[var(--color-fg-subtle)]">
           No destinations yet — add an S3-compatible bucket to store backups.
         </p>
+      )}
+
+      {deleting && (
+        <DeleteConfirmDialog
+          name={deleting.name}
+          resource="destination"
+          impact={["S3 destination configuration", "Backup schedules linked to this destination"]}
+          volumeNotice={false}
+          onConfirm={() => removeDestinationAction(deleting.destinationId)}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => { void onChange(); }}
+        />
       )}
 
       {open ? (

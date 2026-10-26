@@ -583,7 +583,6 @@ function OverviewTab({ db }: { db: Database }) {
 }
 
 function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
-  const { pending: lifePending, error: lifeError, run } = useDbLifecycle(db);
   const meta = ENGINE_META[db.engine];
   const currentVersion = db.dockerImage?.split(":")[1] ?? meta.versions[0];
 
@@ -659,11 +658,9 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
       <Info label="Created" value={db.createdAt ? new Date(db.createdAt).toLocaleString() : "—"} />
 
       <DangerZone
-        name={db.name}
+        service={db}
         message="Destroying removes the service and its container."
-        pending={lifePending}
-        error={lifeError}
-        onDestroy={() => run("remove", onClose)}
+        onDeleted={onClose}
       />
     </div>
   );

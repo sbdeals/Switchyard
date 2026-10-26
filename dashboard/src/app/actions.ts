@@ -12,6 +12,7 @@ import {
   renameEnvironment,
   removeEnvironment,
   listProjects,
+  loadWorkspace,
   saveEnvironment,
   updateDatabase,
   reloadDatabase,
@@ -157,6 +158,21 @@ async function resolveTargetEnv(environmentId?: string): Promise<string> {
   return after[0].environmentId;
 }
 
+/** Resolve membership from the current user's workspace before deleting. */
+async function requireServiceOwnership(
+  id: string,
+  kind: "application" | "compose" | "database",
+  engine?: Engine
+): Promise<void> {
+  const { services } = await loadWorkspace();
+  if (!services.some((service) =>
+    service.id === id && service.kind === kind &&
+    (service.kind !== "database" || service.engine === engine)
+  )) {
+    throw new Error("Service not found in this workspace.");
+  }
+}
+
 // --- databases ----------------------------------------------------------------
 
 /**
@@ -186,7 +202,10 @@ export async function lifecycleAction(
   id: string,
   action: Action
 ): Promise<ActionResult> {
-  return wrap(() => databaseAction(engine, id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership(id, "database", engine);
+    await databaseAction(engine, id, action);
+  });
 }
 
 /**
@@ -227,7 +246,12 @@ export async function renameProjectAction(id: string, name: string): Promise<Act
   return wrap(() => renameProject(id, name));
 }
 export async function removeProjectAction(id: string): Promise<ActionResult> {
-  return wrap(() => removeProject(id));
+  return wrap(async () => {
+    if (!(await listProjects()).some((project) => project.projectId === id)) {
+      throw new Error("Project not found in this workspace.");
+    }
+    await removeProject(id);
+  });
 }
 export async function createEnvironmentAction(
   projectId: string,
@@ -239,7 +263,14 @@ export async function renameEnvironmentAction(id: string, name: string): Promise
   return wrap(() => renameEnvironment(id, name));
 }
 export async function removeEnvironmentAction(id: string): Promise<ActionResult> {
-  return wrap(() => removeEnvironment(id));
+  return wrap(async () => {
+    if (!(await listProjects()).some((project) =>
+      project.environments.some((environment) => environment.environmentId === id)
+    )) {
+      throw new Error("Environment not found in this workspace.");
+    }
+    await removeEnvironment(id);
+  });
 }
 
 // --- applications -----------------------------------------------------------
@@ -370,7 +401,10 @@ export async function quickDeployGithubAction(input: {
 }
 
 export async function appLifecycleAction(id: string, action: Action): Promise<ActionResult> {
-  return wrap(() => applicationAction(id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership(id, "application");
+    await applicationAction(id, action);
+  });
 }
 
 export async function updateApplicationAction(
@@ -630,7 +664,10 @@ export async function createComposeAction(
 }
 
 export async function composeLifecycleAction(id: string, action: Action): Promise<ActionResult> {
-  return wrap(() => composeAction(id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership(id, "compose");
+    await composeAction(id, action);
+  });
 }
 
 export async function saveComposeFileAction(
@@ -686,7 +723,12 @@ export async function createDestinationAction(
 }
 
 export async function removeDestinationAction(destinationId: string): Promise<ActionResult> {
-  return wrap(() => removeDestination(destinationId));
+  return wrap(async () => {
+    if (!(await listDestinations()).some((destination) => destination.destinationId === destinationId)) {
+      throw new Error("Destination not found in this workspace.");
+    }
+    await removeDestination(destinationId);
+  });
 }
 
 export async function listDatabaseBackupsAction(

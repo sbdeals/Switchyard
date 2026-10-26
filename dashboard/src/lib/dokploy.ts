@@ -102,6 +102,8 @@ export interface ServiceBase {
   cpuLimit: string | null;
   memoryLimit: string | null;
   replicas: number | null;
+  /** Mount kinds from the detail response; undefined when not returned. */
+  mounts?: { type: MountType }[];
   /**
    * Engine truth: what is actually running for this service right now.
    * `status` above is only the last DEPLOY result — after a Docker Desktop VM
@@ -119,6 +121,7 @@ export interface Database extends ServiceBase {
   databasePassword: string | null;
   externalPort: number | null;
   command: string | null;
+  deployments?: AppDeployment[];
 }
 
 export type AppSource = "github" | "gitlab" | "bitbucket" | "gitea" | "git" | "docker";
@@ -556,6 +559,8 @@ interface RawDatabaseDetail {
   memoryLimit?: string | null;
   command?: string | null;
   replicas?: number | null;
+  mounts?: RawMount[];
+  deployments?: RawDeployment[];
 }
 
 async function getDetail(engine: Engine, id: string): Promise<RawDatabaseDetail> {
@@ -589,6 +594,8 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
         memoryLimit: d.memoryLimit ?? null,
         command: d.command ?? null,
         replicas: d.replicas ?? null,
+        mounts: mapMountTypes(d.mounts),
+        deployments: d.deployments ? mapDeployments(d.deployments) : undefined,
       } satisfies Database;
     })
   );
@@ -758,6 +765,7 @@ interface RawApplicationDetail {
   }[];
   security?: { securityId: string; username?: string }[];
   deployments?: RawDeployment[];
+  mounts?: RawMount[];
 }
 
 /** Domain shape returned nested under `application.one` / `compose.one`. */
@@ -858,6 +866,7 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
           username: s.username ?? "",
         })),
         deployments: mapDeployments(d.deployments),
+        mounts: mapMountTypes(d.mounts),
         autoDeploy: d.autoDeploy ?? false,
         branch: d.branch ?? d.customGitBranch ?? null,
         buildPath: d.customGitBuildPath ?? null,
@@ -1571,6 +1580,11 @@ interface RawMount {
   content?: string | null;
 }
 
+/** Deletion summaries need mount counts, never file contents or host paths. */
+function mapMountTypes(mounts: RawMount[] | undefined): { type: MountType }[] | undefined {
+  return mounts?.map((mount) => ({ type: mount.type ?? "volume" }));
+}
+
 /** List the mounts attached to a service. */
 export async function listMounts(
   serviceType: MountServiceType,
@@ -1636,6 +1650,7 @@ interface RawComposeDetail {
   createdAt?: string | null;
   domains?: RawDomain[];
   deployments?: RawDeployment[];
+  mounts?: RawMount[];
 }
 
 export const STARTER_COMPOSE = `services:
@@ -1670,6 +1685,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         composeType: d.composeType ?? null,
         domains: mapDomains(d.domains),
         deployments: mapDeployments(d.deployments),
+        mounts: mapMountTypes(d.mounts),
       } satisfies ComposeService;
     })
   );

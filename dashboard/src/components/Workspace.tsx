@@ -93,7 +93,7 @@ export function Workspace({
       )}
 
       <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
-      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
+      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} services={services} />
       <AgentPanel />
     </div>
     </MotionConfig>
