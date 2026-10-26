@@ -12,6 +12,7 @@ import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { ContextMenu } from "@/components/ContextMenu";
+import { CommandPalette } from "@/components/CommandPalette";
 import type { ServiceSection } from "@/components/service/ServiceContextMenu";
 import { workspaceMenuItems, type NewServiceKind } from "@/lib/context-menu";
 import { cn } from "@/lib/utils";
@@ -31,7 +32,9 @@ export function Workspace({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<ServiceSection>("overview");
+  const [navigationVersion, setNavigationVersion] = useState(0);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [initialProjectId, setInitialProjectId] = useState<string>();
   const [newServiceOpen, setNewServiceOpen] = useState(false);
   const [newServiceKind, setNewServiceKind] = useState<NewServiceKind>();
   const router = useRouter();
@@ -51,9 +54,26 @@ export function Workspace({
   };
 
   const openService = (service: Service, section: ServiceSection = "overview") => {
+    setProjectsOpen(false);
+    setNewServiceOpen(false);
     setHighlightedId(service.id);
     setSelectedSection(section);
+    setNavigationVersion((version) => version + 1);
     setSelectedId(service.id);
+  };
+
+  const openCreate = (kind?: NewServiceKind) => {
+    setSelectedId(null);
+    setProjectsOpen(false);
+    setNewServiceKind(kind);
+    setNewServiceOpen(true);
+  };
+
+  const openProjects = (projectId?: string) => {
+    setSelectedId(null);
+    setNewServiceOpen(false);
+    setInitialProjectId(projectId);
+    setProjectsOpen(true);
   };
 
   return (
@@ -72,6 +92,14 @@ export function Workspace({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <CommandPalette
+            services={services}
+            projects={projects}
+            focusedService={selected ?? services.find((service) => service.id === highlightedId) ?? null}
+            onOpenService={openService}
+            onOpenProject={openProjects}
+            onCreate={openCreate}
+          />
           <div className="flex rounded-lg border border-[var(--color-border-strong)] p-0.5">
             <ViewToggle active={view === "canvas"} onClick={() => setView("canvas")}>
               <Network className="size-3.5" /> Canvas
@@ -81,7 +109,7 @@ export function Workspace({
             </ViewToggle>
           </div>
           <button
-            onClick={() => setProjectsOpen(true)}
+            onClick={() => openProjects()}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
           >
             <FolderGit2 className="size-3.5" /> Projects
@@ -101,10 +129,7 @@ export function Workspace({
         </div>
       </header>
 
-      <ContextMenu label="Add New Service" heading="Add New Service" background items={workspaceMenuItems().map((item) => ({ ...item, onSelect: () => {
-        setNewServiceKind(item.id);
-        setNewServiceOpen(true);
-      } }))}>
+      <ContextMenu label="Add New Service" heading="Add New Service" background items={workspaceMenuItems().map((item) => ({ ...item, onSelect: () => openCreate(item.id) }))}>
         {(trigger) => (
         <section {...trigger} aria-label="Workspace" className="min-h-64 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]">
       {services.length === 0 ? (
@@ -124,8 +149,8 @@ export function Workspace({
         )}
       </ContextMenu>
 
-      <ServiceDrawer service={selected} services={services} initialTab={selectedSection} onClose={() => setSelectedId(null)} />
-      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
+      <ServiceDrawer service={selected} services={services} initialTab={selectedSection} navigationVersion={navigationVersion} onClose={() => setSelectedId(null)} />
+      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} initialProjectId={initialProjectId} />
       <AgentPanel />
     </div>
     </MotionConfig>
