@@ -1,0 +1,31 @@
+Initializing deployment
+File 'docker-compose.yml' created: ✅
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║ App Name: nodejs-getting-started-u7cf-pr-4242-ca9xtm                         ║
+║ Build Compose 🐳                                                             ║
+║ Detected: 0 mounts 📂                                                        ║
+║ Command: docker compose -p nodejs-getting-started-u7cf-pr-4242-ca9xtm        ║
+║ --env-file .env -f docker-compose.yml up -d --build --remove-orphans         ║
+║ Source Type: docker raw ✅                                                   ║
+║ Compose Type: docker-compose ✅                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+ Image nodejs-getting-started-u7cf-pr-4242-ca9xtm-app:latest Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 609B done
+#1 DONE 0.0s
+
+#2 [internal] load git source https://github.com/heroku/nodejs-getting-started.git#8b8dec11fcf027522a857e0c831ee01b7124f673
+#2 CACHED
+
+#2 [internal] load git source https://github.com/heroku/nodejs-getting-started.git#8b8dec11fcf027522a857e0c831ee01b7124f673
+#2 CACHED
+
+#3 [internal] load git source https://github.com/heroku/nodejs-getting-started.git#8b8dec11fcf027522a857e0c831ee01b7124f673
+#3 DONE 0.0s
+failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory
+
+Error: ❌ Docker command failed
+
+Error occurred ❌, check the logs for details.

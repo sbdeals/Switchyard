@@ -1,0 +1,172 @@
+2026-10-26T05:50:50.948Z START 16180c11: isolated owner/organization, dashboard pr-preview-proof-16180c11 on :3007
+2026-10-26T05:50:51.243Z FAIL: Own test account sign-in returned 401
+2026-10-26T05:50:51.353Z Cleanup: own automation keys, account, sessions and organization
+2026-10-26T05:50:51.363Z Cleanup: own runtime credential directory
+2026-10-26T05:50:51.363Z END 16180c11
+2026-10-26T05:51:09.566Z START 72cdfb17: isolated owner/organization, dashboard pr-preview-proof-72cdfb17 on :3007
+2026-10-26T05:51:11.721Z FAIL: Action updateDeployHookAction failed (public error withheld)
+2026-10-26T05:51:11.992Z Cleanup: all services created in this proof project
+2026-10-26T05:51:12.015Z Cleanup: throwaway project
+2026-10-26T05:51:12.071Z Cleanup: owned app resources pr-preview-72cdfb17-ciyg5v
+2026-10-26T05:51:12.323Z Cleanup: throwaway dashboard container
+2026-10-26T05:51:12.427Z Cleanup: own automation keys, account, sessions and organization
+2026-10-26T05:51:12.438Z Cleanup: own runtime credential directory
+2026-10-26T05:51:12.438Z END 72cdfb17
+2026-10-26T05:52:25.789Z START ef370189: isolated owner/organization, dashboard pr-preview-proof-ef370189 on :3007
+2026-10-26T05:52:26.560Z FAIL: Local command failed: docker run (output withheld)
+2026-10-26T05:52:26.672Z Cleanup: own automation keys, account, sessions and organization
+2026-10-26T05:52:26.682Z Cleanup: own runtime credential directory
+2026-10-26T05:52:26.683Z END ef370189
+2026-10-26T05:52:54.121Z START 9c860ae1: isolated owner/organization, dashboard pr-preview-proof-9c860ae1 on :3007
+2026-10-26T05:52:56.664Z FAIL: Action updatePreviewSettingsAction failed (public error withheld)
+2026-10-26T05:52:56.823Z Cleanup: all services created in this proof project
+2026-10-26T05:52:56.847Z Cleanup: throwaway project
+2026-10-26T05:52:56.909Z Cleanup: owned app resources pr-preview-9c860ae1-t61bbg
+2026-10-26T05:52:57.123Z Cleanup: throwaway dashboard container
+2026-10-26T05:52:57.232Z Cleanup: own automation keys, account, sessions and organization
+2026-10-26T05:52:57.243Z Cleanup: own runtime credential directory
+2026-10-26T05:52:57.243Z END 9c860ae1
+2026-10-26T05:54:41.201Z START bf16af06: isolated owner/organization, dashboard pr-preview-proof-bf16af06 on :3007
+2026-10-26T05:54:43.796Z FAIL: Action updatePreviewSettingsAction failed (public error withheld)
+2026-10-26T05:54:43.950Z Cleanup: all services created in this proof project
+2026-10-26T05:54:43.970Z Cleanup: throwaway project
+2026-10-26T05:54:44.032Z Cleanup: owned app resources pr-preview-bf16af06-45o1tw
+2026-10-26T05:54:44.267Z Cleanup: throwaway dashboard container
+2026-10-26T05:54:44.369Z Cleanup: own automation keys, account, sessions and organization
+2026-10-26T05:54:44.379Z Cleanup: own runtime credential directory
+2026-10-26T05:54:44.379Z END bf16af06
+2026-10-26T05:55:44.740Z START ed6f15b0: isolated owner/organization, dashboard pr-preview-proof-ed6f15b0 on :3007
+2026-10-26T05:55:47.261Z Diagnostic parent: {"serverId":null,"environmentKeys":["environmentId","name","description","createdAt","env","projectId","isDefault","project"],"projectId":"AF5KEpiDfyoYeDNDJ_oAp"}
+2026-10-26T05:55:47.303Z Diagnostic createApiKey: 200, fields=configId,name,start,referenceId,prefix,key,refillInterval,refillAmount,lastRefillAt,enabled,rateLimitEnabled,rateLimitTimeWindow,rateLimitMax,requestCount,remaining,lastRequest,expiresAt,createdAt,updatedAt,permissions,metadata,id
+2026-10-26T05:55:47.303Z Diagnostic id/key types: string/string
+2026-10-26T05:55:47.327Z FAIL: Action updatePreviewSettingsAction failed (public error withheld)
+2026-10-26T05:55:47.686Z Cleanup: all services created in this proof project
+2026-10-26T05:55:47.721Z Cleanup: throwaway project
+2026-10-26T05:55:47.796Z Cleanup: owned app resources pr-preview-ed6f15b0-gr66sx
+2026-10-26T05:55:48.031Z Cleanup: throwaway dashboard container
+2026-10-26T05:55:48.148Z Cleanup: own automation keys, account, sessions and organization
+2026-10-26T05:55:48.159Z Cleanup: own runtime credential directory
+2026-10-26T05:55:48.159Z END ed6f15b0
+2026-10-26T05:57:28.715Z START 4709c611: isolated owner/organization, dashboard pr-preview-proof-4709c611 on :3007
+2026-10-26T05:57:31.271Z Owner server actions enabled the existing hook and PR previews; automation credentials stayed server-side.
+2026-10-26T05:57:31.287Z opened unsigned: HTTP 403, invalid signature
+2026-10-26T05:57:31.700Z opened: HTTP 202, preview deployment queued
+2026-10-26T05:57:31.764Z Created pr-preview-4709c611-pr-12 (6yFet7r6LbLbzap_SpMuV), pinned f974ab3 in the parent's project.
+2026-10-26T05:57:31.779Z Waiting for owned preview build: running
+2026-10-26T05:57:49.927Z Waiting for owned preview build: running
+2026-10-26T05:58:02.038Z Deployment succeeded: PR #12 · f974ab3 · Local preview proof
+2026-10-26T05:58:02.144Z FAIL: Owned preview URL returned 404
+2026-10-26T05:58:03.083Z Cleanup: all services created in this proof project
+2026-10-26T05:58:03.121Z Cleanup: throwaway project
+2026-10-26T05:58:03.212Z Cleanup: owned app resources pr-preview-4709c611-tiswui
+2026-10-26T05:58:03.334Z Cleanup: owned app resources pr-preview-4709c611-pr-12-hvxjh5
+2026-10-26T05:58:03.601Z Cleanup: throwaway dashboard container
+2026-10-26T05:58:03.696Z Cleanup: own automation keys, account, sessions and organization
+2026-10-26T05:58:03.706Z Cleanup: own runtime credential directory
+2026-10-26T05:58:03.706Z END 4709c611
+2026-10-26T06:00:32.694Z START b7c2a4ea: isolated owner/organization, dashboard pr-preview-proof-b7c2a4ea on :3007
+2026-10-26T06:00:35.604Z Owner server actions enabled the existing hook and PR previews; automation credentials stayed server-side.
+2026-10-26T06:00:35.618Z opened unsigned: HTTP 403, invalid signature
+2026-10-26T06:00:35.889Z opened: HTTP 202, preview deployment queued
+2026-10-26T06:00:35.954Z Created pr-preview-b7c2a4ea-pr-12 (6-ZkNsi7Bmtu_V6Ds00X1), pinned f974ab3 in the parent's project.
+2026-10-26T06:00:35.969Z Waiting for owned preview build: running
+2026-10-26T06:00:38.993Z Deployment succeeded: PR #12 · f974ab3 · Local preview proof
+2026-10-26T06:00:59.126Z Owned routing labels: {"com.docker.compose.config-hash":"0c271bf8ffec022e159e4cc37ca4de2338a6489299a14b239438e631eaa77926","com.docker.compose.container-number":"1","com.docker.compose.depends_on":"","com.docker.compose.image":"sha256:fbdf2bc3add13e5f1fca0d4f04d9d31f79cbfe1ce3bdab7b9590cd5e7e9a1c34","com.docker.compose.oneoff":"False","com.docker.compose.project":"pr-preview-b7c2a4ea-pr-12-kc4nm9","com.docker.compose.project.config_files":"/etc/dokploy/compose/pr-preview-b7c2a4ea-pr-12-kc4nm9/code/docker-compose.yml","com.docker.compose.project.environment_file":"/etc/dokploy/compose/pr-preview-b7c2a4ea-pr-12-kc4nm9/code/.env","com.docker.compose.project.working_dir":"/etc/dokploy/compose/pr-preview-b7c2a4ea-pr-12-kc4nm9/code","com.docker.compose.service":"app","com.docker.compose.version":"5.6.1","io.switchyard.preview":"886ca587-bbf2-410b-9c9c-c6695f2d42cf","traefik.docker.network":"dokploy-network","traefik.enable":"true","traefik.http.routers.pr-preview-b7c2a4ea-pr-12-kc4nm9-25-web.entrypoints":"web","traefik.http.routers.pr-preview-b7c2a4ea-pr-12-kc4nm9-25-web.rule":"Host(`pr-preview-b7c2a4ea-pr-12-kc4nm9-cd0099-104-28-215-142.sslip.io`)","traefik.http.routers.pr-preview-b7c2a4ea-pr-12-kc4nm9-25-web.service":"pr-preview-b7c2a4ea-pr-12-kc4nm9-25-web","traefik.http.services.pr-preview-b7c2a4ea-pr-12-kc4nm9-25-web.loadbalancer.server.port":"3000"}
+2026-10-26T06:00:59.126Z Generated preview URL: http://pr-preview-b7c2a4ea-pr-12-kc4nm9-cd0099-104-28-215-142.sslip.io
+2026-10-26T06:00:59.126Z FAIL: Owned preview URL returned 404
+2026-10-26T06:00:59.951Z Cleanup: all services created in this proof project
+2026-10-26T06:00:59.984Z Cleanup: throwaway project
+2026-10-26T06:01:00.042Z Cleanup: owned app resources pr-preview-b7c2a4ea-gky1sw
+2026-10-26T06:01:00.110Z Cleanup: owned app resources pr-preview-b7c2a4ea-pr-12-kc4nm9
+2026-10-26T06:01:00.355Z Cleanup: throwaway dashboard container
+2026-10-26T06:01:00.477Z Cleanup: own automation keys, account, sessions and organization
+2026-10-26T06:01:00.487Z Cleanup: own runtime credential directory
+2026-10-26T06:01:00.487Z END b7c2a4ea
+2026-10-26T06:01:34.062Z START 463d9132: isolated owner/organization, dashboard pr-preview-proof-463d9132 on :3007
+2026-10-26T06:01:36.549Z Owner server actions enabled the existing hook and PR previews; automation credentials stayed server-side.
+2026-10-26T06:01:36.566Z opened unsigned: HTTP 403, invalid signature
+2026-10-26T06:01:36.808Z opened: HTTP 202, preview deployment queued
+2026-10-26T06:01:36.875Z Created pr-preview-463d9132-pr-12 (mG5g5JfG_vJOB53VS1164), pinned f974ab3 in the parent's project.
+2026-10-26T06:01:36.897Z Waiting for owned preview build: running
+2026-10-26T06:01:39.919Z Deployment succeeded: PR #12 · f974ab3 · Local preview proof
+2026-10-26T06:01:40.043Z URL reachable: http://pr-preview-463d9132-pr-12-fhqmug-de883d-104-28-215-142.sslip.io, HTTP 200, HTML bytes=651
+2026-10-26T06:01:40.053Z opened: HTTP 200, duplicate action and sha
+2026-10-26T06:01:40.061Z opened: HTTP 200, duplicate action and sha
+2026-10-26T06:01:40.419Z synchronize: HTTP 202, preview deployment queued
+2026-10-26T06:01:40.545Z Waiting for owned preview build: running
+2026-10-26T06:01:43.794Z Deployment succeeded: PR #12 · 68c1b9f · Local preview proof
+2026-10-26T06:01:43.843Z URL reachable: http://pr-preview-463d9132-pr-12-fhqmug-de883d-104-28-215-142.sslip.io, HTTP 200, HTML bytes=651
+2026-10-26T06:01:43.869Z Created a session-owned labelled volume to verify close cleanup.
+2026-10-26T06:01:44.608Z closed: HTTP 202, preview deleted
+2026-10-26T06:01:44.617Z closed: HTTP 200, preview already absent
+2026-10-26T06:01:54.685Z FAIL: Local route timeout
+2026-10-26T06:01:54.829Z Cleanup: all services created in this proof project
+2026-10-26T06:01:54.852Z Cleanup: throwaway project
+2026-10-26T06:01:54.909Z Cleanup: owned app resources pr-preview-463d9132-kmzved
+2026-10-26T06:01:54.979Z Cleanup: owned app resources pr-preview-463d9132-pr-12-fhqmug
+2026-10-26T06:01:54.999Z Cleanup: owned proof volume
+2026-10-26T06:01:55.231Z Cleanup: throwaway dashboard container
+2026-10-26T06:01:55.339Z Cleanup: own automation keys, account, sessions and organization
+2026-10-26T06:01:55.350Z Cleanup: own runtime credential directory
+2026-10-26T06:01:55.350Z END 463d9132
+2026-10-26T06:03:08.637Z START 4a050514: isolated owner/organization, dashboard pr-preview-proof-4a050514 on :3007
+2026-10-26T06:03:11.255Z Owner server actions enabled the existing hook and PR previews; automation credentials stayed server-side.
+2026-10-26T06:03:11.277Z opened unsigned: HTTP 403, invalid signature
+2026-10-26T06:03:11.730Z opened: HTTP 202, preview deployment queued
+2026-10-26T06:03:11.793Z Created pr-preview-4a050514-pr-12 (4BMp-Tm-s6BpVzOdinLtc), pinned f974ab3 in the parent's project.
+2026-10-26T06:03:11.807Z Waiting for owned preview build: running
+2026-10-26T06:03:14.950Z Deployment succeeded: PR #12 · f974ab3 · Local preview proof
+2026-10-26T06:03:15.050Z URL reachable: http://pr-preview-4a050514-pr-12-r4u78r-9ff06e-104-28-215-142.sslip.io, HTTP 200, HTML bytes=651
+2026-10-26T06:03:15.059Z opened: HTTP 200, duplicate action and sha
+2026-10-26T06:03:15.066Z opened: HTTP 200, duplicate action and sha
+2026-10-26T06:03:15.212Z synchronize: HTTP 202, preview deployment queued
+2026-10-26T06:03:15.303Z Waiting for owned preview build: running
+2026-10-26T06:03:18.329Z Deployment succeeded: PR #12 · 68c1b9f · Local preview proof
+2026-10-26T06:03:18.377Z URL reachable: http://pr-preview-4a050514-pr-12-r4u78r-9ff06e-104-28-215-142.sslip.io, HTTP 200, HTML bytes=651
+2026-10-26T06:03:18.406Z Created a session-owned labelled volume to verify close cleanup.
+2026-10-26T06:03:19.141Z closed: HTTP 202, preview deleted
+2026-10-26T06:03:19.148Z closed: HTTP 200, preview already absent
+2026-10-26T06:03:29.217Z Closed proof: preview absent from Dokploy, 0 containers, 0 volumes, old URL HTTP unreachable (route removed). Parent still exists.
+2026-10-26T06:03:29.320Z PASS: opened → reachable → synchronize → reachable → closed; duplicate and unsigned checks passed.
+2026-10-26T06:03:29.471Z Cleanup: all services created in this proof project
+2026-10-26T06:03:29.492Z Cleanup: throwaway project
+2026-10-26T06:03:29.550Z Cleanup: owned app resources pr-preview-4a050514-gxadkp
+2026-10-26T06:03:29.626Z Cleanup: owned app resources pr-preview-4a050514-pr-12-r4u78r
+2026-10-26T06:03:29.647Z Cleanup: owned proof volume
+2026-10-26T06:03:29.929Z Cleanup: throwaway dashboard container
+2026-10-26T06:03:30.054Z Cleanup: own automation keys, account, sessions and organization
+2026-10-26T06:03:30.065Z Cleanup: own runtime credential directory
+2026-10-26T06:03:30.065Z END 4a050514
+2026-10-26T06:11:32.739Z START 8929d02a: isolated owner/organization, dashboard pr-preview-proof-8929d02a on :3007
+2026-10-26T06:11:35.349Z Owner server actions enabled the existing hook and PR previews; automation credentials stayed server-side.
+2026-10-26T06:11:35.366Z opened unsigned: HTTP 403, invalid signature
+2026-10-26T06:11:35.796Z opened: HTTP 202, preview deployment queued
+2026-10-26T06:11:35.875Z Pinned source, copied plain env and omitted vault reference checked.
+2026-10-26T06:11:35.875Z Created pr-preview-8929d02a-pr-12 (PD_rnQG9wT_umitUUZ6Lu), pinned f974ab3 in the parent's project.
+2026-10-26T06:11:35.896Z Waiting for owned preview build: running
+2026-10-26T06:11:38.927Z Deployment succeeded: PR #12 · f974ab3 · Local preview proof
+2026-10-26T06:11:39.032Z URL reachable: http://pr-preview-8929d02a-pr-12-8zjnw5-0fb3b8-104-28-215-142.sslip.io, HTTP 200, HTML bytes=651
+2026-10-26T06:11:39.040Z opened: HTTP 200, duplicate action and sha
+2026-10-26T06:11:39.047Z opened: HTTP 200, duplicate action and sha
+2026-10-26T06:11:39.275Z synchronize: HTTP 202, preview deployment queued
+2026-10-26T06:11:39.316Z Waiting for owned preview build: running
+2026-10-26T06:11:42.426Z Deployment succeeded: PR #12 · 68c1b9f · Local preview proof
+2026-10-26T06:11:42.564Z URL reachable: http://pr-preview-8929d02a-pr-12-8zjnw5-0fb3b8-104-28-215-142.sslip.io, HTTP 200, HTML bytes=651
+2026-10-26T06:11:42.604Z Created a session-owned labelled volume to verify close cleanup.
+2026-10-26T06:11:43.348Z closed: HTTP 202, preview deleted
+2026-10-26T06:11:43.354Z closed: HTTP 200, preview already absent
+2026-10-26T06:11:53.470Z Closed proof: preview absent from Dokploy, 0 containers, 0 volumes, old URL HTTP unreachable (10s timeout). Parent still exists.
+2026-10-26T06:11:55.404Z reopened: HTTP 202, preview deployment queued
+2026-10-26T06:11:55.606Z closed: HTTP 202, preview cleanup queued; waiting for current build
+2026-10-26T06:12:01.905Z Reopened and closed during its build: asynchronous cleanup finished, no late container.
+2026-10-26T06:12:02.004Z PASS: opened → reachable → synchronize → reachable → closed; duplicate and unsigned checks passed.
+2026-10-26T06:12:02.144Z Cleanup: all services created in this proof project
+2026-10-26T06:12:02.166Z Cleanup: throwaway project
+2026-10-26T06:12:02.229Z Cleanup: owned app resources pr-preview-8929d02a-fwaksq
+2026-10-26T06:12:02.304Z Cleanup: owned app resources pr-preview-8929d02a-pr-12-8zjnw5
+2026-10-26T06:12:02.381Z Cleanup: owned app resources pr-preview-8929d02a-pr-12-6qotm1
+2026-10-26T06:12:02.402Z Cleanup: owned proof volume
+2026-10-26T06:12:02.605Z Cleanup: throwaway dashboard container
+2026-10-26T06:12:02.736Z Cleanup: own automation keys, account, sessions and organization
+2026-10-26T06:12:02.746Z Cleanup: own runtime credential directory
+2026-10-26T06:12:02.746Z END 8929d02a

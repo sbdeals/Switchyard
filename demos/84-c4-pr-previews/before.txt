@@ -1,0 +1,5 @@
+[before] PR previews switch present: false
+unsigned pull_request opened -> 403 {"result":"invalid signature"}
+signed pull_request opened   -> 200 {"result":"ignored event"}
+same delivery content again  -> 200 {"result":"ignored event"}
+Dokploy API keys remaining: 0

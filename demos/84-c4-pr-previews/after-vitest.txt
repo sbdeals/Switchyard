@@ -1,0 +1,68 @@
+ ✓ src/lib/preview-cleanup.test.ts > removes only containers and volumes matching both project and feature ownership
+ ✓ src/lib/preview-cleanup.test.ts > refuses container ownership mismatch {}
+ ✓ src/lib/preview-cleanup.test.ts > refuses container ownership mismatch {"io.switchyard.preview":"owned-marker","com.docker.compose.project":"parent"}
+ ✓ src/lib/preview-cleanup.test.ts > refuses container ownership mismatch {"io.switchyard.preview":"foreign","com.docker.compose.project":"web-pr-12-unique"}
+ ✓ src/lib/preview-cleanup.test.ts > refuses volume ownership mismatch
+ ✓ src/lib/preview-cleanup.test.ts > is idempotent for already-absent resources and unbound reservations
+ ✓ src/lib/pr-previews.test.ts > preview environment snapshot > omits vault secrets, annotated resolved secrets, and transitive aliases
+ ✓ src/lib/pr-previews.test.ts > preview environment snapshot > copies ordinary env values exactly, including unclassified credentials, without annotations
+ ✓ src/lib/pr-previews.test.ts > preview commit pin > retains the branch for display and uses the full SHA for the build context
+ ✓ src/lib/pr-previews.test.ts > preview commit pin > rejects invalid pin short
+ ✓ src/lib/pr-previews.test.ts > preview commit pin > rejects invalid pin main
+ ✓ src/lib/pr-previews.test.ts > preview commit pin > rejects invalid pin aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ ✓ src/lib/pr-previews.test.ts > preview commit pin > rejects invalid pin gggggggggggggggggggggggggggggggggggggggg
+ ✓ src/lib/pr-previews.test.ts > preview commit pin > rejects invalid pin aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:other
+ ✓ src/lib/preview-access.test.ts > encrypts the key, binds it to its parent, and never uses browser credentials
+ ✓ src/lib/preview-access.test.ts > rejects a missing or changed encryption key
+ ✓ src/lib/preview-access.test.ts > bounds the full API sequence with the same signal and redacts backend errors
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > rejects invalid signatures before any lifecycle work ()
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > rejects invalid signatures before any lifecycle work (sha256=bad)
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > rejects invalid signatures before any lifecycle work (sha256=0000000000000000000000000000000000000000000000000000000000000000)
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > checks the exact raw bytes and shares body size/UTF-8 limits
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > times out a slow raw body after five seconds
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > ignores event "ping"
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > ignores event "pull_request_target"
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > ignores event "issues"
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > ignores PR action edited
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > ignores PR action labeled
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > ignores PR action ready_for_review
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > defaults off and never creates a service until explicitly enabled
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > creates one pinned preview in an existing preview environment, with copied env and its own URL
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > uses the parent environment if no preview environment exists, without creating one
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > updates the automatic URL port with parent env, preserving an explicit domain edit
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > updates the same preview for synchronize and reopened; closed then reopened creates a fresh owned preview
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > can reopen and close repeatedly at the same SHA without suppressing a new lifecycle
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > gates forks using canonical repo identity, never an untrusted fork boolean
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > rejects unsafe head repo http://127.0.0.1/repo
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > rejects unsafe head repo https://github.com.evil.test/acme/web
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > rejects unsafe head repo https://secret@github.com/acme/web
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > rejects unsafe head repo https://github.com/acme/../web
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > rejects unsafe head repo file:///repo
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > rejects invalid base, SHA, branch, and number without backend access
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > deduplicates delivery IDs and action+SHA (including after a module reload/60 seconds)
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > serializes concurrent deliveries, including cap reservations
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > does not claim a same-name service or overwrite its env
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > fails closed after a parent project change
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > fails closed after a parent source change
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > fails closed after a parent remote change
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > fails closed after a parent nested change
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > retries partial failure without another create or leaked backend errors
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > preserves a concurrent source edit and cancels the stale preview dispatch
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > escapes Compose interpolation in titles while retaining the visible title
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > recovers a lost create response by its persisted marker
+ ✓ src/lib/preview-lifecycle.test.ts > signed PR lifecycle on the existing deploy hook > does not recreate an ambiguous failed reservation
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > defers close until the active build ends, then removes its eventual container
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > cleans merged=true, even without a head repo and after disabling previews/forks
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > cleans merged=false, even without a head repo and after disabling previews/forks
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > never deletes a preview whose name no longer matches
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > never deletes a preview whose description no longer matches
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > never deletes a preview whose appName no longer matches
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > never deletes a preview whose environmentId no longer matches
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > never deletes a preview whose project no longer matches
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > never deletes a preview whose remote no longer matches
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > never deletes the parent, even if the stored service ID points at it
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > never deletes an edited preview stack that could mount foreign volumes
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > retries Docker cleanup after Dokploy already removed its row
+ ✓ src/lib/preview-lifecycle.test.ts > owned cleanup > ignores unknown PRs without touching matching names
+ ✓ src/lib/preview-lifecycle.test.ts > normalizes GitHub repository identity
+      Tests  67 passed (67)

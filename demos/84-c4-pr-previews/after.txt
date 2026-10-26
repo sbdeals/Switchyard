@@ -1,0 +1,34 @@
+[after] PR previews switch present: true
+PR previews enabled: true
+Dokploy API keys now: 1
+unsigned pull_request opened -> 403 {"result":"invalid signature"}
+signed pull_request opened   -> 202 {"result":"preview deployment queued"}
+same delivery content again  -> 200 {"result":"duplicate action and sha"}
+--- Active PR previews:
+PR #4242 · main
+
+http://nodejs-getting-started-u7cf-pr-4242-ca9x-11e912-104-28-215-142.sslip.io
+Delete preview
+Dokploy compose rows owned by previews: nodejs-getting-started-u7cf-pr-4242|switchyard-preview:2lw2pVAMpJPFiL9TSh796:04db2511-7271-45b0-a54b-70b0b798c44d
+preview status=error
+--- preview build log tail:
+
+#2 [internal] load git source https://github.com/heroku/nodejs-getting-started.git#8b8dec11fcf027522a857e0c831ee01b7124f673
+#2 CACHED
+
+#3 [internal] load git source https://github.com/heroku/nodejs-getting-started.git#8b8dec11fcf027522a857e0c831ee01b7124f673
+#3 DONE 0.0s
+failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory
+
+Error: ❌ Docker command failed
+
+Error occurred ❌, check the logs for details.
+
+GET http://nodejs-getting-started-u7cf-pr-4242-ca9x-11e912-104-28-215-142.sslip.io -> HTTP 000
+signed pull_request closed   -> 202 {"result":"preview deleted"}
+Dokploy preview rows after close: (none)
+--- Active PR previews after close:
+No active previews.
+PR previews disabled again: true
+Dokploy API keys after disabling previews: 0
+Dokploy API keys remaining: 0
