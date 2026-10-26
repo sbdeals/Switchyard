@@ -3,8 +3,10 @@ import { Command } from "commander";
 
 import { loadConfig, type SwitchyardConfig } from "../core/config.js";
 import { packDirectory } from "../core/deploy-pack.js";
-import { apiRequest, httpReady, signInCookie, uploadApplication } from "../core/dokploy-api.js";
+import { uploadApplication } from "../core/dokploy-api.js";
 import { UserError } from "../core/errors.js";
+import { connectPlatformClient } from "../core/platform-client.js";
+import { findService, selectEnvironment, selectProject, type Project } from "../core/service-selection.js";
 import { sleep } from "../core/util.js";
 
 export interface DeployFlags {
@@ -24,18 +26,6 @@ interface Application {
   domains?: { host: string; https?: boolean; path?: string | null }[];
 }
 
-interface Environment {
-  environmentId: string;
-  name: string;
-  applications?: Application[];
-}
-
-interface Project {
-  projectId: string;
-  name: string;
-  environments: Environment[];
-}
-
 interface Deployment {
   deploymentId: string;
   status: string;
@@ -48,37 +38,17 @@ export function createDeployCommand(
   return new Command("deploy")
     .description("Deploy a directory to Dokploy (the Railway up equivalent)")
     .argument("[path]", "directory to deploy", ".")
-    .option("--service <name>", "application name (default: directory name)")
-    .option("--project <name>", "project to reuse or create (default: the only project)")
+    .option("--service <name|id>", "application to reuse or create (default: directory name)")
+    .option("--project <name|id>", "project to reuse or create (default: the only project)")
     .option("--detach", "return once the upload has queued a deployment")
     .action(action);
 }
 
 export async function connectDeployClient(cfg: SwitchyardConfig): Promise<DeployClient> {
-  if (!cfg.adminEmail || !cfg.adminPassword) {
-    throw new UserError("Not logged in: no Dokploy credentials in the CLI config. Run `switchyard up` to set up your local platform and sign in.");
-  }
-  const base = `http://localhost:${cfg.dokployPort}`;
-  if (!(await httpReady(base))) {
-    throw new UserError(`Platform not running: Dokploy is not answering at ${base}. Start it with \`switchyard up\`.`);
-  }
-  const cookie = await signInCookie(base, cfg.adminEmail, cfg.adminPassword);
-  if (!cookie) {
-    throw new UserError("Not logged in: Dokploy rejected the configured credentials or stopped answering. Check the platform and sign in again with `switchyard up`.");
-  }
+  const client = await connectPlatformClient(cfg);
   return {
-    async request<T>(path: string, init = {}): Promise<T> {
-      try {
-        return await apiRequest<T>(base, cookie, path, init);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        if (/\(401\)/.test(message)) {
-          throw new UserError("Not logged in: the Dokploy session expired. Sign in again with `switchyard up`.");
-        }
-        throw new UserError(`Deploy request failed: ${message}`);
-      }
-    },
-    upload: (applicationId, archive) => uploadApplication(base, cookie, applicationId, archive),
+    request: client.request,
+    upload: (applicationId, archive) => uploadApplication(client.base, client.cookie, applicationId, archive),
   };
 }
 
@@ -111,13 +81,7 @@ export async function deployDirectory(
   }
 
   let projects = await client.request<Project[]>("project.all");
-  const matches = flags.project ? projects.filter((p) => p.name === flags.project) : projects;
-  if (matches.length > 1) {
-    throw new UserError(flags.project
-      ? `More than one project is named ${flags.project}; rename duplicates in the dashboard.`
-      : "More than one project exists. Select one with --project <name>.");
-  }
-  let project = matches[0];
+  let project = selectProject(projects, flags.project);
   if (!project) {
     const projectName = flags.project ?? "Default";
     const created = await client.request<{ project: { projectId: string } }>("project.create", {
@@ -128,17 +92,9 @@ export async function deployDirectory(
     project = projects.find((p) => p.projectId === created.project.projectId);
     if (!project) throw new UserError(`Created project ${projectName}, but Dokploy did not return its environment. Check the dashboard.`);
   }
-  const production = project.environments.filter((e) => e.name.toLowerCase() === "production");
-  const environments = production.length > 0 ? production : project.environments;
-  if (environments.length !== 1) {
-    throw new UserError(`Project ${project.name} needs a single production environment (or a single environment). Rename the intended environment to production in the dashboard.`);
-  }
-  const environment = environments[0]!;
-  const applications = (environment.applications ?? []).filter((a) => a.name === name);
-  if (applications.length > 1) {
-    throw new UserError(`More than one application is named ${name} in ${project.name}/${environment.name}; rename duplicates in the dashboard.`);
-  }
-  const application = applications[0] ?? await client.request<Application>("application.create", {
+  const environment = selectEnvironment(project);
+  const existing = findService(project, environment, name, ["application"]);
+  const application = existing ? { applicationId: existing.serviceId } : await client.request<Application>("application.create", {
     method: "POST", body: { name, appName: name, environmentId: environment.environmentId, sourceType: "drop" },
   });
   const { applicationId } = application;

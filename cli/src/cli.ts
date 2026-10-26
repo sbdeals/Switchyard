@@ -7,7 +7,7 @@ import { createDeployCommand } from "./commands/deploy.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { downCommand } from "./commands/down.js";
 import { localIngressCommand } from "./commands/local-ingress.js";
-import { logsCommand } from "./commands/logs.js";
+import { createLogsCommand } from "./commands/logs.js";
 import { openCommand } from "./commands/open.js";
 import { statusCommand } from "./commands/status.js";
 import { upCommand } from "./commands/up.js";
@@ -72,12 +72,7 @@ program
 
 program.command("doctor").description("Check prerequisites and stack health (read-only)").action(doctorCommand);
 
-program
-  .command("logs")
-  .description("Tail logs: switchyard (container) or dokploy (service)")
-  .argument("[target]", "switchyard | dokploy", "switchyard")
-  .option("-f, --follow", "follow log output")
-  .action(logsCommand);
+program.addCommand(createLogsCommand());
 
 program.command("open").description("Open the dashboard in your browser").action(openCommand);
 

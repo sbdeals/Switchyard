@@ -143,6 +143,9 @@ equivalent), or `switchyard deploy ./my-app --service web --project demos`.
 Add `--detach` to return after queuing. `switchyard up` still starts the
 platform. See [deploy options and build requirements](docs/cli.md#deploy-a-directory).
 
+Read its runtime output with `switchyard logs --service web --project demos`;
+add `--lines 5`, `--since 15m`, `--json`, or `--follow` as needed.
+
 > The npm package is **`switchyard-cli`** (the bare npm name `switchyard` is an
 > unrelated squatted package; don't `npx switchyard`).
 
