@@ -1,16 +1,17 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Check, Copy, Eye, EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import { useStagedForm, useStagedState, useStaging } from "@/components/service/StagedChanges";
 import { stagedVariableValues } from "@/lib/staged-collections";
-import { decodeStoredEnv } from "@/lib/references";
-import { referenceTargets } from "@/lib/reference-vars";
+import { appliedVariablesEditorState, initialVariablesEditorState, variablesEditorReducer, type VariablesEditorState } from "@/lib/variables-editor";
+import { loadServiceEnvAction } from "@/app/actions";
+import { validateServiceReferencesAction } from "@/app/reference-actions";
 import { ContextMenu } from "@/components/ContextMenu";
 import { variableMenuItems, type VariableMenuAction } from "@/lib/context-menu";
-import { serializeVariableRows, validateVariableEntries, validateVariableRows, variableRows, type VariableRow } from "@/lib/variable-rows";
-import { referenceSuggestions, validateVariableReferences, type ReferenceSuggestion } from "@/lib/variable-references";
+import { serializeVariableRows, validateVariableEntries, validateVariableRows, variableRows, type VariableRow, type VariableRowIssue } from "@/lib/variable-rows";
+import { referenceSuggestions, validateVariableReferenceSyntax, type ReferenceSuggestion } from "@/lib/variable-references";
 import { VariableValueInput } from "@/components/service/VariableValueInput";
 
 type TableRow = Pick<VariableRow, "index" | "key" | "value">;
@@ -22,32 +23,79 @@ const inputCls = "w-full min-w-0 rounded border border-[var(--color-border-contr
 
 /** Both editors modify the same env-text draft; only the staging bar applies it. */
 export function VariablesTab({ service, services }: { service: Service; services: Service[] }) {
-  const initial = decodeStoredEnv(service.env);
-  const [value, setValue] = useStagedState("variables", initial);
-  const { pending, revision } = useStaging();
+  const serviceType = service.kind === "database" ? service.engine : service.kind;
+  const { pending, revision, drafts, setDraft, applied } = useStaging();
+  const cachedEditor = drafts.variablesEditor as VariablesEditorState | undefined;
+  const editor = appliedVariablesEditorState(cachedEditor ?? initialVariablesEditorState, applied.variables);
+  const { value, baseline, loadError } = editor;
   const [raw, setRaw] = useState(false);
   const [tableDraft, setTableDraft] = useStagedState<TableDraft | null>("variableRows", null);
   const [addedRow, setAddedRow] = useState<string | null>(null);
+  const [validation, setValidation] = useState<{
+    input: string;
+    issues: VariableRowIssue[];
+    error?: string;
+  } | null>(null);
   const document = tableDraft ?? { template: value, rows: variableRows(value) };
   const rows = document.rows;
-  const targets = useMemo(
-    () => referenceTargets(services.filter((s) => s.projectId === service.projectId && s.environmentId === service.environmentId)),
-    [services, service.projectId, service.environmentId]
-  );
   const suggestions = useMemo(() => referenceSuggestions(services, service, value), [services, service, value]);
+
+  useEffect(() => {
+    if (baseline !== null || loadError) return;
+    let live = true;
+    loadServiceEnvAction(serviceType, service.id).then((res) => {
+      if (!live) return;
+      setDraft("variablesEditor", variablesEditorReducer(initialVariablesEditorState,
+        res.ok ? { type: "loaded", env: res.env } : { type: "failed", error: res.error }));
+    }).catch(() => {
+      if (live) setDraft("variablesEditor", variablesEditorReducer(initialVariablesEditorState, {
+        type: "failed", error: "Could not load environment variables.",
+      }));
+    });
+    return () => { live = false; };
+  }, [baseline, loadError, serviceType, service.id, setDraft]);
+
+  // Include physical rows so duplicate keys and quoted multiline values keep
+  // their row-level errors. Only the server needs sibling values to resolve them.
+  const validationInput = JSON.stringify({ template: value, rows });
+  const hasReferences = rows.some((row) => row.value.includes("${{"));
+  useEffect(() => {
+    if (baseline === null || !hasReferences) return;
+    let live = true;
+    const timer = setTimeout(() => {
+      const input = JSON.parse(validationInput) as { template: string; rows: TableRow[] };
+      validateServiceReferencesAction(serviceType, service.id, input.template, input.rows).then((res) => {
+        if (live) setValidation(res.ok
+          ? { input: validationInput, issues: res.rowIssues }
+          : { input: validationInput, issues: [], error: res.error });
+      }).catch(() => {
+        if (live) setValidation({ input: validationInput, issues: [], error: "Could not validate variable references." });
+      });
+    }, 200);
+    return () => { live = false; clearTimeout(timer); };
+  }, [baseline, hasReferences, serviceType, service.id, validationInput]);
+
+  function setValue(next: string) {
+    setDraft("variablesEditor", variablesEditorReducer(editor, { type: "edited", value: next }));
+  }
+
+  const currentValidation = hasReferences && validation?.input === validationInput ? validation : null;
+  const validating = hasReferences && !currentValidation;
   const unparsedIssues = validateVariableRows(document.template)
     .filter((issue) => !variableRows(document.template).some((row) => row.index === issue.index));
-  const issues = raw && !tableDraft
-    ? [...validateVariableRows(value), ...validateVariableReferences(value, service.name, targets)]
-    : [...unparsedIssues, ...validateVariableEntries(rows), ...validateVariableReferences(value, service.name, targets, rows)];
+  const rowIssues = raw && !tableDraft ? validateVariableRows(value)
+    : [...unparsedIssues, ...validateVariableEntries(rows)];
+  const issues = [...rowIssues, ...(currentValidation?.issues ?? validateVariableReferenceSyntax(value, rows))];
+  const referenceError = currentValidation?.error;
 
   useStagedForm({
     id: "variables",
     action: service.kind === "database" ? "saveEnvironmentAction"
       : service.kind === "compose" ? "saveComposeEnvAction" : "saveApplicationEnvAction",
     args: service.kind === "database" ? [service.engine, service.id, value] : [service.id, value],
-    ...stagedVariableValues(initial, value),
-    error: issues.length ? "Fix variable errors before deploying." : undefined,
+    ...stagedVariableValues(baseline ?? "", baseline === null ? "" : value),
+    error: issues.length ? "Fix variable errors before deploying." : referenceError
+      ?? (validating ? "Checking variable references…" : undefined),
   });
 
   function changeRows(nextRows: TableRow[]) {
@@ -59,6 +107,21 @@ export function VariablesTab({ service, services }: { service: Service; services
     const index = Math.max(document.template.split("\n").length, ...rows.map((row) => row.index + 1));
     setAddedRow(`${revision}:${index}`);
     changeRows([...rows, { index, key: "", value: "" }]);
+  }
+
+  if (loadError) {
+    return <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>;
+  }
+
+  if (baseline === null) {
+    return (
+      <div role="status" aria-label="Loading environment variables" className="space-y-3 animate-pulse">
+        <span className="sr-only">Loading environment variables…</span>
+        <div className="h-4 w-3/4 rounded bg-[var(--color-surface-hover)]" />
+        <div className="h-64 rounded-lg bg-[var(--color-surface-hover)]" />
+        <div className="h-8 w-28 rounded bg-[var(--color-surface-hover)]" />
+      </div>
+    );
   }
 
   return (
@@ -121,6 +184,8 @@ export function VariablesTab({ service, services }: { service: Service; services
           ))}
         </ul>
       )}
+      {validating && <p role="status" className="mt-3 text-xs text-[var(--color-fg-muted)]">Checking variable references…</p>}
+      {referenceError && <p role="alert" className="mt-3 text-xs text-[var(--color-danger)]">{referenceError}</p>}
       {!raw && <p className="mt-3 text-[11px] text-[var(--color-fg-subtle)]">Comments, quotes and blank lines are kept in the raw editor. Copy copies the template value; references resolve on deploy.</p>}
     </div>
   );
