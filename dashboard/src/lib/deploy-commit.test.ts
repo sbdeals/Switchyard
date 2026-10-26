@@ -9,7 +9,7 @@ vi.mock("./session", () => ({
 }));
 vi.mock("./git-remote", () => ({ resolveRepoCommit: vi.fn() }));
 vi.mock("./docker", () => ({ inspectImageExposedPorts: vi.fn() }));
-vi.mock("./repo-port", () => ({ fetchRepoExposedPorts: async () => [] }));
+vi.mock("./repo-port", () => ({ fetchRepoExposedPorts: async () => [], fetchRepoBuildFiles: async () => null }));
 
 import { after } from "next/server";
 import { repoDeploymentLabel } from "./deploy-commit";

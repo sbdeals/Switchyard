@@ -90,6 +90,19 @@ export function parseManaged(composeFile: string | null | undefined): ManagedMet
   return null;
 }
 
+/** Recover the stored recipe from a generated app stack, without re-detecting its source. */
+export function parseManagedBuildPlan(composeFile: string): BuildPlan | undefined {
+  const source = parseManaged(composeFile);
+  if (source?.kind !== "repo" || !source.buildKind || !source.buildPort) return undefined;
+  const inline = composeFile.match(/^services:\r?\n  app:\r?\n    build:\r?\n      context: [^\r\n]+\r?\n      dockerfile_inline: \|\r?\n((?:        [^\r\n]*\r?\n)+)/m)?.[1];
+  if (!inline) throw new Error("Managed build recipe is unavailable.");
+  return {
+    kind: source.buildKind, port: source.buildPort, reason: "Inherited managed build",
+    // Undo Compose interpolation escaping; repoStack applies it once when rendering.
+    dockerfileInline: inline.split(/\r?\n/).slice(0, -1).map((line) => line.slice(8).replaceAll("$$", "$")).join("\n") + "\n",
+  };
+}
+
 /** Record the last automatic routing choice; clearing it preserves explicit Networking edits. */
 export function withManagedAutoDomain(composeFile: string, domain: ManagedAutoDomain | null): string {
   const kind = parseManaged(composeFile)?.kind;
