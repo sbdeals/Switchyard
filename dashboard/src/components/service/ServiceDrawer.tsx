@@ -31,6 +31,7 @@ import { ENGINE_META } from "@/lib/engines";
 import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
+import { loadDatabaseCredentialsAction } from "@/app/database-credentials-actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
 import { BackupsTab } from "@/components/service/BackupsTab";
@@ -444,13 +445,13 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             >
               {tab === "overview" &&
                 (service.kind === "database" ? (
-                  <OverviewTab db={service} />
+                  <OverviewTab key={service.id} db={service} />
                 ) : service.kind === "compose" ? (
                   <ComposeOverviewTab compose={service} />
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "variables" && <VariablesTab key={`${service.kind}:${service.id}`} service={service} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
               {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
               {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
@@ -479,7 +480,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               {tab === "backups" && service.kind === "database" && <BackupsTab db={service} />}
               {tab === "settings" &&
                 (service.kind === "database" ? (
-                  <SettingsTab db={service} onClose={onClose} />
+                  <SettingsTab key={service.id} db={service} onClose={onClose} />
                 ) : service.kind === "compose" ? (
                   <ComposeSettingsTab compose={service} onClose={onClose} />
                 ) : (
@@ -543,15 +544,51 @@ function Header({
 const useDbLifecycle = (db: Database) =>
   useLifecycle((action) => lifecycleAction(db.engine, db.id, action));
 
+function useDatabaseCredentials(db: Database) {
+  const [result, setResult] = useState<Awaited<ReturnType<typeof loadDatabaseCredentialsAction>> | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    loadDatabaseCredentialsAction(db.engine, db.id).then((res) => {
+      if (live) setResult(res);
+    }).catch(() => {
+      if (live) setResult({ ok: false, error: "Could not load database credentials." });
+    });
+    return () => { live = false; };
+  }, [db.engine, db.id, attempt]);
+
+  function retry() {
+    setResult(null);
+    setAttempt((value) => value + 1);
+  }
+
+  return { result, retry };
+}
+
+function CredentialsStatus({ error, retry }: { error?: string; retry: () => void }) {
+  if (!error) {
+    return <p role="status" className="text-xs text-[var(--color-fg-muted)]">Loading database credentials…</p>;
+  }
+  return (
+    <div className="space-y-2">
+      <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>
+      <button type="button" onClick={retry} className="text-xs text-[var(--color-fg-muted)] underline">Retry</button>
+    </div>
+  );
+}
+
 function OverviewTab({ db }: { db: Database }) {
   const meta = ENGINE_META[db.engine];
   const { pending, error, run } = useDbLifecycle(db);
-  const conn = connectionString(db);
+  const { result, retry } = useDatabaseCredentials(db);
+  const conn = result?.ok ? connectionString({ ...db, databasePassword: result.password }) : null;
 
   return (
     <div className="space-y-5">
       <LifecycleButtons status={db.status} pending={pending} error={error} run={run} />
 
+      {!result?.ok && <CredentialsStatus error={result?.error} retry={retry} />}
       {conn && (
         <Field label="Connection string">
           <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
@@ -671,12 +708,14 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
 
 function PasswordRow({ db }: { db: Database }) {
   const [show, setShow] = useState(false);
-  if (!db.databasePassword) return null;
+  const { result, retry } = useDatabaseCredentials(db);
+  if (!result?.ok) return <CredentialsStatus error={result?.error} retry={retry} />;
+  if (!result.password) return null;
   return (
     <Field label="Password" hint="rotation coming soon">
       <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2">
         <code className="flex-1 truncate font-mono text-xs text-[var(--color-fg-muted)]">
-          {show ? db.databasePassword : "•".repeat(16)}
+          {show ? result.password : "•".repeat(16)}
         </code>
         <button
           type="button"
@@ -687,7 +726,7 @@ function PasswordRow({ db }: { db: Database }) {
         >
           {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
         </button>
-        <CopyButton text={db.databasePassword} />
+        <CopyButton text={result.password} />
       </div>
     </Field>
   );

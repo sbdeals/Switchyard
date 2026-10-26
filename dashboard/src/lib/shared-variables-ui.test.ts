@@ -4,16 +4,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SharedVariableEditor, SharedVariablesPanel } from "../components/SharedVariablesPanel";
 import { VariablesTab } from "../components/service/VariablesTab";
 import type { ComposeService, ProjectNode } from "./dokploy";
+import { variablesEditorReducer } from "./variables-editor";
 
 const mocks = vi.hoisted(() => ({
   useSharedVariables: vi.fn(),
+  useSharedVariableKeys: vi.fn(),
+  loadServiceVariables: vi.fn(),
   saveSharedVariables: vi.fn(),
   saveServiceVariables: vi.fn(),
+  editorState: { value: "", baseline: null as string | null, loadError: null as string | null },
 }));
 
-vi.mock("@/components/use-shared-variables", () => ({ useSharedVariables: mocks.useSharedVariables }));
+vi.mock("./variables-editor", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./variables-editor")>(),
+  initialVariablesEditorState: mocks.editorState,
+}));
+vi.mock("@/components/use-shared-variables", () => ({
+  useSharedVariables: mocks.useSharedVariables,
+  useSharedVariableKeys: mocks.useSharedVariableKeys,
+}));
 vi.mock("@/app/shared-variable-actions", () => ({ saveSharedVariablesAction: mocks.saveSharedVariables }));
 vi.mock("@/app/actions", () => ({
+  loadServiceEnvAction: mocks.loadServiceVariables,
   saveEnvironmentAction: mocks.saveServiceVariables,
   saveApplicationEnvAction: mocks.saveServiceVariables,
   saveComposeEnvAction: mocks.saveServiceVariables,
@@ -103,6 +115,7 @@ describe("shared variable editor rendering", () => {
 });
 
 describe("service shared reference rendering", () => {
+  const loadedEnv = 'TOKEN=${{project.TOKEN}}\nEMPTY=${{environment.EMPTY}}\nMISSING=${{environment.UNKNOWN}}\n';
   const service: ComposeService = {
     kind: "compose",
     id: "shared-service",
@@ -114,7 +127,7 @@ describe("service shared reference rendering", () => {
     environmentId: "development",
     environmentName: "Development",
     dockerImage: null,
-    env: 'TOKEN=${{project.TOKEN}}\nEMPTY=${{environment.EMPTY}}\nMISSING=${{environment.UNKNOWN}}\n',
+    env: "PROP_SECRET=service-prop-must-not-be-read",
     createdAt: null,
     cpuLimit: null,
     memoryLimit: null,
@@ -127,9 +140,26 @@ describe("service shared reference rendering", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.useSharedVariables.mockReturnValue({
-      variables: { project: "TOKEN=fixture-project-secret", environment: "EMPTY=\n" },
+    // Static rendering cannot run effects. Seed the reducer's completed-load
+    // state to exercise the UI that follows the ownership-checked action.
+    Object.assign(mocks.editorState, variablesEditorReducer(
+      { value: "", baseline: null, loadError: null },
+      { type: "loaded", env: loadedEnv },
+    ));
+    mocks.useSharedVariableKeys.mockReturnValue({
+      keys: { project: ["TOKEN"], environment: ["EMPTY"] },
     });
+  });
+
+  it("renders only a loading state before the service environment is requested", () => {
+    Object.assign(mocks.editorState, { value: "", baseline: null, loadError: null });
+    const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
+    expect(html).toContain('aria-label="Loading environment variables"');
+    expect(html).not.toContain("service-prop-must-not-be-read");
+    expect(html).not.toContain("<textarea");
+    expect(html).not.toContain('aria-label="Shared reference status"');
+    expect(mocks.loadServiceVariables).not.toHaveBeenCalled();
+    expect(mocks.useSharedVariables).not.toHaveBeenCalled();
   });
 
   it("offers a collapsed reference picker and labels defined and missing references without revealing shared values", () => {
@@ -140,22 +170,25 @@ describe("service shared reference rendering", () => {
     expect(html).toContain('<code>TOKEN: ${{project.TOKEN}}</code> — Defined');
     expect(html).toContain('<code>EMPTY: ${{environment.EMPTY}}</code> — Defined');
     expect(html).toContain('<code>MISSING: ${{environment.UNKNOWN}}</code> — Missing — deployment will fail');
-    expect(html).not.toContain("fixture-project-secret");
+    expect(html).not.toContain("service-prop-must-not-be-read");
     expect(html).toContain(">3 variables</span>");
-    expect(mocks.useSharedVariables).toHaveBeenCalledWith("shared-project", "development", service);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Save variables<\/button>/);
+    expect(mocks.useSharedVariableKeys).toHaveBeenCalledWith("shared-project", "development", service);
+    expect(mocks.useSharedVariables).not.toHaveBeenCalled();
     expect(mocks.saveServiceVariables).not.toHaveBeenCalled();
   });
 
   it("counts parsed keys rather than multiline values, duplicate lines or comments", () => {
-    const html = renderToStaticMarkup(createElement(VariablesTab, {
-      service: { ...service, env: '# comment\nMULTI="first\nsecond"\nDUP=old\nDUP=new\n' },
+    Object.assign(mocks.editorState, variablesEditorReducer(mocks.editorState, {
+      type: "loaded", env: '# comment\nMULTI="first\nsecond"\nDUP=old\nDUP=new\n',
     }));
+    const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
     expect(html).toContain(">2 variables</span>");
     expect(html).not.toContain('aria-label="Shared reference status"');
   });
 
   it("does not mark references missing while shared variables are still loading", () => {
-    mocks.useSharedVariables.mockReturnValue(null);
+    mocks.useSharedVariableKeys.mockReturnValue(null);
     const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
     expect(html).toMatch(/role="status"[^>]*>Checking shared variables…/);
     expect(html).not.toContain("Missing — deployment will fail");
@@ -163,10 +196,19 @@ describe("service shared reference rendering", () => {
   });
 
   it("reports read failures without claiming a reference is missing", () => {
-    mocks.useSharedVariables.mockReturnValue({ error: "Could not load shared variables" });
+    mocks.useSharedVariableKeys.mockReturnValue({ error: "Could not load shared variables" });
     const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
     expect(html).toMatch(/role="alert"[^>]*>Could not load shared variables/);
     expect(html).not.toContain("Missing — deployment will fail");
+  });
+
+  it("does not fall back to page props after an environment load failure", () => {
+    Object.assign(mocks.editorState, { value: "", baseline: null, loadError: "Access denied" });
+    const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
+    expect(html).toMatch(/role="alert"[^>]*>Access denied/);
+    expect(html).not.toContain("service-prop-must-not-be-read");
+    expect(html).not.toContain("<textarea");
+    expect(html).not.toContain("Save variables");
   });
 });
 
@@ -181,6 +223,8 @@ describe("shared variables panel rendering", () => {
     expect(html).toContain('role="status"');
     expect(html).toContain("Loading shared variables…");
     expect(html).not.toContain('role="table"');
+    const environmentSelect = html.match(/<select[^>]*aria-label="Shared variables environment"[^>]*>/)?.[0];
+    expect(environmentSelect).toContain('disabled=""');
     expect(mocks.useSharedVariables).toHaveBeenCalledWith("shared-project", "development");
   });
 
@@ -194,6 +238,9 @@ describe("shared variables panel rendering", () => {
     expect(html).toContain('aria-label="SHARED value" type="password"');
     expect(html).toContain('aria-label="LOCAL value" type="password"');
     expect(html).toContain("redeploy each referencing service");
+    const environmentSelect = html.match(/<select[^>]*aria-label="Shared variables environment"[^>]*>/)?.[0];
+    expect(environmentSelect).toBeDefined();
+    expect(environmentSelect).not.toContain('disabled=""');
   });
 
   it("shows a read error without presenting an empty editable block", () => {
@@ -202,6 +249,9 @@ describe("shared variables panel rendering", () => {
     expect(html).toMatch(/role="alert"[^>]*>Access denied/);
     expect(html).not.toContain('role="table"');
     expect(html).not.toContain("Save project variables");
+    const environmentSelect = html.match(/<select[^>]*aria-label="Shared variables environment"[^>]*>/)?.[0];
+    expect(environmentSelect).toBeDefined();
+    expect(environmentSelect).not.toContain('disabled=""');
   });
 
   it("omits the environment editor when the project has no environment", () => {

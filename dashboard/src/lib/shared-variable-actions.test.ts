@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getSharedVariablesAction, saveSharedVariablesAction } from "../app/shared-variable-actions";
+import { getSharedVariableKeysAction, getSharedVariablesAction, saveSharedVariablesAction } from "../app/shared-variable-actions";
 import type { SharedScope } from "./shared-variables";
 
 const mocks = vi.hoisted(() => ({
@@ -30,6 +30,8 @@ const projects = [
     environments: [{ environmentId: "other-environment" }],
   },
 ];
+const readFailure = { ok: false, error: "Could not load shared variables." };
+const saveFailure = { ok: false, error: "Could not save shared variables." };
 
 describe("shared variable actions", () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -72,6 +74,34 @@ describe("shared variable actions", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("returns only key names for shared reference badges using the user's session", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json([{
+      ...projects[0],
+      env: 'TOKEN=shared-project-sentinel\nTOKEN=last-value\nEMPTY=\nMULTI="first\nsecond"\n',
+    }]));
+    fetchMock.mockResolvedValueOnce(Response.json({ env: "LOCAL=shared-environment-sentinel\n" }));
+
+    const result = await getSharedVariableKeysAction("mine", "development");
+
+    expect(result).toEqual({ ok: true, keys: { project: ["TOKEN", "EMPTY", "MULTI"], environment: ["LOCAL"] } });
+    expect(JSON.stringify(result)).not.toMatch(/sentinel|last-value|first|second/);
+    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
+      "/api/project.all", "/api/environment.one",
+    ]);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init?.headers).toMatchObject({ Cookie: "test-user-session" });
+    }
+  });
+
+  it("supports project-only key reads and empty shared blocks", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json([{ ...projects[0], env: null }]));
+
+    await expect(getSharedVariableKeysAction("mine")).resolves.toEqual({
+      ok: true, keys: { project: [], environment: [] },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("normalizes unset shared blocks to empty text", async () => {
     fetchMock.mockResolvedValueOnce(Response.json([{ ...projects[0], env: null }]));
     fetchMock.mockResolvedValueOnce(Response.json({ env: null }));
@@ -96,15 +126,16 @@ describe("shared variable actions", () => {
   });
 
   it.each([
-    ["unknown", "development", "Project not found or access denied."],
-    ["mine", "other-environment", "Environment does not belong to this project."],
-  ])("refuses reads and writes outside the selected project (%s, %s)", async (projectId, environmentId, error) => {
-    await expect(getSharedVariablesAction(projectId, environmentId)).resolves.toEqual({ ok: false, error });
+    ["unknown", "development"],
+    ["mine", "other-environment"],
+  ])("refuses value reads, key reads and writes outside the selected project (%s, %s)", async (projectId, environmentId) => {
+    await expect(getSharedVariablesAction(projectId, environmentId)).resolves.toEqual(readFailure);
+    await expect(getSharedVariableKeysAction(projectId, environmentId)).resolves.toEqual(readFailure);
     for (const scope of ["project", "environment"] as const) {
       await expect(saveSharedVariablesAction(projectId, environmentId, scope, "KEY=value"))
-        .resolves.toEqual({ ok: false, error });
+        .resolves.toEqual(saveFailure);
     }
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     for (const [url, init] of fetchMock.mock.calls) {
       expect(new URL(String(url)).pathname).toBe("/api/project.all");
       expect(init?.method).toBe("GET");
@@ -114,7 +145,7 @@ describe("shared variable actions", () => {
 
   it("requires a selected environment before writing environment variables", async () => {
     await expect(saveSharedVariablesAction("mine", undefined, "environment", "KEY=value"))
-      .resolves.toEqual({ ok: false, error: "Select an environment first." });
+      .resolves.toEqual(saveFailure);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][1]?.method).toBe("GET");
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
@@ -122,33 +153,55 @@ describe("shared variable actions", () => {
 
   it("rejects unexpected scope and non-text payloads at runtime without any writes", async () => {
     await expect(saveSharedVariablesAction("mine", "development", "application" as SharedScope, "KEY=value"))
-      .resolves.toEqual({ ok: false, error: "Invalid shared variable scope." });
+      .resolves.toEqual(saveFailure);
     await expect(saveSharedVariablesAction("mine", "development", "project", {} as string))
-      .resolves.toEqual({ ok: false, error: "Variables must be text." });
+      .resolves.toEqual(saveFailure);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("surfaces a backend write rejection without revalidating", async () => {
+  it.each([getSharedVariablesAction, getSharedVariableKeysAction])("does not expose backend value-read errors (%#)", async (action) => {
     fetchMock.mockResolvedValueOnce(Response.json(projects));
-    fetchMock.mockResolvedValueOnce(new Response("Permission denied", { status: 403 }));
+    fetchMock.mockResolvedValueOnce(new Response("TOKEN=private-backend-sentinel", { status: 500 }));
+
+    await expect(action("mine", "development")).resolves.toEqual(readFailure);
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("does not expose backend ownership-read errors", async () => {
+    fetchMock.mockResolvedValue(new Response("TOKEN=private-backend-sentinel", { status: 500 }));
+
+    await expect(getSharedVariablesAction("mine", "development")).resolves.toEqual(readFailure);
+    await expect(getSharedVariableKeysAction("mine", "development")).resolves.toEqual(readFailure);
     await expect(saveSharedVariablesAction("mine", "development", "project", "KEY=value"))
-      .resolves.toMatchObject({ ok: false, error: expect.stringContaining("Permission denied") });
+      .resolves.toEqual(saveFailure);
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("does not expose a backend write rejection or revalidate", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json(projects));
+    fetchMock.mockResolvedValueOnce(new Response("TOKEN=private-backend-sentinel", { status: 403 }));
+    await expect(saveSharedVariablesAction("mine", "development", "project", "KEY=value"))
+      .resolves.toEqual(saveFailure);
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("preserves redirects on an expired session and never writes", async () => {
     fetchMock.mockResolvedValue(new Response("Session expired", { status: 401 }));
     await expect(getSharedVariablesAction("mine", "development")).rejects.toBe(mocks.redirect);
+    await expect(getSharedVariableKeysAction("mine", "development")).rejects.toBe(mocks.redirect);
     await expect(saveSharedVariablesAction("mine", "development", "project", "KEY=value"))
       .rejects.toBe(mocks.redirect);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("does not contact Dokploy when there is no user session", async () => {
     mocks.openSession.mockReturnValue(null);
+    await expect(getSharedVariablesAction("mine", "development")).rejects.toBe(mocks.redirect);
+    await expect(getSharedVariableKeysAction("mine", "development")).rejects.toBe(mocks.redirect);
     await expect(saveSharedVariablesAction("mine", "development", "project", "KEY=value"))
       .rejects.toBe(mocks.redirect);
     expect(fetchMock).not.toHaveBeenCalled();

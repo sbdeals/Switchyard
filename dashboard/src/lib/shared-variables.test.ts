@@ -109,7 +109,7 @@ describe("shared references", () => {
 
   it("reports each direct reference in effective service values without disclosing values", () => {
     const source = "URL=${{project.HOST}}/${{environment.PATH}}/${{project.MISSING}}\nOLD=${{project.MISSING}}\nOLD=literal\n";
-    expect(sharedReferences(source, { project: "HOST=private-host\n", environment: "PATH=\n" })).toEqual([
+    expect(sharedReferences(source, { project: ["HOST"], environment: ["PATH"] })).toEqual([
       { variable: "URL", scope: "project", key: "HOST", reference: "${{project.HOST}}", defined: true },
       { variable: "URL", scope: "environment", key: "PATH", reference: "${{environment.PATH}}", defined: true },
       { variable: "URL", scope: "project", key: "MISSING", reference: "${{project.MISSING}}", defined: false },
@@ -118,7 +118,7 @@ describe("shared references", () => {
 
   it("uses exact keys, ignores comments/self references, and does not inherit properties", () => {
     const source = "# A=${{project.X}}\nA=${{project.X }}-${{project.constructor}}-${{environment.__proto__}}-${{SELF}}\nB=${{environment.X}}\n";
-    expect(sharedReferences(source, { project: "X=yes", environment: "__proto__=yes\nX=first\nX=" }).map(({ key, defined }) => ({ key, defined }))).toEqual([
+    expect(sharedReferences(source, { project: ["X"], environment: ["__proto__", "X"] }).map(({ key, defined }) => ({ key, defined }))).toEqual([
       { key: "X ", defined: false },
       { key: "constructor", defined: false },
       { key: "__proto__", defined: true },

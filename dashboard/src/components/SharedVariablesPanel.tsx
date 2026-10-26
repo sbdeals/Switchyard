@@ -26,7 +26,7 @@ export function SharedVariablesPanel({ project }: { project: ProjectNode }) {
       {project.environments.length > 0 && (
         <label className="block text-xs text-[var(--color-fg-muted)]">
           Environment
-          <select aria-label="Shared variables environment" value={environmentId} disabled={Object.values(saving).some(Boolean)} onChange={(e) => setEnvironmentId(e.target.value)} className={`${inputCls} mt-1`}>
+          <select aria-label="Shared variables environment" value={environmentId} disabled={!result || Object.values(saving).some(Boolean)} onChange={(e) => setEnvironmentId(e.target.value)} className={`${inputCls} mt-1`}>
             {project.environments.map((env) => <option key={env.environmentId} value={env.environmentId}>{env.name}</option>)}
           </select>
         </label>

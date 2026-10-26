@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
-import { getSharedVariables, saveSharedVariables } from "@/lib/dokploy";
-import type { SharedScope, SharedVariables } from "@/lib/shared-variables";
+import { getSharedVariables, getSharedVariableKeys, saveSharedVariables } from "@/lib/dokploy";
+import type { SharedScope, SharedVariables, SharedVariableKeys } from "@/lib/shared-variables";
 import type { ActionResult } from "./actions";
 
 export async function getSharedVariablesAction(
@@ -14,7 +14,20 @@ export async function getSharedVariablesAction(
     return { ok: true, variables: await getSharedVariables(projectId, environmentId) };
   } catch (e) {
     unstable_rethrow(e);
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, error: "Could not load shared variables." };
+  }
+}
+
+/** Names only for service reference pickers and Defined/Missing badges. */
+export async function getSharedVariableKeysAction(
+  projectId: string,
+  environmentId?: string
+): Promise<{ ok: true; keys: SharedVariableKeys } | { ok: false; error: string }> {
+  try {
+    return { ok: true, keys: await getSharedVariableKeys(projectId, environmentId) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load shared variables." };
   }
 }
 
@@ -30,6 +43,6 @@ export async function saveSharedVariablesAction(
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e);
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, error: "Could not save shared variables." };
   }
 }

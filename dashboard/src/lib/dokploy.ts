@@ -24,7 +24,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
-import type { SharedScope, SharedVariables } from "./shared-variables";
+import { variableValues, type SharedScope, type SharedVariables, type SharedVariableKeys } from "./shared-variables";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
@@ -96,7 +96,7 @@ export interface ServiceBase {
   environmentId: string;
   environmentName: string;
   dockerImage: string | null;
-  /** Raw env block ("KEY=value\n..."). */
+  /** Raw env block on the server; redacted to null in workspace page props. */
   env: string | null;
   createdAt: string | null;
   // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
@@ -542,6 +542,18 @@ export async function getSharedVariables(
   return { project: project.env ?? "", environment: detail?.env ?? "" };
 }
 
+/** Reference badges/pickers need names only, never the shared values. */
+export async function getSharedVariableKeys(
+  projectId: string,
+  environmentId?: string
+): Promise<SharedVariableKeys> {
+  const shared = await getSharedVariables(projectId, environmentId);
+  return {
+    project: Object.keys(variableValues(shared.project)),
+    environment: Object.keys(variableValues(shared.environment)),
+  };
+}
+
 export async function saveSharedVariables(
   projectId: string,
   environmentId: string | undefined,
@@ -563,6 +575,36 @@ export async function saveSharedVariables(
       body: { environmentId: environment.environmentId, env },
     });
   }
+}
+
+/** Check service ownership before loading any secret from its detail endpoint. */
+async function assertServiceOwnership(type: MountServiceType, id: string): Promise<void> {
+  if (!["application", "compose", ...ENGINES].includes(type) || !id) {
+    throw new Error("Invalid service.");
+  }
+  const tree = await rawTree();
+  const refs = collectIds(tree, (env) => {
+    if (type === "application") return (env.applications ?? []).map((a) => a.applicationId);
+    if (type === "compose") return (env.compose ?? []).map((c) => c.composeId);
+    return ((env[type] ?? []) as Record<string, string>[]).map((item) => item[idKey(type)]);
+  });
+  if (!refs.some((ref) => ref.id === id)) throw new Error("Service unavailable.");
+}
+
+/** Read env only after finding the service in the current user's workspace. */
+export async function getServiceEnvironment(type: MountServiceType, id: string): Promise<string> {
+  await assertServiceOwnership(type, id);
+  const detail = await request<{ env?: string | null }>(
+    `${type}.one?${type}Id=${encodeURIComponent(id)}`
+  );
+  return detail.env ?? "";
+}
+
+/** Load credentials only when an owned database drawer needs them. */
+export async function getDatabasePassword(engine: Engine, id: string): Promise<string | null> {
+  if (!ENGINES.includes(engine)) throw new Error("Invalid database engine.");
+  await assertServiceOwnership(engine, id);
+  return (await getDetail(engine, id)).databasePassword ?? null;
 }
 
 export async function createProject(name: string): Promise<void> {

@@ -1,6 +1,7 @@
 import { unstable_rethrow } from "next/navigation";
 
 import { loadWorkspace, inferEdges } from "@/lib/dokploy";
+import { redactServiceForClient } from "@/lib/service-redaction";
 import { ensureCollector } from "@/lib/collector";
 import { Workspace } from "@/components/Workspace";
 import { LogoutButton } from "@/components/LogoutButton";
@@ -29,7 +30,7 @@ export default async function Page() {
       <>
         <LogoutButton />
         <Workspace
-          services={result.services}
+          services={result.services.map(redactServiceForClient)}
           projects={result.projects}
           edges={inferEdges(result.services)}
         />

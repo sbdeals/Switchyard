@@ -5,6 +5,11 @@ export interface SharedVariables {
   environment: string;
 }
 
+export interface SharedVariableKeys {
+  project: string[];
+  environment: string[];
+}
+
 export interface VariableEntry {
   key: string;
   value: string;
@@ -108,14 +113,14 @@ export function sharedReference(scope: SharedScope, key: string): string {
 }
 
 /** Report direct references without exposing shared values to row labels. */
-export function sharedReferences(source: string, shared: SharedVariables): SharedReference[] {
-  const values = { project: variableValues(shared.project), environment: variableValues(shared.environment) };
+export function sharedReferences(source: string, keys: SharedVariableKeys): SharedReference[] {
+  const names = { project: new Set(keys.project), environment: new Set(keys.environment) };
   const references: SharedReference[] = [];
   for (const [variable, value] of Object.entries(variableValues(source))) {
     // Dokploy matches the key exactly: whitespace is meaningful, not trimmed.
     for (const match of value.matchAll(/\$\{\{(project|environment)\.(.*?)\}\}/g)) {
       const scope = match[1] as SharedScope;
-      references.push({ variable, scope, key: match[2], reference: match[0], defined: Object.hasOwn(values[scope], match[2]) });
+      references.push({ variable, scope, key: match[2], reference: match[0], defined: names[scope].has(match[2]) });
     }
   }
   return references;
