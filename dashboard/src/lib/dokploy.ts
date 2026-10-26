@@ -95,7 +95,7 @@ export interface ServiceBase {
   environmentId: string;
   environmentName: string;
   dockerImage: string | null;
-  /** Raw env block ("KEY=value\n..."). */
+  /** Raw env block on the server; redacted to null in workspace page props. */
   env: string | null;
   createdAt: string | null;
   // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
@@ -116,6 +116,7 @@ export interface Database extends ServiceBase {
   engine: Engine;
   databaseName: string | null;
   databaseUser: string | null;
+  /** Loaded on demand by the client; redacted to null in workspace page props. */
   databasePassword: string | null;
   externalPort: number | null;
   command: string | null;
@@ -515,6 +516,24 @@ export async function listProjects(): Promise<ProjectNode[]> {
   return projectsFromTree(await rawTree());
 }
 
+/** Read env only after finding the service in the current user's workspace. */
+export async function getServiceEnvironment(type: MountServiceType, id: string): Promise<string> {
+  if (!["application", "compose", ...ENGINES].includes(type) || !id) {
+    throw new Error("Invalid service.");
+  }
+  const tree = await rawTree();
+  const refs = collectIds(tree, (env) => {
+    if (type === "application") return (env.applications ?? []).map((a) => a.applicationId);
+    if (type === "compose") return (env.compose ?? []).map((c) => c.composeId);
+    return ((env[type] ?? []) as Record<string, string>[]).map((item) => item[idKey(type)]);
+  });
+  if (!refs.some((ref) => ref.id === id)) throw new Error("Service unavailable.");
+  const detail = await request<{ env?: string | null }>(
+    `${type}.one?${type}Id=${encodeURIComponent(id)}`
+  );
+  return detail.env ?? "";
+}
+
 export async function createProject(name: string): Promise<void> {
   await request("project.create", { method: "POST", body: { name } });
 }
@@ -560,6 +579,17 @@ interface RawDatabaseDetail {
 
 async function getDetail(engine: Engine, id: string): Promise<RawDatabaseDetail> {
   return request<RawDatabaseDetail>(`${engine}.one?${idKey(engine)}=${encodeURIComponent(id)}`);
+}
+
+/** Read a password only after finding the database in the current user's workspace. */
+export async function getDatabasePassword(engine: Engine, id: string): Promise<string | null> {
+  if (!ENGINES.includes(engine) || !id) throw new Error("Invalid database.");
+  const tree = await rawTree();
+  const refs = collectIds(tree, (env) =>
+    ((env[engine] ?? []) as Record<string, string>[]).map((item) => item[idKey(engine)])
+  );
+  if (!refs.some((ref) => ref.id === id)) throw new Error("Database unavailable.");
+  return (await getDetail(engine, id)).databasePassword ?? null;
 }
 
 /** List every database in the tree, enriched with detail. */
