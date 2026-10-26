@@ -1,0 +1,8 @@
+deploy rows at start: 4
+clicked Generate URL
+staged-changes bar: 2 changesnodejs-getting-started-u7cf Details Discard Deploy
+deploy rows after edits (before any Deploy click): 4
+details dialog: 2 changes to apply nodejs-getting-started-u7cf will deploy once after all changes apply. Drafts are kept in this workspace until you reload or leave the page. Field Current New Variable DEMO_STAGED •••••••• •••••••• Domain — nodejs-getting-started-u7cf-uoz3bt-3b9308-104-28-215-142.sslip.io → app:Auto
+bar: Changes applied. Deployment triggered.
+deploy rows after one Deploy click: 5 (+1)
+Variables now contains DEMO_STAGED=after-15454 : true

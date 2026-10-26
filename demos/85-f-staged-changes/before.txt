@@ -1,0 +1,6 @@
+deploy rows at start: 3
+Variables tab has a Save button -> clicking (saves immediately)
+clicked Generate URL
+staged-changes bar: none
+deploy rows after edits (before any Deploy click): 4
+Variables now contains DEMO_STAGED=before-86497 : true
