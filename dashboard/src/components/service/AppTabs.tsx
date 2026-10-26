@@ -64,6 +64,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { DeployChecksSettings, DeployChecksStatus } from "./DeployChecks";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -370,6 +371,7 @@ export function DeploymentsTab({ app }: { app: Application }) {
   return (
     <div className="space-y-6">
       {app.sourceType === "git" && <AutoDeployPanel app={app} />}
+      <DeployChecksStatus service={app} />
       <DeploymentHistory deployments={app.deployments} />
     </div>
   );
@@ -1083,7 +1085,9 @@ export function AppDeployTab({ app }: { app: Application }) {
       </p>
       <ReplicasForm app={app} />
       <RestartPolicyForm app={app} />
-      <HealthCheckForm app={app} />
+      {app.swarmSettingsSupported ? <HealthCheckForm app={app} /> : (
+        <p className="text-xs text-[var(--color-fg-muted)]">{app.deployCheckSupport.reason}</p>
+      )}
     </div>
   );
 }
@@ -1128,6 +1132,7 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
 
   return (
     <div className="space-y-5">
+      <DeployChecksSettings service={app} />
       <div className="space-y-3">
         <Field label="Name">
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />

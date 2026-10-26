@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { DeployChecksSettings } from "./DeployChecks";
 import {
   composeLifecycleAction,
   saveComposeFileAction,
@@ -248,6 +249,7 @@ export function ComposeSettingsTab({
   const { pending, error, run } = useComposeLifecycle(compose);
   return (
     <div className="space-y-5">
+      <DeployChecksSettings service={compose} />
       <Info label="App name" value={compose.appName} mono />
       <Info
         label="Created"

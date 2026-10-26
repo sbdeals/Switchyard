@@ -9,6 +9,7 @@
 import "server-only";
 import Docker from "dockerode";
 import type { Duplex } from "node:stream";
+import type { CheckContainer } from "./deploy-check-status";
 
 const socketPath = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
 const docker = new Docker({ socketPath });
@@ -108,6 +109,36 @@ export async function listRuntimeStates(): Promise<RuntimeStates> {
     if (swarmService) push(swarm, swarmService, state);
   }
   return { compose, swarm };
+}
+
+/** Capability check, not a request to initialize or alter Swarm. */
+export async function isSwarmManager(): Promise<boolean> {
+  try {
+    const info = await withTimeout(docker.info(), DOCKER_OP_TIMEOUT_MS, "Docker capabilities");
+    return info.Swarm?.ControlAvailable === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Read only the selected service's containers; never execute a probe here. */
+export async function readDeployCheckContainers(appName: string, kind: "application" | "compose"): Promise<CheckContainer[]> {
+  const label = kind === "compose" ? "com.docker.compose.project" : "com.docker.swarm.service.name";
+  const containers = await withTimeout(docker.listContainers({ all: true, filters: { label: [`${label}=${appName}`] } }), DOCKER_OP_TIMEOUT_MS, "deploy check containers");
+  return Promise.all(containers.map(async (container) => {
+    const c = await withTimeout(docker.getContainer(container.Id).inspect(), DOCKER_OP_TIMEOUT_MS, "deploy check state");
+    return {
+      serviceName: c.Config.Labels?.["com.docker.compose.service"] ?? "",
+      createdAt: c.Created,
+      state: c.State.Status,
+      health: c.State.Health?.Status,
+      healthTest: c.Config.Healthcheck?.Test,
+      healthRan: (c.State.Health?.Log?.length ?? 0) > 0,
+      exitCode: c.State.ExitCode,
+      command: c.Config.Cmd,
+      entrypoint: Array.isArray(c.Config.Entrypoint) ? c.Config.Entrypoint : undefined,
+    };
+  }));
 }
 
 /**
