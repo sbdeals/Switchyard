@@ -1,0 +1,66 @@
+{
+  "base": "http://127.0.0.1:3054",
+  "startedAt": "2026-10-26T09:49:22.982Z",
+  "steps": [
+    {
+      "text": "Tab through the workspace to the nginx service",
+      "at": "2026-10-26T09:49:25.745Z"
+    },
+    {
+      "text": "nginx service focused by Tab — Enter opens details",
+      "at": "2026-10-26T09:49:28.838Z"
+    },
+    {
+      "text": "Drawer opened. Shift+Tab from initial dialog focus stays inside",
+      "at": "2026-10-26T09:49:30.237Z"
+    },
+    {
+      "text": "Tab wraps from the last control to the first control",
+      "at": "2026-10-26T09:49:31.113Z"
+    },
+    {
+      "text": "ArrowLeft wraps Overview → Settings",
+      "at": "2026-10-26T09:49:32.165Z"
+    },
+    {
+      "text": "ArrowRight wraps Settings → Overview",
+      "at": "2026-10-26T09:49:32.886Z"
+    },
+    {
+      "text": "Home / End select first / last tabs; only the selected tab is tabbable",
+      "at": "2026-10-26T09:49:33.779Z"
+    },
+    {
+      "text": "ArrowRight selects Variables (form values hidden in this recording)",
+      "at": "2026-10-26T09:49:34.516Z"
+    },
+    {
+      "text": "ArrowRight selects Deploy",
+      "at": "2026-10-26T09:49:35.240Z"
+    },
+    {
+      "text": "Escape closes the drawer and restores the same nginx canvas node",
+      "at": "2026-10-26T09:49:36.687Z"
+    },
+    {
+      "text": "Projects: focus stays inside; Escape restores Projects",
+      "at": "2026-10-26T09:49:40.928Z"
+    },
+    {
+      "text": "Quick deploy: focus stays inside; Escape restores New service",
+      "at": "2026-10-26T09:49:43.378Z"
+    },
+    {
+      "text": "Quick deploy → GitHub: focus remains inside the new dialog after animation",
+      "at": "2026-10-26T09:49:46.356Z"
+    },
+    {
+      "text": "Escape restores New service. All keyboard checks passed; no actions submitted.",
+      "at": "2026-10-26T09:49:47.799Z"
+    }
+  ],
+  "redaction": "Proof-only CSS hides input/textarea/pre/code contents. Authentication occurs before video context; session state stays in memory. All interactions in the recorded context are keyboard-only.",
+  "canvasTabs": 16,
+  "passed": true,
+  "finishedAt": "2026-10-26T09:49:48.369Z"
+}

@@ -92,3 +92,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#119](https://github.com/sbdeals/Switchyard/pull/119) | codex/image-update-check (main) | manual image update check panel | [119-image-update-check](119-image-update-check/) | live UI + API proof on :3052 | pass; Update-available path unit-tested only |
 | [#120](https://github.com/sbdeals/Switchyard/pull/120) | codex/vars-raw-editor (main) | raw .env editor + masked review | [120-vars-raw-editor](120-vars-raw-editor/) | live UI + API readback on :3049 | pass; comments/CRLF preserved |
 | [#121](https://github.com/sbdeals/Switchyard/pull/121) | codex/light-theme (main) | light/dark/system theme | [121-light-theme](121-light-theme/) | read-only browser proof on :3055 | pass; 15 checks |
+| [#122](https://github.com/sbdeals/Switchyard/pull/122) | codex/a11y-pass (main) | accessibility pass | [122-a11y-pass](122-a11y-pass/) | axe + keyboard walkthrough on local stack | pass; axe 69→0 |
