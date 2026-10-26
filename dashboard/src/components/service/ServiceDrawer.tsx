@@ -39,6 +39,7 @@ import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { ServiceNotes } from "@/components/service/ServiceNotes";
 import {
   AppOverviewTab,
   AppBuildTab,
@@ -506,14 +507,14 @@ function Header({
   const Icon = service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
         <div
-          className="flex size-11 items-center justify-center rounded-xl"
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl"
           style={{ backgroundColor: `${accent}1a`, color: accent }}
         >
           <Icon className="size-5.5" />
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h2 id={titleId} className="font-semibold">
               {service.name}
@@ -526,6 +527,7 @@ function Header({
           <div className="text-[11px] text-[var(--color-fg-subtle)]">
             Last deploy: {LAST_DEPLOY_LABEL[service.status] ?? service.status}
           </div>
+          <ServiceNotes key={service.id} id={service.id} description={service.description} />
         </div>
       </div>
       <button
