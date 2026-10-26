@@ -1,0 +1,57 @@
+{
+  "type": "Test-only browser render of actual PanelErrorBoundary source",
+  "source": "/workspace/wt-error-boundaries/dashboard/src/components/PanelErrorBoundary.tsx",
+  "renderer": "React createRoot in headless Google Chrome via Playwright",
+  "backend": "None; page.setContent + addScriptTag, no server or network requests",
+  "styling": "Local fixture CSS using dashboard theme colors; not a full dashboard route",
+  "assertions": [
+    {
+      "description": "Healthy panel renders through the real React boundary",
+      "passed": true
+    },
+    {
+      "description": "A child render exception is caught inline",
+      "passed": true
+    },
+    {
+      "description": "Sibling state survives the failed panel",
+      "passed": true
+    },
+    {
+      "description": "Sibling stays interactive while the panel is failed",
+      "passed": true
+    },
+    {
+      "description": "Retry safely catches a persistent child failure again",
+      "passed": true
+    },
+    {
+      "description": "Resolving the fixture leaves recovery under the Retry button",
+      "passed": true
+    },
+    {
+      "description": "Retry recovers the real child render",
+      "passed": true
+    },
+    {
+      "description": "Retry remounts panel state from its initial value",
+      "passed": true
+    },
+    {
+      "description": "Retry preserves the independent sibling state",
+      "passed": true
+    },
+    {
+      "description": "Changing the service/tab boundary key resets failed state",
+      "passed": true
+    },
+    {
+      "description": "Key reset preserves the independent sibling state",
+      "passed": true
+    },
+    {
+      "description": "The test-only fixture made no network requests",
+      "passed": true
+    }
+  ]
+}

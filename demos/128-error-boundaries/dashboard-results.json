@@ -1,0 +1,9 @@
+{
+  "localLogin": true,
+  "notFoundStatus": 404,
+  "offlineDokployUrl": "http://127.0.0.1:3058",
+  "offlineState": true,
+  "offlineDetailsHidden": true,
+  "retryRefreshesServer": true,
+  "invalidSessionRedirectsToLogin": true
+}
