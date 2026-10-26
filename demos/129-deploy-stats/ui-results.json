@@ -1,0 +1,14 @@
+{
+  "base": "http://127.0.0.1:3061",
+  "fixture": "deploy-stats-mvp3q0m8",
+  "initialSummary": "Last 3 deployments\nSuccess rate\n67%\nMedian duration\n3s\np90 duration\n16s\nLast successful\n2m ago\n\n3 completed duration samples. Missing timestamps: duration unavailable (—).",
+  "liveTicks": [
+    "running 1s",
+    "running 4s"
+  ],
+  "finishedDuration": "35s",
+  "pollingStopped": true,
+  "finalSummary": "Last 4 deployments\nSuccess rate\n75%\nMedian duration\n10s\np90 duration\n35s\nLast successful\n2s ago\n\n4 completed duration samples. Missing timestamps: duration unavailable (—).",
+  "absoluteTooltip": "2026-10-26 10:19:56.641 UTC",
+  "consoleErrors": []
+}
