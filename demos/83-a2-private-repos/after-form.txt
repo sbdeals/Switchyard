@@ -1,0 +1,19 @@
+--- connection options: ["Select a provider or SSH key…","SSH key · demo-throwaway-key"]
+--- https URL with SSH key: deploy enabled=false
+--- ssh URL + port 8080: deploy enabled=true
+--- form text:
+Connected Git repo
+Dockerfile or auto-detected Node, Python, Go and static builds.
+CONNECTION
+Select a provider or SSH key…
+SSH key · demo-throwaway-key
+REPOSITORY
+BRANCH
+SUBDIRECTORY
+DOCKERFILE
+APP PORT
+Detection runs on tracked files after Dokploy clones. A Dockerfile takes priority. Leave the port empty to detect it, or override it for your app.
+Connect a Git provider or SSH key in Dokploy, then refresh to see it here.
+Refresh connections
+Credentials stay in Dokploy.
+Deploy

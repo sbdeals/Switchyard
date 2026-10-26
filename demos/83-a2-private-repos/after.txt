@@ -1,0 +1,8 @@
+--- New service menu: APPLICATION Deploy Deploy Branch Auto-detects Node, Python, Go and static sites on public GitHub, GitLab and Bitbucket repos. On bridge hosts, other Git hosts or unavailable public files use a Dockerfile. Connected Git repo private repos Compose stack docker-compose TEMPLATES App catalog DATABASE Po
+--- repo modal text:
+Connected Git repo
+Dockerfile or auto-detected Node, Python, Go and static builds.
+Connect a Git provider or SSH key in Dokploy, then refresh to see it here.
+Connect Git provider
+Refresh
+--- connection options: []

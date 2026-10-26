@@ -1,0 +1,104 @@
+ ✓ src/lib/private-repo-files.test.ts > private manifest projection > detects the same Node lockfile and Django rules from staged files
+ ✓ src/lib/private-repo-files.test.ts > private manifest projection > honors an explicit Dockerfile and rejects a missing one
+ ✓ src/lib/private-repo-files.test.ts > private manifest projection > rejects unrequested files, oversized manifests and invalid output without echoing content
+ ✓ src/lib/private-repo-files.test.ts > private manifest projection > archives before reading and guards all manifest paths against symlinks and command injection
+ ✓ src/lib/private-repo-files.test.ts > isolated manifest reader > mounts only the authorized clone read-only, without a network, and removes its helper
+ ✓ src/lib/private-repo-files.test.ts > isolated manifest reader > rejects a path outside this service's patch clone
+ ✓ src/lib/private-repo-files.test.ts > isolated manifest reader > rejects a path outside this service's patch clone
+ ✓ src/lib/private-repo-files.test.ts > isolated manifest reader > rejects a path outside this service's patch clone
+ ✓ src/lib/private-repo-files.test.ts > isolated manifest reader > cleans up without reading output after staging fails
+ ✓ src/lib/private-repo-files.test.ts > isolated manifest reader > bounds staging time and removes a stalled helper
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > projects safe connections for the current user, with providers before SSH keys
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > retains connection links and redacts upstream errors on discovery failure
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > returns an empty selection and settings links when no connection exists
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > normalizes github repositories and branches without forwarding credentials
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > normalizes gitlab repositories and branches without forwarding credentials
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > normalizes bitbucket repositories and branches without forwarding credentials
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > normalizes gitea repositories and branches without forwarding credentials
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > gates Swarm connections to the existing GitHub flow
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > rejects gitlab on Swarm before creating a project or app
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > rejects bitbucket on Swarm before creating a project or app
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > rejects gitea on Swarm before creating a project or app
+ ✓ src/lib/bridge-private-repos.test.ts > connection discovery > rejects ssh on Swarm before creating a project or app
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > configures a native github clone, a managed patch and the first-deploy URL
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > configures a native gitlab clone, a managed patch and the first-deploy URL
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > configures a native bitbucket clone, a managed patch and the first-deploy URL
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > configures a native gitea clone, a managed patch and the first-deploy URL
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > configures a native ssh clone, a managed patch and the first-deploy URL
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > routes the existing GitHub quick action through a native clone on bridge
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > forwards the GitHub form's explicit port instead of hardcoding 3000
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > detects a private 'node' repo before the first domain/deploy
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > detects a private 'python' repo before the first domain/deploy
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > detects a private 'go' repo before the first domain/deploy
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > detects a private 'static' repo before the first domain/deploy
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > keeps a Dockerfile authoritative over manifests
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > lets an explicit port override the auto-detected builder
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > removes only the new undeployed service on unknown failure
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > removes only the new undeployed service on clone failure
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > removes only the new undeployed service on read failure
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > rejects a github connection the current user cannot see before creating anything
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > rejects a gitlab connection the current user cannot see before creating anything
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > rejects a bitbucket connection the current user cannot see before creating anything
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > rejects a gitea connection the current user cannot see before creating anything
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > rejects a ssh connection the current user cannot see before creating anything
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > rejects a forged repository or branch selection
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > rejects a forged repository or branch selection
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > rejects pasted credentials before any API request
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > never spreads extra client credential fields into the native config or managed metadata
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > preserves ordinary Compose edits on engines that return an empty update response
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > does not deploy if writing the managed patch fails or expose the upstream error
+ ✓ src/lib/bridge-private-repos.test.ts > private bridge deployment > keeps the native patch synchronized on edits and redeploys, even if metadata is removed
+ ✓ src/lib/bridge-repos.test.ts > bridge Git quick deploy > respects PORT ahead of the detected builder port when generating a URL
+ ✓ src/lib/bridge-repos.test.ts > bridge Git quick deploy > creates a managed repo stack and attaches its public URL before deploying
+ ✓ src/lib/bridge-repos.test.ts > bridge Git quick deploy > passes a subdirectory and Dockerfile through to the managed repo
+ ✓ src/lib/bridge-repos.test.ts > bridge Git quick deploy > rejects invalid Git input before creating a project or service (ssh://github.com/docker/welcome-to-docker, main)
+ ✓ src/lib/bridge-repos.test.ts > bridge Git quick deploy > rejects invalid Git input before creating a project or service (https://user:token@github.com/docker/welcome-to-docker, main)
+ ✓ src/lib/bridge-repos.test.ts > bridge Git quick deploy > rejects invalid Git input before creating a project or service (https://github.com/docker/welcome to docker, main)
+ ✓ src/lib/bridge-repos.test.ts > bridge Git quick deploy > rejects invalid Git input before creating a project or service (https://github.com/docker/welcome-to-docker, main#other)
+ ✓ src/lib/bridge-repos.test.ts > bridge Git quick deploy > rejects invalid Git input before creating a project or service (https://github.com/docker/welcome-to-docker, main)
+ ✓ src/lib/bridge-repos.test.ts > bridge Git quick deploy > still deploys when the host has no automatic public URL
+ ✓ src/lib/bridge-repos.test.ts > managed repo port and Networking > resolves the repo port from variables and the locally built image
+ ✓ src/lib/bridge-repos.test.ts > managed repo port and Networking > resolves the repo port from variables and the locally built image
+ ✓ src/lib/bridge-repos.test.ts > managed repo port and Networking > resolves the repo port from variables and the locally built image
+ ✓ src/lib/bridge-repos.test.ts > managed repo port and Networking > keeps an existing app auto-domain without duplicating it
+ ✓ src/lib/bridge-repos.test.ts > managed repo port and Networking > uses the built image port for custom domains and deploys the labels
+ ✓ src/lib/bridge-repos.test.ts > managed repo port and Networking > redeploys repo stacks after editing or deleting domains
+ ✓ src/lib/bridge-repos.test.ts > saves repo variables and redeploys through compose while preserving the Git build
+ ✓ src/lib/bridge-repos.test.ts > Swarm Git quick deploy > keeps public Git deploys on native applications
+ ✓ src/lib/bridge-repos.test.ts > Swarm Git quick deploy > keeps GitHub App deploys and push auto-deploy on native applications
+ ✓ src/lib/private-repo.test.ts > managed provider Compose > round-trips github metadata with the chosen first-deploy port
+ ✓ src/lib/private-repo.test.ts > managed provider Compose > round-trips gitlab metadata with the chosen first-deploy port
+ ✓ src/lib/private-repo.test.ts > managed provider Compose > round-trips bitbucket metadata with the chosen first-deploy port
+ ✓ src/lib/private-repo.test.ts > managed provider Compose > round-trips gitea metadata with the chosen first-deploy port
+ ✓ src/lib/private-repo.test.ts > managed provider Compose > round-trips ssh metadata with the chosen first-deploy port
+ ✓ src/lib/private-repo.test.ts > managed provider Compose > stages tracked source before building, within Dokploy's allowed command grammar
+ ✓ src/lib/private-repo.test.ts > managed provider Compose > keeps public Dockerfile repositories on the original remote-context path
+ ✓ src/lib/private-repo.test.ts > managed provider Compose > checks the staged context before building and rejects paths that could inject commands
+ ✓ src/lib/private-repo.test.ts > managed provider Compose > ignores unknown or nested provider markers
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > accepts a credential-free SSH identity: git@git.example.test:team/repo.git
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > accepts a credential-free SSH identity: ssh://git@fixture-git:2222/repos/demo.git
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > rejects credentials and unsafe custom Git input without echoing it
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > rejects credentials and unsafe custom Git input without echoing it
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > rejects credentials and unsafe custom Git input without echoing it
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > rejects credentials and unsafe custom Git input without echoing it
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > rejects credentials and unsafe custom Git input without echoing it
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > rejects credentials and unsafe custom Git input without echoing it
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > rejects credentials and unsafe custom Git input without echoing it
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > rejects credentials and unsafe custom Git input without echoing it
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > rejects credentials and unsafe custom Git input without echoing it
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > disables deploy for an incomplete or unsafe selection: {"providerId":""}
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > disables deploy for an incomplete or unsafe selection: {"repository":""}
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > disables deploy for an incomplete or unsafe selection: {"branch":""}
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > disables deploy for an incomplete or unsafe selection: {"branch":"../main"}
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > disables deploy for an incomplete or unsafe selection: {"branch":"-option"}
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > disables deploy for an incomplete or unsafe selection: {"subdirectory":"../app"}
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > disables deploy for an incomplete or unsafe selection: {"dockerfile":"/etc/passwd"}
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > disables deploy for an incomplete or unsafe selection: {"port":0}
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > disables deploy for an incomplete or unsafe selection: {"port":65536}
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > disables deploy for an incomplete or unsafe selection: {"port":1.5}
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > enables a valid selection only when idle
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > provides working connection links even when there are no providers
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > shows the private Dockerfile and configured port in Overview
+ ✓ src/lib/private-repo.test.ts > private repo input and form gating > shows the builder detected after a private clone in Overview
+ Test Files  4 passed (4)
+      Tests  102 passed (102)

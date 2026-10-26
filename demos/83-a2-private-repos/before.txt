@@ -1,0 +1,8 @@
+--- New service menu: APPLICATION Deploy Deploy Branch Auto-detects Node, Python, Go and static sites on public GitHub, GitLab and Bitbucket repos. On bridge hosts, other Git hosts or unavailable public files use a Dockerfile. From GitHub private repos Compose stack docker-compose TEMPLATES App catalog DATABASE PostgreSQ
+--- repo modal text:
+Deploy from GitHub
+Private repos, auto-deploy on push.
+No GitHub App is connected yet. Connect one (the Git provider settings open in a new tab), then come back and refresh — your installations will appear here.
+Connect GitHub App
+Refresh
+--- connection options: []
