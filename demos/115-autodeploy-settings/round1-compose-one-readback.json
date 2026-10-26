@@ -1,0 +1,57 @@
+[
+  {
+    "label": "off-saved",
+    "composeId": "7WVtq5p92VSrnbSP5N5Py",
+    "name": "autodeploy-settings-r1-1793006981576",
+    "sourceType": "git",
+    "autoDeploy": false,
+    "watchPaths": [
+      "src/**",
+      "!**/*.test.ts",
+      "package.json"
+    ],
+    "triggerType": "tag",
+    "customGitUrl": "https://github.com/docker/awesome-compose.git",
+    "customGitBranch": "master",
+    "composePath": "nginx-golang/compose.yaml"
+  },
+  {
+    "label": "off-reloaded",
+    "composeId": "7WVtq5p92VSrnbSP5N5Py",
+    "name": "autodeploy-settings-r1-1793006981576",
+    "sourceType": "git",
+    "autoDeploy": false,
+    "watchPaths": [
+      "src/**",
+      "!**/*.test.ts",
+      "package.json"
+    ],
+    "triggerType": "tag",
+    "customGitUrl": "https://github.com/docker/awesome-compose.git",
+    "customGitBranch": "master",
+    "composePath": "nginx-golang/compose.yaml"
+  },
+  {
+    "label": "on-reloaded",
+    "composeId": "7WVtq5p92VSrnbSP5N5Py",
+    "name": "autodeploy-settings-r1-1793006981576",
+    "sourceType": "git",
+    "autoDeploy": true,
+    "watchPaths": [
+      "src/**",
+      "!**/*.test.ts",
+      "package.json"
+    ],
+    "triggerType": "tag",
+    "customGitUrl": "https://github.com/docker/awesome-compose.git",
+    "customGitBranch": "master",
+    "composePath": "nginx-golang/compose.yaml"
+  },
+  {
+    "deletedComposeId": "7WVtq5p92VSrnbSP5N5Py",
+    "verifiedAbsent": true
+  },
+  {
+    "deletedProjectId": "72DD7Ed44tO_N96mnUjYl"
+  }
+]

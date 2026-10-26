@@ -85,3 +85,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#112](https://github.com/sbdeals/Switchyard/pull/112) | codex/resource-limits (main) | Resource limits units + presets | [112-resource-limits](112-resource-limits/) | Codex mp4+pngs | 0.5 CPU/512 MiB readback ✓ |
 | [#113](https://github.com/sbdeals/Switchyard/pull/113) | codex/onboarding-checklist (main) | Onboarding empty states + checklist | [113-onboarding-checklist](113-onboarding-checklist/) | Codex mp4+pngs | 23/24 (native deploy: no swarm) |
 | [#114](https://github.com/sbdeals/Switchyard/pull/114) | codex/logs-download (main) | Logs copy/download | [114-logs-download](114-logs-download/) | Codex mp4+pngs | 5k exact range, 403, cap ✓ |
+| [#115](https://github.com/sbdeals/Switchyard/pull/115) | codex/autodeploy-settings (main) | Deploy triggers settings | [115-autodeploy-settings](115-autodeploy-settings/) | Codex mp4+pngs | off/on + watch paths + tag preserved ✓ |
