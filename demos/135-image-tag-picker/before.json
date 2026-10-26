@@ -1,0 +1,6 @@
+{
+  "applicationId": "YyWrzfQJDOMMu9spDAKkZ",
+  "dockerImage": "nginx:alpine",
+  "status": "idle",
+  "deployments": []
+}

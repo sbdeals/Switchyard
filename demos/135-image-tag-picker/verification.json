@@ -1,0 +1,32 @@
+{
+  "base": "http://127.0.0.1:3066",
+  "fixture": {
+    "slug": "image-tag-picker-1793011139502",
+    "projectId": "GVViR3oyCoxkdamOrAA-E",
+    "environmentId": "OKZ3h2JBN3Gruob-VxS61",
+    "applicationId": "YyWrzfQJDOMMu9spDAKkZ",
+    "name": "image-tag-picker-1793011139502-app"
+  },
+  "before": {
+    "applicationId": "YyWrzfQJDOMMu9spDAKkZ",
+    "dockerImage": "nginx:alpine",
+    "status": "idle",
+    "deployments": []
+  },
+  "selected": "nginx:stable-alpine3.24-slim",
+  "after": {
+    "applicationId": "YyWrzfQJDOMMu9spDAKkZ",
+    "dockerImage": "nginx:stable-alpine3.24-slim",
+    "status": "idle",
+    "deployments": []
+  },
+  "checks": [
+    "Recent anonymous Docker Hub tags include last-pushed time and mark the saved alpine tag Current.",
+    "ArrowDown opens with a rendered aria-activedescendant; Escape closes only suggestions.",
+    "Keyboard selected nginx:stable-alpine3.24-slim; Save changes persisted via application.one with unchanged status and zero new deployments.",
+    "Saved image survives reload; unlisted free text remains editable and saveable, and Tab leaves the combobox.",
+    "Unsupported registry shows generic unavailability without blocking free text.",
+    "390px viewport: input fits, pointer selection works, and recent tags can be reopened."
+  ],
+  "clientErrors": []
+}
