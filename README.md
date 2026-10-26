@@ -180,6 +180,14 @@ Claude Code here), `make doctor` (check prerequisites).
   **persisted metric history** and **crash-loop alerts** through Dokploy's
   notification channels.
 - **Projects & environments**: create, rename, delete from the dashboard.
+  Projects with two or more environments also offer **Compare environments**:
+  match services by name and inspect images, sources/branches, build types,
+  replicas, domain counts, and variable keys added/removed/changed from A to B.
+  Comparison responses omit variable values until explicitly revealed, with
+  access checked again on each reveal. The comparison reads saved configuration
+  (including compose service images/replicas and the Variables block), not
+  running containers or interpolated values. It is strictly read-only;
+  sync/apply is a possible follow-up to comparison and environment duplication.
 - **Login required**: users sign in at `/login` with their Dokploy account
   (sign-up supported); every route, Server Action, and log/metric stream is
   gated.
