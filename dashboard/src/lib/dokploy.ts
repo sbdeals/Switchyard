@@ -23,6 +23,7 @@ import { redirect } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
+import { applicationInTree, parseBuildArgs } from "./build-args";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
 import {
   deriveComposeRuntime,
@@ -226,6 +227,8 @@ export interface Application extends ServiceBase {
   dockerfile: string | null;
   dockerContextPath: string | null;
   dockerBuildStage: string | null;
+  buildArgs: string | null;
+  buildSecretsSupported: boolean;
   /** Custom start/run command appended to the container's entrypoint. */
   command: string | null;
   /** Registry host for docker-image apps (credentials are never read back). */
@@ -731,6 +734,8 @@ interface RawApplicationDetail {
   dockerfile?: string | null;
   dockerContextPath?: string | null;
   dockerBuildStage?: string | null;
+  buildArgs?: string | null;
+  buildSecrets?: string | null;
   command?: string | null;
   registryUrl?: string | null;
   env?: string | null;
@@ -828,6 +833,8 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
         dockerfile: d.dockerfile ?? null,
         dockerContextPath: d.dockerContextPath ?? null,
         dockerBuildStage: d.dockerBuildStage ?? null,
+        buildArgs: d.buildArgs ?? null,
+        buildSecretsSupported: "buildSecrets" in d,
         command: d.command ?? null,
         registryUrl: d.registryUrl ?? null,
         env: d.env ?? null,
@@ -1154,10 +1161,23 @@ export async function saveAppBuildType(id: string, patch: BuildTypePatch): Promi
 }
 
 export async function saveApplicationEnvironment(id: string, env: string): Promise<void> {
-  // application.saveEnvironment also accepts build args/secrets; send empty.
-  await request("application.saveEnvironment", {
+  // Patch only runtime variables so build args, secrets and createEnvFile survive.
+  await request("application.update", {
     method: "POST",
-    body: { applicationId: id, env, buildArgs: "", buildSecrets: "", createEnvFile: false },
+    body: { applicationId: id, env },
+  });
+}
+
+/** Save build arguments without deploying or changing any other application field. */
+export async function saveApplicationBuildArgs(id: string, buildArgs: string): Promise<void> {
+  if (!applicationInTree(await rawTree(), id)) {
+    throw new Error("Application not found in your projects.");
+  }
+  const { errors } = parseBuildArgs(buildArgs);
+  if (errors.length) throw new Error(errors.join(" "));
+  await request("application.update", {
+    method: "POST",
+    body: { applicationId: id, buildArgs },
   });
 }
 

@@ -64,6 +64,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { BuildArgumentsForm } from "@/components/service/BuildArgumentsForm";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -580,14 +581,15 @@ function RedeployToggle({
  * Build configuration: the build strategy (Nixpacks / Dockerfile / Railpack /
  * …) and Dockerfile options for source-built apps, private registry
  * credentials for docker-image apps, and the custom start command for either.
- * Build-strategy and image changes only take effect on the next deploy, so each
- * sub-form offers an optional redeploy.
+ * Build-strategy and image changes offer an optional redeploy. Build arguments
+ * are always saved for the next deploy.
  */
 export function AppBuildTab({ app }: { app: Application }) {
   const isDocker = app.sourceType === "docker";
   return (
     <div className="space-y-6">
       {isDocker ? <DockerSourceForm app={app} /> : <BuildStrategyForm app={app} />}
+      {!isDocker && <BuildArgumentsForm app={app} />}
       <StartCommandForm app={app} />
     </div>
   );
