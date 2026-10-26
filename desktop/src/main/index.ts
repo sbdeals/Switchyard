@@ -13,6 +13,7 @@ import { join } from "node:path";
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from "electron";
 
+import { CONTROL_PLANE_RESET_NOTICE } from "../../../cli/src/core/control-plane.js";
 import { establishDashboardSession } from "./autologin.js";
 import { initLogging, log, logFilePath } from "./logging.js";
 import type { ReadyInfo, UiState } from "./orchestrator.js";
@@ -221,6 +222,9 @@ function wireIpc(): void {
 
 async function dispatchAction(id: string, payload?: unknown): Promise<void> {
   switch (id) {
+    case "freshStart":
+      await confirmReset();
+      return;
     case "logs": {
       const file = logFilePath();
       if (file) shell.showItemInFolder(file);
@@ -273,16 +277,16 @@ function trayDeps(): TrayDeps {
 }
 
 async function confirmReset(): Promise<void> {
+  if (orchestrator.isBusy()) return;
   showWindow();
   const r = await dialog.showMessageBox({
     type: "warning",
-    buttons: ["Delete everything", "Cancel"],
+    buttons: ["Reset control plane", "Cancel"],
     defaultId: 1,
     cancelId: 1,
-    title: "Reset Switchyard",
-    message: "Delete ALL Dokploy data and start fresh?",
-    detail:
-      "Every project, deployment, database, and the admin account will be permanently deleted. The stack is then reinstalled from scratch.",
+    title: "Reset control plane",
+    message: "Delete control-plane data and reinstall?",
+    detail: CONTROL_PLANE_RESET_NOTICE + " The control plane is then reinstalled from scratch.",
   });
   if (r.response === 0) void orchestrator.resetAll();
 }

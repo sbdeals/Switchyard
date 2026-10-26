@@ -82,8 +82,8 @@ version → the container is recreated (that's also the upgrade path:
 |---|---|
 | `switchyard up` | Install/converge/upgrade the whole stack (idempotent) |
 | `switchyard status` | Services, container health, URLs, config path |
-| `switchyard down` | Stop the stack; data volumes survive |
-| `switchyard down --purge` | Also delete network, secrets, and volumes (fresh slate; clears stored admin creds) |
+| `switchyard down` | Stop the control plane; deployed workloads keep running and volumes survive |
+| `switchyard down --purge` | Also delete control-plane data and stored admin credentials; deployed workloads and their volumes remain orphaned |
 | `switchyard config list \| get <k> \| set <k> <v>` | Read/change persisted settings; `set` recreates the container |
 | `switchyard local-ingress up \| down` | Opt-in demo Traefik on alternate ports so domains route locally over **HTTP** (see below) |
 | `switchyard doctor` | Read-only prerequisite + health check |

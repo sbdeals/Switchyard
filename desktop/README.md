@@ -19,14 +19,20 @@ source of truth for HOW the stack is provisioned.
    adoption/auto-bump, generated admin credentials, `ensureDokploy`,
    `ensureSwitchyard`, deep health check. Progress streams into the status
    view; failures become friendly error cards (including the stale-volume trap,
-   which offers "keep data" (`--force`) vs "fresh start" (purge)).
+   which offers "keep data" (`--force`) vs a confirmed control-plane reset).
 4. **Auto-login**: mints the dashboard's `switchyard_session` cookie itself
    (it knows the admin credentials and the session secret from config.json)
    and injects it into Electron's cookie jar — the window opens straight into
    the workspace. Mirror of `dashboard/src/lib/session.ts`; keep in sync.
-5. **Tray**: open dashboard/Dokploy, start/stop/restart the stack, reset
-   everything (purge + reinstall), start-at-login toggle, update check, quit
+5. **Tray**: open dashboard/Dokploy, start/stop/restart the control plane, reset
+   control-plane data (purge + reinstall), start-at-login toggle, update check, quit
    (the stack keeps running — containers are `restart unless-stopped`).
+
+Stop keeps deployed workloads running and preserves all volumes; ingress
+stops, so app URLs may be unavailable. Reset deletes Dokploy metadata and
+control-plane data, leaving workloads and their volumes orphaned. Remove
+workloads through Dokploy before resetting for a clean install. Automatic
+ownership-aware workload/orphan cleanup remains a follow-up.
 
 Auto-update: `electron-updater` against GitHub Releases (`latest.yml` is
 published by the release workflow). Windows works unsigned; macOS auto-update

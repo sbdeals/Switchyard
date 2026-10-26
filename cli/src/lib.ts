@@ -22,6 +22,13 @@ export {
   parseJsonLines,
   type EngineCandidate,
 } from "./core/docker.js";
+export {
+  CONTROL_PLANE_RESET_NOTICE,
+  CONTROL_PLANE_STOP_NOTICE,
+  downControlPlane,
+  planControlPlaneDown,
+  type ControlPlaneResource,
+} from "./core/control-plane.js";
 export { UserError } from "./core/errors.js";
 export { LOCAL_INGRESS_CONTAINER, renderLocalIngress } from "./core/local-ingress.js";
 export { nextFreePort, portFree } from "./core/ports.js";

@@ -46,8 +46,8 @@ program.command("status").description("Show stack status, container health, and 
 
 program
   .command("down")
-  .description("Stop the stack; --purge also deletes network, secrets, and data volumes")
-  .option("--purge", "delete network, secrets, and data volumes (fresh slate)")
+  .description("Stop the control plane; deployed workloads and their volumes remain")
+  .option("--purge", "delete control-plane data (leaves deployed workloads orphaned)")
   .option("--yes", "skip the confirmation prompt")
   .action(downCommand);
 

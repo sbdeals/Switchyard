@@ -70,9 +70,27 @@ everything.
    repos, or the 476-template catalog.
 
 Day to day it lives in the system tray: open the dashboard, stop/start the
-stack, reset everything, launch at login (on by default, so it's always warm),
-and auto-update. Closing the window keeps everything running; "Quit" does too.
-Your apps only stop if you ask for **Stop stack**.
+control plane, reset control-plane data, launch at login (on by default, so
+it's always warm), and auto-update. Closing the window keeps everything
+running; "Quit" does too.
+
+**Stop control plane** removes the Dokploy services, Switchyard dashboard,
+metrics service, and ingress containers; it keeps data volumes. Deployed
+apps, Compose stacks, and databases keep running, though their URLs may stop
+working without ingress. Start the control plane again to manage them.
+
+**Reset control plane…** also deletes the control-plane volumes, secrets,
+Dokploy project/deployment metadata, admin account, and metrics history, then
+reinstalls the control plane. It does **not** remove deployed workloads or
+their volumes: they can keep running but become orphaned from the new
+Dokploy install. For a clean install, remove workloads through Dokploy before
+resetting. The shared network is kept if it still has attached workloads.
+
+Ownership-aware workload/orphan cleanup is a follow-up: generic Compose/Swarm
+labels and a shared network do not establish ownership of every workload and
+volume. Until that is implemented, stop/reset target only the provisioner's
+reserved control-plane names. The CLI's `down` / `down --purge` have the same
+control-plane-only scope.
 
 > **Docker Desktop VM resets:** Docker Desktop runs everything in a Linux VM
 > whose root filesystem — including Dokploy's `/etc/dokploy` config tree — is

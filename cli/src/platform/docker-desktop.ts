@@ -1,9 +1,10 @@
 import { STORE_SERVICE, STORE_VOLUME } from "../core/config.js";
+import { downControlPlane } from "../core/control-plane.js";
 import { docker, dockerInherit, dockerOk } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { ensureLocalIngress, removeLocalIngress } from "../core/local-ingress.js";
 import { serviceExists, waitServicesConverged } from "../core/swarm.js";
-import { randomSecret, sleep } from "../core/util.js";
+import { randomSecret } from "../core/util.js";
 import type { PlatformModule } from "./types.js";
 
 /**
@@ -205,48 +206,6 @@ export const dockerDesktopPlatform: PlatformModule = {
   },
 
   async downDokploy(opts, log) {
-    for (const svc of SERVICES) {
-      log(`Removing service ${svc} ...`);
-      await docker(["service", "rm", svc]); // tolerate absence
-    }
-    log(`Removing service ${STORE_SERVICE} (metrics store) ...`);
-    await docker(["service", "rm", STORE_SERVICE]); // tolerate absence
-    await docker(["rm", "-f", "dokploy-traefik"]);
-    if (opts.purge) {
-      log("Purging network, secrets, and volumes ...");
-      // `service rm` returns before the task containers are gone; removing
-      // the network/volumes too early fails with "in use". Wait for the
-      // stack's containers to drain (bounded), then retry the removals.
-      const deadline = Date.now() + 60_000;
-      for (;;) {
-        const ps = await docker([
-          "ps",
-          "--all",
-          "--filter",
-          "label=com.docker.swarm.service.name",
-          "--format",
-          "{{.Label \"com.docker.swarm.service.name\"}}",
-        ]);
-        const draining = [...SERVICES, STORE_SERVICE];
-        const busy = ps.stdout.split(/\r?\n/).some((n) => draining.includes(n.trim()));
-        if (!busy || Date.now() > deadline) break;
-        await sleep(2000);
-      }
-      const removals: string[][] = [
-        ["network", "rm", "dokploy-network"],
-        ...SECRETS.map((s) => ["secret", "rm", s]),
-        ...["dokploy", "dokploy-postgres", "dokploy-redis", STORE_VOLUME].map((v) => ["volume", "rm", v]),
-      ];
-      for (const args of removals) {
-        let res = await docker(args);
-        for (let i = 0; i < 10 && res.code !== 0 && /in use|has active endpoints/i.test(res.stderr); i++) {
-          await sleep(2000);
-          res = await docker(args);
-        }
-        if (res.code !== 0 && !/not found|no such/i.test(res.stderr)) {
-          log(`  warning: ${args.join(" ")} failed: ${res.stderr.trim().split("\n")[0]}`);
-        }
-      }
-    }
+    await downControlPlane(opts.purge, log);
   },
 };

@@ -16,7 +16,6 @@ import { docker, dockerAvailability, dockerOk } from "../../../cli/src/core/dock
 import { signInProbe, signUp, waitHttpReady } from "../../../cli/src/core/dokploy-api.js";
 import { repairComposeStacks } from "../../../cli/src/core/repair.js";
 import { UserError } from "../../../cli/src/core/errors.js";
-import { LOCAL_INGRESS_CONTAINER } from "../../../cli/src/core/local-ingress.js";
 import { nextFreePort, portFree } from "../../../cli/src/core/ports.js";
 import { serviceExists, servicePublishedPort } from "../../../cli/src/core/swarm.js";
 import {
@@ -161,9 +160,6 @@ export class Orchestrator extends EventEmitter {
         return;
       case "forceKeepData":
         void this.run({ force: true });
-        return;
-      case "freshStart":
-        await this.resetAll();
         return;
       case "stop":
         await this.stopStack();
@@ -512,12 +508,10 @@ export class Orchestrator extends EventEmitter {
     this.busy = true;
     try {
       this.set({ phase: "working", dashboardUrl: undefined, error: undefined });
-      log("Stopping the stack (data volumes survive) ...");
-      await docker(["rm", "-f", CONTAINER_NAME]);
-      await docker(["rm", "-f", LOCAL_INGRESS_CONTAINER]);
+      log("Stopping the control plane (data volumes survive) ...");
       await dockerDesktopPlatform.downDokploy({ purge: false }, (m) => log(m));
       this.state.steps = freshSteps();
-      log("Stack stopped.");
+      log("Control plane stopped. Deployed workloads were left running.");
       this.set({ phase: "stopped" });
     } catch (e) {
       this.fail(e);
@@ -526,15 +520,13 @@ export class Orchestrator extends EventEmitter {
     }
   }
 
-  /** Tear everything down INCLUDING data volumes, then converge from scratch. */
+  /** Reset control-plane data, leaving workloads orphaned; caller must confirm. */
   async resetAll(): Promise<void> {
     if (this.busy) return;
     this.busy = true;
     try {
       this.set({ phase: "working", dashboardUrl: undefined, error: undefined });
-      log("Resetting: removing services, secrets, and data volumes ...");
-      await docker(["rm", "-f", CONTAINER_NAME]);
-      await docker(["rm", "-f", LOCAL_INGRESS_CONTAINER]);
+      log("Resetting the control plane: removing its services, secrets, and data volumes ...");
       await dockerDesktopPlatform.downDokploy({ purge: true }, (m) => log(m));
       // The admin account and metrics store died with their volumes; stale
       // secrets would send the next converge down the wrong path (down.ts).
@@ -569,7 +561,7 @@ export class Orchestrator extends EventEmitter {
       title = "Data from a previous install";
       actions = [
         { id: "forceKeepData", label: "Keep the old data", kind: "primary" },
-        { id: "freshStart", label: "Fresh start (deletes it)", kind: "danger" },
+        { id: "freshStart", label: "Reset control plane…", kind: "danger" },
         { id: "logs", label: "View logs" },
       ];
     } else if (/did not converge|did not serve HTTP|did not answer/i.test(message)) {

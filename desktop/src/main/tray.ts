@@ -34,7 +34,7 @@ export function refreshTray(deps: TrayDeps): void {
   const phase = deps.getPhase();
   const idle = phase === "ready" || phase === "error" || phase === "stopped";
   tray.setToolTip(
-    phase === "ready" ? "Switchyard — running" : phase === "stopped" ? "Switchyard — stopped" : "Switchyard",
+    phase === "ready" ? "Switchyard — running" : phase === "stopped" ? "Switchyard — control plane stopped" : "Switchyard",
   );
   const menu = Menu.buildFromTemplate([
     {
@@ -48,17 +48,17 @@ export function refreshTray(deps: TrayDeps): void {
     },
     { type: "separator" },
     {
-      label: phase === "stopped" ? "Start stack" : "Restart / converge",
+      label: phase === "stopped" ? "Start control plane" : "Restart / converge",
       enabled: idle,
       click: () => deps.startStack(),
     },
     {
-      label: "Stop stack",
+      label: "Stop control plane",
       enabled: phase === "ready" || phase === "error",
       click: () => deps.stopStack(),
     },
     {
-      label: "Reset everything…",
+      label: "Reset control plane…",
       enabled: idle,
       click: () => deps.resetStack(),
     },
