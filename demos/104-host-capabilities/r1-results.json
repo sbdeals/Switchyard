@@ -1,0 +1,18 @@
+{
+  "base": "http://127.0.0.1:3030",
+  "checkedAt": "2026-10-26T08:28:01.265Z",
+  "dockerSocket": "/tmp/host-capabilities-r1-missing.sock",
+  "screenshot": "r1-unknown.png",
+  "checks": [
+    "Unknown pill and warning",
+    "Unverified feature labels",
+    "Neutral inline notes",
+    "Native Start/Redeploy enabled",
+    "Replica and healthcheck fields enabled",
+    "Complete schedule form can submit",
+    "Build redeploy controls enabled",
+    "Native Docker-image, Git and GitHub creation controls enabled",
+    "Compose enabled"
+  ],
+  "mutations": "None; login, reads, navigation and unsaved form edits only."
+}

@@ -1,0 +1,19 @@
+{
+  "base": "http://127.0.0.1:3030",
+  "checkedAt": "2026-10-26T08:13:59.385Z",
+  "screenshots": [
+    "01-header-pill",
+    "02-host-popover",
+    "03-new-service-notice",
+    "04-native-application-notice",
+    "05-replicas-healthcheck-notices",
+    "06-schedules-notice",
+    "07-build-redeploy-notice",
+    "08-native-database-backup-notices",
+    "09-compose-remains-available"
+  ],
+  "nativeApp": "nginx-g9se",
+  "database": "postgres-d4rm",
+  "compose": "nodejs-getting-started-u7cf",
+  "mutations": "None; only login, reads, navigation and unsaved form edits."
+}
