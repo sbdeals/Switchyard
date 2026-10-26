@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
+import { randomUUID } from "node:crypto";
 import {
   createDatabase,
   databaseAction,
@@ -59,6 +60,7 @@ import {
   createMount,
   updateMount,
   removeMount,
+  request,
   type Action,
   type DatabasePatch,
   type ApplicationPatch,
@@ -99,6 +101,8 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { duplicateService } from "@/lib/service-duplicate-operation";
+import type { DuplicateServiceRef } from "@/lib/service-duplicate";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -131,6 +135,14 @@ async function wrapId(fn: () => Promise<string>): Promise<QuickDeployResult> {
     unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
   }
+}
+
+export async function duplicateServiceAction(
+  ref: DuplicateServiceRef,
+  name: string,
+  environmentId: string
+): Promise<QuickDeployResult> {
+  return wrapId(() => duplicateService(request, ref, name, environmentId, randomUUID()));
 }
 
 /** Like `wrap`, but returns the generated host so the UI can surface it. */

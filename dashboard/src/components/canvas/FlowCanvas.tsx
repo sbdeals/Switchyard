@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Copy } from "lucide-react";
 import {
   ReactFlow,
   Background,
@@ -18,6 +19,7 @@ import type { Service, ServiceEdge } from "@/lib/dokploy";
 import { serviceAccent } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
+import { useDialogFocus } from "@/components/use-focus-trap";
 
 // v2: key bumped when the default layout became a grid — pre-grid saves froze
 // every auto-position (not just drags), which would pin the old horizontal
@@ -59,11 +61,15 @@ export function FlowCanvas({
   services,
   edges: serviceEdges,
   onSelect,
+  onDuplicate,
 }: {
   services: Service[];
   edges: ServiceEdge[];
   onSelect: (service: Service) => void;
+  onDuplicate: (service: Service) => void;
 }) {
+  const [menu, setMenu] = useState<{ service: Service; x: number; y: number } | null>(null);
+  const menuRef = useDialogFocus<HTMLDivElement>(() => setMenu(null));
   // Catalog logos for Railway-style node icons (null while the catalog loads).
   const logos = useTemplateLogos();
 
@@ -183,6 +189,15 @@ export function FlowCanvas({
         edges={edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeContextMenu={(event, node) => {
+          event.preventDefault();
+          setMenu({
+            service: (node.data as ServiceNodeData).service,
+            x: Math.min(event.clientX, window.innerWidth - 200),
+            y: Math.min(event.clientY, window.innerHeight - 52),
+          });
+        }}
+        onMoveStart={() => setMenu(null)}
         nodeTypes={nodeTypes}
         colorMode="dark"
         fitView
@@ -205,6 +220,34 @@ export function FlowCanvas({
           className="!bg-[var(--color-bg-elevated)]"
         />
       </ReactFlow>
+      {menu && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setMenu(null)} onContextMenu={(event) => {
+            event.preventDefault();
+            setMenu(null);
+          }} />
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={`${menu.service.name} actions`}
+            style={{ left: menu.x, top: menu.y }}
+            className="fixed z-40 w-48 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-1 shadow-xl"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              data-autofocus
+              onClick={() => {
+                onDuplicate(menu.service);
+                setMenu(null);
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+            >
+              <Copy className="size-3.5" /> Duplicate service
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

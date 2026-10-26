@@ -25,6 +25,7 @@ import {
   Server,
   TerminalSquare,
   Table2,
+  Copy,
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -344,7 +345,15 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
+export function ServiceDrawer({
+  service,
+  onClose,
+  onDuplicate,
+}: {
+  service: Service | null;
+  onClose: () => void;
+  onDuplicate: (service: Service) => void;
+}) {
   const [tab, setTab] = useState<TabId>("overview");
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
@@ -391,7 +400,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             className="fixed inset-y-0 right-0 z-50 flex flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
           >
             <ResizeHandle width={width} apply={applyWidth} reset={resetWidth} />
-            <Header service={service} onClose={onClose} titleId={titleId} />
+            <Header service={service} onClose={onClose} onDuplicate={() => onDuplicate(service)} titleId={titleId} />
             <nav
               role="tablist"
               aria-label="Service sections"
@@ -496,10 +505,12 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
 function Header({
   service,
   onClose,
+  onDuplicate,
   titleId,
 }: {
   service: Service;
   onClose: () => void;
+  onDuplicate: () => void;
   titleId: string;
 }) {
   const accent = serviceAccent(service);
@@ -528,14 +539,25 @@ function Header({
           </div>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close service details"
-        className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
-      >
-        <X className="size-4" />
-      </button>
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={onDuplicate}
+          aria-label="Duplicate service"
+          title="Duplicate service"
+          className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+        >
+          <Copy className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close service details"
+          className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
     </div>
   );
 }

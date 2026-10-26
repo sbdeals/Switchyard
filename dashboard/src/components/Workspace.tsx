@@ -10,6 +10,7 @@ import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
+import { DuplicateServiceDialog } from "@/components/service/DuplicateServiceDialog";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ export function Workspace({
 }) {
   const [view, setView] = useState<View>("canvas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [duplicateSource, setDuplicateSource] = useState<Service | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const router = useRouter();
 
@@ -81,7 +83,12 @@ export function Workspace({
       {services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
+        <FlowCanvas
+          services={services}
+          edges={edges}
+          onSelect={(s) => setSelectedId(s.id)}
+          onDuplicate={setDuplicateSource}
+        />
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
@@ -92,7 +99,20 @@ export function Workspace({
         </motion.div>
       )}
 
-      <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
+      <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} onDuplicate={setDuplicateSource} />
+      {duplicateSource && (
+        <DuplicateServiceDialog
+          service={duplicateSource}
+          projects={projects}
+          services={services}
+          onClose={() => setDuplicateSource(null)}
+          onCreated={() => router.refresh()}
+          onOpen={(id) => {
+            setDuplicateSource(null);
+            onDeployed(id);
+          }}
+        />
+      )}
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
       <AgentPanel />
     </div>
