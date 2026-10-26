@@ -1,0 +1,147 @@
+{
+  "base": "http://127.0.0.1:3046",
+  "project": "logs-download-proof",
+  "service": "logs-download-numbered",
+  "totalFixtureLines": 12050,
+  "startedAt": "2026-10-26T09:20:32.531Z",
+  "downloads": [
+    {
+      "format": "log",
+      "count": 5000,
+      "defaultSelection": true,
+      "filename": "compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-07-779Z.log",
+      "savedTo": "/workspace/sy-codex-notes/fix/logs-download-proof/5000-log/compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-07-779Z.log",
+      "contentDisposition": "attachment; filename=\"compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-07-779Z.log\"",
+      "head": [
+        "2026-10-26T09:20:55.297Z line-07051 stdout",
+        "2026-10-26T09:20:55.299Z line-07052 stderr"
+      ],
+      "tail": [
+        "2026-10-26T09:21:05.411Z line-12049 stdout",
+        "2026-10-26T09:21:05.413Z line-12050 stderr"
+      ],
+      "status": 200
+    },
+    {
+      "format": "json",
+      "count": 5000,
+      "defaultSelection": true,
+      "filename": "compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-07-983Z.json",
+      "savedTo": "/workspace/sy-codex-notes/fix/logs-download-proof/5000-json/compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-07-983Z.json",
+      "contentDisposition": "attachment; filename=\"compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-07-983Z.json\"",
+      "head": [
+        "\u001b[32mline-07051 stdout\u001b[0m",
+        "\u001b[31mline-07052 stderr\u001b[0m"
+      ],
+      "tail": [
+        "\u001b[32mline-12049 stdout\u001b[0m",
+        "\u001b[31mline-12050 stderr\u001b[0m"
+      ],
+      "status": 200
+    },
+    {
+      "format": "log",
+      "count": 1000,
+      "defaultSelection": false,
+      "filename": "compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-177Z.log",
+      "savedTo": "/workspace/sy-codex-notes/fix/logs-download-proof/1000-log/compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-177Z.log",
+      "contentDisposition": "attachment; filename=\"compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-177Z.log\"",
+      "head": [
+        "2026-10-26T09:21:03.436Z line-11051 stdout",
+        "2026-10-26T09:21:03.438Z line-11052 stderr"
+      ],
+      "tail": [
+        "2026-10-26T09:21:05.411Z line-12049 stdout",
+        "2026-10-26T09:21:05.413Z line-12050 stderr"
+      ],
+      "status": 200
+    },
+    {
+      "format": "json",
+      "count": 1000,
+      "defaultSelection": false,
+      "filename": "compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-342Z.json",
+      "savedTo": "/workspace/sy-codex-notes/fix/logs-download-proof/1000-json/compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-342Z.json",
+      "contentDisposition": "attachment; filename=\"compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-342Z.json\"",
+      "head": [
+        "\u001b[32mline-11051 stdout\u001b[0m",
+        "\u001b[31mline-11052 stderr\u001b[0m"
+      ],
+      "tail": [
+        "\u001b[32mline-12049 stdout\u001b[0m",
+        "\u001b[31mline-12050 stderr\u001b[0m"
+      ],
+      "status": 200
+    },
+    {
+      "format": "log",
+      "count": 10000,
+      "defaultSelection": false,
+      "filename": "compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-525Z.log",
+      "savedTo": "/workspace/sy-codex-notes/fix/logs-download-proof/10000-log/compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-525Z.log",
+      "contentDisposition": "attachment; filename=\"compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-525Z.log\"",
+      "head": [
+        "2026-10-26T09:20:45.059Z line-02051 stdout",
+        "2026-10-26T09:20:45.063Z line-02052 stderr"
+      ],
+      "tail": [
+        "2026-10-26T09:21:05.411Z line-12049 stdout",
+        "2026-10-26T09:21:05.413Z line-12050 stderr"
+      ],
+      "status": 200
+    },
+    {
+      "format": "json",
+      "count": 10000,
+      "defaultSelection": false,
+      "filename": "compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-814Z.json",
+      "savedTo": "/workspace/sy-codex-notes/fix/logs-download-proof/10000-json/compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-814Z.json",
+      "contentDisposition": "attachment; filename=\"compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-08-814Z.json\"",
+      "head": [
+        "\u001b[32mline-02051 stdout\u001b[0m",
+        "\u001b[31mline-02052 stderr\u001b[0m"
+      ],
+      "tail": [
+        "\u001b[32mline-12049 stdout\u001b[0m",
+        "\u001b[31mline-12050 stderr\u001b[0m"
+      ],
+      "status": 200
+    }
+  ],
+  "cleanup": {
+    "composeDeletedViaDashboard": true,
+    "projectDeletedViaDashboard": true
+  },
+  "appName": "compose-program-auxiliary-program-ncmgoc",
+  "appNameGeneratedByDokploy": true,
+  "containerName": "logs-download-compose-program-auxiliary-program-ncmgoc",
+  "copy": {
+    "filter": "line-1204",
+    "count": 10,
+    "first": "2026-10-26T09:21:05.395Z line-12040 stderr",
+    "last": "2026-10-26T09:21:05.411Z line-12049 stdout",
+    "toast": "Copied 10 visible log lines",
+    "actualClipboardReadback": true
+  },
+  "tailSlicesMatchInActualReturnedOrder": true,
+  "hardCap": {
+    "requested": 999999,
+    "actual": 10000,
+    "status": 200,
+    "head": [
+      "2026-10-26T09:20:45.059Z line-02051 stdout",
+      "2026-10-26T09:20:45.063Z line-02052 stderr"
+    ],
+    "tail": [
+      "2026-10-26T09:21:05.411Z line-12049 stdout",
+      "2026-10-26T09:21:05.413Z line-12050 stderr"
+    ]
+  },
+  "unknownApp": {
+    "app": "logs-download-other-unknown",
+    "status": 403,
+    "body": "unknown app"
+  },
+  "passed": true,
+  "finishedAt": "2026-10-26T09:21:29.566Z"
+}

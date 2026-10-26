@@ -1,0 +1,22 @@
+Actual saved .log download (default Last 5k lines)
+compose-program-auxiliary-program-ncmgoc-2026-10-26T09-21-07-779Z.log
+Line count: 5000 · ANSI escape bytes: 0
+
+head -n 2:
+2026-10-26T09:20:55.297Z line-07051 stdout
+2026-10-26T09:20:55.299Z line-07052 stderr
+
+tail -n 2:
+2026-10-26T09:21:05.411Z line-12049 stdout
+2026-10-26T09:21:05.413Z line-12050 stderr
+
+All six browser downloads passed:
+  5,000 lines  .log  first=7051  last=12050  [default 5k]
+  5,000 records  .json  first=7051  last=12050  [default 5k]
+  1,000 lines  .log  first=11051  last=12050
+  1,000 records  .json  first=11051  last=12050
+  10,000 lines  .log  first=2051  last=12050
+  10,000 records  .json  first=2051  last=12050
+
+JSON: valid UTC timestamps; stdout and stderr match each numbered line.
+Copy: actual clipboard contains only filtered lines 12040–12049 (10 lines).
