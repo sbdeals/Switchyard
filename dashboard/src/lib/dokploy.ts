@@ -96,7 +96,7 @@ export interface ServiceBase {
   environmentId: string;
   environmentName: string;
   dockerImage: string | null;
-  /** Raw env block ("KEY=value\n..."). */
+  /** Raw env block on the server; redacted to null in workspace page props. */
   env: string | null;
   createdAt: string | null;
   // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
@@ -227,6 +227,7 @@ export interface Application extends ServiceBase {
   dockerfile: string | null;
   dockerContextPath: string | null;
   dockerBuildStage: string | null;
+  /** Raw build args on the server; redacted to null in workspace page props. */
   buildArgs: string | null;
   buildSecretsSupported: boolean;
   /** Custom start/run command appended to the container's entrypoint. */
@@ -516,6 +517,38 @@ function projectsFromTree(tree: RawProject[]): ProjectNode[] {
 
 export async function listProjects(): Promise<ProjectNode[]> {
   return projectsFromTree(await rawTree());
+}
+
+async function assertServiceOwnership(type: MountServiceType, id: string): Promise<void> {
+  if (!["application", "compose", ...ENGINES].includes(type) || !id) {
+    throw new Error("Invalid service.");
+  }
+  const tree = await rawTree();
+  const refs = collectIds(tree, (env) => {
+    if (type === "application") return (env.applications ?? []).map((a) => a.applicationId);
+    if (type === "compose") return (env.compose ?? []).map((c) => c.composeId);
+    return ((env[type] ?? []) as Record<string, string>[]).map((item) => item[idKey(type)]);
+  });
+  if (!refs.some((ref) => ref.id === id)) throw new Error("Service unavailable.");
+}
+
+/** Read env only after finding the service in the current user's workspace. */
+export async function getServiceEnvironment(type: MountServiceType, id: string): Promise<string> {
+  await assertServiceOwnership(type, id);
+  const detail = await request<{ env?: string | null }>(
+    `${type}.one?${type}Id=${encodeURIComponent(id)}`
+  );
+  return detail.env ?? "";
+}
+
+/** Database passwords are available only on explicit reveal, never in page props. */
+export async function getDatabasePassword(engine: Engine, id: string): Promise<string | null> {
+  if (!ENGINES.includes(engine)) throw new Error("Invalid database engine.");
+  await assertServiceOwnership(engine, id);
+  const detail = await request<{ databasePassword?: string | null }>(
+    `${engine}.one?${engine}Id=${encodeURIComponent(id)}`
+  );
+  return detail.databasePassword ?? null;
 }
 
 export async function createProject(name: string): Promise<void> {
@@ -1166,6 +1199,17 @@ export async function saveApplicationEnvironment(id: string, env: string): Promi
     method: "POST",
     body: { applicationId: id, env },
   });
+}
+
+/** Read only build args after checking ownership; build secrets stay on the server. */
+export async function getApplicationBuildArgs(id: string): Promise<string> {
+  if (!applicationInTree(await rawTree(), id)) {
+    throw new Error("Application not found in your projects.");
+  }
+  const detail = await request<{ buildArgs?: string | null }>(
+    `application.one?applicationId=${encodeURIComponent(id)}`
+  );
+  return detail.buildArgs ?? "";
 }
 
 /** Save build arguments without deploying or changing any other application field. */

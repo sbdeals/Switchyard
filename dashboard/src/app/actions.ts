@@ -12,6 +12,9 @@ import {
   renameEnvironment,
   removeEnvironment,
   listProjects,
+  getServiceEnvironment,
+  getDatabasePassword,
+  getApplicationBuildArgs,
   saveEnvironment,
   updateDatabase,
   reloadDatabase,
@@ -219,6 +222,31 @@ export async function saveEnvironmentAction(
   return wrap(() => saveEnvironment(engine, id, env));
 }
 
+/** Environment values are fetched only by the open Variables tab. */
+export async function loadServiceEnvAction(
+  type: MountServiceType,
+  id: string
+): Promise<{ ok: true; env: string } | { ok: false; error: string }> {
+  try {
+    return { ok: true, env: await getServiceEnvironment(type, id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load environment variables." };
+  }
+}
+
+export async function loadDatabasePasswordAction(
+  engine: Engine,
+  id: string
+): Promise<{ ok: true; password: string | null } | { ok: false; error: string }> {
+  try {
+    return { ok: true, password: await getDatabasePassword(engine, id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load database credentials." };
+  }
+}
+
 // --- projects & environments ------------------------------------------------
 
 export async function createProjectAction(name: string): Promise<ActionResult> {
@@ -398,6 +426,18 @@ export async function saveApplicationBuildArgsAction(id: string, buildArgs: stri
     unstable_rethrow(e);
     // Upstream errors may echo submitted values; never return or log them.
     return { ok: false, error: "Could not save build arguments. Check your access and try again." };
+  }
+}
+
+/** Build argument values are fetched only by the open Build tab. */
+export async function loadApplicationBuildArgsAction(
+  id: string
+): Promise<{ ok: true; buildArgs: string } | { ok: false; error: string }> {
+  try {
+    return { ok: true, buildArgs: await getApplicationBuildArgs(id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load build arguments." };
   }
 }
 
