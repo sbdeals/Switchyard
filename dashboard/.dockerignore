@@ -2,6 +2,8 @@ node_modules
 .next
 out
 coverage
+# Unit tests use the workspace test runner, not the production build.
+**/*.test.ts
 .env*
 !.env.example
 *.md
