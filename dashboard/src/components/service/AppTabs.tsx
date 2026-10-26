@@ -64,6 +64,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { ConfigAsCodePanel } from "@/components/service/ConfigAsCodePanel";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -589,6 +590,7 @@ export function AppBuildTab({ app }: { app: Application }) {
     <div className="space-y-6">
       {isDocker ? <DockerSourceForm app={app} /> : <BuildStrategyForm app={app} />}
       <StartCommandForm app={app} />
+      {!isDocker && <ConfigAsCodePanel key={app.id} app={app} />}
     </div>
   );
 }
