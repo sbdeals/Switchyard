@@ -100,3 +100,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#127](https://github.com/sbdeals/Switchyard/pull/127) | codex/build-args (main) | build arguments editor | [127-build-args](127-build-args/) | live UI + API readback on :3057 + docker build fixture | pass; deploy unproven (no swarm) |
 | [#128](https://github.com/sbdeals/Switchyard/pull/128) | codex/error-boundaries (main) | error boundaries + unreachable state | [128-error-boundaries](128-error-boundaries/) | live :3058 + isolated browser render | pass |
 | [#129](https://github.com/sbdeals/Switchyard/pull/129) | codex/deploy-stats (main) | deploy durations + stats | [129-deploy-stats](129-deploy-stats/) | live :3061, 4 real deploys | pass |
+| [#130](https://github.com/sbdeals/Switchyard/pull/130) | codex/unsaved-guard (main) | unsaved-changes guard | [130-unsaved-guard](130-unsaved-guard/) | live :3060, 16 browser checks | pass |

@@ -1,0 +1,5 @@
+{
+  "before": "PROOF_BASELINE=unchanged",
+  "afterDiscard": "PROOF_BASELINE=unchanged",
+  "unchanged": true
+}

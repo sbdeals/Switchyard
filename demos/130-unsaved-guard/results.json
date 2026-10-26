@@ -1,0 +1,29 @@
+{
+  "slug": "unsaved-guard-1793010195741",
+  "results": [
+    "Variables close asks; Keep editing preserves text and returns focus",
+    "Discard closes drawer; API environment is unchanged",
+    "Tab switch Keep preserves active tab; Discard opens requested tab",
+    "Current tab is a no-op; keyboard Arrow/End tab switching is guarded",
+    "Drawer Escape asks; dialog Escape keeps editing and restores focus",
+    "Drawer backdrop asks and preserves edits on Keep editing",
+    "Dirty reload triggers native beforeunload and cancelling preserves edits",
+    "Reverting to saved value removes beforeunload prompt",
+    "Cross-project service selection handler asks and honors Keep/Discard",
+    "Compose editor asks; Keep preserves text/focus; Discard leaves API file unchanged",
+    "Domains draft is guarded and Keep editing restores its field",
+    "Projects entry handler asks and honors Keep/Discard",
+    "Rapid reopen during closing animation drops discarded state and guards new edits",
+    "Explicit save clears dirty registration and closes without confirmation",
+    "Completed save removes beforeunload prompt",
+    "No browser runtime errors"
+  ],
+  "cleanup": [
+    "application.delete: deleted",
+    "compose.delete: deleted",
+    "project.remove: deleted",
+    "project.remove: deleted"
+  ],
+  "runtimeErrors": [],
+  "failure": null
+}
