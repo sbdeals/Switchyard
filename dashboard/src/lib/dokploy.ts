@@ -29,6 +29,7 @@ import { rewriteDataBindsToVolumes } from "./template-volumes";
 import { resolveAppPort } from "./app-port";
 import { fetchRepoBuildFiles, fetchRepoExposedPorts } from "./repo-port";
 import { detectBuildPlan } from "./build-plan";
+import { PRIVATE_COMPOSE_PATH } from "./private-repo";
 import {
   bridgeImageDomain,
   databaseStack,
@@ -1760,6 +1761,8 @@ export async function removeMount(mountId: string): Promise<void> {
 // --- compose ----------------------------------------------------------------
 
 interface RawComposeDetail {
+  sourceType?: string;
+  composePath?: string;
   name?: string;
   appName?: string;
   composeStatus?: ServiceStatus;
@@ -1836,7 +1839,7 @@ export async function createCompose(
 export async function createManagedCompose(
   name: string,
   environmentId: string,
-  build: (appName: string) => { composeFile: string; env?: string }
+  build: (appName: string) => { composeFile: string; env?: string; source?: Record<string, string | number | boolean> }
 ): Promise<string> {
   // appName is the stack's internal hostname. The engine treats it as a prefix
   // and appends a unique suffix, so seed it from the service name to get
@@ -1846,12 +1849,13 @@ export async function createManagedCompose(
     method: "POST",
     body: { name, environmentId, ...(prefix ? { appName: prefix } : {}) },
   });
-  const { composeFile, env } = build(created.appName);
+  const { composeFile, env, source } = build(created.appName);
   await request("compose.update", {
     method: "POST",
     body: {
       composeId: created.composeId,
       sourceType: "raw",
+      ...source,
       composeType: "docker-compose",
       composeFile,
       // The stack joins the shared bridge itself; don't let the engine rewrite
@@ -1859,6 +1863,7 @@ export async function createManagedCompose(
       isolatedDeployment: false,
     },
   });
+  if (source?.composePath === PRIVATE_COMPOSE_PATH) await savePrivateComposePatch(created.composeId, composeFile);
   if (env) await saveComposeEnvironment(created.composeId, env);
   return created.composeId;
 }
@@ -1951,7 +1956,7 @@ export async function ensureBridgeAutoDomain(composeId: string): Promise<string 
   } else if (managed.kind === "repo") {
     const localPorts = await inspectImageExposedPorts(managed.image);
     port = resolveAppPort({ image: managed.image, env: detail.env,
-      exposedPorts: localPorts.length ? localPorts : await fetchRepoExposedPorts(managed) });
+      exposedPorts: localPorts.length || managed.repoProvider ? localPorts : await fetchRepoExposedPorts(managed) });
   } else {
     port = await resolveImagePort(managed.image, detail.env, true);
   }
@@ -2106,7 +2111,19 @@ export async function redeployManagedImage(composeId: string): Promise<void> {
 }
 
 export async function updateComposeFile(id: string, composeFile: string): Promise<void> {
-  await request("compose.update", { method: "POST", body: { composeId: id, composeFile } });
+  const updated = await request<RawComposeDetail>("compose.update", { method: "POST", body: { composeId: id, composeFile } });
+  // The DB copy drives Switchyard's UI; native provider deployments read the
+  // patched file after cloning. Sync even if an editor removes x-switchyard.
+  if (updated?.sourceType !== "raw" && updated?.composePath === PRIVATE_COMPOSE_PATH) {
+    await savePrivateComposePatch(id, composeFile);
+  }
+}
+
+async function savePrivateComposePatch(id: string, composeFile: string): Promise<void> {
+  await request("patch.saveFileAsPatch", {
+    method: "POST",
+    body: { id, type: "compose", filePath: PRIVATE_COMPOSE_PATH, content: composeFile, patchType: "create" },
+  });
 }
 
 /**

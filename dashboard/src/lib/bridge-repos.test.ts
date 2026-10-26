@@ -129,14 +129,6 @@ describe("bridge Git quick deploy", () => {
     expect(requests).toEqual([]);
   });
 
-  it("returns actionable GitHub App errors before resolving an environment or creating anything", async () => {
-    expect(await quickDeployGithubAction(githubInput)).toEqual({
-      ok: false,
-      error: "GitHub App deploys need Swarm. On this host, deploy a public repo URL (Dockerfile or auto-detected Node/Python/Go/static app), or push an image to a registry and deploy the image.",
-    });
-    expect(requests).toEqual([]);
-  });
-
   it("still deploys when the host has no automatic public URL", async () => {
     vi.stubEnv("SWITCHYARD_HOST_IP", "");
     expect(await quickDeployRepoAction(repoUrl, "main", "environment-1"))

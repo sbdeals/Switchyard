@@ -105,6 +105,8 @@ import { friendlyEngineError } from "@/lib/deploy-errors";
 import { deployTarget } from "@/lib/deploy-target";
 import { validateRepoSource } from "@/lib/managed-compose";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { deployPrivateBridgeRepo, listGitBranches, listGitConnections, listGitRepositories, resolvePrivateRepo } from "@/lib/dokploy-git";
+import { validatePrivateRepoInput, type GitConnection, type GitProviderKind, type GitRepository, type PrivateRepoInput } from "@/lib/private-repo";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -335,6 +337,71 @@ function listOk<T>(data: T): ListResult<T> {
   return { ok: true, data };
 }
 
+/** A settings link remains available even if provider discovery fails. */
+export async function gitConnectionsAction(): Promise<{
+  providers: GitConnection[]; connectUrl: string; sshKeysUrl: string; bridge: boolean; error?: string;
+}> {
+  const bridge = (await deployTarget()) === "bridge";
+  const links = { connectUrl: githubConnectUrl(), sshKeysUrl: githubConnectUrl().replace(/git-providers$/, "ssh-keys"), bridge };
+  try {
+    return { ...links, providers: await listGitConnections(bridge) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ...links, providers: [], error: "Could not load Git connections. Check your access in Dokploy and refresh." };
+  }
+}
+
+export async function gitRepositoriesAction(kind: GitProviderKind, id: string): Promise<ListResult<GitRepository[]>> {
+  try {
+    return listOk(await listGitRepositories(kind, id, (await deployTarget()) === "bridge"));
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load repositories. Check this connection in Dokploy." };
+  }
+}
+
+export async function gitBranchesAction(kind: GitProviderKind, id: string, repository: string): Promise<ListResult<{ name: string }[]>> {
+  try {
+    return listOk(await listGitBranches(kind, id, repository, (await deployTarget()) === "bridge"));
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load branches. Check repository access in Dokploy." };
+  }
+}
+
+export async function quickDeployConnectedGitAction(input: PrivateRepoInput & { environmentId?: string }): Promise<QuickDeployResult> {
+  // Validation messages never echo pasted input. Upstream errors can contain
+  // authenticated clone URLs, so they must not be passed through fail().
+  try { validatePrivateRepoInput(input); } catch {
+    return { ok: false, error: "Select a connection, repository and branch, a relative Dockerfile path, and a valid app port. Custom Git requires an SSH URL without credentials." };
+  }
+  try {
+    const bridge = (await deployTarget()) === "bridge";
+    if (!bridge && input.providerKind !== "github") {
+      return { ok: false, error: "Connected repo deploys support only GitHub on Swarm hosts for now. Use a bridge host for GitLab, Bitbucket, Gitea or SSH keys." };
+    }
+    const source = await resolvePrivateRepo(input, bridge);
+    const environmentId = await resolveTargetEnv(input.environmentId);
+    let id: string;
+    if (bridge) {
+      id = await deployPrivateBridgeRepo(randomServiceName(input.repository.split("/").pop()?.replace(/\.git$/, "") || "repo"), source, environmentId);
+    } else {
+      // The existing Swarm flow remains GitHub App backed.
+      id = await createApplication(randomServiceName(String(source.fields.repository)), environmentId);
+      await setAppGithubSource(id, {
+        githubId: input.providerId, owner: String(source.fields.owner), repository: String(source.fields.repository), branch: input.branch,
+      });
+      await applicationAction(id, "deploy");
+      await mintAutoDomain(id);
+    }
+    revalidatePath("/");
+    return { ok: true, id };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not deploy this repository. Check connection access and branch in Dokploy. Use a Dockerfile or a supported Node, Python, Go or static app; build manifests must be regular files under 128 KiB." };
+  }
+}
+
 /** Configured GitHub App connections + the Dokploy URL to add a new one. */
 export async function githubConnectionsAction(): Promise<
   ListResult<{ providers: GithubProvider[]; connectUrl: string }>
@@ -378,17 +445,19 @@ export async function quickDeployGithubAction(input: {
   owner: string;
   repository: string;
   branch: string;
+  port?: number;
   environmentId?: string;
 }): Promise<QuickDeployResult> {
+  if ((await deployTarget()) === "bridge") {
+    return quickDeployConnectedGitAction({
+      providerKind: "github", providerId: input.githubId, repository: `${input.owner}/${input.repository}`,
+      branch: input.branch, port: input.port, environmentId: input.environmentId,
+    });
+  }
   return wrapId(async () => {
     const { githubId, owner, repository, branch } = input;
     if (!githubId || !owner || !repository || !branch)
       throw new Error("Installation, repository and branch are required.");
-    if ((await deployTarget()) === "bridge") {
-      throw new Error(
-        "GitHub App deploys need Swarm. On this host, deploy a public repo URL (Dockerfile or auto-detected Node/Python/Go/static app), or push an image to a registry and deploy the image."
-      );
-    }
     const id = await createApplication(
       randomServiceName(repository),
       await resolveTargetEnv(input.environmentId)
