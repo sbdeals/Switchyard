@@ -1,0 +1,12 @@
+{
+  "applicationId": "YlogpX1w_j6wn03f7D-Kf",
+  "name": "vars-raw-editor-r1-proof",
+  "applicationStatus": "idle",
+  "deployments": 0,
+  "before": "# Round 1: keep this header and the blank lines\r\n\r\nKEEP='keep # literal' # untouched quoting\r\nCHANGE=shadowed # earlier duplicate stays untouched\r\n\r\n  export CHANGE = \"old value\"  # effective value comment\r\nREF=${{Service.VAR}}\r\n\r\n# Keep this footer too\r\n",
+  "after": "# Round 1: keep this header and the blank lines\r\n\r\nKEEP='keep # literal' # untouched quoting\r\nCHANGE=shadowed # earlier duplicate stays untouched\r\n\r\n  export CHANGE = \"new value\"  # effective value comment\r\nREF=${{Service.VAR}}\r\n\r\n# Keep this footer too\r\n",
+  "changedLines": [
+    6
+  ],
+  "exactExpectedMatch": true
+}
