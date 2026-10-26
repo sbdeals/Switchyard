@@ -1,0 +1,11 @@
+[
+  "Created two undeployed throwaway apps; first publishes 3072/tcp as configuration only.",
+  "Conflict names first app; link opens its drawer.",
+  "Save anyway persisted 3072/tcp on second app without deployment.",
+  "30720/tcp has no warning and offers Add; draft only, never bound or deployed.",
+  "3072/udp has no conflict, uses Add, and persists successfully. No other host port bound.",
+  "Reserved 3000/tcp warns before saving (not saved).",
+  "Deleted port-conflicts-second via API.",
+  "Deleted port-conflicts-first via API.",
+  "Deleted own proof project via API and verified it is absent."
+]
