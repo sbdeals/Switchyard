@@ -1,12 +1,15 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, type SetStateAction } from "react";
 import { AlertTriangle, CheckCircle2, ChevronRight, Link2, Trash2, X } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
-import { useStagedForm, useStagedState, useStaging } from "@/components/service/StagedChanges";
+import { useStagedForm, useStaging } from "@/components/service/StagedChanges";
 import { stagedVariableValues } from "@/lib/staged-collections";
-import { decodeStoredEnv, resolveTemplate } from "@/lib/references";
-import { referenceTargets, referenceableKeys } from "@/lib/reference-vars";
+import { findReferences, type RefIssue } from "@/lib/references";
+import { referenceableKeys } from "@/lib/reference-keys";
+import { appliedVariablesEditorState, initialVariablesEditorState, variablesEditorReducer, type VariablesEditorState } from "@/lib/variables-editor";
+import { loadServiceEnvAction } from "@/app/actions";
+import { validateServiceReferencesAction } from "@/app/reference-actions";
 import { serviceLabel } from "@/lib/service-meta";
 import { cn } from "@/lib/utils";
 import { ContextMenu } from "@/components/ContextMenu";
@@ -20,33 +23,74 @@ import { removeVariableRow, variableRows } from "@/lib/variable-rows";
  * deploy (see lib/references.ts for syntax and storage).
  */
 export function VariablesTab({ service, services }: { service: Service; services: Service[] }) {
-  const initial = decodeStoredEnv(service.env);
-  const [value, setValue] = useStagedState("variables", initial);
-  const { pending } = useStaging();
+  const serviceType = service.kind === "database" ? service.engine : service.kind;
+  const { pending, drafts, setDraft, applied } = useStaging();
+  const cachedEditor = drafts.variablesEditor as VariablesEditorState | undefined;
+  const editor = appliedVariablesEditorState(cachedEditor ?? initialVariablesEditorState, applied.variables);
+  const { value, baseline, loadError } = editor;
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [validation, setValidation] = useState<{
+    template: string;
+    issues: RefIssue[];
+    error?: string;
+  } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (baseline !== null || loadError) return;
+    let live = true;
+    loadServiceEnvAction(serviceType, service.id).then((res) => {
+      if (!live) return;
+      setDraft("variablesEditor", variablesEditorReducer(initialVariablesEditorState,
+        res.ok ? { type: "loaded", env: res.env } : { type: "failed", error: res.error }));
+    }).catch(() => {
+      if (live) setDraft("variablesEditor", variablesEditorReducer(initialVariablesEditorState, {
+        type: "failed", error: "Could not load environment variables.",
+      }));
+    });
+    return () => { live = false; };
+  }, [baseline, loadError, serviceType, service.id, setDraft]);
+
+  const references = findReferences(value);
+  const hasReferences = references.length > 0;
+  useEffect(() => {
+    if (baseline === null || !hasReferences) return;
+    let live = true;
+    const timer = setTimeout(() => {
+      validateServiceReferencesAction(serviceType, service.id, value).then((res) => {
+        if (live) setValidation(res.ok
+          ? { template: value, issues: res.issues }
+          : { template: value, issues: [], error: res.error });
+      }).catch(() => {
+        if (live) setValidation({ template: value, issues: [], error: "Could not validate variable references." });
+      });
+    }, 200);
+    return () => { live = false; clearTimeout(timer); };
+  }, [baseline, hasReferences, serviceType, service.id, value]);
+
+  function setValue(next: SetStateAction<string>) {
+    setDraft("variablesEditor", variablesEditorReducer(editor, {
+      type: "edited", value: typeof next === "function" ? next(value) : next,
+    }));
+  }
 
   const count = value.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).length;
   const rows = variableRows(value);
-
-  const targets = useMemo(
-    () => referenceTargets(services, service.environmentId),
-    [services, service.environmentId]
-  );
-  const resolution = useMemo(
-    () => resolveTemplate(value, service.name, targets),
-    [value, service.name, targets]
-  );
-  const refKeys = [...resolution.referencing];
-  const issueKeys = new Set(resolution.issues.map((i) => i.key));
+  const validating = hasReferences && validation?.template !== value;
+  const currentValidation = hasReferences && validation?.template === value ? validation : null;
+  const issues = currentValidation?.issues ?? [];
+  const refKeys = [...new Set(references.map((ref) => ref.key))];
+  const issueKeys = new Set(issues.map((issue) => issue.key));
+  const referenceError = currentValidation?.error
+    ?? (issues.length ? "Resolve variable references before deploying." : undefined);
 
   useStagedForm({
     id: "variables",
     action: service.kind === "database" ? "saveEnvironmentAction"
       : service.kind === "compose" ? "saveComposeEnvAction" : "saveApplicationEnvAction",
     args: service.kind === "database" ? [service.engine, service.id, value] : [service.id, value],
-    ...stagedVariableValues(initial, value),
-    error: resolution.issues.length ? "Resolve variable references before deploying." : undefined,
+    ...stagedVariableValues(baseline ?? "", baseline === null ? "" : value),
+    error: referenceError,
   });
 
   /**
@@ -82,6 +126,21 @@ export function VariablesTab({ service, services }: { service: Service; services
       textareaRef.current?.focus();
       textareaRef.current?.setSelectionRange(caret, caret);
     });
+  }
+
+  if (loadError) {
+    return <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>;
+  }
+
+  if (baseline === null) {
+    return (
+      <div role="status" aria-label="Loading environment variables" className="space-y-3 animate-pulse">
+        <span className="sr-only">Loading environment variables…</span>
+        <div className="h-4 w-3/4 rounded bg-[var(--color-surface-hover)]" />
+        <div className="h-64 rounded-lg bg-[var(--color-surface-hover)]" />
+        <div className="h-8 w-28 rounded bg-[var(--color-surface-hover)]" />
+      </div>
+    );
   }
 
   return (
@@ -160,17 +219,19 @@ export function VariablesTab({ service, services }: { service: Service; services
         className="min-h-64 flex-1 resize-none rounded-lg border border-[var(--color-border-control)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
       />
 
-      {(refKeys.length > 0 || resolution.issues.length > 0) && (
+      {validating && <p role="status" className="mt-3 text-[11px] text-[var(--color-fg-muted)]">Checking variable references…</p>}
+      {currentValidation?.error && <p role="alert" className="mt-3 text-[11px] text-[var(--color-danger)]">{currentValidation.error}</p>}
+      {(refKeys.length > 0 || issues.length > 0) && (
         <ul aria-label="Reference status" className="mt-3 space-y-1 text-[11px]">
           {refKeys
-            .filter((k) => !issueKeys.has(k))
+            .filter((k) => currentValidation && !currentValidation.error && !issueKeys.has(k))
             .map((k) => (
               <li key={k} className="flex items-center gap-1.5 text-[var(--color-fg-muted)]">
                 <CheckCircle2 className="size-3.5 shrink-0 text-[var(--color-ok)]" />
                 <span className="font-mono">{k}</span> resolves
               </li>
             ))}
-          {resolution.issues.map((i) => (
+          {issues.map((i) => (
             <li
               key={`${i.key}|${i.ref}|${i.message}`}
               className="flex items-start gap-1.5 text-[var(--color-danger)]"
