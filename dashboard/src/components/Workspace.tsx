@@ -11,6 +11,7 @@ import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { cn } from "@/lib/utils";
 
 type View = "canvas" | "grid";
@@ -74,6 +75,7 @@ export function Workspace({
           >
             <RefreshCw className="size-3.5" /> Refresh
           </button>
+          <KeyboardShortcuts />
           <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
         </div>
       </header>
