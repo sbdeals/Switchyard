@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   Globe,
   ExternalLink,
@@ -64,6 +65,16 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import {
+  durationBarHeight,
+  formatAbsoluteTime,
+  formatDuration,
+  formatRelativeTime,
+  getDeploymentDuration,
+  getDeployStats,
+  isDeploymentRunning,
+  sortDeployments,
+} from "@/lib/deploy-stats";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -493,35 +504,127 @@ function AutoDeployPanel({ app }: { app: Application }) {
 }
 
 export function DeploymentHistory({ deployments: history }: { deployments: AppDeployment[] }) {
-  const deployments = [...history].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const router = useRouter();
+  const [now, setNow] = useState<number | null>(null);
+  const deployments = sortDeployments(history);
+  const stats = getDeployStats(history);
+  const lastSuccessfulAt = stats.lastSuccessful?.finishedAt && Number.isFinite(Date.parse(stats.lastSuccessful.finishedAt))
+    ? stats.lastSuccessful.finishedAt
+    : stats.lastSuccessful?.createdAt;
+  const bars = [...stats.recent].reverse().map((deployment) => ({
+    deployment,
+    duration: getDeploymentDuration(deployment, now ?? NaN),
+  }));
+  const maxDuration = Math.max(0, ...bars.map(({ duration }) => duration ?? 0));
   const color = (s: string) =>
     s === "done" ? "var(--color-ok)" : s === "error" ? "var(--color-danger)" : s === "running" ? "var(--color-warn)" : "var(--color-idle)";
+
+  useEffect(() => {
+    const initialTick = window.setTimeout(() => setNow(Date.now()), 0);
+    const running = history.filter(isDeploymentRunning);
+    const tick = running.some((deployment) => getDeploymentDuration(deployment, Date.now()) !== null)
+      ? window.setInterval(() => setNow(Date.now()), 1000)
+      : undefined;
+    const refresh = running.length > 0
+      ? window.setInterval(() => router.refresh(), 5000)
+      : undefined;
+    return () => {
+      window.clearTimeout(initialTick);
+      window.clearInterval(tick);
+      window.clearInterval(refresh);
+    };
+  }, [history, router]);
+
   return (
     <div className="space-y-2">
+      {stats.recent.length > 0 && (
+        <section aria-label="Deployment insights" className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold">Last {stats.recent.length} deployments</h3>
+            <svg
+              width={bars.length * 10}
+              height={36}
+              viewBox={`0 0 ${bars.length * 10} 36`}
+              role="img"
+              aria-label="Deployment durations, oldest to newest. Green: successful; red: failed; grey: other. Dashes: duration unavailable."
+            >
+              {bars.map(({ deployment, duration }, index) => {
+                const height = durationBarHeight(duration, maxDuration);
+                const barColor = deployment.status === "done"
+                  ? "var(--color-ok)"
+                  : deployment.status === "error" ? "var(--color-danger)" : "var(--color-idle)";
+                return (
+                  <g key={deployment.deploymentId}>
+                    <title>{`${deployment.title}: ${deployment.status}, ${duration === null ? "duration unavailable" : formatDuration(duration)}. ${formatAbsoluteTime(deployment.createdAt)}`}</title>
+                    {duration === null ? (
+                      <line x1={index * 10 + 1} x2={index * 10 + 7} y1={34} y2={34} stroke={barColor} strokeWidth={2} />
+                    ) : (
+                      <rect x={index * 10 + 1} y={34 - height} width={6} height={height} rx={1} fill={barColor} />
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div title="Successful deploys divided by successful and failed deploys. Cancelled, queued and running deploys are excluded.">
+              <dt className="text-[11px] text-[var(--color-fg-subtle)]">Success rate</dt>
+              <dd className="mt-1 text-sm font-medium tabular-nums">{stats.successRate === null ? "—" : `${Math.round(stats.successRate)}%`}</dd>
+            </div>
+            <div title={stats.medianDurationMs === null ? "duration unavailable" : "Median completed deployment duration"}>
+              <dt className="text-[11px] text-[var(--color-fg-subtle)]">Median duration</dt>
+              <dd className="mt-1 text-sm font-medium tabular-nums">{formatDuration(stats.medianDurationMs)}</dd>
+            </div>
+            <div title={stats.p90DurationMs === null ? "duration unavailable" : "90th percentile completed deployment duration"}>
+              <dt className="text-[11px] text-[var(--color-fg-subtle)]">p90 duration</dt>
+              <dd className="mt-1 text-sm font-medium tabular-nums">{formatDuration(stats.p90DurationMs)}</dd>
+            </div>
+            <div title={lastSuccessfulAt ? formatAbsoluteTime(lastSuccessfulAt) : "No successful deployment in this history"}>
+              <dt className="text-[11px] text-[var(--color-fg-subtle)]">Last successful</dt>
+              <dd className="mt-1 text-sm font-medium">{lastSuccessfulAt && now !== null ? formatRelativeTime(lastSuccessfulAt, now) : "—"}</dd>
+            </div>
+          </dl>
+          <p className="text-[10px] text-[var(--color-fg-subtle)]">
+            {stats.durationCount} completed duration {stats.durationCount === 1 ? "sample" : "samples"}. Missing timestamps: duration unavailable (—).
+          </p>
+        </section>
+      )}
       <p className="mb-1 text-xs text-[var(--color-fg-muted)]">Deployment history (newest first).</p>
       {deployments.length === 0 ? (
         <p className="text-xs text-[var(--color-fg-subtle)]">No deployments yet.</p>
       ) : (
-        deployments.map((d) => (
-          <div
-            key={d.deploymentId}
-            className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
-          >
-            <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
-            {d.rollbackId && <span className="sr-only">{d.status}</span>}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm">{d.title}</div>
-              <div className="text-[11px] text-[var(--color-fg-subtle)]">
-                {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
+        deployments.map((d) => {
+          const duration = getDeploymentDuration(d, now ?? NaN);
+          const durationLabel = duration === null
+            ? "duration unavailable"
+            : `${isDeploymentRunning(d) ? "running " : ""}${formatDuration(duration)}`;
+          return (
+            <div
+              key={d.deploymentId}
+              className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
+            >
+              <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
+              {d.rollbackId && <span className="sr-only">{d.status}</span>}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm">{d.title}</div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-fg-subtle)]">
+                  <span title={formatAbsoluteTime(d.createdAt)}>
+                    {now === null ? "—" : formatRelativeTime(d.createdAt, now)}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span title={durationLabel} aria-label={durationLabel} className="tabular-nums">
+                    {duration === null ? "—" : durationLabel}
+                  </span>
+                </div>
               </div>
+              {d.rollbackId ? (
+                <RollbackButton rollbackId={d.rollbackId} title={d.title} />
+              ) : (
+                <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
+              )}
             </div>
-            {d.rollbackId ? (
-              <RollbackButton rollbackId={d.rollbackId} title={d.title} />
-            ) : (
-              <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
-            )}
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );
