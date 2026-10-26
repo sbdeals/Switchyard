@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { unstable_rethrow } from "next/navigation";
 
 import { loadWorkspace, inferEdges } from "@/lib/dokploy";
@@ -28,11 +29,13 @@ export default async function Page() {
     return (
       <>
         <LogoutButton />
-        <Workspace
-          services={result.services}
-          projects={result.projects}
-          edges={inferEdges(result.services)}
-        />
+        <Suspense>
+          <Workspace
+            services={result.services}
+            projects={result.projects}
+            edges={inferEdges(result.services)}
+          />
+        </Suspense>
       </>
     );
   }
