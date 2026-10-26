@@ -22,10 +22,12 @@ export function ProjectsPanel({
   open,
   onClose,
   projects,
+  initialProjectId,
 }: {
   open: boolean;
   onClose: () => void;
   projects: ProjectNode[];
+  initialProjectId?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -59,6 +61,7 @@ export function ProjectsPanel({
         >
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
           <FocusTrapPanel
+            key={initialProjectId}
             onClose={onClose}
             role="dialog"
             aria-modal="true"
@@ -117,7 +120,7 @@ export function ProjectsPanel({
                     </IconBtn>
                   </div>
 
-                  <div ref={(node) => { environments.current[p.projectId] = node; }} role="group" aria-label={`${p.name} environments`} tabIndex={-1} className="mt-2 space-y-1 pl-6 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]">
+                  <div ref={(node) => { environments.current[p.projectId] = node; }} data-autofocus={p.projectId === initialProjectId ? "" : undefined} role="group" aria-label={`${p.name} environments`} tabIndex={-1} className="mt-2 space-y-1 pl-6 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]">
                     {p.environments.map((e) => (
                       <div key={e.environmentId} className="flex items-center gap-2 text-xs">
                         <Layers className="size-3.5 text-[var(--color-fg-subtle)]" />

@@ -31,6 +31,7 @@ export function ServiceCard({ service, onOpen, selected, onSelect }: {
       {(trigger, deploy, pending, error) => (
     <motion.div
       {...trigger}
+      onFocusCapture={onSelect}
       tabIndex={-1}
       data-selected={selected}
       style={selected ? { borderColor: accent, boxShadow: `0 0 0 1px ${accent}` } : undefined}

@@ -33,6 +33,7 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
       {(trigger, _deploy, _pending, error) => (
     <div
       {...trigger}
+      onFocusCapture={() => onHighlight(service.id)}
       role="button"
       tabIndex={0}
       data-selected={selected}

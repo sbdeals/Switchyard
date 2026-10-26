@@ -350,12 +350,14 @@ export function ServiceDrawer({
   services,
   onClose,
   initialTab = "overview",
+  navigationVersion = 0,
 }: {
   service: Service | null;
   /** Every service in the workspace — the Variables tab's reference targets. */
   services: Service[];
   onClose: () => void;
   initialTab?: ServiceSection;
+  navigationVersion?: number;
 }) {
   const [tab, setTab] = useState<TabId>(initialTab);
   const titleId = useId();
@@ -365,11 +367,13 @@ export function ServiceDrawer({
   // render — the React-recommended alternative to a resetting effect).
   const [shownId, setShownId] = useState<string | null>(null);
   const [shownTab, setShownTab] = useState(initialTab);
+  const [shownNavigation, setShownNavigation] = useState(navigationVersion);
   // Deploy whose log the Deploys tab should open (set by the banner's "View logs").
   const [logDeployId, setLogDeployId] = useState<string | null>(null);
-  if ((service?.id ?? null) !== shownId || initialTab !== shownTab) {
+  if ((service?.id ?? null) !== shownId || initialTab !== shownTab || navigationVersion !== shownNavigation) {
     setShownId(service?.id ?? null);
     setShownTab(initialTab);
+    setShownNavigation(navigationVersion);
     setTab(initialTab);
     setLogDeployId(null);
   }

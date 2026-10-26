@@ -54,9 +54,10 @@ export function useLifecycle(runAction: (action: Action) => Promise<ActionResult
   return { pending, error, run };
 }
 
-export function useServiceLifecycle(service: Service) {
+export function useServiceLifecycle(service: Service | null) {
   return useLifecycle((action) =>
-    service.kind === "database" ? lifecycleAction(service.engine, service.id, action)
+    !service ? Promise.resolve({ ok: false, error: "Select a service first." })
+      : service.kind === "database" ? lifecycleAction(service.engine, service.id, action)
       : service.kind === "compose" ? composeLifecycleAction(service.id, action)
         : appLifecycleAction(service.id, action)
   );
