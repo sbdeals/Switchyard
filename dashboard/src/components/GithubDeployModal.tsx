@@ -19,6 +19,8 @@ import {
   quickDeployGithubAction,
 } from "@/app/actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { FeatureNotice, useHostCapabilities } from "@/components/HostCapabilities";
+import { featureUnavailableReason } from "@/lib/host-capabilities";
 
 /**
  * GitHub App deploy flow: pick installation -> repo -> branch -> deploy.
@@ -42,6 +44,7 @@ export function GithubDeployModal({
   environmentId?: string;
   onDeployed: (id: string) => void;
 }) {
+  const unavailable = featureUnavailableReason(useHostCapabilities(), "nativeApplication");
   const [providers, setProviders] = useState<GithubProvider[] | null>(null);
   const [connectUrl, setConnectUrl] = useState<string>("");
   const [githubId, setGithubId] = useState("");
@@ -146,7 +149,7 @@ export function GithubDeployModal({
   }, [open]);
 
   function deploy() {
-    if (!selectedRepo || !branch) return;
+    if (unavailable || !selectedRepo || !branch) return;
     setError(null);
     startDeploy(async () => {
       const res = await quickDeployGithubAction({
@@ -204,6 +207,7 @@ export function GithubDeployModal({
               </button>
             </div>
 
+            <FeatureNotice feature="nativeApplication" />
             {providers === null ? (
               <div role="status" className="flex items-center gap-2 py-8 text-sm text-[var(--color-fg-muted)]">
                 <Loader2 className="size-4 animate-spin" /> Loading installations…
@@ -291,7 +295,8 @@ export function GithubDeployModal({
                   </span>
                   <button
                     onClick={deploy}
-                    disabled={!selectedRepo || !branch || deploying}
+                    disabled={!selectedRepo || !branch || deploying || !!unavailable}
+                    title={unavailable ?? undefined}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
                   >
                     {deploying ? <Loader2 className="size-4 animate-spin" /> : null}

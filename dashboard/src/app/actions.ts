@@ -97,6 +97,8 @@ import {
   type UpdateBackupInput,
   type RestoreBackupInput,
 } from "@/lib/dokploy";
+import { getHostCapabilities } from "@/lib/host-capabilities-server";
+import { featureUnavailableReason, type HostFeature } from "@/lib/host-capabilities";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
 
@@ -107,6 +109,11 @@ export type GenerateUrlResult = { ok: true; host: string } | { ok: false; error:
 
 function fail(e: unknown): { ok: false; error: string } {
   return { ok: false, error: e instanceof Error ? e.message : String(e) };
+}
+
+async function requireHostFeature(feature: HostFeature): Promise<void> {
+  const reason = featureUnavailableReason(await getHostCapabilities(), feature);
+  if (reason) throw new Error(reason);
 }
 
 /** Run a mutation, revalidate the page, normalize errors into the result. */
@@ -251,6 +258,7 @@ export async function quickDeployImageAction(
   environmentId?: string
 ): Promise<QuickDeployResult> {
   return wrapId(async () => {
+    await requireHostFeature("nativeApplication");
     const trimmed = image.trim();
     if (!trimmed) throw new Error("Image is required.");
     // Derive a friendly name from the image (e.g. "nginx:alpine" -> "nginx").
@@ -273,6 +281,7 @@ export async function quickDeployRepoAction(
   environmentId?: string
 ): Promise<QuickDeployResult> {
   return wrapId(async () => {
+    await requireHostFeature("nativeApplication");
     const url = repoUrl.trim();
     if (!url) throw new Error("Repository URL is required.");
     // Derive a name from the repo (".../my-app.git" -> "my-app").
@@ -355,6 +364,7 @@ export async function quickDeployGithubAction(input: {
   environmentId?: string;
 }): Promise<QuickDeployResult> {
   return wrapId(async () => {
+    await requireHostFeature("nativeApplication");
     const { githubId, owner, repository, branch } = input;
     if (!githubId || !owner || !repository || !branch)
       throw new Error("Installation, repository and branch are required.");
@@ -370,7 +380,10 @@ export async function quickDeployGithubAction(input: {
 }
 
 export async function appLifecycleAction(id: string, action: Action): Promise<ActionResult> {
-  return wrap(() => applicationAction(id, action));
+  return wrap(async () => {
+    if (action === "deploy" || action === "start") await requireHostFeature("nativeApplication");
+    await applicationAction(id, action);
+  });
 }
 
 export async function updateApplicationAction(
@@ -379,6 +392,9 @@ export async function updateApplicationAction(
   redeploy = false
 ): Promise<ActionResult> {
   return wrap(async () => {
+    if (patch.replicas !== undefined) await requireHostFeature("replicas");
+    if (patch.healthCheckSwarm !== undefined) await requireHostFeature("swarmHealthcheck");
+    if (redeploy) await requireHostFeature("nativeApplication");
     await updateApplication(id, patch);
     if (redeploy) await applicationAction(id, "deploy");
   });
@@ -395,6 +411,7 @@ export async function saveAppBuildTypeAction(
   redeploy = false
 ): Promise<ActionResult> {
   return wrap(async () => {
+    if (redeploy) await requireHostFeature("nativeApplication");
     await saveAppBuildType(id, patch);
     if (redeploy) await applicationAction(id, "deploy");
   });
@@ -411,6 +428,7 @@ export async function setAppDockerSourceAction(
   redeploy = false
 ): Promise<ActionResult> {
   return wrap(async () => {
+    if (redeploy) await requireHostFeature("nativeApplication");
     const image = dockerImage.trim();
     if (!image) throw new Error("Image is required.");
     const hasCreds = registry && (registry.username || registry.password || registry.registryUrl);
@@ -561,6 +579,7 @@ export async function updateGitDeployAction(
   }
 ): Promise<ActionResult> {
   return wrap(async () => {
+    if (config.autoDeploy) await requireHostFeature("nativeApplication");
     if (config.gitUrl) {
       await setAppGitSource(
         applicationId,
@@ -580,7 +599,10 @@ export async function updateGitDeployAction(
  * a registry image); see `rollbackToDeployment`.
  */
 export async function rollbackDeploymentAction(rollbackId: string): Promise<ActionResult> {
-  return wrap(() => rollbackToDeployment(rollbackId));
+  return wrap(async () => {
+    await requireHostFeature("nativeApplication");
+    await rollbackToDeployment(rollbackId);
+  });
 }
 
 // --- schedules --------------------------------------------------------------
@@ -599,14 +621,20 @@ export async function listSchedulesAction(applicationId: string): Promise<Schedu
 }
 
 export async function createScheduleAction(input: CreateScheduleInput): Promise<ActionResult> {
-  return wrap(() => createSchedule(input));
+  return wrap(async () => {
+    await requireHostFeature("schedules");
+    await createSchedule(input);
+  });
 }
 
 export async function updateScheduleAction(
   scheduleId: string,
   input: UpdateScheduleInput
 ): Promise<ActionResult> {
-  return wrap(() => updateSchedule(scheduleId, input));
+  return wrap(async () => {
+    if (input.enabled) await requireHostFeature("schedules");
+    await updateSchedule(scheduleId, input);
+  });
 }
 
 export async function deleteScheduleAction(scheduleId: string): Promise<ActionResult> {
@@ -614,7 +642,10 @@ export async function deleteScheduleAction(scheduleId: string): Promise<ActionRe
 }
 
 export async function runScheduleAction(scheduleId: string): Promise<ActionResult> {
-  return wrap(() => runSchedule(scheduleId));
+  return wrap(async () => {
+    await requireHostFeature("schedules");
+    await runSchedule(scheduleId);
+  });
 }
 
 // --- compose ----------------------------------------------------------------
@@ -703,13 +734,19 @@ export async function listDatabaseBackupsAction(
 export async function createDatabaseBackupAction(
   input: CreateBackupInput
 ): Promise<ActionResult> {
-  return wrap(() => createDatabaseBackup(input));
+  return wrap(async () => {
+    await requireHostFeature("s3Backups");
+    await createDatabaseBackup(input);
+  });
 }
 
 export async function updateDatabaseBackupAction(
   input: UpdateBackupInput
 ): Promise<ActionResult> {
-  return wrap(() => updateDatabaseBackup(input));
+  return wrap(async () => {
+    if (input.enabled) await requireHostFeature("s3Backups");
+    await updateDatabaseBackup(input);
+  });
 }
 
 export async function removeDatabaseBackupAction(backupId: string): Promise<ActionResult> {
@@ -721,7 +758,10 @@ export async function runDatabaseBackupAction(
   engine: BackupEngine,
   backupId: string
 ): Promise<ActionResult> {
-  return wrap(() => runDatabaseBackup(engine, backupId));
+  return wrap(async () => {
+    await requireHostFeature("s3Backups");
+    await runDatabaseBackup(engine, backupId);
+  });
 }
 
 export async function listBackupFilesAction(
@@ -737,7 +777,10 @@ export async function listBackupFilesAction(
 
 /** Restore a backup (destructive — the UI confirms before calling this). */
 export async function restoreBackupAction(input: RestoreBackupInput): Promise<ActionResult> {
-  return wrap(() => restoreBackup(input));
+  return wrap(async () => {
+    await requireHostFeature("s3Backups");
+    await restoreBackup(input);
+  });
 }
 
 // --- templates (one-click catalog) ------------------------------------------

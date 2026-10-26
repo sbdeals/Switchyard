@@ -9,6 +9,7 @@
 import "server-only";
 import Docker from "dockerode";
 import type { Duplex } from "node:stream";
+import type { DockerSwarmState } from "./host-capabilities";
 
 const socketPath = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
 const docker = new Docker({ socketPath });
@@ -53,6 +54,12 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
       },
     );
   });
+}
+
+/** Read engine capabilities through the existing socket; never changes Swarm. */
+export async function getDockerSwarmState(): Promise<DockerSwarmState | undefined> {
+  const info = await withTimeout(docker.info(), DOCKER_OP_TIMEOUT_MS, "Docker info");
+  return info.Swarm;
 }
 
 // --- runtime truth ----------------------------------------------------------

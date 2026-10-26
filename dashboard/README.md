@@ -73,6 +73,21 @@ Server-Sent-Event routes (`/api/services/logs`, `/api/services/metrics`); no
 Dokploy WebSocket reverse-engineering needed. `dockerode` is kept out of the
 bundle via `serverExternalPackages` in `next.config.ts`.
 
+## Host capabilities
+
+The header pill reports the Docker engine's Swarm mode and Dokploy version.
+Native Application deploys, replicas, Swarm healthchecks, application schedules,
+and native database S3 backups are disabled only on a confirmed bridge host or
+Swarm worker. If Docker info cannot be read (for example, the dashboard has no
+Docker socket), the pill shows **unknown** with a warning and inline notes;
+controls and server actions stay enabled so Dokploy can handle the request.
+
+Reads are shared within each server render. Known engine modes and Dokploy
+version metadata are cached for **30 seconds**; unknown engine results, including
+socket failures and timeouts, are cached for **5 seconds** before the next read
+retries. Refresh the page after that interval to update the displayed state.
+Detection only reads the engine; it never initializes or changes Swarm.
+
 ## Status
 
 A unified **Service** model (`database | application | compose`) renders every

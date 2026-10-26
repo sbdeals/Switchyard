@@ -12,6 +12,7 @@ import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { cn } from "@/lib/utils";
+import { HostCapabilitiesPill } from "@/components/HostCapabilities";
 
 type View = "canvas" | "grid";
 
@@ -48,6 +49,7 @@ export function Workspace({
               <Boxes className="size-4.5" />
             </div>
             <h1 className="text-xl font-semibold tracking-tight">Services</h1>
+            <HostCapabilitiesPill />
           </div>
           <p className="mt-1.5 text-sm text-[var(--color-fg-muted)]">
             Apps and databases across your Dokploy projects.

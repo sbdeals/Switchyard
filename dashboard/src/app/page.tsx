@@ -4,6 +4,8 @@ import { loadWorkspace, inferEdges } from "@/lib/dokploy";
 import { ensureCollector } from "@/lib/collector";
 import { Workspace } from "@/components/Workspace";
 import { LogoutButton } from "@/components/LogoutButton";
+import { HostCapabilitiesProvider } from "@/components/HostCapabilities";
+import { getHostCapabilities } from "@/lib/host-capabilities-server";
 
 // Always fetch fresh state from Dokploy.
 export const dynamic = "force-dynamic";
@@ -25,14 +27,17 @@ export default async function Page() {
   }
 
   if (result) {
+    const capabilities = await getHostCapabilities();
     return (
       <>
         <LogoutButton />
-        <Workspace
-          services={result.services}
-          projects={result.projects}
-          edges={inferEdges(result.services)}
-        />
+        <HostCapabilitiesProvider capabilities={capabilities}>
+          <Workspace
+            services={result.services}
+            projects={result.projects}
+            edges={inferEdges(result.services)}
+          />
+        </HostCapabilitiesProvider>
       </>
     );
   }

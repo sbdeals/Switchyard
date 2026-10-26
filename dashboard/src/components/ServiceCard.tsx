@@ -9,6 +9,8 @@ import { serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceLogo } from "@/components/canvas/ServiceNode";
 import { StatusBadge } from "@/components/StatusBadge";
+import { FeatureNotice, useHostCapabilities } from "@/components/HostCapabilities";
+import { featureUnavailableReason } from "@/lib/host-capabilities";
 
 /**
  * Compact card: identity + status at a glance, click to open the drawer where
@@ -16,6 +18,8 @@ import { StatusBadge } from "@/components/StatusBadge";
  * only when the service hasn't been deployed yet.
  */
 export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: () => void }) {
+  const host = useHostCapabilities();
+  const unavailable = service.kind === "application" ? featureUnavailableReason(host, "nativeApplication") : null;
   const accent = serviceAccent(service);
   const logos = useTemplateLogos();
   const [pending, startTransition] = useTransition();
@@ -81,7 +85,8 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
           <button
             type="button"
             onClick={deploy}
-            disabled={pending}
+            disabled={pending || !!unavailable}
+            title={unavailable ?? undefined}
             className="relative z-10 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
           >
             <Rocket className="size-3.5" /> Deploy
@@ -91,6 +96,9 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
         )}
       </div>
 
+      {service.kind === "application" && service.status === "idle" && (
+        <div className="mt-2"><FeatureNotice feature="nativeApplication" /></div>
+      )}
       {error && (
         <p role="alert" className="mt-2 text-xs text-[var(--color-danger)]">
           {error}
