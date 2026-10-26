@@ -1,0 +1,74 @@
+createProjectAction: OK
+createComposeAction: OK
+saveComposeFileAction: OK
+createComposeDomainAction: OK
+createComposeDomainAction: OK
+createComposeDomainAction: OK
+updateDomainAction: OK
+updateDomainAction: OK
+updateDomainAction: OK
+composeLifecycleAction: OK
+Created only domain-status-round1-1793009041579: domain-status-round1-1793009041579.172.30.0.2.sslip.io, domain-status-round1-1793009041579-nx.invalid, domain-status-round1-1793009041579-internal.invalid
+Own dashboard loopback :80/:443 sentinels ready; no host ports published
+Isolated DNS fixture domain-status-round1-1793009041579-dns: domain-status-round1-1793009041579.172.30.0.2.sslip.io -> 172.30.0.2; domain-status-round1-1793009041579-nx.invalid -> NXDOMAIN; domain-status-round1-1793009041579-internal.invalid -> 127.0.0.1
+Domain health
+OK
+Re-check
+DNS
+172.30.0.2 · DNS configured
+Reachability
+HTTP 200
+
+Checked 6:04:09 AM · Results cached for 30s
+Domain health
+Error
+Re-check
+DNS
+dns-not-found
+Reachability
+dns-not-found
+
+DNS: dns-not-found · Reachability: dns-not-found
+
+Checked 6:04:09 AM · Results cached for 30s
+Domain health
+Warning
+Re-check
+DNS
+127.0.0.1 · Resolves elsewhere
+Reachability
+Not checked (internal address)
+TLS
+Not checked (internal address)
+
+Resolves to an internal address (127.0.0.1); reachability not checked.
+
+Checked 6:04:09 AM · Results cached for 30s
+Blocked-address API: {"checkedAt":"2026-10-26T10:04:09.267Z","level":"warning","reasons":["Resolves to an internal address (127.0.0.1); reachability not checked."],"dns":{"addresses":["127.0.0.1"],"matchesExpected":false},"reachability":{"blockedAddress":"127.0.0.1"}}
+Own loopback sentinels observed HTTP connections=0, TLS connections=0
+30s cache reused checkedAt 2026-10-26T10:04:09.271Z
+Arbitrary host rejected 400; unknown service rejected 404
+No polling for 32s; manual re-check refreshed checkedAt 2026-10-26T10:04:42.310Z
+Manual internal-address re-check refreshed checkedAt 2026-10-26T10:04:42.630Z; still blocked
+Own loopback sentinels observed HTTP connections=0, TLS connections=0
+updateDomainAction: OK
+composeLifecycleAction: OK
+HTTPS without an issued certificate: Domain health
+Error
+Re-check
+DNS
+172.30.0.2 · DNS configured
+Reachability
+HTTP 200
+TLS
+Issuer: TRAEFIK DEFAULT CERT · Valid to 2027-10-26 (UTC) · 365 days left · Hostname mismatch · Self-signed
+
+Certificate hostname mismatch · Self-signed certificate
+
+Checked 6:04:46 AM · Results cached for 30s
+Own loopback sentinels observed HTTP connections=0, TLS connections=0
+Cleanup verified: own loopback sentinels stopped
+composeLifecycleAction: OK
+removeProjectAction: OK
+Cleanup verified: own throwaway compose and project removed via dashboard API
+Video encoded from this run only: /workspace/sy-codex-notes/fix/domain-status-proof/round1-video-1793009041579/page@dc49f65ec75b165b3015f2236ee15044.webm
