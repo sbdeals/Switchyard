@@ -1,0 +1,34 @@
+{
+  "reference": {
+    "id": "fTpUy4y50HOxxZ15f6EeM->WAzrL2XUVTPm4fHdKe0JH",
+    "description": "cre-r1-api references cre-r1-db: cre-r1-db.HOST, cre-r1-db.PORT",
+    "label": "HOST, PORT",
+    "dash": "none",
+    "stroke": "rgb(45, 212, 191)",
+    "marker": "url('#1__color=#2dd4bf&height=18&type=arrowclosed&width=18')"
+  },
+  "inferred": {
+    "id": "fTpUy4y50HOxxZ15f6EeM->VDQxf411nUVbqpfHjn3y3",
+    "description": "inferred: cre-r1-api mentions cre-r1-cache in its env (heuristic)",
+    "label": null,
+    "dash": "5px, 5px",
+    "stroke": "rgb(136, 136, 160)",
+    "marker": "url('#1__color=var(--color-fg-subtle)&height=18&type=arrowclosed&width=18')"
+  },
+  "referenceTooltip": "cre-r1-api references cre-r1-db: cre-r1-db.HOST, cre-r1-db.PORT",
+  "inferredTooltip": "inferred: cre-r1-api mentions cre-r1-cache in its env (heuristic)",
+  "brokenBadge": true,
+  "noBrokenEdge": true,
+  "explicitWins": true,
+  "inferredDedupe": true,
+  "legendVisible": true,
+  "fallbackAfterReferenceRemoval": {
+    "id": "fTpUy4y50HOxxZ15f6EeM->WAzrL2XUVTPm4fHdKe0JH",
+    "description": "inferred: cre-r1-api mentions cre-r1-db in its env (heuristic)",
+    "label": null,
+    "dash": "5px, 5px",
+    "stroke": "rgb(136, 136, 160)",
+    "marker": "url('#1__color=var(--color-fg-subtle)&height=18&type=arrowclosed&width=18')"
+  },
+  "pageErrors": []
+}
