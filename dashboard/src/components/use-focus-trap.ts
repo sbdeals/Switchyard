@@ -27,7 +27,7 @@ const visible = (el: HTMLElement) => el.getClientRects().length > 0;
 
 export function useDialogFocus<T extends HTMLElement>(
   onClose: () => void,
-  { trapTab = true, preventScroll = false }: { trapTab?: boolean; preventScroll?: boolean } = {}
+  { trapTab = true, preventScroll = false, restoreFocus = true }: { trapTab?: boolean; preventScroll?: boolean; restoreFocus?: boolean } = {}
 ) {
   const nodeRef = useRef<T | null>(null);
   // The trap re-arms when the attached node changes, not on every render.
@@ -85,9 +85,9 @@ export function useDialogFocus<T extends HTMLElement>(
       document.removeEventListener("keydown", onKey, true);
       stack.splice(stack.indexOf(panel), 1);
       // No-op if the opener unmounted with the dialog.
-      opener?.focus({ preventScroll });
+      if (restoreFocus) opener?.focus({ preventScroll });
     };
-  }, [version, trapTab, preventScroll]);
+  }, [version, trapTab, preventScroll, restoreFocus]);
 
   return setPanel;
 }
