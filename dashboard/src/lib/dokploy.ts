@@ -135,8 +135,10 @@ export interface ServiceBase {
   environmentId: string;
   environmentName: string;
   dockerImage: string | null;
-  /** Raw env block ("KEY=value\n..."). */
+  /** Raw env block on the server; redacted to null in workspace page props. */
   env: string | null;
+  /** Variable names for the client picker; values remain on the server. */
+  referenceKeys?: { own: string[]; builtin: string[] };
   createdAt: string | null;
   // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
   cpuLimit: string | null;
@@ -563,6 +565,35 @@ function projectsFromTree(tree: RawProject[]): ProjectNode[] {
 
 export async function listProjects(): Promise<ProjectNode[]> {
   return projectsFromTree(await rawTree());
+}
+
+/** Check the current user's workspace before reading a service's secrets. */
+async function requireServiceOwnership(type: MountServiceType, id: string): Promise<void> {
+  if (!["application", "compose", ...ENGINES].includes(type) || !id) {
+    throw new Error("Invalid service.");
+  }
+  const tree = await rawTree();
+  const refs = collectIds(tree, (env) => {
+    if (type === "application") return (env.applications ?? []).map((a) => a.applicationId);
+    if (type === "compose") return (env.compose ?? []).map((c) => c.composeId);
+    return ((env[type] ?? []) as Record<string, string>[]).map((item) => item[idKey(type)]);
+  });
+  if (!refs.some((ref) => ref.id === id)) throw new Error("Service unavailable.");
+}
+
+/** Read env only after finding the service in the current user's workspace. */
+export async function getServiceEnvironment(type: MountServiceType, id: string): Promise<string> {
+  await requireServiceOwnership(type, id);
+  const detail = await request<{ env?: string | null }>(
+    `${type}.one?${type}Id=${encodeURIComponent(id)}`
+  );
+  return detail.env ?? "";
+}
+
+export async function getDatabasePassword(engine: Engine, id: string): Promise<string | null> {
+  if (!ENGINES.includes(engine)) throw new Error("Invalid database.");
+  await requireServiceOwnership(engine, id);
+  return (await getDetail(engine, id)).databasePassword ?? null;
 }
 
 export async function createProject(name: string): Promise<void> {
