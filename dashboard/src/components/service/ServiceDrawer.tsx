@@ -48,7 +48,7 @@ import {
   DeploymentHistory,
   SchedulesTab,
 } from "@/components/service/AppTabs";
-import { NetworkingTab } from "@/components/service/networking";
+import { AppHttpSettings, NetworkingTab } from "@/components/service/networking";
 import {
   ComposeOverviewTab,
   ComposeEditorTab,
@@ -483,7 +483,10 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : service.kind === "compose" ? (
                   <ComposeSettingsTab compose={service} onClose={onClose} />
                 ) : (
-                  <AppSettingsTab app={service} onClose={onClose} />
+                  <div className="space-y-5">
+                    <AppHttpSettings key={service.id} app={service} />
+                    <AppSettingsTab app={service} onClose={onClose} />
+                  </div>
                 ))}
             </div>
           </motion.aside>
