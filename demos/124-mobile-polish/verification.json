@@ -1,0 +1,38 @@
+[
+  {
+    "width": 375,
+    "height": 812,
+    "documentOverflow": false,
+    "drawerWidth": 375,
+    "closeHitTest": true,
+    "tabScroll": true,
+    "canvasTargets": "40px minimum"
+  },
+  {
+    "width": 414,
+    "height": 896,
+    "documentOverflow": false,
+    "drawerWidth": 414,
+    "closeHitTest": true,
+    "tabScroll": true,
+    "canvasTargets": "40px minimum"
+  },
+  {
+    "width": 768,
+    "height": 1024,
+    "documentOverflow": false,
+    "drawerWidth": 576,
+    "closeHitTest": true,
+    "tabScroll": true,
+    "canvasTargets": "40px minimum"
+  },
+  {
+    "width": 1280,
+    "height": 800,
+    "documentOverflow": false,
+    "drawerWidth": 576,
+    "closeHitTest": true,
+    "tabScroll": true,
+    "canvasTargets": "desktop unchanged"
+  }
+]

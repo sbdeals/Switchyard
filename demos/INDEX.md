@@ -94,3 +94,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#121](https://github.com/sbdeals/Switchyard/pull/121) | codex/light-theme (main) | light/dark/system theme | [121-light-theme](121-light-theme/) | read-only browser proof on :3055 | pass; 15 checks |
 | [#122](https://github.com/sbdeals/Switchyard/pull/122) | codex/a11y-pass (main) | accessibility pass | [122-a11y-pass](122-a11y-pass/) | axe + keyboard walkthrough on local stack | pass; axe 69→0 |
 | [#123](https://github.com/sbdeals/Switchyard/pull/123) | codex/app-security (main) | redirects + basic auth settings | [123-app-security](123-app-security/) | live UI + API readback on :3056 | pass; Traefik 401/200 unproven (no swarm) |
+| [#124](https://github.com/sbdeals/Switchyard/pull/124) | codex/mobile-polish (main) | mobile responsive pass | [124-mobile-polish](124-mobile-polish/) | 4-viewport live audit on :3053 | pass; 0 overflow in 116 states |
