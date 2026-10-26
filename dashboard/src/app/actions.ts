@@ -32,6 +32,7 @@ import {
   updateApplication,
   saveAppBuildType,
   saveApplicationEnvironment,
+  saveApplicationBuildArgs,
   createDomain,
   createComposeDomain,
   ensureAutoDomain,
@@ -386,6 +387,18 @@ export async function updateApplicationAction(
 
 export async function saveApplicationEnvAction(id: string, env: string): Promise<ActionResult> {
   return wrap(() => saveApplicationEnvironment(id, env));
+}
+
+export async function saveApplicationBuildArgsAction(id: string, buildArgs: string): Promise<ActionResult> {
+  try {
+    await saveApplicationBuildArgs(id, buildArgs);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    // Upstream errors may echo submitted values; never return or log them.
+    return { ok: false, error: "Could not save build arguments. Check your access and try again." };
+  }
 }
 
 /** Set an application's build strategy (Nixpacks / Dockerfile / Railpack / …). */
