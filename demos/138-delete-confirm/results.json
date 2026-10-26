@@ -1,0 +1,26 @@
+{
+  "checks": [
+    "created own project/environment/application via local Dokploy API",
+    "project impact includes loaded service/domain/volume/variable counts",
+    "Escape cancels nested dialog and restores opener focus",
+    "environment: wrong-case name disabled",
+    "environment: focus wraps both directions",
+    "service: wrong-case name disabled",
+    "service: focus wraps both directions",
+    "pending blocks duplicate submit/cancel; failure stays inline and generic",
+    "service deletion succeeds after retry",
+    "environment: wrong-case name disabled",
+    "environment: focus wraps both directions",
+    "environment: deletion succeeds",
+    "project: wrong-case name disabled",
+    "project: focus wraps both directions",
+    "project: deletion succeeds",
+    "API verifies own project and children removed",
+    "existing resource dialog opened and canceled only"
+  ],
+  "names": {
+    "projectName": "delete-confirm-project-mvp5dgaj",
+    "envName": "delete-confirm-env-mvp5dgaj",
+    "appName": "delete-confirm-app-mvp5dgaj"
+  }
+}
