@@ -36,6 +36,10 @@ export function proxy(request: NextRequest): NextResponse {
 
   if (isPublic(pathname)) return NextResponse.next();
   if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next();
+  // CLI sessions are validated against Dokploy inside this one route.
+  if (pathname === "/api/services/logs/recent" && request.headers.get("authorization")?.startsWith("Bearer ")) {
+    return NextResponse.next();
+  }
 
   // Unauthenticated. API routes and Server Actions get a 401 (they are called
   // programmatically); page navigations get a redirect to the login screen.

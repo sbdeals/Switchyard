@@ -125,6 +125,13 @@ test("explicit missing project creates only that project", async (t) => {
   client.done();
 });
 
+test("deploy reuses explicit project and application IDs", async (t) => {
+  const path = await fixture(t);
+  const client = clientFor([...startSteps(), { path: detail, value: app }]);
+  await deployDirectory(path, { service: app.applicationId, project: project.projectId, detach: true }, client, quiet);
+  client.done();
+});
+
 for (const marker of ["package.json", "requirements.txt", "pyproject.toml", "Pipfile", "go.mod"]) {
   test(`uses Nixpacks when ${marker} exists without a Dockerfile`, async (t) => {
     const path = await fixture(t, marker);

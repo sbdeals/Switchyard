@@ -88,7 +88,7 @@ version → the container is recreated (that's also the upgrade path:
 | `switchyard config list \| get <k> \| set <k> <v>` | Read/change persisted settings; `set` recreates the container |
 | `switchyard local-ingress up \| down` | Opt-in demo Traefik on alternate ports so domains route locally over **HTTP** (see below) |
 | `switchyard doctor` | Read-only prerequisite + health check |
-| `switchyard logs [switchyard\|dokploy] [-f]` | Tail the dashboard container or the Dokploy service logs |
+| `switchyard logs [target] [--service <name\|id>] [--project <name\|id>]` | Read service logs, or stack logs with positional `switchyard` / `dokploy`; add `--follow` |
 | `switchyard open` | Open the dashboard in a browser |
 | `switchyard claude [args...]` | Launch Claude Code (installs it first if needed) |
 
@@ -124,8 +124,8 @@ switchyard deploy . --service web --project demos --detach
 | Argument / flag | Meaning |
 |---|---|
 | `[path]` | Directory to upload (default: the current directory) |
-| `--service <name>` | Reuse or create an application with this exact name (default: directory name) |
-| `--project <name>` | Reuse or create a project with this exact name |
+| `--service <name\|id>` | Reuse an application by ID or exact name, or create that name (default: directory name) |
+| `--project <name\|id>` | Reuse a project by ID or exact name, or create that name |
 | `--detach` | Return once the deployment is queued, without waiting for the result |
 
 Without `--project`, the CLI uses the only existing project, or creates
@@ -159,6 +159,59 @@ produce an error before deployment. By default it polls the new deployment
 for up to 15 minutes and exits with an error on failure or timeout. It prints
 an existing application URL when available; attach a domain in the dashboard
 if the application has none. Deploy does not create domains.
+
+### Read service logs
+
+```bash
+switchyard logs
+switchyard logs web --project <project-id>
+switchyard logs --service web --project <project-id> --lines 5
+switchyard logs --service <service-id> --project <project-id> --since 15m --json
+switchyard logs --service web --project <project-id> --follow
+```
+
+Logs shares deploy's selection rules: the current directory name is the default
+service, the only project is selected unless `--project` is supplied, and the
+production (or only) environment is used. Names must be unambiguous; IDs take
+precedence over names. Logs never creates a missing service or project.
+Applications, compose services and managed databases on the local Dokploy
+engine are supported. Remote-server logs are not yet supported.
+
+| Argument / flag | Meaning |
+|---|---|
+| `[target]` | Existing service name or ID; `switchyard` and `dokploy` are reserved for infrastructure (see below) |
+| `--service <name\|id>` | Existing service name or ID (default: current directory name) |
+| `--project <name\|id>` | Existing project name or ID (default: the only project) |
+| `--lines <N>` | Recent lines per request, from 1 to 1000 (default: 200) |
+| `--since <duration>` | Restrict each request to the last `15m`, `1h` or `6h` |
+| `-f`, `--follow` | Poll until Ctrl+C; exit successfully when interrupted |
+| `--json` | NDJSON records with `id`, `ts` (Docker timestamp), and `text` |
+
+A positional target and `--service` cannot be combined. To read a service
+literally named `switchyard` or `dokploy`, use `--service switchyard` or
+`--service dokploy`.
+
+The CLI signs in with the same saved local credentials as deploy and reads
+through the dashboard HTTP API. The dashboard must include the recent-logs
+route; it checks the session's project access on every request. The CLI does
+not need access to the Docker socket. Plain output includes timestamps; JSON
+output contains only log records, with warnings and errors on stderr.
+
+Follow de-duplicates overlapping polls, preserving repeated messages with
+different timestamps. It polls every second while receiving new lines and
+backs off to ten seconds while idle or during transient failures; after five
+failed retries it exits with an error. Each response is capped at 256 KiB and
+20 containers. Bursts larger than the requested window can be missed between
+polls; this is recent runtime output, not an archival log export or build log.
+Identical messages with the exact same Docker timestamp can be indistinguishable
+when the requested window moves across them.
+
+For infrastructure diagnostics, `switchyard logs switchyard` reads the last 200
+lines of the dashboard container with `docker logs`; `switchyard logs dokploy`
+uses `docker service logs` for the Dokploy service with the same tail. Add `-f`
+or `--follow` to stream either target. These commands need Docker access on the
+platform host and work without dashboard authentication. `--project`, `--lines`,
+`--since` and `--json` apply only to service logs.
 
 ## Configuration
 

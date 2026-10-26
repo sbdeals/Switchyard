@@ -11,9 +11,9 @@ function headers(base: string): Record<string, string> {
   return { "Content-Type": "application/json", Origin: base };
 }
 
-export async function httpReady(base: string): Promise<boolean> {
+export async function httpReady(base: string, signal?: AbortSignal): Promise<boolean> {
   try {
-    const res = await fetch(base, { redirect: "manual", signal: AbortSignal.timeout(5000) });
+    const res = await fetch(base, { redirect: "manual", signal: requestSignal(5000, signal) });
     return res.status >= 200 && res.status < 400;
   } catch {
     return false;
@@ -62,13 +62,14 @@ export async function signInCookie(
   base: string,
   email: string,
   password: string,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   try {
     const res = await fetch(`${base}/api/auth/sign-in/email`, {
       method: "POST",
       headers: headers(base),
       body: JSON.stringify({ email, password }),
-      signal: AbortSignal.timeout(15000),
+      signal: requestSignal(15000, signal),
     });
     if (!res.ok) return null;
     const setCookie = res.headers.get("set-cookie");
@@ -88,13 +89,13 @@ export async function apiRequest<T = unknown>(
   base: string,
   cookie: string,
   path: string,
-  init: { method?: "GET" | "POST"; body?: unknown } = {},
+  init: { method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
   const res = await fetch(`${base}/api/${path}`, {
     method: init.method ?? "GET",
     headers: { ...headers(base), Cookie: cookie },
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-    signal: AbortSignal.timeout(30000),
+    signal: requestSignal(30000, init.signal),
   });
   if (!res.ok) {
     const body = (await res.text()).slice(0, 200);
@@ -102,6 +103,11 @@ export async function apiRequest<T = unknown>(
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : null) as T;
+}
+
+function requestSignal(timeoutMs: number, signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
 /**

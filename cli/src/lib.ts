@@ -3,6 +3,9 @@
  * (tests import from dist/lib.js so they run against the built artifact).
  */
 export { connectDeployClient, createDeployCommand, deployDirectory } from "./commands/deploy.js";
+export { createLogsClient, createLogsCommand, formatLogLine, infrastructureLogsCommand, LogDeduplicator, LogsRequestError, runServiceLogs, withLogsInterrupt } from "./commands/logs.js";
+export { connectPlatformClient } from "./core/platform-client.js";
+export { findService, resolveService, selectEnvironment, selectProject } from "./core/service-selection.js";
 export { DEFAULT_DEPLOY_MAX_BYTES, packDirectory } from "./core/deploy-pack.js";
 export { uploadApplication } from "./core/dokploy-api.js";
 export {
