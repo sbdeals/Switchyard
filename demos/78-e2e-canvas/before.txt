@@ -1,0 +1,4 @@
+nodes: 13; compose-5ntm transform before drag: translate(0px, 624px)
+after drag: translate(564.693px, 971.503px)
+after reload: translate(0px, 624px) -> RESET/MOVED
+at 390x844: 0/13 nodes intersect the viewport
