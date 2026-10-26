@@ -1,0 +1,19 @@
+PASS managed Postgres named data volume
+PASS short syntax: named, anonymous, flags, relative/absolute/Windows binds
+PASS long syntax: named, anonymous, external alias, bind, tmpfs, other mount types
+PASS one-letter volume names remain named; Windows drives keep their colons
+PASS YAML anchors, merges, comments, flow syntax, and separate compose services
+PASS interpolation stays literal, including nested colon defaults
+PASS empty compose mounts and unused top-level declarations
+PASS missing, invalid, multi-document YAML and unsupported shapes report errors
+PASS invalid entries preserve valid rows and mark incomplete results
+PASS include, extends, and volumes_from do not claim a complete empty result
+PASS managed Postgres renders data/path/persistence/compose label and read-only row
+PASS anonymous and bind mounts render distinct badges without edit/delete buttons
+PASS empty state appears only after a successful empty mounts load and compose parse
+PASS compose rows remain visible during Dokploy mounts loading or failure
+PASS Dokploy mounts keep their existing edit/delete controls beside compose rows
+PASS existing add/edit form rendering remains available
+PASS native database mounts remain visible; unreported native storage is not inferred
+PASS 17 verification cases; 0 server actions; no live stack access
+Managed Postgres: data -> /var/lib/postgresql/data | Persistent named volume | Declared in compose | no empty state

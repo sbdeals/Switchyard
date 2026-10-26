@@ -1,0 +1,29 @@
+--- compose-5ntm → Volumes
+Persistent storage for this service. Redeploy the service for mount changes to take effect.
+
+Persistent named volume
+/var/lib/postgresql/data
+data
+
+Declared in compose · db
+
+Anonymous volume
+/tmp/cache
+Anonymous volume
+
+Declared in compose · db
+
+Bind mount
+/usr/share/nginx/html
+./site
+
+Declared in compose · web
+
+Add mount
+--- postgres-d4rm → Volumes
+Persistent storage for this service. Redeploy the service for mount changes to take effect.
+
+Volume
+/var/lib/postgresql/18/docker
+postgres-input-haptic-alarm-i2oya2-data
+Add mount

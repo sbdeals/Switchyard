@@ -1,0 +1,13 @@
+--- compose-5ntm → Volumes
+Persistent storage for this service. Redeploy the service for mount changes to take effect.
+
+No mounts attached.
+
+Add mount
+--- postgres-d4rm → Volumes
+Persistent storage for this service. Redeploy the service for mount changes to take effect.
+
+Volume
+/var/lib/postgresql/18/docker
+postgres-input-haptic-alarm-i2oya2-data
+Add mount
