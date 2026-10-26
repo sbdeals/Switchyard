@@ -37,6 +37,7 @@ import { BackupsTab } from "@/components/service/BackupsTab";
 import { VolumesTab } from "@/components/service/VolumesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
+import { DeploymentLogs } from "@/components/service/DeploymentLogs";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
 import {
@@ -344,17 +345,24 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
+export function ServiceDrawer({ service, deploymentId, onClose }: {
+  service: Service | null;
+  deploymentId?: string | null;
+  onClose: () => void;
+}) {
   const [tab, setTab] = useState<TabId>("overview");
+  const [showDeploymentLogs, setShowDeploymentLogs] = useState(Boolean(deploymentId));
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
-  // Reset to Overview when a different service is opened (adjust state during
+  // Reset when a different service or deployment is opened (adjust state during
   // render — the React-recommended alternative to a resetting effect).
-  const [shownId, setShownId] = useState<string | null>(null);
-  if (service && service.id !== shownId) {
-    setShownId(service.id);
-    setTab("overview");
+  const [shownTarget, setShownTarget] = useState<string | null>(null);
+  const target = service ? `${service.id}:${deploymentId ?? ""}` : null;
+  if (target !== shownTarget) {
+    setShownTarget(target);
+    setTab(deploymentId ? "logs" : "overview");
+    setShowDeploymentLogs(Boolean(deploymentId));
   }
   const baseTabs =
     service?.kind === "application"
@@ -474,7 +482,14 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
               )}
               {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
-              {tab === "logs" && <LogsTab key={service.appName} appName={service.appName} active />}
+              {tab === "logs" && (deploymentId && showDeploymentLogs ? (
+                <DeploymentLogs
+                  key={deploymentId}
+                  service={service}
+                  deploymentId={deploymentId}
+                  onRuntimeLogs={() => setShowDeploymentLogs(false)}
+                />
+              ) : <LogsTab key={service.appName} appName={service.appName} active />)}
               {tab === "console" && <ConsoleTab key={service.appName} appName={service.appName} />}
               {tab === "backups" && service.kind === "database" && <BackupsTab db={service} />}
               {tab === "settings" &&

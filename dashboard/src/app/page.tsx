@@ -1,9 +1,12 @@
 import { unstable_rethrow } from "next/navigation";
+import { cookies } from "next/headers";
+import { createHash } from "node:crypto";
 
 import { loadWorkspace, inferEdges } from "@/lib/dokploy";
 import { ensureCollector } from "@/lib/collector";
 import { Workspace } from "@/components/Workspace";
 import { LogoutButton } from "@/components/LogoutButton";
+import { openSession, SESSION_COOKIE } from "@/lib/session";
 
 // Always fetch fresh state from Dokploy.
 export const dynamic = "force-dynamic";
@@ -25,6 +28,8 @@ export default async function Page() {
   }
 
   if (result) {
+    const session = openSession((await cookies()).get(SESSION_COOKIE)?.value);
+    const notificationScope = createHash("sha256").update(session?.email ?? "").digest("hex");
     return (
       <>
         <LogoutButton />
@@ -32,6 +37,7 @@ export default async function Page() {
           services={result.services}
           projects={result.projects}
           edges={inferEdges(result.services)}
+          notificationScope={notificationScope}
         />
       </>
     );

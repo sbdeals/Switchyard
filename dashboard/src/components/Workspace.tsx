@@ -11,30 +11,49 @@ import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { DeployNotifications } from "@/components/DeployNotifications";
+import { useWorkspacePolling } from "@/components/use-workspace-polling";
+import type { DeploymentEvent } from "@/lib/deploy-notifications";
 import { cn } from "@/lib/utils";
 
 type View = "canvas" | "grid";
 
 export function Workspace({
-  services,
-  projects,
-  edges,
+  services: initialServices,
+  projects: initialProjects,
+  edges: initialEdges,
+  notificationScope,
 }: {
   services: Service[];
   projects: ProjectNode[];
   edges: ServiceEdge[];
+  notificationScope: string;
 }) {
   const [view, setView] = useState<View>("canvas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [deployment, setDeployment] = useState<DeploymentEvent | null>(null);
   const router = useRouter();
+  const { services, projects, edges } = useWorkspacePolling({
+    services: initialServices,
+    projects: initialProjects,
+    edges: initialEdges,
+  }, projectId);
+
+  const currentProject = projects.some((p) => p.projectId === projectId) ? projectId : null;
+  const visibleServices = currentProject ? services.filter((s) => s.projectId === currentProject) : services;
+  const openService = (id: string) => {
+    setDeployment(null);
+    setSelectedId(id);
+  };
 
   // Re-resolve the selected service from fresh props so the drawer updates.
   const selected = services.find((s) => s.id === selectedId) ?? null;
 
   // Open the new service's drawer and pull fresh state in.
   const onDeployed = (id: string) => {
-    setSelectedId(id);
+    openService(id);
     router.refresh();
   };
 
@@ -54,6 +73,22 @@ export function Workspace({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <select
+            aria-label="Current project"
+            value={currentProject ?? ""}
+            onChange={(e) => { setProjectId(e.target.value || null); setSelectedId(null); }}
+            className="max-w-40 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-2 text-xs"
+          >
+            <option value="">All projects</option>
+            {projects.map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}
+          </select>
+          <DeployNotifications
+            key={notificationScope}
+            services={services}
+            projectId={currentProject}
+            storageKey={`switchyard:deploy-activity:v1:${notificationScope}`}
+            onViewLogs={(event) => { setDeployment(event); setSelectedId(event.serviceId); }}
+          />
           <div className="flex rounded-lg border border-[var(--color-border-strong)] p-0.5">
             <ViewToggle active={view === "canvas"} onClick={() => setView("canvas")}>
               <Network className="size-3.5" /> Canvas
@@ -78,21 +113,21 @@ export function Workspace({
         </div>
       </header>
 
-      {services.length === 0 ? (
+      {visibleServices.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
+        <FlowCanvas services={visibleServices} edges={edges.filter((e) => visibleServices.some((s) => s.id === e.source) && visibleServices.some((s) => s.id === e.target))} onSelect={(s) => openService(s.id)} />
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
-            {services.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => setSelectedId(s.id)} />
+            {visibleServices.map((s) => (
+              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => openService(s.id)} />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
 
-      <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
+      <ServiceDrawer key={`${selectedId}:${deployment?.deploymentId ?? "overview"}`} service={selected} deploymentId={deployment?.deploymentId} onClose={() => setSelectedId(null)} />
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
       <AgentPanel />
     </div>

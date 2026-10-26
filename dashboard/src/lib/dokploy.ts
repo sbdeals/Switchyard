@@ -153,6 +153,8 @@ export interface AppDeployment {
   status: string;
   title: string;
   createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
   /**
    * Non-null when this deployment produced a restorable image snapshot
    * (Dokploy only records these when the app deploys to a registry). Feeds
@@ -777,6 +779,8 @@ interface RawDeployment {
   status?: string;
   title?: string;
   createdAt?: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
   rollbackId?: string | null;
 }
 
@@ -800,8 +804,17 @@ function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment
     status: dp.status ?? "idle",
     title: dp.title ?? "Deployment",
     createdAt: dp.createdAt ?? "",
+    startedAt: dp.startedAt ?? null,
+    finishedAt: dp.finishedAt ?? null,
     rollbackId: dp.rollbackId ?? null,
   }));
+}
+
+/** Exact build/deploy log, authorized by Dokploy with the current user's session. */
+export async function readDeploymentLogs(deploymentId: string): Promise<string> {
+  return request<string>(
+    `deployment.readLogs?deploymentId=${encodeURIComponent(deploymentId)}&tail=10000`
+  );
 }
 
 /** List every application in the tree, enriched with detail. */
