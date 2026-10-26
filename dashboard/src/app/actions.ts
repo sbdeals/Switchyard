@@ -99,6 +99,7 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { parseEnvironment, validateCron, validateMount, validatePort } from "@/lib/validation";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -215,6 +216,8 @@ export async function saveEnvironmentAction(
   id: string,
   env: string
 ): Promise<ActionResult> {
+  const { error } = parseEnvironment(env);
+  if (error) return { ok: false, error };
   return wrap(() => saveEnvironment(engine, id, env));
 }
 
@@ -385,6 +388,8 @@ export async function updateApplicationAction(
 }
 
 export async function saveApplicationEnvAction(id: string, env: string): Promise<ActionResult> {
+  const { error } = parseEnvironment(env);
+  if (error) return { ok: false, error };
   return wrap(() => saveApplicationEnvironment(id, env));
 }
 
@@ -423,6 +428,8 @@ export async function createDomainAction(
   applicationId: string,
   input: DomainInput
 ): Promise<ActionResult> {
+  const error = validatePort(input?.port, "Container port");
+  if (error) return { ok: false, error };
   return wrap(() => createDomain(applicationId, { ...input, host: input.host.trim() }));
 }
 
@@ -430,6 +437,8 @@ export async function updateDomainAction(
   domainId: string,
   input: DomainInput
 ): Promise<ActionResult> {
+  const error = validatePort(input?.port, "Container port");
+  if (error) return { ok: false, error };
   return wrap(() => updateDomain(domainId, { ...input, host: input.host.trim() }));
 }
 
@@ -448,6 +457,8 @@ export async function generateDomainAction(
   serviceName: string,
   port: number
 ): Promise<GenerateUrlResult> {
+  const error = validatePort(port, "Container port");
+  if (error) return { ok: false, error };
   return wrapHost(async () => {
     const g = await generateHostFor(serviceName);
     await createDomain(applicationId, {
@@ -468,6 +479,8 @@ export async function createComposeDomainAction(
   host: string,
   port: number
 ): Promise<ActionResult> {
+  const error = validatePort(port);
+  if (error) return { ok: false, error };
   return wrap(() => createComposeDomain(composeId, serviceName.trim(), host.trim(), port));
 }
 
@@ -482,6 +495,8 @@ export async function generateComposeDomainAction(
   labelName: string,
   port: number
 ): Promise<GenerateUrlResult> {
+  const error = validatePort(port);
+  if (error) return { ok: false, error };
   return wrapHost(async () => {
     const g = await generateHostFor(labelName || serviceName);
     await createComposeDomain(composeId, serviceName.trim(), g.host, port, {
@@ -520,6 +535,8 @@ export async function createPortAction(
   protocol: "tcp" | "udp",
   publishMode: "host" | "ingress"
 ): Promise<ActionResult> {
+  const error = validatePort(publishedPort, "Published port") || validatePort(targetPort, "Target port");
+  if (error) return { ok: false, error };
   return wrap(() => createPort(applicationId, { publishedPort, targetPort, protocol, publishMode }));
 }
 
@@ -599,14 +616,18 @@ export async function listSchedulesAction(applicationId: string): Promise<Schedu
 }
 
 export async function createScheduleAction(input: CreateScheduleInput): Promise<ActionResult> {
-  return wrap(() => createSchedule(input));
+  const error = validateCron(input?.cronExpression);
+  if (error) return { ok: false, error };
+  return wrap(() => createSchedule({ ...input, cronExpression: input.cronExpression.trim() }));
 }
 
 export async function updateScheduleAction(
   scheduleId: string,
   input: UpdateScheduleInput
 ): Promise<ActionResult> {
-  return wrap(() => updateSchedule(scheduleId, input));
+  const error = validateCron(input?.cronExpression);
+  if (error) return { ok: false, error };
+  return wrap(() => updateSchedule(scheduleId, { ...input, cronExpression: input.cronExpression.trim() }));
 }
 
 export async function deleteScheduleAction(scheduleId: string): Promise<ActionResult> {
@@ -645,6 +666,8 @@ export async function saveComposeFileAction(
 }
 
 export async function saveComposeEnvAction(id: string, env: string): Promise<ActionResult> {
+  const { error } = parseEnvironment(env);
+  if (error) return { ok: false, error };
   return wrap(() => saveComposeEnvironment(id, env));
 }
 
@@ -790,6 +813,8 @@ export async function listMountsAction(
 }
 
 export async function createMountAction(input: CreateMountInput): Promise<ActionResult> {
+  const error = validateMount({ ...input, mountPath: input?.mountPath ?? "" });
+  if (error) return { ok: false, error };
   return wrap(() => createMount(input));
 }
 
@@ -797,6 +822,8 @@ export async function updateMountAction(
   mountId: string,
   patch: MountPatch
 ): Promise<ActionResult> {
+  const error = validateMount(patch);
+  if (error) return { ok: false, error };
   return wrap(() => updateMount(mountId, patch));
 }
 

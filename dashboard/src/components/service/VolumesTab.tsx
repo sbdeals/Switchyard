@@ -21,6 +21,7 @@ import {
 } from "@/app/actions";
 import { inputCls, Field } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { validateMount } from "@/lib/validation";
 
 const TYPE_META: Record<MountType, { label: string; icon: React.ReactNode }> = {
   volume: { label: "Volume", icon: <VolumeIcon className="size-3.5" /> },
@@ -240,6 +241,11 @@ function MountForm({
       filePath: type === "file" ? filePath.trim() : undefined,
       content: type === "file" ? content : undefined,
     };
+    const validationError = validateMount(patch);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     start(async () => {
       const res = existing
         ? await updateMountAction(existing.mountId, patch)

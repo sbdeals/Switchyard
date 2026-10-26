@@ -13,6 +13,7 @@
 import { useState, useTransition } from "react";
 import { Globe, ArrowRight, Plug, Lock, Plus, Loader2 } from "lucide-react";
 import type { Application } from "@/lib/dokploy";
+import { validatePort } from "@/lib/validation";
 import { DomainsTab } from "@/components/service/AppTabs";
 import { inputCls, Field, RemoveBtn } from "@/components/service/primitives";
 import {
@@ -195,10 +196,11 @@ function PortsSection({ app }: { app: Application }) {
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   function add() {
+    const validationError = validatePort(published, "Published port") || validatePort(target, "Target port");
+    setError(validationError);
+    if (validationError) return;
     const p = Number(published);
     const t = Number(target);
-    if (!p || !t) return;
-    setError(null);
     start(async () => {
       // publishMode defaults to "host" (Dokploy's own default) — the common
       // case of exposing a port on the node.
@@ -252,7 +254,8 @@ function PortsSection({ app }: { app: Application }) {
           <Field label="Published">
             <input
               value={published}
-              onChange={(e) => setPublished(e.target.value.replace(/[^0-9]/g, ""))}
+              onChange={(e) => setPublished(e.target.value)}
+              inputMode="numeric"
               placeholder="8080"
               className={inputCls}
             />
@@ -262,7 +265,8 @@ function PortsSection({ app }: { app: Application }) {
           <Field label="Target">
             <input
               value={target}
-              onChange={(e) => setTarget(e.target.value.replace(/[^0-9]/g, ""))}
+              onChange={(e) => setTarget(e.target.value)}
+              inputMode="numeric"
               placeholder="80"
               className={inputCls}
             />

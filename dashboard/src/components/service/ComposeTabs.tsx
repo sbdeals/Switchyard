@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { validatePort } from "@/lib/validation";
 import {
   composeLifecycleAction,
   saveComposeFileAction,
@@ -120,14 +121,16 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
 
   function add() {
     if (!host.trim() || !serviceName.trim()) return;
-    setError(null);
+    const validationError = validatePort(port);
+    setError(validationError);
     setGenerated(null);
+    if (validationError) return;
     start(async () => {
       const res = await createComposeDomainAction(
         compose.id,
         serviceName,
         host,
-        Number(port) || 80
+        Number(port)
       );
       if (res.ok) setHost("");
       else setError(res.error);
@@ -137,14 +140,16 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
   // Attach a random routable host to the selected service, on the current port.
   function generate() {
     if (!serviceName.trim()) return;
-    setError(null);
+    const validationError = validatePort(port);
+    setError(validationError);
     setGenerated(null);
+    if (validationError) return;
     start(async () => {
       const res = await generateComposeDomainAction(
         compose.id,
         serviceName,
         serviceName,
-        Number(port) || 80
+        Number(port)
       );
       if (res.ok) setGenerated(res.host);
       else setError(res.error);
@@ -213,7 +218,8 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
           <Field label="Port">
             <input
               value={port}
-              onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ""))}
+              onChange={(e) => setPort(e.target.value)}
+              inputMode="numeric"
               className={inputCls}
             />
           </Field>
