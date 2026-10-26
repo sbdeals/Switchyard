@@ -20,7 +20,6 @@ import {
 import type {
   Application,
   AppDomain,
-  ApplicationPatch,
   BuildType,
   BuildTypePatch,
   CertificateType,
@@ -32,14 +31,6 @@ import type {
 } from "@/lib/dokploy";
 import {
   appLifecycleAction,
-  updateApplicationAction,
-  saveAppBuildTypeAction,
-  setAppDockerSourceAction,
-  createDomainAction,
-  generateDomainAction,
-  updateDomainAction,
-  deleteDomainAction,
-  updateGitDeployAction,
   listSchedulesAction,
   createScheduleAction,
   updateScheduleAction,
@@ -58,8 +49,9 @@ import {
   PrivateNetwork,
   GenerateUrlBtn,
   useLifecycle,
-  useSavedFlash,
 } from "@/components/service/primitives";
+import { generateDomainPreviewAction } from "@/app/staged-actions";
+import { useStagedForm, useStagedState, useStaging } from "@/components/service/StagedChanges";
 import { DeploymentHistory } from "@/components/service/DeployActivity";
 import { isStopped } from "@/lib/service-meta";
 import { cn } from "@/lib/utils";
@@ -187,53 +179,41 @@ function toInput(d: AppDomain): DomainInput {
 /** One attached domain: display row that expands into an inline editor. */
 export function DomainRow({ d, composeId }: { d: AppDomain; composeId?: string }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<DomainInput>(() => toInput(d));
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useStagedState<DomainInput>(`domain:${d.domainId}:input`, toInput(d));
+  const [removed, setRemoved] = useStagedState(`domain:${d.domainId}:removed`, false);
+  const { pending } = useStaging();
+  const error = !removed ? domainError(draft) : undefined;
+  useStagedForm({
+    id: `domain:${d.domainId}`,
+    action: removed ? "deleteDomainAction" : "updateDomainAction",
+    args: removed ? [d.domainId, composeId] : [d.domainId, draft, composeId],
+    before: removed ? { Domain: d.host } : domainDetails(toInput(d)),
+    after: removed ? { Domain: "(removed)" } : domainDetails(draft),
+    error,
+  });
 
-  function save() {
-    if (!draft.host.trim()) return;
-    setError(null);
-    start(async () => {
-      const res = await updateDomainAction(d.domainId, draft, composeId);
-      if (res.ok) setEditing(false);
-      else setError(res.error);
-    });
-  }
-
-  function remove() {
-    if (!confirm(`Remove domain "${d.host}"?`)) return;
-    setError(null);
-    start(async () => {
-      const res = await deleteDomainAction(d.domainId, composeId);
-      if (!res.ok) setError(res.error);
-    });
-  }
-
-  if (editing) {
+  if (editing && !removed) {
     return (
       <div className="space-y-3 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-3">
         <DomainFields value={draft} onChange={(patch) => setDraft((v) => ({ ...v, ...patch }))} />
-        {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
+        <StagedHint error={error} />
         <div className="flex items-center justify-end gap-2">
           <button
             onClick={() => {
               setDraft(toInput(d));
               setEditing(false);
-              setError(null);
             }}
             disabled={pending}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
           >
-            <X className="size-3.5" /> Cancel
+            <X className="size-3.5" /> Revert
           </button>
           <button
-            onClick={save}
-            disabled={pending || !draft.host.trim()}
+            onClick={() => setEditing(false)}
+            disabled={pending}
             className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
           >
-            {pending && <Loader2 className="size-4 animate-spin" />}
-            Save
+            Done
           </button>
         </div>
       </div>
@@ -249,38 +229,52 @@ export function DomainRow({ d, composeId }: { d: AppDomain; composeId?: string }
         rel="noreferrer"
         className="flex min-w-0 flex-1 items-center gap-1.5 truncate hover:underline"
       >
-        <span className="truncate">{d.host}</span>
-        {d.port && <span className="text-xs text-[var(--color-fg-subtle)]">:{d.port}</span>}
+        <span className={cn("truncate", removed && "line-through")}>{draft.host}</span>
+        {draft.port && <span className="text-xs text-[var(--color-fg-subtle)]">:{draft.port}</span>}
         <ExternalLink className="size-3 shrink-0 text-[var(--color-fg-subtle)]" />
       </a>
-      <span className="shrink-0 rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)]">
-        {d.certificateType === "letsencrypt" ? "LE" : d.https ? "HTTPS" : "HTTP"}
-      </span>
-      <button
-        onClick={() => {
-          setDraft(toInput(d));
-          setEditing(true);
-        }}
-        disabled={pending}
-        className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
-        title="Edit domain"
-        aria-label="Edit domain"
-        aria-expanded={editing}
-      >
-        <Pencil className="size-3.5" />
-      </button>
-      <button
-        onClick={remove}
-        disabled={pending}
-        className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
-        title="Remove domain"
-        aria-label="Remove domain"
-      >
-        {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-      </button>
+      {removed ? (
+        <button onClick={() => setRemoved(false)} disabled={pending} className="text-xs text-[var(--color-brand)]">
+          Removal staged · Undo
+        </button>
+      ) : (
+        <>
+          <span className="shrink-0 rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)]">
+            {draft.certificateType === "letsencrypt" ? "LE" : draft.https ? "HTTPS" : "HTTP"}
+          </span>
+          <button
+            onClick={() => setEditing(true)}
+            disabled={pending}
+            className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+            title="Edit domain"
+            aria-label="Edit domain"
+            aria-expanded={editing}
+          >
+            <Pencil className="size-3.5" />
+          </button>
+          <button
+            onClick={() => setRemoved(true)}
+            disabled={pending}
+            className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
+            title="Stage domain removal"
+            aria-label="Stage domain removal"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </>
+      )}
       {error && <span role="alert" className="text-xs text-[var(--color-danger)]">{error}</span>}
     </div>
   );
+}
+
+function domainError(domain: DomainInput): string | undefined {
+  if (!domain.host.trim()) return "Host is required.";
+  if (!Number.isInteger(domain.port) || domain.port < 1 || domain.port > 65535) return "Container port must be between 1 and 65535.";
+}
+
+function domainDetails(domain: DomainInput): Record<string, unknown> {
+  return { "Domain host": domain.host.trim(), "Container port": domain.port, HTTPS: domain.https, Certificate: domain.certificateType, "Domain path": domain.path ?? "/" };
 }
 
 const NEW_DOMAIN: DomainInput = {
@@ -292,29 +286,35 @@ const NEW_DOMAIN: DomainInput = {
 };
 
 export function DomainsTab({ app }: { app: Application }) {
-  const [draft, setDraft] = useState<DomainInput>(NEW_DOMAIN);
-  const [pending, start] = useTransition();
+  const [draft, setDraft] = useStagedState<DomainInput>("domain:new", NEW_DOMAIN);
+  const [editingId, setEditingId] = useStagedState<string | null>("domain:new:editing", null);
+  const [generating, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [generated, setGenerated] = useState<string | null>(null);
+  const { stage, discard, operations, pending } = useStaging();
+  const additions = operations.filter((operation) => operation.action === "createDomainAction");
 
-  function add() {
-    if (!draft.host.trim()) return;
-    setError(null);
-    setGenerated(null);
-    start(async () => {
-      const res = await createDomainAction(app.id, draft);
-      if (res.ok) setDraft(NEW_DOMAIN);
-      else setError(res.error);
+  function stageDomain(domain: DomainInput) {
+    const issue = domainError(domain);
+    if (issue) {
+      setError(issue);
+      return;
+    }
+    stage({
+      id: editingId ?? `domain:add:${crypto.randomUUID()}`,
+      action: "createDomainAction",
+      args: [app.id, domain],
+      changes: [{ field: "Domain", before: "", after: `${domain.host.trim()}:${domain.port}` }],
     });
+    setDraft(NEW_DOMAIN);
+    setEditingId(null);
+    setError(null);
   }
 
-  // Attach a random routable host with no typing, on the form's current port.
   function generate() {
     setError(null);
-    setGenerated(null);
     start(async () => {
-      const res = await generateDomainAction(app.id, app.appName, draft.port);
-      if (res.ok) setGenerated(res.host);
+      const res = await generateDomainPreviewAction(app.appName);
+      if (res.ok) stageDomain({ ...draft, host: res.host, https: res.https, certificateType: res.certificateType });
       else setError(res.error);
     });
   }
@@ -324,42 +324,55 @@ export function DomainsTab({ app }: { app: Application }) {
       <p className="text-xs text-[var(--color-fg-muted)]">
         Attach a domain and point its DNS at this server. Let&apos;s Encrypt needs the host to
         answer on ports 80/443 — for local/no-ingress setups choose certificate &ldquo;None&rdquo;
-        and untick HTTPS.
+        and untick HTTPS. Domain changes are staged until Deploy.
       </p>
 
       {app.domains.length > 0 ? (
         <div className="space-y-2">
-          {app.domains.map((d) => (
-            <DomainRow key={d.domainId} d={d} />
-          ))}
+          {app.domains.map((d) => <DomainRow key={d.domainId} d={d} />)}
         </div>
       ) : (
         <p className="text-xs text-[var(--color-fg-subtle)]">No domains attached.</p>
       )}
+      {additions.map((operation) => {
+        const domain = operation.args[1] as DomainInput;
+        return (
+          <div key={operation.id} className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs">
+            <Globe className="size-3.5 text-[var(--color-brand)]" />
+            <span className="min-w-0 flex-1 truncate">{domain.host}:{domain.port} · staged</span>
+            <button
+              aria-label={`Edit staged domain ${domain.host}`}
+              onClick={() => { setDraft(domain); setEditingId(operation.id); }}
+              disabled={pending}
+              className="text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+            ><Pencil className="size-3.5" /></button>
+            <button
+              aria-label={`Discard staged domain ${domain.host}`}
+              onClick={() => { discard(operation.id); if (editingId === operation.id) { setDraft(NEW_DOMAIN); setEditingId(null); } }}
+              disabled={pending}
+              className="text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
+            ><X className="size-3.5" /></button>
+          </div>
+        );
+      })}
 
       <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-3">
-        <div className="text-xs font-medium text-[var(--color-fg-muted)]">Add a domain</div>
+        <div className="text-xs font-medium text-[var(--color-fg-muted)]">{editingId ? "Edit staged domain" : "Add a domain"}</div>
         <DomainFields value={draft} onChange={(patch) => setDraft((v) => ({ ...v, ...patch }))} />
         <div className="flex items-center justify-between gap-2">
-          <GenerateUrlBtn pending={pending} onClick={generate} />
+          <GenerateUrlBtn pending={pending || generating} onClick={generate} />
           <button
-            onClick={add}
-            disabled={pending || !draft.host.trim()}
+            onClick={() => stageDomain(draft)}
+            disabled={pending || generating || !draft.host.trim()}
             className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
           >
-            {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-            Add
+            <Plus className="size-4" /> {editingId ? "Update" : "Add"}
           </button>
         </div>
         <p className="text-[10px] text-[var(--color-fg-subtle)]">
-          Generate URL attaches a random host on port {draft.port} — no typing needed.
+          Generate URL stages a random host on port {draft.port}. Deploy to attach it.
         </p>
       </div>
-      {generated && (
-        <p role="status" className="text-xs text-[var(--color-ok)]">
-          Attached {generated} — it appears in the list above.
-        </p>
-      )}
       {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );
@@ -379,33 +392,17 @@ export function DeploymentsTab({ app, openId }: { app: Application; openId?: str
  * webhook to wire into a Git host, plus branch / watch-paths / auto-deploy.
  */
 function AutoDeployPanel({ app }: { app: Application }) {
-  const [branch, setBranch] = useState(app.branch ?? "main");
-  const [autoDeploy, setAutoDeploy] = useState(app.autoDeploy);
-  const [watch, setWatch] = useState(app.watchPaths.join("\n"));
-  const [saving, start] = useTransition();
-  const [saved, flashSaved] = useSavedFlash();
-  const [error, setError] = useState<string | null>(null);
-
+  const [branch, setBranch] = useStagedState("git:branch", app.branch ?? "main");
+  const [autoDeploy, setAutoDeploy] = useStagedState("git:autoDeploy", app.autoDeploy);
+  const [watch, setWatch] = useStagedState("git:watch", app.watchPaths.join("\n"));
   const watchList = watch.split("\n").map((s) => s.trim()).filter(Boolean);
-  const dirty =
-    branch !== (app.branch ?? "main") ||
-    autoDeploy !== app.autoDeploy ||
-    watchList.join("\n") !== app.watchPaths.join("\n");
-
-  function save() {
-    setError(null);
-    start(async () => {
-      const res = await updateGitDeployAction(app.id, {
-        gitUrl: app.gitUrl,
-        branch,
-        buildPath: app.buildPath ?? "/",
-        watchPaths: watchList,
-        autoDeploy,
-      });
-      if (res.ok) flashSaved();
-      else setError(res.error);
-    });
-  }
+  useStagedForm({
+    id: "git-deploy",
+    action: "updateGitDeployAction",
+    args: [app.id, { gitUrl: app.gitUrl, branch, buildPath: app.buildPath ?? "/", watchPaths: watchList, autoDeploy }],
+    before: { Branch: app.branch?.trim() || "main", "Auto-deploy": app.autoDeploy, "Watch paths": app.watchPaths.map((path) => path.trim()).filter(Boolean).join("\n") },
+    after: { Branch: branch.trim() || "main", "Auto-deploy": autoDeploy, "Watch paths": watchList.join("\n") },
+  });
 
   return (
     <div className="space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
@@ -486,29 +483,16 @@ function AutoDeployPanel({ app }: { app: Application }) {
         />
       </Field>
 
-      <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
+      <StagedHint />
     </div>
   );
 }
 
-/** Small "redeploy after saving" checkbox shared by the build sub-forms. */
-function RedeployToggle({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
+function StagedHint({ error }: { error?: string }) {
   return (
-    <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="accent-[var(--color-brand)]"
-      />
-      Redeploy now to apply
-    </label>
+    <p role={error ? "alert" : undefined} className={`text-xs ${error ? "text-[var(--color-danger)]" : "text-[var(--color-fg-subtle)]"}`}>
+      {error || "Changes are staged. Deploy to apply."}
+    </p>
   );
 }
 
@@ -516,8 +500,7 @@ function RedeployToggle({
  * Build configuration: the build strategy (Nixpacks / Dockerfile / Railpack /
  * …) and Dockerfile options for source-built apps, private registry
  * credentials for docker-image apps, and the custom start command for either.
- * Build-strategy and image changes only take effect on the next deploy, so each
- * sub-form offers an optional redeploy.
+ * Changes are staged together and applied by the service Deploy button.
  */
 export function AppBuildTab({ app }: { app: Application }) {
   const isDocker = app.sourceType === "docker";
@@ -530,36 +513,29 @@ export function AppBuildTab({ app }: { app: Application }) {
 }
 
 function BuildStrategyForm({ app }: { app: Application }) {
-  const [buildType, setBuildType] = useState<BuildType>(app.buildType ?? "nixpacks");
-  const [dockerfile, setDockerfile] = useState(app.dockerfile ?? "Dockerfile");
-  const [contextPath, setContextPath] = useState(app.dockerContextPath ?? "");
-  const [buildStage, setBuildStage] = useState(app.dockerBuildStage ?? "");
-  const [redeploy, setRedeploy] = useState(false);
-  const [saving, startSave] = useTransition();
-  const [saved, flashSaved] = useSavedFlash();
-  const [error, setError] = useState<string | null>(null);
-
-  const dirty =
-    buildType !== (app.buildType ?? "nixpacks") ||
-    (buildType === "dockerfile" &&
-      (dockerfile !== (app.dockerfile ?? "Dockerfile") ||
-        contextPath !== (app.dockerContextPath ?? "") ||
-        buildStage !== (app.dockerBuildStage ?? "")));
-
-  function save() {
-    setError(null);
-    const patch: BuildTypePatch = { buildType };
-    if (buildType === "dockerfile") {
-      patch.dockerfile = dockerfile.trim() || "Dockerfile";
-      patch.dockerContextPath = contextPath.trim() || null;
-      patch.dockerBuildStage = buildStage.trim() || null;
-    }
-    startSave(async () => {
-      const res = await saveAppBuildTypeAction(app.id, patch, redeploy);
-      if (res.ok) flashSaved();
-      else setError(res.error);
-    });
+  const [buildType, setBuildType] = useStagedState<BuildType>("build:type", app.buildType ?? "nixpacks");
+  const [dockerfile, setDockerfile] = useStagedState("build:dockerfile", app.dockerfile ?? "Dockerfile");
+  const [contextPath, setContextPath] = useStagedState("build:context", app.dockerContextPath ?? "");
+  const [buildStage, setBuildStage] = useStagedState("build:stage", app.dockerBuildStage ?? "");
+  const patch: BuildTypePatch = { buildType };
+  if (buildType === "dockerfile") {
+    patch.dockerfile = dockerfile.trim() || "Dockerfile";
+    patch.dockerContextPath = contextPath.trim() || null;
+    patch.dockerBuildStage = buildStage.trim() || null;
   }
+  useStagedForm({
+    id: "build",
+    action: "saveAppBuildTypeAction",
+    args: [app.id, patch, false],
+    before: {
+      "Build type": app.buildType ?? "nixpacks",
+      ...(buildType === "dockerfile" ? { Dockerfile: app.dockerfile?.trim() || "Dockerfile", "Build context": app.dockerContextPath?.trim() ?? "", "Build stage": app.dockerBuildStage?.trim() ?? "" } : {}),
+    },
+    after: {
+      "Build type": buildType,
+      ...(buildType === "dockerfile" ? { Dockerfile: patch.dockerfile, "Build context": patch.dockerContextPath ?? "", "Build stage": patch.dockerBuildStage ?? "" } : {}),
+    },
+  });
 
   return (
     <div className="space-y-3">
@@ -609,49 +585,30 @@ function BuildStrategyForm({ app }: { app: Application }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
-        <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
-      </div>
+      <StagedHint />
     </div>
   );
 }
 
 function DockerSourceForm({ app }: { app: Application }) {
-  const [image, setImage] = useState(app.dockerImage ?? "");
-  const [registryUrl, setRegistryUrl] = useState(app.registryUrl ?? "");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [image, setImage] = useStagedState("docker:image", app.dockerImage ?? "");
+  const [registryUrl, setRegistryUrl] = useStagedState("docker:registry", app.registryUrl ?? "");
+  const [username, setUsername] = useStagedState("docker:username", "");
+  const [password, setPassword] = useStagedState("docker:password", "");
   const [showPassword, setShowPassword] = useState(false);
-  const [redeploy, setRedeploy] = useState(false);
-  const [saving, startSave] = useTransition();
-  const [saved, flashSaved] = useSavedFlash();
-  const [error, setError] = useState<string | null>(null);
-
-  // Credentials are never read back from Dokploy, so treat any input here (or an
-  // image/registry change) as a reason to resubmit the whole docker source.
-  const dirty =
-    image.trim() !== (app.dockerImage ?? "") ||
-    registryUrl.trim() !== (app.registryUrl ?? "") ||
-    username !== "" ||
-    password !== "";
-
-  function save() {
-    setError(null);
-    startSave(async () => {
-      const res = await setAppDockerSourceAction(
-        app.id,
-        image,
-        { username: username.trim(), password, registryUrl: registryUrl.trim() },
-        redeploy
-      );
-      if (res.ok) {
-        setUsername("");
-        setPassword("");
-        flashSaved();
-      } else setError(res.error);
-    });
-  }
+  const error = !image.trim() ? "Image is required." : undefined;
+  const replaceRegistry = username.trim() !== "" || password !== "" ||
+    registryUrl.trim() !== (app.registryUrl?.trim() ?? "");
+  const savedCredential = { saved: true };
+  useStagedForm({
+    id: "docker-source",
+    action: "setAppDockerSourceAction",
+    args: [app.id, image, replaceRegistry ? { username: username.trim(), password, registryUrl: registryUrl.trim() } : undefined, false],
+    before: { Image: app.dockerImage?.trim() ?? "", Registry: app.registryUrl?.trim() ?? "", "Registry username": savedCredential, "Registry password": savedCredential },
+    after: { Image: image.trim(), Registry: registryUrl.trim(), "Registry username": replaceRegistry ? username.trim() : savedCredential, "Registry password": replaceRegistry ? password : savedCredential },
+    secretFields: ["Registry username", "Registry password"],
+    error,
+  });
 
   return (
     <div className="space-y-3">
@@ -666,7 +623,8 @@ function DockerSourceForm({ app }: { app: Application }) {
       </Field>
       <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
         <p className="text-[11px] text-[var(--color-fg-subtle)]">
-          Private registry credentials (leave blank for public images).
+          Image-only edits keep saved registry credentials. Changing any registry field
+          replaces the saved credentials; blank username or password fields clear those values.
         </p>
         <Field label="Registry URL" hint="optional">
           <input
@@ -707,35 +665,20 @@ function DockerSourceForm({ app }: { app: Application }) {
           </Field>
         </div>
       </div>
-      <div className="flex items-center justify-between">
-        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
-        <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
-      </div>
+      <StagedHint error={error} />
     </div>
   );
 }
 
 function StartCommandForm({ app }: { app: Application }) {
-  const [command, setCommand] = useState(app.command ?? "");
-  const [redeploy, setRedeploy] = useState(false);
-  const [saving, startSave] = useTransition();
-  const [saved, flashSaved] = useSavedFlash();
-  const [error, setError] = useState<string | null>(null);
-
-  const dirty = command !== (app.command ?? "");
-
-  function save() {
-    setError(null);
-    startSave(async () => {
-      const res = await updateApplicationAction(
-        app.id,
-        { command: command.trim() || null },
-        redeploy
-      );
-      if (res.ok) flashSaved();
-      else setError(res.error);
-    });
-  }
+  const [command, setCommand] = useStagedState("start:command", app.command ?? "");
+  useStagedForm({
+    id: "start-command",
+    action: "updateApplicationAction",
+    args: [app.id, { command: command.trim() || null }, false],
+    before: { "Start command": app.command?.trim() ?? "" },
+    after: { "Start command": command.trim() },
+  });
 
   return (
     <div className="space-y-3">
@@ -748,10 +691,7 @@ function StartCommandForm({ app }: { app: Application }) {
           className={`${inputCls} font-mono`}
         />
       </Field>
-      <div className="flex items-center justify-between">
-        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
-        <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
-      </div>
+      <StagedHint />
     </div>
   );
 }
@@ -793,28 +733,18 @@ function DeploySection({
   );
 }
 
-/** Shared save state for a Deploy sub-form, with an opt-in redeploy toggle. */
-function useDeploySave(app: Application) {
-  const [redeploy, setRedeploy] = useState(false);
-  const [saving, startSave] = useTransition();
-  const [saved, flashSaved] = useSavedFlash();
-  const [error, setError] = useState<string | null>(null);
-  const save = (patch: ApplicationPatch) => {
-    setError(null);
-    startSave(async () => {
-      const res = await updateApplicationAction(app.id, patch, redeploy);
-      if (res.ok) flashSaved();
-      else setError(res.error);
-    });
-  };
-  return { redeploy, setRedeploy, saving, saved, error, save };
-}
-
 function ReplicasForm({ app }: { app: Application }) {
   const current = String(app.replicas ?? 1);
-  const [replicas, setReplicas] = useState(current);
-  const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
-  const dirty = replicas !== "" && replicas !== current;
+  const [replicas, setReplicas] = useStagedState("deploy:replicas", current);
+  const error = replicas === "" || !Number.isSafeInteger(Number(replicas)) ? "Instances must be a whole number." : undefined;
+  useStagedForm({
+    id: "replicas",
+    action: "updateApplicationAction",
+    args: [app.id, { replicas: Number(replicas) }, false],
+    before: { Replicas: current },
+    after: { Replicas: replicas },
+    error,
+  });
 
   return (
     <DeploySection
@@ -832,41 +762,31 @@ function ReplicasForm({ app }: { app: Application }) {
           />
         </Field>
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
-        <SaveRow
-          saving={saving}
-          saved={saved}
-          error={error}
-          disabled={!dirty}
-          onSave={() => save({ replicas: Number(replicas) })}
-        />
-      </div>
+      <StagedHint error={error} />
     </DeploySection>
   );
 }
 
 function RestartPolicyForm({ app }: { app: Application }) {
   const curCond = app.restartPolicySwarm?.Condition ?? "";
-  const curMax =
-    app.restartPolicySwarm?.MaxAttempts != null
-      ? String(app.restartPolicySwarm.MaxAttempts)
-      : "";
-  const [condition, setCondition] = useState<string>(curCond);
-  const [maxAttempts, setMaxAttempts] = useState(curMax);
-  const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
-  const dirty = condition !== curCond || maxAttempts !== curMax;
-
-  function onSave() {
-    // Merge over any existing policy so Delay/Window set via Dokploy's advanced
-    // UI survive. The schema is `.strict()`, so only known keys may be sent.
-    const base: RestartPolicySwarm = { ...(app.restartPolicySwarm ?? {}) };
-    if (condition) base.Condition = condition as RestartCondition;
-    else delete base.Condition;
-    if (maxAttempts !== "") base.MaxAttempts = Number(maxAttempts);
-    else delete base.MaxAttempts;
-    save({ restartPolicySwarm: Object.keys(base).length > 0 ? base : null });
-  }
+  const curMax = app.restartPolicySwarm?.MaxAttempts != null ? String(app.restartPolicySwarm.MaxAttempts) : "";
+  const [condition, setCondition] = useStagedState("deploy:restart", curCond);
+  const [maxAttempts, setMaxAttempts] = useStagedState("deploy:attempts", curMax);
+  // Preserve Delay/Window configured through Dokploy's advanced UI.
+  const policy: RestartPolicySwarm = { ...(app.restartPolicySwarm ?? {}) };
+  if (condition) policy.Condition = condition as RestartCondition;
+  else delete policy.Condition;
+  if (maxAttempts !== "") policy.MaxAttempts = Number(maxAttempts);
+  else delete policy.MaxAttempts;
+  const error = maxAttempts !== "" && !Number.isSafeInteger(Number(maxAttempts)) ? "Max attempts must be a whole number." : undefined;
+  useStagedForm({
+    id: "restart-policy",
+    action: "updateApplicationAction",
+    args: [app.id, { restartPolicySwarm: Object.keys(policy).length > 0 ? policy : null }, false],
+    before: { "Restart condition": curCond, "Restart max attempts": curMax },
+    after: { "Restart condition": condition, "Restart max attempts": maxAttempts },
+    error,
+  });
 
   return (
     <DeploySection
@@ -896,16 +816,7 @@ function RestartPolicyForm({ app }: { app: Application }) {
           />
         </Field>
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
-        <SaveRow
-          saving={saving}
-          saved={saved}
-          error={error}
-          disabled={!dirty}
-          onSave={onSave}
-        />
-      </div>
+      <StagedHint error={error} />
     </DeploySection>
   );
 }
@@ -917,31 +828,29 @@ function HealthCheckForm({ app }: { app: Application }) {
   const curTimeout = nsToSec(hc?.Timeout);
   const curStart = nsToSec(hc?.StartPeriod);
   const curRetries = hc?.Retries != null ? String(hc.Retries) : "";
-  const [cmd, setCmd] = useState(curCmd);
-  const [intervalSec, setIntervalSec] = useState(curInterval);
-  const [timeoutSec, setTimeoutSec] = useState(curTimeout);
-  const [startSec, setStartSec] = useState(curStart);
-  const [retries, setRetries] = useState(curRetries);
-  const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
-  const dirty =
-    cmd !== curCmd ||
-    intervalSec !== curInterval ||
-    timeoutSec !== curTimeout ||
-    startSec !== curStart ||
-    retries !== curRetries;
-
+  const [cmd, setCmd] = useStagedState("health:command", curCmd);
+  const [intervalSec, setIntervalSec] = useStagedState("health:interval", curInterval);
+  const [timeoutSec, setTimeoutSec] = useStagedState("health:timeout", curTimeout);
+  const [startSec, setStartSec] = useStagedState("health:start", curStart);
+  const [retries, setRetries] = useStagedState("health:retries", curRetries);
   const decimal = (v: string) => v.replace(/[^0-9.]/g, "");
-
-  function onSave() {
-    const next: HealthCheckSwarm = {};
-    const c = cmd.trim();
-    if (c) next.Test = ["CMD-SHELL", c];
-    if (intervalSec !== "") next.Interval = secToNs(intervalSec);
-    if (timeoutSec !== "") next.Timeout = secToNs(timeoutSec);
-    if (startSec !== "") next.StartPeriod = secToNs(startSec);
-    if (retries !== "") next.Retries = Number(retries);
-    save({ healthCheckSwarm: Object.keys(next).length > 0 ? next : null });
-  }
+  const next: HealthCheckSwarm = {};
+  if (cmd.trim()) next.Test = ["CMD-SHELL", cmd.trim()];
+  if (intervalSec !== "") next.Interval = secToNs(intervalSec);
+  if (timeoutSec !== "") next.Timeout = secToNs(timeoutSec);
+  if (startSec !== "") next.StartPeriod = secToNs(startSec);
+  if (retries !== "") next.Retries = Number(retries);
+  const error = [intervalSec, timeoutSec, startSec].some((value) => value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0))
+    ? "Healthcheck durations must be valid seconds."
+    : retries !== "" && !Number.isSafeInteger(Number(retries)) ? "Retries must be a whole number." : undefined;
+  useStagedForm({
+    id: "healthcheck",
+    action: "updateApplicationAction",
+    args: [app.id, { healthCheckSwarm: Object.keys(next).length > 0 ? next : null }, false],
+    before: { "Healthcheck command": curCmd, "Healthcheck interval (s)": curInterval, "Healthcheck timeout (s)": curTimeout, "Healthcheck start period (s)": curStart, "Healthcheck retries": curRetries },
+    after: { "Healthcheck command": cmd.trim(), "Healthcheck interval (s)": intervalSec, "Healthcheck timeout (s)": timeoutSec, "Healthcheck start period (s)": startSec, "Healthcheck retries": retries },
+    error,
+  });
 
   return (
     <DeploySection
@@ -994,16 +903,7 @@ function HealthCheckForm({ app }: { app: Application }) {
           />
         </Field>
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
-        <SaveRow
-          saving={saving}
-          saved={saved}
-          error={error}
-          disabled={!dirty}
-          onSave={onSave}
-        />
-      </div>
+      <StagedHint error={error} />
     </DeploySection>
   );
 }
@@ -1012,10 +912,8 @@ export function AppDeployTab({ app }: { app: Application }) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-[var(--color-fg-muted)]">
-        Runtime settings for the Docker Swarm service. Each card saves
-        independently; toggle{" "}
-        <span className="font-medium">Redeploy now</span> to apply immediately,
-        otherwise changes take effect on the next deploy.
+        Runtime settings for the Docker Swarm service. Changes are staged together
+        and take effect when you select Deploy.
       </p>
       <ReplicasForm app={app} />
       <RestartPolicyForm app={app} />
@@ -1026,41 +924,20 @@ export function AppDeployTab({ app }: { app: Application }) {
 
 export function AppSettingsTab({ app, onClose }: { app: Application; onClose: () => void }) {
   const { pending: lifePending, error: lifeError, run } = useAppLifecycle(app);
-  const [name, setName] = useState(app.name);
-  const [cpu, setCpu] = useState(app.cpuLimit ?? "");
-  const [mem, setMem] = useState(app.memoryLimit ?? "");
-  const [cpuRes, setCpuRes] = useState(app.cpuReservation ?? "");
-  const [memRes, setMemRes] = useState(app.memoryReservation ?? "");
-  const [saving, startSave] = useTransition();
-  const [saved, flashSaved] = useSavedFlash();
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const resourcesDirty =
-    cpu !== (app.cpuLimit ?? "") ||
-    mem !== (app.memoryLimit ?? "") ||
-    cpuRes !== (app.cpuReservation ?? "") ||
-    memRes !== (app.memoryReservation ?? "");
-  const dirty = name !== app.name || resourcesDirty;
-
-  function save() {
-    setSaveError(null);
-    startSave(async () => {
-      const res = await updateApplicationAction(
-        app.id,
-        {
-          name: name.trim(),
-          cpuLimit: cpu || null,
-          memoryLimit: mem || null,
-          cpuReservation: cpuRes || null,
-          memoryReservation: memRes || null,
-        },
-        // Resource changes only bind on redeploy.
-        resourcesDirty
-      );
-      if (res.ok) flashSaved();
-      else setSaveError(res.error);
-    });
-  }
+  const [name, setName] = useStagedState("settings:name", app.name);
+  const [cpu, setCpu] = useStagedState("settings:cpu", app.cpuLimit ?? "");
+  const [mem, setMem] = useStagedState("settings:memory", app.memoryLimit ?? "");
+  const [cpuRes, setCpuRes] = useStagedState("settings:cpuReservation", app.cpuReservation ?? "");
+  const [memRes, setMemRes] = useStagedState("settings:memoryReservation", app.memoryReservation ?? "");
+  const error = !name.trim() ? "Name is required." : undefined;
+  useStagedForm({
+    id: "settings",
+    action: "updateApplicationAction",
+    args: [app.id, { name: name.trim(), cpuLimit: cpu || null, memoryLimit: mem || null, cpuReservation: cpuRes || null, memoryReservation: memRes || null }, false],
+    before: { Name: app.name.trim(), "CPU limit": app.cpuLimit ?? "", "Memory limit": app.memoryLimit ?? "", "CPU reservation": app.cpuReservation ?? "", "Memory reservation": app.memoryReservation ?? "" },
+    after: { Name: name.trim(), "CPU limit": cpu, "Memory limit": mem, "CPU reservation": cpuRes, "Memory reservation": memRes },
+    error,
+  });
 
   return (
     <div className="space-y-5">
@@ -1082,7 +959,7 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
             <input value={memRes} onChange={(e) => setMemRes(e.target.value)} placeholder="none" className={inputCls} />
           </Field>
         </div>
-        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
+        <StagedHint error={error} />
       </div>
 
       <Info label="App name" value={app.appName} mono />
@@ -1123,7 +1000,7 @@ export function SchedulesTab({ app }: { app: Application }) {
     <div className="space-y-5">
       <p className="text-xs text-[var(--color-fg-muted)]">
         Cron jobs run a command inside this app&apos;s container on a schedule (times are UTC). The
-        container must be running when the job fires.
+        container must be running when the job fires. Schedule changes save immediately.
       </p>
 
       <CreateScheduleForm applicationId={app.id} onCreated={reload} />

@@ -10,25 +10,18 @@
  * the frequently-edited AppTabs.tsx. The Domains section reuses DomainsTab.
  */
 
-import { useState, useTransition } from "react";
 import { Globe, ArrowRight, Plug, Lock, Plus, Loader2 } from "lucide-react";
-import type { Application } from "@/lib/dokploy";
+import type { Application, AppRedirect, AppPort, AppSecurity } from "@/lib/dokploy";
 import { DomainsTab } from "@/components/service/AppTabs";
 import { inputCls, Field, RemoveBtn } from "@/components/service/primitives";
-import {
-  createRedirectAction,
-  deleteRedirectAction,
-  createPortAction,
-  deletePortAction,
-  createSecurityAction,
-  deleteSecurityAction,
-} from "@/app/actions";
+import { useStagedState, useStaging } from "@/components/service/StagedChanges";
+import { stagedCollection } from "@/lib/staged-collections";
 
 export function NetworkingTab({ app }: { app: Application }) {
   return (
     <div className="space-y-8">
       <p className="text-[11px] text-[var(--color-fg-subtle)]">
-        Networking changes apply on the service&apos;s next deploy.
+        Networking changes are staged until you deploy. Add an entry to stage it.
       </p>
 
       <section className="space-y-3">
@@ -92,32 +85,28 @@ const tagCls =
   "shrink-0 rounded border border-[var(--color-border-strong)] px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)]";
 
 function RedirectsSection({ app }: { app: Application }) {
-  const [regex, setRegex] = useState("");
-  const [replacement, setReplacement] = useState("");
-  const [permanent, setPermanent] = useState(true);
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [regex, setRegex] = useStagedState("redirect:regex", "");
+  const [replacement, setReplacement] = useStagedState("redirect:replacement", "");
+  const [permanent, setPermanent] = useStagedState("redirect:permanent", true);
+  const { pending, operations, stage, discard } = useStaging();
+  const redirects = stagedCollection<AppRedirect>(app.redirects, operations, {
+    key: (item) => item.redirectId, create: "createRedirectAction", remove: "deleteRedirectAction",
+    added: (op) => ({ redirectId: op.id, regex: String(op.args[1]), replacement: String(op.args[2]), permanent: Boolean(op.args[3]) }),
+  });
 
   function add() {
     if (!regex.trim() || !replacement.trim()) return;
-    setError(null);
-    start(async () => {
-      const res = await createRedirectAction(app.id, regex, replacement, permanent);
-      if (res.ok) {
-        setRegex("");
-        setReplacement("");
-      } else setError(res.error);
-    });
+    stage({ id: `redirect:add:${crypto.randomUUID()}`, action: "createRedirectAction",
+      args: [app.id, regex.trim(), replacement.trim(), permanent],
+      changes: [{ field: "Redirect", before: null, after: `${regex.trim()} → ${replacement.trim()} (${permanent ? "308" : "307"})` }] });
+    setRegex("");
+    setReplacement("");
   }
   function remove(id: string) {
-    setError(null);
-    setRemovingId(id);
-    start(async () => {
-      const res = await deleteRedirectAction(id);
-      if (!res.ok) setError(res.error);
-      setRemovingId(null);
-    });
+    if (operations.some((op) => op.id === id && op.action === "createRedirectAction")) { discard(id); return; }
+    const item = app.redirects.find((entry) => entry.redirectId === id);
+    if (item) stage({ id: `redirect:${id}`, action: "deleteRedirectAction", args: [id],
+      changes: [{ field: "Redirect", before: `${item.regex} → ${item.replacement} (${item.permanent ? "308" : "307"})`, after: null }] });
   }
 
   return (
@@ -127,9 +116,9 @@ function RedirectsSection({ app }: { app: Application }) {
         title="Redirects"
         hint="regex → replacement"
       />
-      {app.redirects.length > 0 ? (
+      {redirects.length > 0 ? (
         <div className="space-y-2">
-          {app.redirects.map((r) => (
+          {redirects.map((r) => (
             <div key={r.redirectId} className={rowCls}>
               <code className="min-w-0 flex-1 truncate font-mono text-xs">
                 {r.regex} <span className="text-[var(--color-fg-subtle)]">→</span> {r.replacement}
@@ -137,7 +126,7 @@ function RedirectsSection({ app }: { app: Application }) {
               <span className={tagCls}>{r.permanent ? "308" : "307"}</span>
               <RemoveBtn
                 label={`Remove redirect ${r.regex}`}
-                pending={pending && removingId === r.redirectId}
+                pending={pending}
                 onClick={() => remove(r.redirectId)}
               />
             </div>
@@ -176,47 +165,39 @@ function RedirectsSection({ app }: { app: Application }) {
           Permanent
         </label>
         <AddBtn
-          pending={pending && removingId === null}
+          pending={pending}
           disabled={!regex.trim() || !replacement.trim()}
           onClick={add}
         />
       </div>
-      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </section>
   );
 }
 
 function PortsSection({ app }: { app: Application }) {
-  const [published, setPublished] = useState("");
-  const [target, setTarget] = useState("");
-  const [protocol, setProtocol] = useState<"tcp" | "udp">("tcp");
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [published, setPublished] = useStagedState("port:published", "");
+  const [target, setTarget] = useStagedState("port:target", "");
+  const [protocol, setProtocol] = useStagedState<"tcp" | "udp">("port:protocol", "tcp");
+  const { pending, operations, stage, discard } = useStaging();
+  const ports = stagedCollection<AppPort>(app.ports, operations, {
+    key: (item) => item.portId, create: "createPortAction", remove: "deletePortAction",
+    added: (op) => ({ portId: op.id, publishedPort: Number(op.args[1]), targetPort: Number(op.args[2]), protocol: op.args[3] as "tcp" | "udp", publishMode: "host" }),
+  });
+  const valid = [Number(published), Number(target)].every((port) => Number.isInteger(port) && port > 0 && port <= 65535);
 
   function add() {
-    const p = Number(published);
-    const t = Number(target);
-    if (!p || !t) return;
-    setError(null);
-    start(async () => {
-      // publishMode defaults to "host" (Dokploy's own default) — the common
-      // case of exposing a port on the node.
-      const res = await createPortAction(app.id, p, t, protocol, "host");
-      if (res.ok) {
-        setPublished("");
-        setTarget("");
-      } else setError(res.error);
-    });
+    if (!valid) return;
+    stage({ id: `port:add:${crypto.randomUUID()}`, action: "createPortAction",
+      args: [app.id, Number(published), Number(target), protocol, "host"],
+      changes: [{ field: "Port", before: null, after: `${published} → ${target} (${protocol})` }] });
+    setPublished("");
+    setTarget("");
   }
   function remove(id: string) {
-    setError(null);
-    setRemovingId(id);
-    start(async () => {
-      const res = await deletePortAction(id);
-      if (!res.ok) setError(res.error);
-      setRemovingId(null);
-    });
+    if (operations.some((op) => op.id === id && op.action === "createPortAction")) { discard(id); return; }
+    const item = app.ports.find((entry) => entry.portId === id);
+    if (item) stage({ id: `port:${id}`, action: "deletePortAction", args: [id],
+      changes: [{ field: "Port", before: `${item.publishedPort} → ${item.targetPort} (${item.protocol})`, after: null }] });
   }
 
   return (
@@ -226,9 +207,9 @@ function PortsSection({ app }: { app: Application }) {
         title="Ports"
         hint="published → target"
       />
-      {app.ports.length > 0 ? (
+      {ports.length > 0 ? (
         <div className="space-y-2">
-          {app.ports.map((p) => (
+          {ports.map((p) => (
             <div key={p.portId} className={rowCls}>
               <span className="min-w-0 flex-1 truncate font-mono text-xs">
                 {p.publishedPort} <span className="text-[var(--color-fg-subtle)]">→</span>{" "}
@@ -238,7 +219,7 @@ function PortsSection({ app }: { app: Application }) {
               <span className={tagCls}>{p.publishMode}</span>
               <RemoveBtn
                 label={`Remove port ${p.publishedPort}`}
-                pending={pending && removingId === p.portId}
+                pending={pending}
                 onClick={() => remove(p.portId)}
               />
             </div>
@@ -281,42 +262,37 @@ function PortsSection({ app }: { app: Application }) {
           </Field>
         </div>
         <AddBtn
-          pending={pending && removingId === null}
-          disabled={!published || !target}
+          pending={pending}
+          disabled={!valid}
           onClick={add}
         />
       </div>
-      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </section>
   );
 }
 
 function SecuritySection({ app }: { app: Application }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [username, setUsername] = useStagedState("security:username", "");
+  const [password, setPassword] = useStagedState("security:password", "");
+  const { pending, operations, stage, discard } = useStaging();
+  const security = stagedCollection<AppSecurity>(app.security, operations, {
+    key: (item) => item.securityId, create: "createSecurityAction", remove: "deleteSecurityAction",
+    added: (op) => ({ securityId: op.id, username: String(op.args[1]) }),
+  });
 
   function add() {
     if (!username.trim() || !password) return;
-    setError(null);
-    start(async () => {
-      const res = await createSecurityAction(app.id, username, password);
-      if (res.ok) {
-        setUsername("");
-        setPassword("");
-      } else setError(res.error);
-    });
+    stage({ id: `security:add:${crypto.randomUUID()}`, action: "createSecurityAction",
+      args: [app.id, username.trim(), password],
+      changes: [{ field: `Basic auth ${username.trim()}`, before: null, after: password, secret: true }] });
+    setUsername("");
+    setPassword("");
   }
   function remove(id: string) {
-    setError(null);
-    setRemovingId(id);
-    start(async () => {
-      const res = await deleteSecurityAction(id);
-      if (!res.ok) setError(res.error);
-      setRemovingId(null);
-    });
+    if (operations.some((op) => op.id === id && op.action === "createSecurityAction")) { discard(id); return; }
+    const item = app.security.find((entry) => entry.securityId === id);
+    if (item) stage({ id: `security:${id}`, action: "deleteSecurityAction", args: [id],
+      changes: [{ field: `Basic auth ${item.username}`, before: "Configured", after: null, secret: true }] });
   }
 
   return (
@@ -326,9 +302,9 @@ function SecuritySection({ app }: { app: Application }) {
         title="Basic auth"
         hint="HTTP credentials"
       />
-      {app.security.length > 0 ? (
+      {security.length > 0 ? (
         <div className="space-y-2">
-          {app.security.map((s) => (
+          {security.map((s) => (
             <div key={s.securityId} className={rowCls}>
               <span className="min-w-0 flex-1 truncate">{s.username}</span>
               <span className="shrink-0 font-mono text-xs text-[var(--color-fg-subtle)]">
@@ -336,7 +312,7 @@ function SecuritySection({ app }: { app: Application }) {
               </span>
               <RemoveBtn
                 label={`Remove basic-auth user ${s.username}`}
-                pending={pending && removingId === s.securityId}
+                pending={pending}
                 onClick={() => remove(s.securityId)}
               />
             </div>
@@ -368,12 +344,11 @@ function SecuritySection({ app }: { app: Application }) {
           </Field>
         </div>
         <AddBtn
-          pending={pending && removingId === null}
+          pending={pending}
           disabled={!username.trim() || !password}
           onClick={add}
         />
       </div>
-      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </section>
   );
 }

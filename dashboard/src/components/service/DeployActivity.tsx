@@ -8,6 +8,7 @@ import { explainDeployError, failureLine } from "@/lib/deploy-errors";
 import { cn } from "@/lib/utils";
 import { ContextMenu } from "@/components/ContextMenu";
 import { deploymentMenuItems, serviceMenuItems, type DeploymentMenuAction } from "@/lib/context-menu";
+import { useStaging } from "@/components/service/StagedChanges";
 import { useServiceLifecycle } from "@/components/service/primitives";
 
 /** Services with deploy history (databases have none). */
@@ -329,8 +330,10 @@ function DeploymentRow({ service, deployment: d, open, duration, onToggle, onVie
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const staging = useStaging();
+  const staged = staging.hasServiceChanges(service.id);
   function rollback() {
-    if (!d.rollbackId || !confirm(`Roll back to "${d.title}"? This redeploys the recorded image.`)) return;
+    if (staged || staging.pending || !d.rollbackId || !confirm(`Roll back to "${d.title}"? This redeploys the recorded image.`)) return;
     const rollbackId = d.rollbackId;
     setError(null);
     start(async () => {
@@ -345,7 +348,7 @@ function DeploymentRow({ service, deployment: d, open, duration, onToggle, onVie
     "copy-id": () => navigator.clipboard.writeText(d.deploymentId),
   };
   const items = deploymentMenuItems({ rollbackAvailable: !!d.rollbackId, pending, redeployDisabledReason })
-    .map((item) => ({ ...item, onSelect: actions[item.id] }));
+    .map((item) => ({ ...item, ...(item.id === "rollback" && staged ? { disabled: true, disabledReason: "Deploy or discard staged changes before rolling back." } : {}), onSelect: actions[item.id] }));
   return (
     <div className={cn("rounded-lg border bg-[var(--color-surface)]", open ? "border-[var(--color-border-strong)]" : "border-[var(--color-border)]")}>
       <ContextMenu label={`${d.title} actions`} items={items}>
@@ -364,7 +367,7 @@ function DeploymentRow({ service, deployment: d, open, duration, onToggle, onVie
             </button>
             {d.rollbackId && (
               <div className="flex flex-col items-end gap-1">
-                <button onClick={rollback} disabled={pending} title="Roll back to this deployment" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)] disabled:opacity-40">
+                <button onClick={rollback} disabled={pending || staging.pending || staged} title={staged ? "Deploy or discard staged changes before rolling back." : "Roll back to this deployment"} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)] disabled:opacity-40">
                   {pending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
                   Roll back
                 </button>
