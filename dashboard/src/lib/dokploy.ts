@@ -24,6 +24,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
+import { isGitSource, parseDeployTriggers, type DeployTriggerKind } from "./deploy-triggers";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
@@ -244,6 +245,7 @@ export interface Application extends ServiceBase {
   // --- push-to-deploy config (custom-git source); see setAppGitSource ---------
   /** When true, hitting the deploy webhook redeploys the app. */
   autoDeploy: boolean;
+  triggerType: "push" | "tag" | null;
   /** Branch the webhook must match to trigger a deploy (customGitBranch). */
   branch: string | null;
   /** Build path within the repo (customGitBuildPath). */
@@ -262,6 +264,10 @@ export interface Application extends ServiceBase {
 
 export interface ComposeService extends ServiceBase {
   kind: "compose";
+  sourceType: AppSource | "raw" | null;
+  autoDeploy: boolean;
+  watchPaths: string[];
+  triggerType: "push" | "tag" | null;
   composeFile: string | null;
   composeType: string | null;
   /** Public domains routed to the stack's services (Dokploy `domains`). */
@@ -723,6 +729,7 @@ interface RawApplicationDetail {
   customGitBuildPath?: string | null;
   watchPaths?: string[] | null;
   autoDeploy?: boolean | null;
+  triggerType?: "push" | "tag" | null;
   refreshToken?: string | null;
   owner?: string | null;
   repository?: string | null;
@@ -859,6 +866,7 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
         })),
         deployments: mapDeployments(d.deployments),
         autoDeploy: d.autoDeploy ?? false,
+        triggerType: d.triggerType ?? null,
         branch: d.branch ?? d.customGitBranch ?? null,
         buildPath: d.customGitBuildPath ?? null,
         gitUrl: d.customGitUrl ?? null,
@@ -942,6 +950,77 @@ export async function setAppAutoDeploy(
   await request("application.update", {
     method: "POST",
     body: { applicationId, autoDeploy },
+  });
+}
+
+/** Re-check the current user's project tree before reading or updating a service. */
+async function assertOwnedGitService(kind: DeployTriggerKind, id: string): Promise<void> {
+  if (
+    (kind !== "application" && kind !== "compose") ||
+    typeof id !== "string" ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(id)
+  ) {
+    throw new Error("Invalid service.");
+  }
+  const tree = await rawTree();
+  const owned = tree.some((project) =>
+    project.environments.some((environment) =>
+      kind === "application"
+        ? (environment.applications ?? []).some((app) => app.applicationId === id)
+        : (environment.compose ?? []).some((compose) => compose.composeId === id)
+    )
+  );
+  if (!owned) throw new Error("Service not found in your projects.");
+}
+
+/** Save deploy trigger settings, defaulting an unset trigger type to push when enabling. */
+export async function updateDeployTriggers(
+  kind: DeployTriggerKind,
+  id: string,
+  input: unknown
+): Promise<void> {
+  const { autoDeploy, watchPaths } = parseDeployTriggers(input);
+  await assertOwnedGitService(kind, id);
+  const key = kind === "application" ? "applicationId" : "composeId";
+  const current = await request<RawApplicationDetail | RawComposeDetail>(
+    `${kind}.one?${key}=${encodeURIComponent(id)}`
+  );
+  if (!isGitSource(current.sourceType)) {
+    throw new Error("Deploy triggers require a Git source.");
+  }
+  await request(`${kind}.update`, {
+    method: "POST",
+    body: {
+      [key]: id,
+      autoDeploy,
+      watchPaths,
+      ...(autoDeploy && current.triggerType == null ? { triggerType: "push" } : {}),
+    },
+  });
+}
+
+/** Change only the branch; saveGitProvider also resets applicationStatus to idle.
+ * https://github.com/Dokploy/dokploy/blob/v0.30.10/apps/dokploy/server/api/routers/application.ts#L658-L687
+ */
+export async function updateAppGitBranch(applicationId: string, branch: string): Promise<void> {
+  if (
+    typeof branch !== "string" ||
+    !branch.trim() ||
+    branch.length > 255 ||
+    /[\x00-\x1f\x7f]/.test(branch)
+  ) {
+    throw new Error("Branch must be between 1 and 255 characters without control characters.");
+  }
+  await assertOwnedGitService("application", applicationId);
+  const current = await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(applicationId)}`
+  );
+  if (current.sourceType !== "git") {
+    throw new Error("Branch settings require a custom Git source.");
+  }
+  await request("application.update", {
+    method: "POST",
+    body: { applicationId, customGitBranch: branch.trim() },
   });
 }
 
@@ -1630,6 +1709,10 @@ interface RawComposeDetail {
   name?: string;
   appName?: string;
   composeStatus?: ServiceStatus;
+  sourceType?: AppSource | "raw" | null;
+  autoDeploy?: boolean | null;
+  watchPaths?: string[] | null;
+  triggerType?: "push" | "tag" | null;
   composeType?: string | null;
   composeFile?: string | null;
   env?: string | null;
@@ -1660,6 +1743,10 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         name: d.name ?? id,
         appName: d.appName ?? "",
         status: d.composeStatus ?? "idle",
+        sourceType: d.sourceType ?? null,
+        autoDeploy: d.autoDeploy ?? false,
+        watchPaths: d.watchPaths ?? [],
+        triggerType: d.triggerType ?? null,
         dockerImage: null,
         env: d.env ?? null,
         createdAt: d.createdAt ?? null,

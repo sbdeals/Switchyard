@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { isGitSource } from "@/lib/deploy-triggers";
+import { DeployTriggerSettings } from "./DeployTriggerSettings";
 import {
   composeLifecycleAction,
   saveComposeFileAction,
@@ -248,6 +250,7 @@ export function ComposeSettingsTab({
   const { pending, error, run } = useComposeLifecycle(compose);
   return (
     <div className="space-y-5">
+      {isGitSource(compose.sourceType) && <DeployTriggerSettings key={compose.id} service={compose} />}
       <Info label="App name" value={compose.appName} mono />
       <Info
         label="Created"
