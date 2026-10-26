@@ -1,0 +1,11 @@
+Local proof: http://127.0.0.1:3031. Names are injected into the existing Compose action's optional name argument solely to enforce the throwaway prefix; all creation/results are real.
+PASS: focused-canvas N opens at viewport center; Ctrl+N ignored; Escape closes and restores focus; input N does not reopen.
+PASS: right-click opens; outside click closes.
+Edge exclusion used a temporary SVG DOM fixture because the local stack currently has no service edges.
+PASS: bubbling node and edge double-clicks do not open New service.
+PASS: double-click created canvas-point-a-mvoz8n60; id=OBPj6fJYxpS5tpZVyJ356; screen={"x":300,"y":320}; viewport={"x":755.297,"y":22.3978,"zoom":0.62722}; saved={"x":-893.301862643075,"y":291.12938516768713}; rendered={"x":299.99993896484375,"y":320}; drawer opened.
+PASS: right-click created canvas-point-b-mvoz8n60; id=sw16EJb_2eeqgJcjDoOhw; screen={"x":600,"y":550}; viewport={"x":755.297,"y":22.3978,"zoom":0.62722}; saved={"x":-415.00097430325485,"y":657.8267328948825}; rendered={"x":600,"y":550}; drawer opened.
+PASS: both localStorage positions and node flow transforms survive a full reload (fitView may recenter the viewport).
+Deleted canvas-point-a-mvoz8n60 through dashboard Compose lifecycle action.
+Deleted canvas-point-b-mvoz8n60 through dashboard Compose lifecycle action.
+PASS: both throwaway Compose services absent after cleanup and reload.

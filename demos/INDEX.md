@@ -70,3 +70,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#97](https://github.com/sbdeals/Switchyard/pull/97) | codex/env-duplicate (main) | Duplicate environment | [97-env-duplicate](97-env-duplicate/) | Codex mp4+pngs | 2 services copied, no domains ✓ |
 | [#98](https://github.com/sbdeals/Switchyard/pull/98) | codex/cli-logs (codex/cli-up) | switchyard logs <service> | [98-cli-logs](98-cli-logs/) | CLI transcripts | logs/json/follow + infra compat ✓ |
 | [#99](https://github.com/sbdeals/Switchyard/pull/99) | codex/deploy-notify (main) | In-app deploy notifications | [99-deploy-notify](99-deploy-notify/) | Codex mp4+pngs | toasts+bell, drafts survive polling ✓ |
+| [#100](https://github.com/sbdeals/Switchyard/pull/100) | codex/canvas-create-at-point (main) | Canvas create at point | [100-canvas-create-at-point](100-canvas-create-at-point/) | Codex mp4+pngs | 2 placements persist ✓ |
