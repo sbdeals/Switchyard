@@ -1,0 +1,57 @@
+{
+  "base": "http://127.0.0.1:3038",
+  "assertions": [
+    "Header Escape cancels and keeps drawer open",
+    "Header Enter saves trimmed name and preserves unsaved description",
+    "Blank and 64-character names blocked; duplicate warns and saves",
+    "Grid and reloaded canvas show saved display name",
+    "Reload retains description",
+    "appName, container ID/name/start time unchanged across both saves"
+  ],
+  "snapshots": [
+    {
+      "stage": "before",
+      "name": "service-rename-original",
+      "appName": "service-rename-fixture-d2xxp4",
+      "containers": [
+        {
+          "id": "f1d021838223eb757187a915dfcdd951c1c78978ea4b769cf9a1bb103efb1fdb",
+          "name": "/service-rename-fixture-d2xxp4-app-1",
+          "startedAt": "2026-10-26T08:43:39.796348037Z",
+          "running": true
+        }
+      ],
+      "dockerPs": "f1d021838223\tservice-rename-fixture-d2xxp4-app-1\tUp Less than a second"
+    },
+    {
+      "stage": "header",
+      "name": "service-rename-header",
+      "appName": "service-rename-fixture-d2xxp4",
+      "containers": [
+        {
+          "id": "f1d021838223eb757187a915dfcdd951c1c78978ea4b769cf9a1bb103efb1fdb",
+          "name": "/service-rename-fixture-d2xxp4-app-1",
+          "startedAt": "2026-10-26T08:43:39.796348037Z",
+          "running": true
+        }
+      ],
+      "dockerPs": "f1d021838223\tservice-rename-fixture-d2xxp4-app-1\tUp 4 seconds"
+    },
+    {
+      "stage": "settings-reloaded",
+      "name": "service-rename-settings",
+      "description": "Display metadata only; Docker identity is unchanged.",
+      "appName": "service-rename-fixture-d2xxp4",
+      "containers": [
+        {
+          "id": "f1d021838223eb757187a915dfcdd951c1c78978ea4b769cf9a1bb103efb1fdb",
+          "name": "/service-rename-fixture-d2xxp4-app-1",
+          "startedAt": "2026-10-26T08:43:39.796348037Z",
+          "running": true
+        }
+      ],
+      "dockerPs": "f1d021838223\tservice-rename-fixture-d2xxp4-app-1\tUp 11 seconds"
+    }
+  ],
+  "cleanedUp": true
+}
