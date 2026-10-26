@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import {
   ReactFlow,
   Background,
@@ -17,14 +17,15 @@ import "@xyflow/react/dist/style.css";
 import type { Service, ServiceEdge } from "@/lib/dokploy";
 import { serviceAccent } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
+import { CANVAS_ROW_HEIGHT as ROW_H, mergeNodePositions, type Positions } from "@/lib/canvas-layout";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
+import { CanvasResizeFit } from "@/components/canvas/CanvasResizeFit";
 
 // v2: key bumped when the default layout became a grid — pre-grid saves froze
 // every auto-position (not just drags), which would pin the old horizontal
 // layout forever.
 const POS_KEY = "switchyard:positions:v2";
 const COL_W = 300;
-const ROW_H = 104;
 /**
  * Group-columns per grid row. With one column per project, an unbounded row
  * turns a dozen projects into a horizontal strip; wrapping at 4 keeps the
@@ -34,8 +35,6 @@ const ROW_H = 104;
 const GRID_COLS = 4;
 /** Vertical padding between grid rows — room for the next row's group label. */
 const ROW_GAP = 72;
-
-type Positions = Record<string, { x: number; y: number }>;
 
 function loadPositions(): Positions {
   if (typeof window === "undefined") return {};
@@ -55,6 +54,16 @@ function savePositions(p: Positions) {
 
 const nodeTypes = { service: ServiceNode };
 
+// Saved positions live in localStorage, which the server render can't see.
+// Reading them during the first client render would hydrate a different
+// transform than the server HTML, and React keeps the server's style on
+// mismatch. The node stayed at its default spot even though state held the
+// saved one. So apply saved positions only after hydration.
+const noopSubscribe = () => () => {};
+function useHydrated(): boolean {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
+
 export function FlowCanvas({
   services,
   edges: serviceEdges,
@@ -66,10 +75,10 @@ export function FlowCanvas({
 }) {
   // Catalog logos for Railway-style node icons (null while the catalog loads).
   const logos = useTemplateLogos();
+  const hydrated = useHydrated();
 
   const buildNodes = useCallback(
-    (overrides?: Positions): Node[] => {
-      const saved = { ...loadPositions(), ...(overrides ?? {}) };
+    (current: Node[] = []): Node[] => {
       // Group by project / environment for a tidy default layout. The group
       // name renders inside each card (nodes are draggable — a label pinned to
       // the background would stay behind when its services move).
@@ -98,16 +107,16 @@ export function FlowCanvas({
           nodes.push({
             id: service.id,
             type: "service",
-            position: saved[service.id] ?? { x, y: rowY + row * ROW_H },
+            position: { x, y: rowY + row * ROW_H },
             data: { service, logo: resolveServiceLogo(service, logos), onSelect } as ServiceNodeData,
           });
         });
         rowMaxServices = Math.max(rowMaxServices, svcs.length);
         col++;
       }
-      return nodes;
+      return mergeNodePositions(nodes, hydrated ? loadPositions() : {}, current);
     },
-    [services, onSelect, logos]
+    [services, onSelect, logos, hydrated]
   );
 
   const buildEdges = useCallback(
@@ -133,14 +142,9 @@ export function FlowCanvas({
   const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges());
 
   // Re-sync with fresh server data (added/removed services, status changes)
-  // while keeping any in-session node positions. Standard React Flow
-  // controlled-data pattern.
+  // while restoring saved drags before considering in-session/default positions.
   useEffect(() => {
-    setNodes((curr) => {
-      const pos: Positions = {};
-      for (const n of curr) if (n.type === "service") pos[n.id] = n.position;
-      return buildNodes(pos);
-    });
+    setNodes((curr) => buildNodes(curr));
     setEdges(buildEdges());
   }, [buildNodes, buildEdges, setNodes, setEdges]);
 
@@ -191,6 +195,7 @@ export function FlowCanvas({
         minZoom={0.3}
         maxZoom={1.5}
       >
+        <CanvasResizeFit />
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#ffffff2b" />
         <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
         <MiniMap
