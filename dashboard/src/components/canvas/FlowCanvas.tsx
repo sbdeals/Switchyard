@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -15,6 +15,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { Service, ServiceEdge } from "@/lib/dokploy";
+import { applySelectionChanges } from "@/lib/bulk-selection";
 import { serviceAccent } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
@@ -59,13 +60,24 @@ export function FlowCanvas({
   services,
   edges: serviceEdges,
   onSelect,
+  selectedIds,
+  onSelectionChange,
+  selectionDisabled = false,
 }: {
   services: Service[];
   edges: ServiceEdge[];
   onSelect: (service: Service) => void;
+  selectedIds: string[];
+  onSelectionChange: (ids: string[]) => void;
+  selectionDisabled?: boolean;
 }) {
   // Catalog logos for Railway-style node icons (null while the catalog loads).
   const logos = useTemplateLogos();
+  const selectedIdsRef = useRef(selectedIds);
+
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds;
+  }, [selectedIds]);
 
   const buildNodes = useCallback(
     (overrides?: Positions): Node[] => {
@@ -98,6 +110,7 @@ export function FlowCanvas({
           nodes.push({
             id: service.id,
             type: "service",
+            selected: selectedIds.includes(service.id),
             position: saved[service.id] ?? { x, y: rowY + row * ROW_H },
             data: { service, logo: resolveServiceLogo(service, logos), onSelect } as ServiceNodeData,
           });
@@ -107,7 +120,7 @@ export function FlowCanvas({
       }
       return nodes;
     },
-    [services, onSelect, logos]
+    [services, onSelect, logos, selectedIds]
   );
 
   const buildEdges = useCallback(
@@ -146,7 +159,15 @@ export function FlowCanvas({
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      onNodesChange(changes);
+      const allowed = selectionDisabled
+        ? changes.filter((change) => change.type !== "select")
+        : changes;
+      onNodesChange(allowed);
+      const selectionChanges = allowed.filter((change) => change.type === "select");
+      if (selectionChanges.length > 0) {
+        selectedIdsRef.current = applySelectionChanges(selectedIdsRef.current, selectionChanges);
+        onSelectionChange(selectedIdsRef.current);
+      }
       // Persist positions after a drag — but only the nodes the user actually
       // dragged. Saving every node's position (the old behavior) froze the
       // auto-layout into localStorage, so default-layout improvements never
@@ -169,21 +190,28 @@ export function FlowCanvas({
         });
       }
     },
-    [onNodesChange, setNodes]
+    [onNodesChange, setNodes, onSelectionChange, selectionDisabled]
   );
 
   return (
     <div
       role="region"
       aria-label="Service canvas"
-      className="h-[calc(100vh-9rem)] w-full overflow-hidden rounded-2xl border border-[var(--color-border)]"
+      className="relative h-[calc(100vh-9rem)] w-full overflow-hidden rounded-2xl border border-[var(--color-border)]"
     >
+      <p className="pointer-events-none absolute left-3 top-3 z-10 rounded-lg bg-[var(--color-surface)] px-2 py-1 text-xs text-[var(--color-fg-muted)]">
+        Shift-drag or Shift/Ctrl/⌘-click to select services
+      </p>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
+        elementsSelectable={!selectionDisabled}
+        multiSelectionKeyCode={["Shift", "Control", "Meta"]}
+        selectionKeyCode={selectionDisabled ? null : "Shift"}
+        deleteKeyCode={null}
         colorMode="dark"
         fitView
         fitViewOptions={{ padding: 0.3, maxZoom: 1 }}

@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
+import { BulkActionDialog } from "@/components/BulkActionDialog";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { cn } from "@/lib/utils";
+import { emptySelection, reconcileSelection, replaceSelection, toggleSelection } from "@/lib/bulk-selection";
+import { BULK_ACTION_LABELS, type BulkAction } from "@/lib/bulk-actions";
 
 type View = "canvas" | "grid";
 
@@ -27,6 +30,18 @@ export function Workspace({
   const [view, setView] = useState<View>("canvas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [bulkSelection, setBulkSelection] = useState(emptySelection);
+  const [bulkRequest, setBulkRequest] = useState<{ action: BulkAction; services: Service[] } | null>(null);
+  const serviceIds = useMemo(() => services.map((service) => service.id), [services]);
+  const selection = useMemo(() => reconcileSelection(bulkSelection, serviceIds), [bulkSelection, serviceIds]);
+  if (selection.ids.length !== bulkSelection.ids.length || selection.anchor !== bulkSelection.anchor) {
+    setBulkSelection(selection);
+  }
+  const selectedServices = services.filter((service) => selection.ids.includes(service.id));
+  const onCanvasSelection = useCallback((ids: string[]) => {
+    setBulkSelection((current) => replaceSelection(current, serviceIds, ids));
+  }, [serviceIds]);
+  const openService = useCallback((service: Service) => setSelectedId(service.id), []);
   const router = useRouter();
 
   // Re-resolve the selected service from fresh props so the drawer updates.
@@ -78,20 +93,51 @@ export function Workspace({
         </div>
       </header>
 
+      {selection.ids.length > 0 && (
+        <div role="region" aria-label="Bulk service actions" className="sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-3 shadow-lg">
+          <span className="mr-auto text-sm font-medium">{selection.ids.length} selected</span>
+          {(Object.keys(BULK_ACTION_LABELS) as BulkAction[]).map((action) => (
+            <button
+              key={action}
+              type="button"
+              disabled={bulkRequest !== null}
+              onClick={() => setBulkRequest({ action, services: selectedServices })}
+              className="rounded-lg border border-[var(--color-border-strong)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
+            >
+              {BULK_ACTION_LABELS[action]}
+            </button>
+          ))}
+          <button type="button" disabled={bulkRequest !== null} onClick={() => setBulkSelection(emptySelection)} className="px-2 py-1.5 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] disabled:opacity-40">
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
+        <FlowCanvas services={services} edges={edges} onSelect={openService} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} />
       ) : (
+        <>
+        <p className="mb-3 text-xs text-[var(--color-fg-subtle)]">Select services with the checkboxes. Shift-click to select a range.</p>
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {services.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => setSelectedId(s.id)} />
+              <ServiceCard
+                key={`${s.kind}:${s.id}`}
+                service={s}
+                onOpen={() => setSelectedId(s.id)}
+                selected={selection.ids.includes(s.id)}
+                selectionDisabled={bulkRequest !== null}
+                onToggleSelection={(shift) => setBulkSelection((current) => toggleSelection(current, serviceIds, s.id, shift))}
+              />
             ))}
           </AnimatePresence>
         </motion.div>
+        </>
       )}
 
+      {bulkRequest && <BulkActionDialog {...bulkRequest} onClose={() => setBulkRequest(null)} />}
       <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
       <AgentPanel />
