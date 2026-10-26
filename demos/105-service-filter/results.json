@@ -1,0 +1,73 @@
+{
+  "base": "http://127.0.0.1:3036",
+  "assertions": [
+    "Slash focuses search",
+    "Sequential typing preserves query",
+    "Mid-string insertion preserves caret",
+    "Escape clears search",
+    "Grid hides non-matching services",
+    "Running status combines with query",
+    "Running status reaches URL",
+    "URL unchanged after reload",
+    "Query restored after reload",
+    "Status restored after reload",
+    "Unrelated query params and hash survive edits/reload",
+    "Escape preserves status filter",
+    "Canvas has existing nodes",
+    "Canvas retains node membership and positions",
+    "Canvas retains viewport",
+    "Canvas dims unmatched nodes",
+    "Canvas retains edge membership",
+    "Empty-results message appears",
+    "Empty canvas retains layout and dims all nodes",
+    "Empty grid has no service cards",
+    "Clear filters restores every grid card",
+    "Clear filters removes only owned query params",
+    "Slash does not steal dialog focus",
+    "History updates synchronize search",
+    "Back navigation restores prior filters",
+    "No browser page errors"
+  ],
+  "screenshots": [
+    {
+      "file": "01-search-grid.png",
+      "url": "http://127.0.0.1:3036/?proof=service-filter&tag=one&tag=two&q=getting-started#services"
+    },
+    {
+      "file": "02-status-running.png",
+      "url": "http://127.0.0.1:3036/?proof=service-filter&tag=one&tag=two&q=getting-started&status=running#services"
+    },
+    {
+      "file": "03-url-persistence-after-reload.png",
+      "url": "http://127.0.0.1:3036/?proof=service-filter&tag=one&tag=two&q=getting-started&status=running#services"
+    },
+    {
+      "file": "04-canvas-dimming.png",
+      "url": "http://127.0.0.1:3036/?proof=service-filter&tag=one&tag=two&q=getting-started#services"
+    },
+    {
+      "file": "05-empty-canvas.png",
+      "url": "http://127.0.0.1:3036/?proof=service-filter&tag=one&tag=two&q=service-filter-no-match-9f1b#services"
+    },
+    {
+      "file": "06-empty-grid.png",
+      "url": "http://127.0.0.1:3036/?proof=service-filter&tag=one&tag=two&q=service-filter-no-match-9f1b#services"
+    },
+    {
+      "file": "07-status-stopped.png",
+      "url": "http://127.0.0.1:3036/?proof=service-filter&tag=one&tag=two&status=stopped#services"
+    }
+  ],
+  "pageErrors": [],
+  "canvasBefore": {
+    "nodes": 13,
+    "edges": 0
+  },
+  "dimmedEdges": 0,
+  "totalServices": 13,
+  "queryMatches": 2,
+  "runningQueryMatches": 2,
+  "finalUrl": "http://127.0.0.1:3036/?proof=service-filter&tag=one&tag=two&status=stopped#services",
+  "passed": true,
+  "video": "/workspace/sy-codex-notes/fix/service-filter-proof/video/page@5c4b114862c74690e1bf2d50aa9f1d24.webm"
+}

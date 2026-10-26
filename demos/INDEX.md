@@ -75,3 +75,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#102](https://github.com/sbdeals/Switchyard/pull/102) | codex/volume-usage (main) | Volume disk usage | [102-volume-usage](102-volume-usage/) | Codex pngs | 50 MiB shown ✓ |
 | [#103](https://github.com/sbdeals/Switchyard/pull/103) | codex/shared-vars (main) | Shared project/env variables | [103-shared-vars](103-shared-vars/) | Codex mp4+pngs | container got shared values ✓ |
 | [#104](https://github.com/sbdeals/Switchyard/pull/104) | codex/host-capabilities (main) | Host capability detection + gating | [104-host-capabilities](104-host-capabilities/) | Codex pngs | bridge gating + fail-open ✓ |
+| [#105](https://github.com/sbdeals/Switchyard/pull/105) | codex/service-filter (main) | Service search + status filters | [105-service-filter](105-service-filter/) | Codex mp4+pngs | 26 browser assertions ✓ |
