@@ -78,3 +78,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#105](https://github.com/sbdeals/Switchyard/pull/105) | codex/service-filter (main) | Service search + status filters | [105-service-filter](105-service-filter/) | Codex mp4+pngs | 26 browser assertions ✓ |
 | [#106](https://github.com/sbdeals/Switchyard/pull/106) | codex/service-rename (main) | Service rename | [106-service-rename](106-service-rename/) | Codex mp4+pngs | appName/container unchanged ✓ |
 | [#107](https://github.com/sbdeals/Switchyard/pull/107) | codex/shortcuts-help (main) | Keyboard shortcuts overlay | [107-shortcuts-help](107-shortcuts-help/) | Codex mp4+pngs | browser checks ✓ |
+| [#108](https://github.com/sbdeals/Switchyard/pull/108) | codex/env-compare (main) | Compare environments | [108-env-compare](108-env-compare/) | Codex mp4+pngs | masked/reveal/authz ✓ |

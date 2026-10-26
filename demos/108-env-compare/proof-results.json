@@ -1,0 +1,12 @@
+{
+  "port": 3037,
+  "project": "env-compare-proof-1793004776112",
+  "checks": [
+    "Comparison action response contains variable keys/statuses but no fixture variable or inline YAML values. Existing workspace payload is unchanged from main.",
+    "Explicit variable reveal returns only requested A/B values; other variables remain absent from response.",
+    "Forged environment ID was denied by the live reveal server action without returning values.",
+    "Hide discards revealed values; selecting the other environment swaps A/B and clears prior results.",
+    "Compare view contains no sync/apply or mutation controls.",
+    "Closing/reopening comparison resets results and revealed values."
+  ]
+}

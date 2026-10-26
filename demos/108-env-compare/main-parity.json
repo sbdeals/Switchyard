@@ -1,0 +1,5 @@
+{
+  "dashboard/src/app/page.tsx": true,
+  "dashboard/src/components/service/VariablesTab.tsx": true,
+  "dashboard/src/components/service/ComposeTabs.tsx": true
+}
