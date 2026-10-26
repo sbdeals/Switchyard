@@ -1,0 +1,99 @@
+# AFTER (codex/desktop-stop-reset)
+$ grep -n "label:" desktop/src/main/tray.ts
+41:      label: phase === "ready" ? "Open dashboard" : "Show Switchyard",
+45:      label: "Open Dokploy in browser",
+51:      label: phase === "stopped" ? "Start control plane" : "Restart / converge",
+56:      label: "Stop control plane",
+61:      label: "Reset control plane…",
+67:      label: "Start at login",
+72:    { label: "View logs", click: () => deps.openLogs() },
+73:    { label: "Check for updates…", click: () => deps.checkForUpdates() },
+75:    { label: "Quit (stack keeps running)", click: () => deps.quit() },
+
+$ grep -n -A2 "case \"freshStart\"" desktop/src/main/index.ts
+225:    case "freshStart":
+226-      await confirmReset();
+227-      return;
+
+$ grep -n "NOTICE =" -A5 cli/src/core/control-plane.ts
+8:export const CONTROL_PLANE_STOP_NOTICE =
+9-  "Deployed apps, Compose stacks, and databases keep running; their volumes are kept. " +
+10-  "Stopping ingress can make their URLs unavailable.";
+11-
+12:export const CONTROL_PLANE_RESET_NOTICE =
+13-  "Deletes Dokploy project/deployment metadata, the admin account, and control-plane data (including metrics). " +
+14-  "Deployed apps, Compose stacks, databases, and their volumes are NOT removed. " +
+15-  "They can keep running but become orphaned from the new Dokploy install. " +
+16-  "For a clean install, remove workloads through Dokploy before resetting.";
+17-
+
+$ (cd cli && esbuild src/lib.ts --bundle ... --outfile=dist/lib.js && node --test)
+# Subtest: hash changes when a port changes
+# Subtest: alt ports are published on the container's 80/443
+# Subtest: expose switches the bind host (and the hash); default stays on 127.0.0.1
+# Subtest: run args carry the container name, config-hash label, and traefik configFile
+# Subtest: portFree reflects a busy vs free port
+# Subtest: nextFreePort skips the busy port
+# Subtest: collectComposeIds finds ids at any nesting depth and dedupes
+# Subtest: collectComposeIds tolerates non-object roots
+# Subtest: needsRepair leaves a running stack alone, one-shot exits included
+# Subtest: needsRepair fires on the wedged-created pile even beside a running sibling
+# Subtest: needsRepair fires when nothing is running
+# Subtest: parseContainerRows parses the ID/State format and drops blank lines
+# Subtest: generatePassword: long, URL-safe, non-repeating
+# Subtest: isValidEmail
+# Subtest: sha256 is deterministic
+# Subtest: parsePort validates
+# Subtest: parseJsonLines handles docker NDJSON output
+# tests 49
+# suites 0
+# pass 49
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 295.538058
+
+$ node --test /tmp/verify-desktop-stop-reset.cjs
+# Subtest: actual stopStack: shared planner path preserves workloads and all volumes
+ok 1 - actual stopStack: shared planner path preserves workloads and all volumes
+# Subtest: actual resetAll: workloads survive, control-plane config cleared only after successful teardown
+ok 2 - actual resetAll: workloads survive, control-plane config cleared only after successful teardown
+# Subtest: actual resetAll: failed removal retains stored config and skips reinstall
+ok 3 - actual resetAll: failed removal retains stored config and skips reinstall
+# Subtest: actual tray names describe the control-plane scope
+ok 4 - actual tray names describe the control-plane scope
+# Subtest: actual tray reset: cancel is default, warning is explicit, cancel does no Docker I/O
+ok 5 - actual tray reset: cancel is default, warning is explicit, cancel does no Docker I/O
+# Subtest: actual fresh-start action routes through the same confirmation
+ok 6 - actual fresh-start action routes through the same confirmation
+# Subtest: confirm accepts exactly once and busy state prevents a second reset dialog
+ok 7 - confirm accepts exactly once and busy state prevents a second reset dialog
+# Subtest: direct orchestrator fresh-start action cannot bypass confirmation
+ok 8 - direct orchestrator fresh-start action cannot bypass confirmation
+# Subtest: actual stopped renderer tells users that workloads remain running
+ok 9 - actual stopped renderer tells users that workloads remain running
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 945.486543
+
+$ node --test test/control-plane.test.mjs
+ok 1 - control-plane stop leaves unlabelled containers and all workloads untouched
+ok 2 - only reset removes control-plane volumes; user volumes survive even reset in the fallback design
+ok 3 - planner matches both kind and exact reserved name, without duplicates or input mutation
+ok 4 - planner re-run after applying stop or reset is a no-op
+ok 5 - fake executor stops only the control plane and preserves every volume
+ok 6 - fake reset removes control-plane data after services, leaves workloads, and re-runs safely
+ok 7 - failed inventory aborts before any removal
+ok 8 - reset keeps the shared network when workloads are attached
+ok 9 - reset waits for control-plane tasks but not user service tasks
+ok 10 - failed service removal stops reset before deleting metadata
+ok 11 - failed volume removal is reported instead of claiming a successful reset
+ok 12 - a task-drain timeout preserves control-plane data
+# pass 12
+# fail 0

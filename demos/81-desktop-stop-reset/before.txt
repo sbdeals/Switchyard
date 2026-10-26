@@ -1,0 +1,24 @@
+# BEFORE (main): wording and Fresh start routing
+$ git show origin/main:desktop/src/main/tray.ts | grep -n "label:"
+41:      label: phase === "ready" ? "Open dashboard" : "Show Switchyard",
+45:      label: "Open Dokploy in browser",
+51:      label: phase === "stopped" ? "Start stack" : "Restart / converge",
+56:      label: "Stop stack",
+61:      label: "Reset everything…",
+67:      label: "Start at login",
+72:    { label: "View logs", click: () => deps.openLogs() },
+73:    { label: "Check for updates…", click: () => deps.checkForUpdates() },
+75:    { label: "Quit (stack keeps running)", click: () => deps.quit() },
+
+$ git show origin/main:desktop/src/main/index.ts | grep -n -A3 "message: \"Delete ALL"
+283:    message: "Delete ALL Dokploy data and start fresh?",
+284-    detail:
+285-      "Every project, deployment, database, and the admin account will be permanently deleted. The stack is then reinstalled from scratch.",
+286-  });
+
+$ git show origin/main:desktop/src/main/orchestrator.ts | grep -n -A2 "case \"freshStart\""
+165:      case "freshStart":
+166-        await this.resetAll();
+167-        return;
+# -> the stale-data 'Fresh start (deletes it)' button calls resetAll() directly, with no confirmation
+# -> 'Delete everything' claims every deployment and database is deleted, but downDokploy only removes control-plane services and volumes; workloads keep running (orphaned)
