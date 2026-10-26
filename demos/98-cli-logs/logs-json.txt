@@ -1,0 +1,9 @@
+$ switchyard logs --project 3kqHDPniKw4li3ASlzhvZ --service 6uzOITMTVPDKe9SzRDrkM --lines 5 --json
+# cwd: /workspace/sy-codex-notes/fix/cli-logs-proof/cli-logs-1793001452842
+# Uses the built command parser/action and production HTTP client with a demo browser session injected in memory.
+{"id":"57473ca339b4ff9f85f475e1beb741790b526db23c3f4eba8ef7b3d9affbc947:9bf0e805dd35853d2462bc0ba46d13722f63630af82e9ab6d23be2be707c13d7:0","ts":"2026-10-26T07:57:38.002703936Z","text":"cli-logs tick 5"}
+{"id":"57473ca339b4ff9f85f475e1beb741790b526db23c3f4eba8ef7b3d9affbc947:b7acdc8167dc1a06cee6b080d368141cfc17526a8a7f96233aa5e01ebf0bca2d:0","ts":"2026-10-26T07:57:38.503729326Z","text":"cli-logs tick 6"}
+{"id":"57473ca339b4ff9f85f475e1beb741790b526db23c3f4eba8ef7b3d9affbc947:33db480361c48b5da9d288c336745f1ed2fedc600ec188b1de78c506b95fd0ba:0","ts":"2026-10-26T07:57:39.004344123Z","text":"cli-logs tick 7"}
+{"id":"57473ca339b4ff9f85f475e1beb741790b526db23c3f4eba8ef7b3d9affbc947:1d630a3d8194716da1dcedabdabb08a57cdf058df78b8f0f447fa26c2b85b3a6:0","ts":"2026-10-26T07:57:39.504045942Z","text":"cli-logs tick 8"}
+{"id":"57473ca339b4ff9f85f475e1beb741790b526db23c3f4eba8ef7b3d9affbc947:52e71c07ddc9b1bf11a85194a57e4338253813c06124b479c6a2c90c36a234aa:0","ts":"2026-10-26T07:57:40.004802070Z","text":"cli-logs tick 9"}
+[exit code=0, signal=none]

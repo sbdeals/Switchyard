@@ -1,0 +1,47 @@
+# Round 1 compatibility proof — local VM only
+# cwd: /workspace/wt-cli-logs
+$ node cli/dist/cli.js logs --help
+Usage: switchyard logs [options] [target]
+
+Read service logs through the dashboard API or infrastructure logs through
+Docker
+
+Arguments:
+  target               switchyard | dokploy for infrastructure, otherwise a
+                       service name or ID
+
+Options:
+  --service <name|id>  service to read (default: current directory name)
+  --project <name|id>  project to use (default: the only project)
+  --lines <N>          recent service lines per poll (1–1000) (default: 200)
+  -f, --follow         follow log output until Ctrl+C
+  --json               print service logs as one JSON object per line (NDJSON)
+  --since <duration>   only service logs from this recent window (choices:
+                       "15m", "1h", "6h")
+  -h, --help           display help for command
+
+Infrastructure targets tail 200 lines via Docker. Services named switchyard or dokploy require --service.
+Use either a positional target or --service, not both.
+[exit code=0]
+
+$ node cli/dist/cli.js logs switchyard
+# Executed with sudo for Docker socket permissions; DOCKER_HOST pinned to unix:///var/run/docker.sock.
+# First 12 lines of the command output (tail 200); sensitive-looking lines/opaque strings redacted.
+▲ Next.js 16.2.9
+- Local:         http://localhost:3001
+- Network:       http://0.0.0.0:3001
+✓ Ready in 0ms
+[collector] started (interval 20000ms, store off, alerts on)
+[traefik-metrics] cannot reach http://127.0.0.1:8081/metrics (fetch failed); HTTP metrics disabled. Set TRAEFIK_METRICS_URL if Traefik's Prometheus endpoint is elsewhere.
+[collector] crash-loop on [redacted opaque string] but no alert sent: no Dokploy notification channels configured
+[collector] crash-loop on [redacted opaque string] but no alert sent: no Dokploy notification channels configured
+[collector] crash-loop on flask-hello-world-bsyq-puyupd but no alert sent: no Dokploy notification channels configured
+[collector] crash-loop on go-getting-started-vtzp-gzeaez but no alert sent: no Dokploy notification channels configured
+[collector] crash-loop on [redacted opaque string] but no alert sent: no Dokploy notification channels configured
+[collector] crash-loop on [redacted opaque string] but no alert sent: no Dokploy notification channels configured
+[exit code=0]
+
+# Checks:
+# cd cli && npm run typecheck && npm test — passed; 153 node:test tests.
+# cd dashboard && npm run lint && npx tsc --noEmit && npx vitest run — passed; 30 Vitest tests.
+# No resources created, stopped or deleted. No commit.

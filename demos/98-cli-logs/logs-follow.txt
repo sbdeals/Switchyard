@@ -1,0 +1,21 @@
+$ switchyard logs --project 3kqHDPniKw4li3ASlzhvZ --lines 5 --follow
+# cwd: /workspace/sy-codex-notes/fix/cli-logs-proof/cli-logs-1793001452842
+# Uses the built command parser/action and production HTTP client with a demo browser session injected in memory.
+2026-10-26T07:57:38.002703936Z cli-logs tick 5
+2026-10-26T07:57:38.503729326Z cli-logs tick 6
+2026-10-26T07:57:39.004344123Z cli-logs tick 7
+2026-10-26T07:57:39.504045942Z cli-logs tick 8
+2026-10-26T07:57:40.004802070Z cli-logs tick 9
+2026-10-26T07:57:40.505497726Z cli-logs tick 10
+2026-10-26T07:57:41.006868386Z cli-logs tick 11
+2026-10-26T07:57:41.506096277Z cli-logs tick 12
+2026-10-26T07:57:42.006054344Z cli-logs tick 13
+2026-10-26T07:57:42.506988192Z cli-logs tick 14
+2026-10-26T07:57:43.007762905Z cli-logs tick 15
+2026-10-26T07:57:43.508761045Z cli-logs tick 16
+2026-10-26T07:57:44.007722435Z cli-logs tick 17
+2026-10-26T07:57:44.508509087Z cli-logs tick 18
+2026-10-26T07:57:45.009304937Z cli-logs tick 19
+2026-10-26T07:57:45.509081183Z cli-logs tick 20
+^C (SIGINT sent after six seconds of output)
+[exit code=0, signal=none]

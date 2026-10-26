@@ -1,0 +1,13 @@
+Usage: switchyard logs [options]
+
+Read recent service logs through the dashboard API
+
+Options:
+  --service <name|id>  service to read (default: current directory name)
+  --project <name|id>  project to use (default: the only project)
+  --lines <N>          recent lines per poll (1–1000) (default: 200)
+  -f, --follow         poll for new lines until Ctrl+C
+  --json               print one JSON object per line (NDJSON)
+  --since <duration>   only logs from this recent window (choices: "15m", "1h",
+                       "6h")
+  -h, --help           display help for command

@@ -1,0 +1,9 @@
+$ switchyard logs --project 3kqHDPniKw4li3ASlzhvZ --lines 5 --since 15m
+# cwd: /workspace/sy-codex-notes/fix/cli-logs-proof/cli-logs-1793001452842
+# Uses the built command parser/action and production HTTP client with a demo browser session injected in memory.
+2026-10-26T07:57:44.508509087Z cli-logs tick 18
+2026-10-26T07:57:45.009304937Z cli-logs tick 19
+2026-10-26T07:57:45.509081183Z cli-logs tick 20
+2026-10-26T07:57:46.010226803Z cli-logs tick 21
+2026-10-26T07:57:46.510775770Z cli-logs tick 22
+[exit code=0, signal=none]

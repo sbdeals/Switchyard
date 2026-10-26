@@ -1,0 +1,7 @@
+$ switchyard logs --project 3kqHDPniKw4li3ASlzhvZ --service cli-logs-does-not-exist
+# cwd: /workspace/sy-codex-notes/fix/cli-logs-proof/cli-logs-1793001452842
+# Uses the built command parser/action and production HTTP client with a demo browser session injected in memory.
+
+[stderr]
+Unknown service: cli-logs-does-not-exist in cli-logs-1793001452842/production. Select one with --service <name|id>.
+[exit code=1, signal=none]

@@ -1,0 +1,15 @@
+Started: 2026-10-26T07:57:32.842Z
+Dashboard: http://127.0.0.1:3026
+Fixture: cli-logs-1793001452842
+Proof uses the real built createLogsCommand parser, runServiceLogs action, createLogsClient HTTP transport, and withLogsInterrupt signal handler.
+Authentication is supplied by the authorized demo browser login; the installed-bin saved-credential flow is intentionally not exercised.
+No credentials are written to files, command arguments, or transcripts.
+Created project 3kqHDPniKw4li3ASlzhvZ; compose 6uzOITMTVPDKe9SzRDrkM.
+Fixture HTTP: 200 cli-logs proof on :3026
+Passed: recent logs; exactly five lines; valid NDJSON; follow emits new lines without duplicates; actual SIGINT exits 0; since; clear unknown-service and unauthenticated errors; anonymous endpoint returns 401.
+Deleted throwaway compose 6uzOITMTVPDKe9SzRDrkM via API.
+Deleted throwaway project 3kqHDPniKw4li3ASlzhvZ via API.
+Cleanup verified: project absent from project.all.
+Finished: 2026-10-26T07:57:58.187Z
+Post-cleanup Docker name-filter check: no containers remain with fixture prefix cli-logs-1793001452842.
+Root cleanup: removed session-created sy-cli-logs dashboard container, sy-cli-logs-data volume, and switchyard-dash:cli-logs image tag.

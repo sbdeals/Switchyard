@@ -68,3 +68,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#95](https://github.com/sbdeals/Switchyard/pull/95) | codex/cli-link-vars (codex/cli-up) | CLI link + variables, .env excluded | [95-cli-link-vars](95-cli-link-vars/) | before/after txt + live transcript | .env excluded, masked vars ✓ |
 | [#96](https://github.com/sbdeals/Switchyard/pull/96) | codex/deploy-commit-info (main) | Commit SHA + subject per deploy | [96-deploy-commit-info](96-deploy-commit-info/) | Codex proof pngs | SHA+subject on 2 deploys ✓ |
 | [#97](https://github.com/sbdeals/Switchyard/pull/97) | codex/env-duplicate (main) | Duplicate environment | [97-env-duplicate](97-env-duplicate/) | Codex mp4+pngs | 2 services copied, no domains ✓ |
+| [#98](https://github.com/sbdeals/Switchyard/pull/98) | codex/cli-logs (codex/cli-up) | switchyard logs <service> | [98-cli-logs](98-cli-logs/) | CLI transcripts | logs/json/follow + infra compat ✓ |
