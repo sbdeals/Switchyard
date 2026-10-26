@@ -39,6 +39,7 @@ import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { DeployChecksStatus } from "@/components/service/DeployChecks";
 import {
   AppOverviewTab,
   AppBuildTab,
@@ -464,7 +465,10 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 <DeploymentsTab app={service} />
               )}
               {tab === "deployments" && service.kind === "compose" && (
-                <DeploymentHistory deployments={service.deployments} />
+                <div className="space-y-6">
+                  <DeployChecksStatus service={service} />
+                  <DeploymentHistory deployments={service.deployments} />
+                </div>
               )}
               {tab === "schedules" && service.kind === "application" && (
                 <SchedulesTab app={service} />

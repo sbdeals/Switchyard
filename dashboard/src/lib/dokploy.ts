@@ -24,10 +24,14 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
+import { composeDeployChecksSupport, mapApplicationChecks, mapComposeChecks, readApplicationChecks, readComposeChecks, type DeployCheckInput } from "./deploy-checks";
+import { applicationCheckSupport, observeDeployChecks, type DeployCheckObservation, type DeployCheckSupport } from "./deploy-check-status";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
   listRuntimeStates,
+  isSwarmManager,
+  readDeployCheckContainers,
   type ServiceRuntime,
 } from "./docker";
 
@@ -217,6 +221,10 @@ export interface AppSecurity {
 
 export interface Application extends ServiceBase {
   kind: "application";
+  deployChecks: DeployCheckInput | null;
+  deployCheckSupport: DeployCheckSupport;
+  deployCheckObservation?: DeployCheckObservation;
+  swarmSettingsSupported: boolean;
   sourceType: AppSource | null;
   buildType: BuildType | null;
   description: string | null;
@@ -262,6 +270,10 @@ export interface Application extends ServiceBase {
 
 export interface ComposeService extends ServiceBase {
   kind: "compose";
+  deployChecks: DeployCheckInput | null;
+  deployCheckSupport: DeployCheckSupport;
+  deployCheckServiceName?: string;
+  deployCheckObservation?: DeployCheckObservation;
   composeFile: string | null;
   composeType: string | null;
   /** Public domains routed to the stack's services (Dokploy `domains`). */
@@ -712,6 +724,7 @@ export async function reloadDatabase(engine: Engine, id: string, appName: string
 // --- applications -----------------------------------------------------------
 
 interface RawApplicationDetail {
+  serverId?: string | null;
   name?: string;
   appName?: string;
   applicationStatus?: ServiceStatus;
@@ -805,7 +818,7 @@ function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment
 }
 
 /** List every application in the tree, enriched with detail. */
-async function listApplications(tree: RawProject[]): Promise<Application[]> {
+async function listApplications(tree: RawProject[], manager: boolean): Promise<Application[]> {
   const refs = collectIds(tree, (env) => (env.applications ?? []).map((a) => a.applicationId));
   return Promise.all(
     refs.map(async ({ id, ...scope }) => {
@@ -815,6 +828,11 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
       return {
         ...scope,
         kind: "application",
+        swarmSettingsSupported: manager && !d.serverId,
+        deployChecks: readApplicationChecks(d.healthCheckSwarm),
+        deployCheckSupport: d.healthCheckSwarm && !readApplicationChecks(d.healthCheckSwarm)
+          ? { healthcheck: false, preDeploy: false, reason: "A custom Swarm healthcheck is configured. Manage it in Deploy settings." }
+          : applicationCheckSupport(manager, !!d.serverId),
         id,
         name: d.name ?? id,
         appName: d.appName ?? "",
@@ -1114,7 +1132,32 @@ export interface ApplicationPatch {
 }
 
 export async function updateApplication(id: string, patch: ApplicationPatch): Promise<void> {
+  if (patch.healthCheckSwarm !== undefined) {
+    const app = await request<RawApplicationDetail>(`application.one?applicationId=${encodeURIComponent(id)}`);
+    if (!await isSwarmManager() || app.serverId) throw new Error("Not supported on this host: application healthchecks require a verified local Swarm manager.");
+  }
   await request("application.update", { method: "POST", body: { applicationId: id, ...patch } });
+}
+
+/** The user's Dokploy session authorizes both the read and the atomic update. */
+export async function saveDeployChecks(kind: "application" | "compose", id: string, input: DeployCheckInput): Promise<void> {
+  if (kind === "application") {
+    const d = await request<RawApplicationDetail>(`application.one?applicationId=${encodeURIComponent(id)}`);
+    const support = applicationCheckSupport(await isSwarmManager(), !!d.serverId);
+    if (!support.healthcheck) throw new Error(support.reason ?? "Not supported on this host.");
+    if (d.healthCheckSwarm && !readApplicationChecks(d.healthCheckSwarm)) {
+      throw new Error("A custom Swarm healthcheck is configured. Manage it in Deploy settings.");
+    }
+    await updateApplication(id, mapApplicationChecks(input));
+  } else if (kind === "compose") {
+    const d = await request<RawComposeDetail>(`compose.one?composeId=${encodeURIComponent(id)}`);
+    const support = composeCheckSupport(d);
+    if (!support.healthcheck) throw new Error(support.reason ?? "Not supported on this host.");
+    const patch = mapComposeChecks(d.composeFile ?? "", d.appName ?? "", d.command ?? null, input);
+    await request("compose.update", { method: "POST", body: { composeId: id, ...patch } });
+  } else {
+    throw new Error("Deploy checks only support applications and Compose services.");
+  }
 }
 
 /** Build-strategy settings applied by `application.saveBuildType`. */
@@ -1627,6 +1670,9 @@ export async function removeMount(mountId: string): Promise<void> {
 // --- compose ----------------------------------------------------------------
 
 interface RawComposeDetail {
+  serverId?: string | null;
+  sourceType?: string | null;
+  command?: string | null;
   name?: string;
   appName?: string;
   composeStatus?: ServiceStatus;
@@ -1636,6 +1682,25 @@ interface RawComposeDetail {
   createdAt?: string | null;
   domains?: RawDomain[];
   deployments?: RawDeployment[];
+}
+
+function composeCheckSupport(d: RawComposeDetail): DeployCheckSupport {
+  if (d.serverId || d.composeType === "stack") {
+    return { healthcheck: false, preDeploy: false, reason: "Not supported on this host: deploy checks require local docker-compose." };
+  }
+  const support = composeDeployChecksSupport(d.composeFile ?? "", d.sourceType ?? "");
+  const saved = readComposeChecks(d.composeFile ?? "");
+  if (support.supported && saved) {
+    try {
+      mapComposeChecks(d.composeFile ?? "", d.appName ?? "", d.command ?? null, saved);
+    } catch (error) {
+      return { healthcheck: false, preDeploy: false, reason: error instanceof Error ? error.message : "Compose deploy command could not be verified." };
+    }
+  }
+  if (support.supported && d.command?.trim() && !saved) {
+    return { healthcheck: false, preDeploy: false, reason: "A custom Compose deploy command is configured. Manage its checks in Compose YAML." };
+  }
+  return { healthcheck: support.supported, preDeploy: support.supported, reason: support.reason ?? null };
 }
 
 export const STARTER_COMPOSE = `services:
@@ -1656,6 +1721,9 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
       return {
         ...scope,
         kind: "compose",
+        deployChecks: readComposeChecks(d.composeFile ?? ""),
+        deployCheckSupport: composeCheckSupport(d),
+        deployCheckServiceName: composeDeployChecksSupport(d.composeFile ?? "", d.sourceType ?? "").serviceName,
         id,
         name: d.name ?? id,
         appName: d.appName ?? "",
@@ -2123,9 +2191,10 @@ export async function loadWorkspace(): Promise<{
   projects: ProjectNode[];
 }> {
   const tree = await rawTree();
+  const manager = await isSwarmManager();
   const [databases, applications, compose] = await Promise.all([
     listDatabases(tree),
-    listApplications(tree),
+    listApplications(tree, manager),
     listCompose(tree),
   ]);
   const services = [...databases, ...applications, ...compose].sort((a, b) =>
@@ -2146,6 +2215,22 @@ export async function loadWorkspace(): Promise<{
   } catch {
     // dockerode unavailable in this deployment — leave runtime undefined.
   }
+  await Promise.all(services.map(async (service) => {
+    if (service.kind === "database" || !service.deployChecks || !service.deployCheckSupport.healthcheck) return;
+    const checks = service.deployChecks;
+    if (!checks.healthcheckPath && !checks.preDeployCommand) return;
+    try {
+      const containers = await readDeployCheckContainers(service.appName, service.kind);
+      const latest = [...service.deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      const expected = mapApplicationChecks({ ...checks, preDeployCommand: "" }).healthCheckSwarm?.Test;
+      service.deployCheckObservation = observeDeployChecks(checks, containers, latest?.createdAt, expected);
+      if (service.runtime && service.deployCheckObservation.healthcheck === "Unhealthy") {
+        service.runtime.health = "degraded";
+      }
+    } catch {
+      // Unavailable observations remain explicitly unknown, never passed.
+    }
+  }));
   return { services, projects: projectsFromTree(tree) };
 }
 

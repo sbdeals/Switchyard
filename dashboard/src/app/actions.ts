@@ -30,6 +30,7 @@ import {
   type GithubBranch,
   applicationAction,
   updateApplication,
+  saveDeployChecks,
   saveAppBuildType,
   saveApplicationEnvironment,
   createDomain,
@@ -99,6 +100,7 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import type { DeployCheckInput } from "@/lib/deploy-checks";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -382,6 +384,10 @@ export async function updateApplicationAction(
     await updateApplication(id, patch);
     if (redeploy) await applicationAction(id, "deploy");
   });
+}
+
+export async function saveDeployChecksAction(kind: "application" | "compose", id: string, input: DeployCheckInput): Promise<ActionResult> {
+  return wrap(() => saveDeployChecks(kind, id, input));
 }
 
 export async function saveApplicationEnvAction(id: string, env: string): Promise<ActionResult> {
