@@ -11,6 +11,7 @@ import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { DirtyGuardProvider, useGuardedNavigation } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
 
 type View = "canvas" | "grid";
@@ -24,17 +25,35 @@ export function Workspace({
   projects: ProjectNode[];
   edges: ServiceEdge[];
 }) {
+  return (
+    <DirtyGuardProvider>
+      <WorkspaceContent services={services} projects={projects} edges={edges} />
+    </DirtyGuardProvider>
+  );
+}
+
+function WorkspaceContent({
+  services,
+  projects,
+  edges,
+}: {
+  services: Service[];
+  projects: ProjectNode[];
+  edges: ServiceEdge[];
+}) {
   const [view, setView] = useState<View>("canvas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const router = useRouter();
+  const navigate = useGuardedNavigation();
+  const selectService = (id: string) => navigate(() => setSelectedId(id), id === selectedId);
 
   // Re-resolve the selected service from fresh props so the drawer updates.
   const selected = services.find((s) => s.id === selectedId) ?? null;
 
   // Open the new service's drawer and pull fresh state in.
   const onDeployed = (id: string) => {
-    setSelectedId(id);
+    selectService(id);
     router.refresh();
   };
 
@@ -63,7 +82,10 @@ export function Workspace({
             </ViewToggle>
           </div>
           <button
-            onClick={() => setProjectsOpen(true)}
+            onClick={() => navigate(() => {
+              setSelectedId(null);
+              setProjectsOpen(true);
+            })}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
           >
             <FolderGit2 className="size-3.5" /> Projects
@@ -81,12 +103,12 @@ export function Workspace({
       {services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
+        <FlowCanvas services={services} edges={edges} onSelect={(s) => selectService(s.id)} />
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {services.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => setSelectedId(s.id)} />
+              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => selectService(s.id)} />
             ))}
           </AnimatePresence>
         </motion.div>

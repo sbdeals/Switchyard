@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { useDirtyGuard } from "@/components/DirtyGuard";
+import { hasDirtyFields } from "@/lib/dirty-guard";
 import {
   composeLifecycleAction,
   saveComposeFileAction,
@@ -49,6 +51,7 @@ export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
   const dirty = value !== (compose.composeFile ?? "");
+  useDirtyGuard("Compose", dirty);
 
   function save(redeploy: boolean) {
     setError(null);
@@ -114,9 +117,11 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
   const [serviceName, setServiceName] = useState(services[0] ?? "");
   const [host, setHost] = useState("");
   const [port, setPort] = useState("80");
+  const [defaults, setDefaults] = useState({ serviceName, port });
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
+  useDirtyGuard("Domains", hasDirtyFields({ host, serviceName, port }, { host: "", ...defaults }));
 
   function add() {
     if (!host.trim() || !serviceName.trim()) return;
@@ -129,8 +134,10 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
         host,
         Number(port) || 80
       );
-      if (res.ok) setHost("");
-      else setError(res.error);
+      if (res.ok) {
+        setHost("");
+        setDefaults({ serviceName, port });
+      } else setError(res.error);
     });
   }
 
@@ -146,8 +153,10 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
         serviceName,
         Number(port) || 80
       );
-      if (res.ok) setGenerated(res.host);
-      else setError(res.error);
+      if (res.ok) {
+        setGenerated(res.host);
+        setDefaults({ serviceName, port });
+      } else setError(res.error);
     });
   }
 

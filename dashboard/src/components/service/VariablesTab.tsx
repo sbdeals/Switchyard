@@ -8,6 +8,7 @@ import {
   saveComposeEnvAction,
 } from "@/app/actions";
 import { SaveRow, useSavedFlash } from "@/components/service/primitives";
+import { useDirtyGuard } from "@/components/DirtyGuard";
 
 export function VariablesTab({ service }: { service: Service }) {
   const [value, setValue] = useState(service.env ?? "");
@@ -16,6 +17,7 @@ export function VariablesTab({ service }: { service: Service }) {
   const [error, setError] = useState<string | null>(null);
 
   const dirty = value !== (service.env ?? "");
+  useDirtyGuard("Variables", dirty);
   const count = value.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).length;
 
   function save() {

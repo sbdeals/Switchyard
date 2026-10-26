@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { useDirtyGuard, useGuardedNavigation } from "@/components/DirtyGuard";
 import {
   X,
   Database as DatabaseIcon,
@@ -346,15 +347,21 @@ function ResizeHandle({
 
 export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("overview");
+  const navigate = useGuardedNavigation();
+  const close = () => navigate(onClose);
+  const selectTab = (id: TabId) => navigate(() => {
+    setTab(id);
+    document.getElementById(`drawer-tab-${id}`)?.focus();
+  }, id === tab);
   const titleId = useId();
-  const dialogRef = useDialogFocus<HTMLElement>(onClose);
+  const dialogRef = useDialogFocus<HTMLElement>(close);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
   // Reset to Overview when a different service is opened (adjust state during
   // render — the React-recommended alternative to a resetting effect).
-  const [shownId, setShownId] = useState<string | null>(null);
-  if (service && service.id !== shownId) {
-    setShownId(service.id);
-    setTab("overview");
+  const [shown, setShown] = useState({ id: service?.id ?? null, session: 0 });
+  if ((service?.id ?? null) !== shown.id) {
+    setShown({ id: service?.id ?? null, session: shown.session + 1 });
+    if (service) setTab("overview");
   }
   const baseTabs =
     service?.kind === "application"
@@ -373,7 +380,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={close}
           />
           <motion.aside
             ref={dialogRef}
@@ -391,7 +398,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             className="fixed inset-y-0 right-0 z-50 flex flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
           >
             <ResizeHandle width={width} apply={applyWidth} reset={resetWidth} />
-            <Header service={service} onClose={onClose} titleId={titleId} />
+            <Header service={service} onClose={close} titleId={titleId} />
             <nav
               role="tablist"
               aria-label="Service sections"
@@ -404,11 +411,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 else if (e.key === "End") next = tabs.length - 1;
                 if (next === null) return;
                 e.preventDefault();
-                setTab(tabs[next]);
-                const el = e.currentTarget.querySelector<HTMLElement>(
-                  `#drawer-tab-${tabs[next]}`
-                );
-                el?.focus();
+                selectTab(tabs[next]);
               }}
               className="flex gap-1 overflow-x-auto border-b border-[var(--color-border)] px-4 [scrollbar-width:thin]"
             >
@@ -421,7 +424,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                   aria-selected={tab === id}
                   aria-controls="drawer-tabpanel"
                   tabIndex={tab === id ? 0 : -1}
-                  onClick={() => setTab(id)}
+                  onClick={() => selectTab(id)}
                   className={cn(
                     "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
                     tab === id
@@ -436,6 +439,8 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             </nav>
 
             <div
+              // A fresh session also drops discarded state if reopened mid-exit.
+              key={`${service.id}:${shown.session}`}
               id="drawer-tabpanel"
               role="tabpanel"
               aria-labelledby={`drawer-tab-${tab}`}
@@ -602,6 +607,7 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
     port !== (db.externalPort != null ? String(db.externalPort) : "") ||
     cpu !== (db.cpuLimit ?? "") ||
     mem !== (db.memoryLimit ?? "");
+  useDirtyGuard("Settings", dirty);
 
   function save() {
     setSaveError(null);
