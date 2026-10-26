@@ -1,0 +1,148 @@
+{
+  "slug": "db-connect-mvp4qp8g",
+  "base": "http://127.0.0.1:3065",
+  "results": [
+    {
+      "check": "postgres: deploy",
+      "passed": false,
+      "message": "Local postgres.deploy failed (HTTP 500)",
+      "swarmUnavailable": true
+    },
+    {
+      "check": "redis: deploy",
+      "passed": false,
+      "message": "Local redis.deploy failed (HTTP 500)",
+      "swarmUnavailable": true
+    },
+    {
+      "check": "before any reveal/copy: initial HTML and RSC exclude raw and encoded fixture passwords",
+      "passed": true,
+      "htmlBytes": 79579,
+      "rscBytes": 26564
+    },
+    {
+      "check": "postgres: internal host/port and masked credentials; external URI absent",
+      "passed": true
+    },
+    {
+      "check": "postgres: copy fetches password while display remains masked",
+      "passed": true
+    },
+    {
+      "check": "postgres: reveal and hide password",
+      "passed": true
+    },
+    {
+      "check": "postgres: URI and CLI encode @:?#% and copy exact values",
+      "passed": true
+    },
+    {
+      "check": "postgres: clipboard failure is generic",
+      "passed": true,
+      "message": "Could not copy. Reveal the value to copy it manually."
+    },
+    {
+      "check": "redis: internal host/port and masked credentials; external URI absent",
+      "passed": true
+    },
+    {
+      "check": "redis: copy fetches password while display remains masked",
+      "passed": true
+    },
+    {
+      "check": "redis: reveal and hide password",
+      "passed": true
+    },
+    {
+      "check": "redis: URI and CLI encode @:?#% and copy exact values",
+      "passed": true
+    },
+    {
+      "check": "redis: clipboard failure is generic",
+      "passed": true,
+      "message": "Could not copy. Reveal the value to copy it manually."
+    },
+    {
+      "check": "ownership-checked action rejects a missing database with a generic error",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "check": "configured external port shows external URI; panel has no port editor",
+      "passed": true,
+      "configuredPort": 3065
+    },
+    {
+      "check": "after reveal and external metadata change: initial HTML and RSC exclude raw and encoded fixture passwords",
+      "passed": true,
+      "htmlBytes": 79579,
+      "rscBytes": 26564
+    },
+    {
+      "check": "postgres: deployment runtime state",
+      "applicationStatus": "error",
+      "hostSwarmState": "inactive",
+      "runningContainers": 0
+    },
+    {
+      "check": "postgres: live network connection",
+      "proven": false,
+      "limitation": "No database container is running after deployment; connection strings only are proven."
+    },
+    {
+      "check": "redis: deployment runtime state",
+      "applicationStatus": "error",
+      "hostSwarmState": "inactive",
+      "runningContainers": 0
+    },
+    {
+      "check": "redis: live network connection",
+      "proven": false,
+      "limitation": "No database container is running after deployment; connection strings only are proven."
+    }
+  ],
+  "fixtures": [
+    {
+      "engine": "postgres",
+      "name": "db-connect-mvp4qp8g-postgres",
+      "id": "nquWZH-mRWLeEgiEFIdA1",
+      "appName": "db-connect-mvp4qp8g-postgres-3ejz7k",
+      "image": "postgres:16"
+    },
+    {
+      "engine": "redis",
+      "name": "db-connect-mvp4qp8g-redis",
+      "id": "6sboTvLCE3meY6omaPPQL",
+      "appName": "db-connect-mvp4qp8g-redis-mswsde",
+      "image": "redis:7-alpine"
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "db-connect-mvp4qp8g-redis",
+      "deletedViaAPI": true
+    },
+    {
+      "name": "db-connect-mvp4qp8g-postgres",
+      "deletedViaAPI": true
+    },
+    {
+      "name": "db-connect-mvp4qp8g",
+      "deletedViaAPI": true
+    }
+  ],
+  "limitations": [
+    "Dokploy v0.30.10 rejects slash in databasePassword on create; live fixtures cover @:?#%, while slash encoding is covered by the pure builder tests."
+  ],
+  "cleanupVerification": {
+    "via": "Dokploy project.all API",
+    "remainingDbConnectProjects": 0,
+    "passed": true
+  },
+  "clipboardVerification": {
+    "transport": "native browser Clipboard API",
+    "nativeWriteAndReadback": true,
+    "syntheticFailureAlsoCovered": true,
+    "clearAttemptedBeforeBrowserClose": true
+  }
+}
