@@ -1,0 +1,15 @@
+--- env: paste fixture (export, dotted, dashed, multiline quoted, duplicate)
+new text: ["4 variables"]
+--- env: add bare line BROKEN_LINE
+new text: ["Variables line 8: use KEY=value."]
+--- port: published 70000 -> 80
+new text: ["Published port: enter a whole number from 1 to 65535."]
+--- cron: "not-a-cron"
+new text: ["Cron expression: use 5 fields, or 6 with seconds first."]
+--- cron: "0 0 L * *" (last day of month)
+new text: ["demo-lastday","0 0 L * *","bash -c echo hi"]
+--- mount: volume "my data" at relative path "data"
+new text: ["Mount path: enter an absolute container path other than /, without NUL characters."]
+--- Dokploy DB state after run
+||ports:|||sched:|demo-lastday 0 0 L * *||mounts:|
+

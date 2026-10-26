@@ -1,0 +1,7 @@
+export FOO=bar
+spring.datasource.url=demo
+my-key=1
+PRIVATE_KEY="-----BEGIN KEY-----
+abc
+-----END KEY-----"
+FOO=last # duplicate
