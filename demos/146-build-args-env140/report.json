@@ -1,0 +1,290 @@
+{
+  "base": "http://127.0.0.1:3078",
+  "container": "sy-build-args-env140",
+  "slug": "build-args-env140-1793015404657",
+  "startedAt": "2026-10-26T11:50:04.657Z",
+  "checks": [
+    {
+      "name": "Created isolated app/database fixtures through local Dokploy API"
+    },
+    {
+      "name": "HTML and RSC contain zero runtime/build-argument/build-secret/database-password sentinels before tab opens",
+      "html": {
+        "bytes": 80530,
+        "sha256": "415a58c21318bd243d95d032d73afcb351847630b1cef6dbd4f6d10375e9abb3",
+        "sentinelHits": {
+          "runtime": false,
+          "runtimeNew": false,
+          "build": false,
+          "buildNew": false,
+          "secret": false,
+          "password": false
+        }
+      },
+      "rsc": {
+        "bytes": 27413,
+        "sha256": "6451a0de6bdf8d9c6c0ad7399edb4e4be0710dab22da5d1953ebf1160384f3b6",
+        "sentinelHits": {
+          "runtime": false,
+          "runtimeNew": false,
+          "build": false,
+          "buildNew": false,
+          "secret": false,
+          "password": false
+        }
+      }
+    },
+    {
+      "name": "Build tab lazily loaded existing arguments and established a clean baseline"
+    },
+    {
+      "name": "Masked review saved build arguments; latest runtime env, build secrets and createEnvFile survived; no deploy triggered"
+    },
+    {
+      "name": "Variables tab lazily loaded latest runtime environment with a clean baseline"
+    },
+    {
+      "name": "Runtime save persisted latest env without wiping build arguments/build secrets/createEnvFile"
+    },
+    {
+      "name": "Reopening both editors reloads saved values with no dirty state"
+    },
+    {
+      "name": "Fresh HTML and RSC remain redacted after both saves",
+      "html": {
+        "bytes": 80530,
+        "sha256": "415a58c21318bd243d95d032d73afcb351847630b1cef6dbd4f6d10375e9abb3",
+        "sentinelHits": {
+          "runtime": false,
+          "runtimeNew": false,
+          "build": false,
+          "buildNew": false,
+          "secret": false,
+          "password": false
+        }
+      },
+      "rsc": {
+        "bytes": 27413,
+        "sha256": "eebbb50ca7f1f035fc4471fb00d5d087fd8bca38d692909c75b760a9291d9a70",
+        "sentinelHits": {
+          "runtime": false,
+          "runtimeNew": false,
+          "build": false,
+          "buildNew": false,
+          "secret": false,
+          "password": false
+        }
+      }
+    },
+    {
+      "name": "Database password loads only after explicit reveal"
+    },
+    {
+      "name": "Captured browser response chunks confirm on-demand args/env/password loads and no build-secret sentinel",
+      "incompleteResponses": [
+        {
+          "stage": "before-tabs",
+          "bytes": 0,
+          "error": "cdpSession.send: Protocol error (Network.getResponseBody): No resource with given identifier found"
+        },
+        {
+          "stage": "before-tabs",
+          "bytes": 285455,
+          "error": "Stream remained open after action completed"
+        },
+        {
+          "stage": "runtime-save",
+          "bytes": 27420,
+          "error": "Stream remained open after action completed"
+        }
+      ]
+    }
+  ],
+  "network": [
+    {
+      "stage": "before-tabs",
+      "path": "/",
+      "type": "text/x-component",
+      "status": 200,
+      "captureError": "cdpSession.send: Protocol error (Network.getResponseBody): No resource with given identifier found",
+      "bytes": 0,
+      "sentinelHits": {
+        "runtime": false,
+        "runtimeNew": false,
+        "build": false,
+        "buildNew": false,
+        "secret": false,
+        "password": false
+      }
+    },
+    {
+      "stage": "before-tabs",
+      "path": "/",
+      "method": "GET",
+      "type": "text/html",
+      "status": 200,
+      "completed": true,
+      "bytes": 80530,
+      "sentinelHits": {
+        "runtime": false,
+        "runtimeNew": false,
+        "build": false,
+        "buildNew": false,
+        "secret": false,
+        "password": false
+      }
+    },
+    {
+      "stage": "before-tabs",
+      "path": "/",
+      "method": "POST",
+      "type": "text/x-component",
+      "status": 200,
+      "bytes": 285455,
+      "sentinelHits": {
+        "runtime": false,
+        "runtimeNew": false,
+        "build": false,
+        "buildNew": false,
+        "secret": false,
+        "password": false
+      }
+    },
+    {
+      "stage": "build-lazy-load",
+      "path": "/",
+      "method": "POST",
+      "type": "text/x-component",
+      "status": 200,
+      "completed": true,
+      "bytes": 155,
+      "sentinelHits": {
+        "runtime": false,
+        "runtimeNew": false,
+        "build": true,
+        "buildNew": false,
+        "secret": false,
+        "password": false
+      }
+    },
+    {
+      "stage": "build-save",
+      "path": "/",
+      "method": "POST",
+      "type": "text/x-component",
+      "status": 200,
+      "completed": true,
+      "bytes": 27420,
+      "sentinelHits": {
+        "runtime": false,
+        "runtimeNew": false,
+        "build": false,
+        "buildNew": false,
+        "secret": false,
+        "password": false
+      }
+    },
+    {
+      "stage": "runtime-lazy-load",
+      "path": "/",
+      "method": "POST",
+      "type": "text/x-component",
+      "status": 200,
+      "completed": true,
+      "bytes": 154,
+      "sentinelHits": {
+        "runtime": false,
+        "runtimeNew": true,
+        "build": false,
+        "buildNew": false,
+        "secret": false,
+        "password": false
+      }
+    },
+    {
+      "stage": "runtime-save",
+      "path": "/",
+      "method": "POST",
+      "type": "text/x-component",
+      "status": 200,
+      "bytes": 27420,
+      "sentinelHits": {
+        "runtime": false,
+        "runtimeNew": false,
+        "build": false,
+        "buildNew": false,
+        "secret": false,
+        "password": false
+      }
+    },
+    {
+      "stage": "reopen",
+      "path": "/",
+      "method": "POST",
+      "type": "text/x-component",
+      "status": 200,
+      "completed": true,
+      "bytes": 194,
+      "sentinelHits": {
+        "runtime": false,
+        "runtimeNew": false,
+        "build": false,
+        "buildNew": true,
+        "secret": false,
+        "password": false
+      }
+    },
+    {
+      "stage": "reopen",
+      "path": "/",
+      "method": "POST",
+      "type": "text/x-component",
+      "status": 200,
+      "completed": true,
+      "bytes": 176,
+      "sentinelHits": {
+        "runtime": false,
+        "runtimeNew": true,
+        "build": false,
+        "buildNew": false,
+        "secret": false,
+        "password": false
+      }
+    },
+    {
+      "stage": "database-explicit-reveal",
+      "path": "/",
+      "method": "POST",
+      "type": "text/x-component",
+      "status": 200,
+      "completed": true,
+      "bytes": 135,
+      "sentinelHits": {
+        "runtime": false,
+        "runtimeNew": false,
+        "build": false,
+        "buildNew": false,
+        "secret": false,
+        "password": true
+      }
+    }
+  ],
+  "cleanup": [
+    {
+      "previousRun": "build-args-env140-1793015366876",
+      "alreadyAbsent": true
+    },
+    {
+      "via": "Dokploy API",
+      "removed": true
+    }
+  ],
+  "fixture": {
+    "projectId": "fi0UDrMrel0TWETllzKRG",
+    "environmentId": "iypS6xxVNmzQGScuggPQ9",
+    "appId": "r-uQPxJtU7BEFSFWklZOU",
+    "postgresId": "PzJFNrTcF-m9ZJFg1aVxq"
+  },
+  "success": true,
+  "finishedAt": "2026-10-26T11:50:16.107Z"
+}
