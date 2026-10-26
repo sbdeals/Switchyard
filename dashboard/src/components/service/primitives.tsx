@@ -32,6 +32,7 @@ import type { Action, AppDomain, Service, ServiceStatus } from "@/lib/dokploy";
 import { lifecycleAction, appLifecycleAction, composeLifecycleAction, type ActionResult } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
+import { useOptionalStaging } from "@/components/service/StagedChanges";
 import { destroyConfirmation, runLifecycleAction } from "@/lib/context-menu";
 
 export const inputCls =
@@ -40,25 +41,30 @@ export const inputCls =
 // --- hooks --------------------------------------------------------------------
 
 /** Run lifecycle actions with shared pending/error handling. */
-export function useLifecycle(runAction: (action: Action) => Promise<ActionResult>) {
+export function useLifecycle(runAction: (action: Action) => Promise<ActionResult>, serviceId?: string) {
+  const staging = useOptionalStaging();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const run = (action: Action | "restart", after?: () => void) => {
     setError(null);
+    if (action === "deploy" && staging && (serviceId ? staging.hasServiceChanges(serviceId) : staging.hasChanges)) {
+      staging.deploy(serviceId);
+      return;
+    }
     start(async () => {
       const res = await runLifecycleAction(action, runAction);
       if (!res.ok) setError(res.error);
       else after?.();
     });
   };
-  return { pending, error, run };
+  return { pending: pending || !!staging?.pending, error, run };
 }
 
 export function useServiceLifecycle(service: Service) {
   return useLifecycle((action) =>
     service.kind === "database" ? lifecycleAction(service.engine, service.id, action)
       : service.kind === "compose" ? composeLifecycleAction(service.id, action)
-        : appLifecycleAction(service.id, action)
+        : appLifecycleAction(service.id, action), service.id
   );
 }
 

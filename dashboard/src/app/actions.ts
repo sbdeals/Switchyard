@@ -14,6 +14,7 @@ import {
   listProjects,
   updateDatabase,
   reloadDatabase,
+  request,
   createApplication,
   setAppDockerSource,
   setAppGitSource,
@@ -107,7 +108,9 @@ import { deployTarget } from "@/lib/deploy-target";
 import { validateRepoSource } from "@/lib/managed-compose";
 import { randomPassword, randomServiceName } from "@/lib/names";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult =
+  | { ok: true }
+  | { ok: false; error: string; appliedSteps?: string[]; failedStep?: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
 /** Result of the "Generate URL" action: the freshly-attached host on success. */
 export type GenerateUrlResult = { ok: true; host: string } | { ok: false; error: string };
@@ -126,6 +129,23 @@ async function wrap(fn: () => Promise<unknown>): Promise<ActionResult> {
     unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
   }
+}
+
+/** Preserve the exact outcome when a settings action requires several writes. */
+async function wrapSteps(steps: [string, () => Promise<unknown>][]): Promise<ActionResult> {
+  const appliedSteps: string[] = [];
+  for (const [name, run] of steps) {
+    try {
+      await run();
+      appliedSteps.push(name);
+    } catch (error) {
+      unstable_rethrow(error);
+      if (appliedSteps.length) revalidatePath("/");
+      return { ...fail(error), appliedSteps, failedStep: name };
+    }
+  }
+  revalidatePath("/");
+  return { ok: true };
 }
 
 /** Like `wrap`, but returns the created id so the UI can open its drawer. */
@@ -211,17 +231,23 @@ export async function updateDatabaseAction(
   engine: Engine,
   id: string,
   appName: string,
-  patch: DatabasePatch
+  patch: DatabasePatch,
+  reload = true
 ): Promise<ActionResult> {
-  return wrap(async () => {
-    await updateDatabase(engine, id, patch);
-    const needsReload =
-      patch.dockerImage !== undefined ||
-      patch.cpuLimit !== undefined ||
-      patch.memoryLimit !== undefined ||
-      patch.externalPort !== undefined;
-    if (needsReload) await reloadDatabase(engine, id, appName);
-  });
+  const { externalPort, ...settings } = patch;
+  const steps: [string, () => Promise<unknown>][] = [];
+  if (Object.keys(settings).length) {
+    steps.push(["Database settings", () => updateDatabase(engine, id, settings)]);
+  }
+  if (externalPort !== undefined) {
+    steps.push(["External port", () => request(`${engine}.saveExternalPort`, {
+      method: "POST", body: { [`${engine}Id`]: id, externalPort },
+    })]);
+  }
+  const needsReload = patch.dockerImage !== undefined || patch.cpuLimit !== undefined ||
+    patch.memoryLimit !== undefined || externalPort !== undefined;
+  if (reload && needsReload) steps.push(["Reload", () => reloadDatabase(engine, id, appName)]);
+  return wrapSteps(steps);
 }
 
 export async function saveEnvironmentAction(
@@ -461,7 +487,8 @@ export async function createDomainAction(
 export async function updateDomainAction(
   domainId: string,
   input: DomainInput,
-  composeId?: string
+  composeId?: string,
+  redeploy = true
 ): Promise<ActionResult> {
   return wrap(async () => {
     if (composeId) await stopBridgeRepoPortWatch(composeId);
@@ -471,15 +498,15 @@ export async function updateDomainAction(
       domain.certificateType = "none";
     }
     await updateDomain(domainId, domain);
-    if (composeId) await redeployManagedImage(composeId);
+    if (composeId && redeploy) await redeployManagedImage(composeId);
   });
 }
 
-export async function deleteDomainAction(domainId: string, composeId?: string): Promise<ActionResult> {
+export async function deleteDomainAction(domainId: string, composeId?: string, redeploy = true): Promise<ActionResult> {
   return wrap(async () => {
     if (composeId) await stopBridgeRepoPortWatch(composeId);
     await deleteDomain(domainId);
-    if (composeId) await redeployManagedImage(composeId);
+    if (composeId && redeploy) await redeployManagedImage(composeId);
   });
 }
 
@@ -512,12 +539,14 @@ export async function createComposeDomainAction(
   composeId: string,
   serviceName: string,
   host: string,
-  port?: number
+  port?: number,
+  options?: { https?: boolean; certificateType?: DomainInput["certificateType"] },
+  redeploy = true
 ): Promise<ActionResult> {
   return wrap(async () => {
     await stopBridgeRepoPortWatch(composeId);
-    await createComposeDomain(composeId, serviceName.trim(), host.trim(), port);
-    await redeployManagedImage(composeId);
+    await createComposeDomain(composeId, serviceName.trim(), host.trim(), port, options);
+    if (redeploy) await redeployManagedImage(composeId);
   });
 }
 
@@ -612,18 +641,18 @@ export async function updateGitDeployAction(
     autoDeploy: boolean;
   }
 ): Promise<ActionResult> {
-  return wrap(async () => {
-    if (config.gitUrl) {
-      await setAppGitSource(
+  const steps: [string, () => Promise<unknown>][] = [];
+  if (config.gitUrl) {
+    steps.push(["Git source", () => setAppGitSource(
         applicationId,
-        config.gitUrl,
+        config.gitUrl!,
         config.branch?.trim() || "main",
         config.buildPath?.trim() || "/",
         (config.watchPaths ?? []).map((p) => p.trim()).filter(Boolean)
-      );
-    }
-    await setAppAutoDeploy(applicationId, config.autoDeploy);
-  });
+      )]);
+  }
+  steps.push(["Auto-deploy", () => setAppAutoDeploy(applicationId, config.autoDeploy)]);
+  return wrapSteps(steps);
 }
 
 /**

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Globe, ExternalLink, Plus, Loader2, RotateCcw } from "lucide-react";
+import { Globe, ExternalLink, Plus, Loader2, RotateCcw, X } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
 import { repoReleaseTiming } from "@/lib/bridge-repo-release";
 import { ENGINE_META } from "@/lib/engines";
@@ -12,9 +12,6 @@ import { ContextMenu } from "@/components/ContextMenu";
 import { deploymentMenuItems } from "@/lib/context-menu";
 import {
   composeLifecycleAction,
-  saveComposeFileAction,
-  createComposeDomainAction,
-  generateComposeDomainAction,
   rollbackComposeAction,
 } from "@/app/actions";
 import {
@@ -24,19 +21,21 @@ import {
   Info,
   CopyButton,
   LifecycleButtons,
-  SaveRow,
   DangerZone,
   PublicUrlBar,
   GenerateUrlBtn,
   useLifecycle,
-  useSavedFlash,
 } from "@/components/service/primitives";
+
+import { useStagedForm, useStagedState, useStaging } from "@/components/service/StagedChanges";
+import { generateDomainPreviewAction } from "@/app/staged-actions";
 
 const useComposeLifecycle = (c: ComposeService) =>
   useLifecycle((action) => composeLifecycleAction(c.id, action));
 
 export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   const { pending, error, run } = useComposeLifecycle(compose);
+  const { hasChanges } = useStaging();
   const [rollbackPending, startRollback] = useTransition();
   const [rollbackError, setRollbackError] = useState<string | null>(null);
   const managedApp = compose.managed?.kind === "image" || compose.managed?.kind === "repo"
@@ -44,6 +43,7 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   const busy = pending || rollbackPending || Boolean(managedApp && compose.status === "running");
 
   function rollback(timestamp: string, image: string) {
+    if (hasChanges) return;
     if (!confirm(`Roll back "${compose.name}" to ${image}? This redeploys the service.`)) return;
     setRollbackError(null);
     startRollback(async () => {
@@ -85,6 +85,7 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
           compose={compose}
           managed={managedApp}
           pending={busy}
+          staged={hasChanges}
           error={rollbackError}
           rollback={rollback}
         />
@@ -93,10 +94,11 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   );
 }
 
-function PreviousDeploys({ compose, managed, pending, error, rollback }: {
+function PreviousDeploys({ compose, managed, pending, staged, error, rollback }: {
   compose: ComposeService;
   managed: Exclude<ManagedMeta, { kind: "database" }>;
   pending: boolean;
+  staged: boolean;
   error: string | null;
   rollback: (timestamp: string, image: string) => void;
 }) {
@@ -113,7 +115,7 @@ function PreviousDeploys({ compose, managed, pending, error, rollback }: {
     <div className="space-y-2 border-t border-[var(--color-border)] pt-4">
       <h3 className="text-xs font-medium text-[var(--color-fg-muted)]">Previous deploys</h3>
       {rows.length ? rows.map((entry) => (
-        <ContextMenu key={`${entry.timestamp}-${entry.image}`} label={`${entry.image} actions`} items={deploymentMenuItems({ rollbackAvailable: !entry.current && entry.saved, pending }).filter((item) => item.id === "rollback").map((item) => ({ ...item, onSelect: () => rollback(entry.timestamp, entry.image) }))}>
+        <ContextMenu key={`${entry.timestamp}-${entry.image}`} label={`${entry.image} actions`} items={deploymentMenuItems({ rollbackAvailable: !entry.current && entry.saved, pending: pending || staged }).filter((item) => item.id === "rollback").map((item) => ({ ...item, onSelect: () => rollback(entry.timestamp, entry.image) }))}>
           {(trigger) => (
         <div {...trigger} className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]">
           <div className="min-w-0 flex-1">
@@ -127,7 +129,7 @@ function PreviousDeploys({ compose, managed, pending, error, rollback }: {
               Current
             </span>
           ) : entry.saved && (
-            <Btn onClick={() => rollback(entry.timestamp, entry.image)} disabled={pending}>
+            <Btn onClick={() => rollback(entry.timestamp, entry.image)} disabled={pending || staged}>
               <RotateCcw className="size-3" /> Roll back
             </Btn>
           )}
@@ -137,6 +139,7 @@ function PreviousDeploys({ compose, managed, pending, error, rollback }: {
       )) : (
         <p className="text-xs text-[var(--color-fg-subtle)]">No previous deploys saved yet. Deploy this service to start its history.</p>
       )}
+      {staged && <p className="text-xs text-[var(--color-fg-muted)]">Deploy or discard staged changes before rolling back.</p>}
       <p className="text-[11px] leading-relaxed text-[var(--color-fg-subtle)]">
         Up to five saved images. Current marks the configured image; check Deploys for its status.
         {managed.kind === "repo" && (managed.pinnedTag
@@ -206,41 +209,23 @@ function ManagedOverview({ compose, managed }: { compose: ComposeService; manage
 }
 
 export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
-  const [value, setValue] = useState(compose.composeFile ?? "");
-  const [pending, start] = useTransition();
-  const [saved, flashSaved] = useSavedFlash();
-  const [error, setError] = useState<string | null>(null);
-  const dirty = value !== (compose.composeFile ?? "");
-
-  function save(redeploy: boolean) {
-    setError(null);
-    start(async () => {
-      const res = await saveComposeFileAction(compose.id, value, redeploy);
-      if (res.ok) flashSaved();
-      else setError(res.error);
-    });
-  }
+  const [value, setValue] = useStagedState("compose-file", compose.composeFile ?? "");
+  const { pending } = useStaging();
+  useStagedForm({ id: "compose-file", action: "saveComposeFileAction", args: [compose.id, value, false],
+    before: { "Compose file": compose.composeFile ?? "" }, after: { "Compose file": value },
+    secretFields: ["Compose file"] });
 
   return (
     <div className="flex h-full flex-col">
-      <p className="mb-3 text-xs text-[var(--color-fg-muted)]">docker-compose.yml</p>
+      <p className="mb-3 text-xs text-[var(--color-fg-muted)]">docker-compose.yml — edits are staged until you deploy.</p>
       <textarea
         value={value}
         onChange={(e) => setValue(e.target.value)}
         spellCheck={false}
         aria-label="docker-compose.yml contents"
+        disabled={pending}
         className="min-h-72 flex-1 resize-none rounded-lg border border-[var(--color-border-control)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
       />
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <button
-          onClick={() => save(false)}
-          disabled={pending || !dirty}
-          className="rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)] disabled:opacity-40"
-        >
-          Save
-        </button>
-        <SaveRow saving={pending} saved={saved} error={error} onSave={() => save(true)} label="Save & deploy" />
-      </div>
     </div>
   );
 }
@@ -274,44 +259,36 @@ function composeServiceNames(file: string | null): string[] {
 export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
   const managedApp = compose.managed?.kind === "image" || compose.managed?.kind === "repo";
   const services = composeServiceNames(compose.composeFile);
-  const [serviceName, setServiceName] = useState(managedApp ? "app" : services[0] ?? "");
-  const [host, setHost] = useState("");
+  const [serviceName, setServiceName] = useStagedState("compose-domain:service", managedApp ? "app" : services[0] ?? "");
+  const [host, setHost] = useStagedState("compose-domain:host", "");
   // Blank means the server detects PORT / local image EXPOSE metadata for managed apps.
-  const [port, setPort] = useState(managedApp ? "" : "80");
+  const [port, setPort] = useStagedState("compose-domain:port", managedApp ? "" : "80");
   const targetPort = managedApp ? (port ? Number(port) : undefined) : Number(port) || 80;
-  const [pending, start] = useTransition();
+  const [generating, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [generated, setGenerated] = useState<string | null>(null);
+  const { operations, stage, discard, pending: deploying } = useStaging();
+  const pending = deploying || generating;
+  const added = operations.filter((op) => op.action === "createComposeDomainAction");
+
+  function stageDomain(nextHost: string, tls?: { https: boolean; certificateType: "none" | "letsencrypt" }) {
+    stage({ id: `domain:add:${crypto.randomUUID()}`, action: "createComposeDomainAction",
+      args: [compose.id, serviceName.trim(), nextHost.trim(), targetPort, tls],
+      changes: [{ field: "Domain", before: null, after: `${nextHost.trim()} → ${serviceName.trim()}:${targetPort ?? "Auto"}` }] });
+  }
 
   function add() {
     if (!host.trim() || !serviceName.trim()) return;
     setError(null);
-    setGenerated(null);
-    start(async () => {
-      const res = await createComposeDomainAction(
-        compose.id,
-        serviceName,
-        host,
-        targetPort
-      );
-      if (res.ok) setHost("");
-      else setError(res.error);
-    });
+    stageDomain(host);
+    setHost("");
   }
 
-  // Attach a random routable host to the selected service, on the current port.
   function generate() {
     if (!serviceName.trim()) return;
     setError(null);
-    setGenerated(null);
     start(async () => {
-      const res = await generateComposeDomainAction(
-        compose.id,
-        serviceName,
-        managedApp ? compose.appName : serviceName,
-        targetPort
-      );
-      if (res.ok) setGenerated(res.host);
+      const res = await generateDomainPreviewAction(managedApp ? compose.appName : serviceName);
+      if (res.ok) stageDomain(res.host, { https: res.https, certificateType: res.certificateType });
       else setError(res.error);
     });
   }
@@ -320,7 +297,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
     <div className="space-y-4">
       <p className="text-xs text-[var(--color-fg-muted)]">
         Attach a domain to one service in this stack (auto-SSL via Let&apos;s Encrypt). Point the
-        domain&apos;s DNS at this server for it to resolve.
+        domain&apos;s DNS at this server for it to resolve. Changes are staged until you deploy.
       </p>
 
       {compose.domains.length > 0 ? (
@@ -348,6 +325,17 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
       ) : (
         <p className="text-xs text-[var(--color-fg-subtle)]">No domains attached.</p>
       )}
+
+      {added.map((operation) => (
+        <div key={operation.id} className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs">
+          <Globe className="size-3.5 text-[var(--color-brand)]" />
+          <span className="flex-1 truncate">{String(operation.args[2])} → {String(operation.args[1])}:{String(operation.args[3] ?? "Auto")}</span>
+          <span className="text-[var(--color-fg-subtle)]">Staged</span>
+          <button onClick={() => discard(operation.id)} disabled={pending} aria-label={`Discard domain ${operation.args[2]}`} className="rounded p-1 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]">
+            <X className="size-3.5" />
+          </button>
+        </div>
+      ))}
 
       <div className="flex items-end gap-2">
         <div className="w-32">
@@ -397,11 +385,6 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
           Add
         </button>
       </div>
-      {generated && (
-        <p role="status" className="text-xs text-[var(--color-ok)]">
-          Attached {generated} → {serviceName} — it appears in the list above.
-        </p>
-      )}
       {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );

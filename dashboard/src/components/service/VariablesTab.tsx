@@ -1,14 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronRight, Link2, Trash2, X } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
-import {
-  saveEnvironmentAction,
-  saveApplicationEnvAction,
-  saveComposeEnvAction,
-} from "@/app/actions";
-import { SaveRow, useSavedFlash } from "@/components/service/primitives";
+import { useStagedForm, useStagedState, useStaging } from "@/components/service/StagedChanges";
+import { stagedVariableValues } from "@/lib/staged-collections";
 import { decodeStoredEnv, resolveTemplate } from "@/lib/references";
 import { referenceTargets, referenceableKeys } from "@/lib/reference-vars";
 import { serviceLabel } from "@/lib/service-meta";
@@ -20,19 +16,16 @@ import { removeVariableRow, variableRows } from "@/lib/variable-rows";
 /**
  * Service variables with Railway-style references. The textarea edits the
  * TEMPLATE (`DATABASE_URL=${{postgres.DATABASE_URL}}`); references are checked
- * live against the workspace and expanded server-side on save and before each
+ * live against the workspace and expanded server-side when applying and before each
  * deploy (see lib/references.ts for syntax and storage).
  */
 export function VariablesTab({ service, services }: { service: Service; services: Service[] }) {
   const initial = decodeStoredEnv(service.env);
-  const [value, setValue] = useState(initial);
-  const [pending, start] = useTransition();
-  const [saved, flashSaved] = useSavedFlash();
-  const [error, setError] = useState<string | null>(null);
+  const [value, setValue] = useStagedState("variables", initial);
+  const { pending } = useStaging();
   const [pickerOpen, setPickerOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const dirty = value !== initial;
   const count = value.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).length;
   const rows = variableRows(value);
 
@@ -47,19 +40,14 @@ export function VariablesTab({ service, services }: { service: Service; services
   const refKeys = [...resolution.referencing];
   const issueKeys = new Set(resolution.issues.map((i) => i.key));
 
-  function save() {
-    setError(null);
-    start(async () => {
-      const res =
-        service.kind === "database"
-          ? await saveEnvironmentAction(service.engine, service.id, value)
-          : service.kind === "compose"
-            ? await saveComposeEnvAction(service.id, value)
-            : await saveApplicationEnvAction(service.id, value);
-      if (res.ok) flashSaved();
-      else setError(res.error);
-    });
-  }
+  useStagedForm({
+    id: "variables",
+    action: service.kind === "database" ? "saveEnvironmentAction"
+      : service.kind === "compose" ? "saveComposeEnvAction" : "saveApplicationEnvAction",
+    args: service.kind === "database" ? [service.engine, service.id, value] : [service.id, value],
+    ...stagedVariableValues(initial, value),
+    error: resolution.issues.length ? "Resolve variable references before deploying." : undefined,
+  });
 
   /**
    * Insert a reference at the cursor. On an empty line, write a whole
@@ -101,8 +89,7 @@ export function VariablesTab({ service, services }: { service: Service; services
       <div className="mb-3 flex items-start justify-between gap-3">
         <p className="text-xs text-[var(--color-fg-muted)]">
           One <code className="font-mono">KEY=value</code> per line. Reference another service with{" "}
-          <code className="font-mono">{"${{Service.VAR}}"}</code> — resolved when you save and
-          before every deploy. Redeploy for changes to take effect.
+          <code className="font-mono">{"${{Service.VAR}}"}</code> — resolved when you deploy. Edits are staged until you deploy.
         </p>
         <button
           type="button"
@@ -126,7 +113,7 @@ export function VariablesTab({ service, services }: { service: Service; services
 
       {rows.length > 0 && (
         <div className="mb-3">
-          <p className="mb-2 text-[11px] text-[var(--color-fg-subtle)]">Row actions edit this draft. Save variables to apply changes.</p>
+          <p className="mb-2 text-[11px] text-[var(--color-fg-subtle)]">Row actions edit this draft. Deploy to apply changes.</p>
           <ul aria-label="Variables" className="max-h-48 space-y-1 overflow-y-auto">
             {rows.map((row) => {
               const edit = () => {
@@ -134,7 +121,7 @@ export function VariablesTab({ service, services }: { service: Service; services
                 textareaRef.current?.setSelectionRange(row.start, row.end);
               };
               const remove = () => {
-                if (confirm(`Delete variable "${row.key}" from "${service.name}"? Save variables to apply this change.`)) {
+                if (confirm(`Delete variable "${row.key}" from "${service.name}"? Deploy to apply this change.`)) {
                   setValue((current) => removeVariableRow(current, row.index));
                   textareaRef.current?.focus();
                 }
@@ -167,6 +154,7 @@ export function VariablesTab({ service, services }: { service: Service; services
         value={value}
         onChange={(e) => setValue(e.target.value)}
         spellCheck={false}
+        disabled={pending}
         placeholder={"DATABASE_URL=${{postgres.DATABASE_URL}}\nLOG_LEVEL=info"}
         aria-label="Environment variables, one KEY=value per line"
         className="min-h-64 flex-1 resize-none rounded-lg border border-[var(--color-border-control)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
@@ -201,14 +189,6 @@ export function VariablesTab({ service, services }: { service: Service; services
         <span className="text-xs text-[var(--color-fg-subtle)]">
           {count} variable{count === 1 ? "" : "s"}
         </span>
-        <SaveRow
-          saving={pending}
-          saved={saved}
-          error={error}
-          disabled={!dirty || resolution.issues.length > 0}
-          onSave={save}
-          label="Save variables"
-        />
       </div>
     </div>
   );

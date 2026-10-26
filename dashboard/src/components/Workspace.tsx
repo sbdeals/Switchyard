@@ -9,6 +9,7 @@ import { ServiceCard } from "@/components/ServiceCard";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
+import { StagingProvider } from "@/components/service/StagedChanges";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { ContextMenu } from "@/components/ContextMenu";
@@ -58,6 +59,7 @@ export function Workspace({
 
   return (
     <MotionConfig reducedMotion="user">
+    <StagingProvider service={selected} services={services}>
     <div className="mx-auto max-w-7xl px-6 py-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -128,6 +130,7 @@ export function Workspace({
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
       <AgentPanel />
     </div>
+    </StagingProvider>
     </MotionConfig>
   );
 }

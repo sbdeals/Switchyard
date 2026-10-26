@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useDialogFocus } from "@/components/use-focus-trap";
 import {
@@ -30,7 +30,7 @@ import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel, presentedKind, isStopped } from "@/lib/service-meta";
 import { connectionString } from "@/lib/connection";
-import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
+import { lifecycleAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
 import { BackupsTab } from "@/components/service/BackupsTab";
@@ -61,12 +61,11 @@ import {
   Info,
   CopyButton,
   LifecycleButtons,
-  SaveRow,
   DangerZone,
   useLifecycle,
-  useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { useStagedForm, useStagedState, useStaging } from "@/components/service/StagedChanges";
 import type { ServiceSection } from "@/components/service/ServiceContextMenu";
 
 type TabId =
@@ -345,18 +344,16 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({
-  service,
-  services,
-  onClose,
-  initialTab = "overview",
-}: {
+type ServiceDrawerProps = {
   service: Service | null;
-  /** Every service in the workspace — the Variables tab's reference targets. */
   services: Service[];
   onClose: () => void;
   initialTab?: ServiceSection;
-}) {
+};
+
+export function ServiceDrawer({ service, services, onClose: closeDrawer, initialTab = "overview" }: ServiceDrawerProps) {
+  const { requestLeave, pending: applying, revision, setBarContainer } = useStaging();
+  const onClose = () => requestLeave(closeDrawer);
   const [tab, setTab] = useState<TabId>(initialTab);
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
@@ -460,13 +457,16 @@ export function ServiceDrawer({
                 </button>
               ))}
             </nav>
+            <div ref={setBarContainer} />
 
-            <div
+            <fieldset
+              key={`${service.id}:${revision}`}
+              disabled={applying}
               id="drawer-tabpanel"
               role="tabpanel"
               aria-labelledby={`drawer-tab-${tab}`}
               tabIndex={0}
-              className="flex-1 overflow-auto p-5"
+              className="min-h-0 min-w-0 flex-1 overflow-auto p-5"
             >
               {tab === "overview" &&
                 (service.kind === "database" ? (
@@ -511,7 +511,7 @@ export function ServiceDrawer({
                 ) : (
                   <AppSettingsTab app={service} onClose={onClose} />
                 ))}
-            </div>
+            </fieldset>
           </motion.aside>
         </>
       )}
@@ -615,37 +615,23 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
   const meta = ENGINE_META[db.engine];
   const currentVersion = db.dockerImage?.split(":")[1] ?? meta.versions[0];
 
-  const [name, setName] = useState(db.name);
-  const [version, setVersion] = useState(currentVersion);
-  const [port, setPort] = useState(db.externalPort != null ? String(db.externalPort) : "");
-  const [cpu, setCpu] = useState(db.cpuLimit ?? "");
-  const [mem, setMem] = useState(db.memoryLimit ?? "");
-  const [saving, startSave] = useTransition();
-  const [saved, flashSaved] = useSavedFlash();
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const dirty =
-    name !== db.name ||
-    version !== currentVersion ||
-    port !== (db.externalPort != null ? String(db.externalPort) : "") ||
-    cpu !== (db.cpuLimit ?? "") ||
-    mem !== (db.memoryLimit ?? "");
-
-  function save() {
-    setSaveError(null);
-    const patch: DatabasePatch = {};
-    if (name !== db.name) patch.name = name.trim();
-    if (version !== currentVersion) patch.dockerImage = `${meta.image}:${version}`;
-    if (port !== (db.externalPort != null ? String(db.externalPort) : ""))
-      patch.externalPort = port ? Number(port) : null;
-    if (cpu !== (db.cpuLimit ?? "")) patch.cpuLimit = cpu || null;
-    if (mem !== (db.memoryLimit ?? "")) patch.memoryLimit = mem || null;
-    startSave(async () => {
-      const res = await updateDatabaseAction(db.engine, db.id, db.appName, patch);
-      if (res.ok) flashSaved();
-      else setSaveError(res.error);
-    });
-  }
+  const [name, setName] = useStagedState("db:name", db.name);
+  const [version, setVersion] = useStagedState("db:version", currentVersion);
+  const [port, setPort] = useStagedState("db:port", db.externalPort != null ? String(db.externalPort) : "");
+  const [cpu, setCpu] = useStagedState("db:cpu", db.cpuLimit ?? "");
+  const [mem, setMem] = useStagedState("db:memory", db.memoryLimit ?? "");
+  const patch: DatabasePatch = {};
+  if (name !== db.name) patch.name = name.trim();
+  if (version !== currentVersion) patch.dockerImage = `${meta.image}:${version}`;
+  if (port !== (db.externalPort != null ? String(db.externalPort) : "")) patch.externalPort = port ? Number(port) : null;
+  if (cpu !== (db.cpuLimit ?? "")) patch.cpuLimit = cpu || null;
+  if (mem !== (db.memoryLimit ?? "")) patch.memoryLimit = mem || null;
+  const error = !name.trim() ? "Name is required." : port && (Number(port) < 1 || Number(port) > 65535) ? "External port must be between 1 and 65535." : undefined;
+  useStagedForm({
+    id: "database-settings", action: "updateDatabaseAction", args: [db.engine, db.id, db.appName, patch],
+    before: { Name: db.name, Version: currentVersion, "External port": db.externalPort != null ? String(db.externalPort) : "", "CPU limit": db.cpuLimit ?? "", "Memory limit": db.memoryLimit ?? "" },
+    after: { Name: name.trim(), Version: version, "External port": port, "CPU limit": cpu, "Memory limit": mem }, error,
+  });
 
   return (
     <div className="space-y-5">
@@ -654,7 +640,7 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Version" hint="changing redeploys">
+          <Field label="Version" hint="staged until Deploy">
             <select value={version} onChange={(e) => setVersion(e.target.value)} className={inputCls}>
               {meta.versions.map((v) => (
                 <option key={v} value={v}>
@@ -678,7 +664,8 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
             <input value={mem} onChange={(e) => setMem(e.target.value)} placeholder="unlimited" className={inputCls} />
           </Field>
         </div>
-        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
+        <p className="text-xs text-[var(--color-fg-muted)]">Changes are staged. Deploy to apply.</p>
+        {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
       </div>
 
       <PasswordRow db={db} />

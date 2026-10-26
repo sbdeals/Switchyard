@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Database as VolumeIcon,
   FolderTree,
@@ -11,15 +11,14 @@ import {
   Loader2,
   X,
 } from "lucide-react";
-import type { Mount, MountServiceType, MountType, Service } from "@/lib/dokploy";
+import type { CreateMountInput, Mount, MountPatch, MountServiceType, MountType, Service } from "@/lib/dokploy";
 import {
   listMountsAction,
-  createMountAction,
-  updateMountAction,
-  removeMountAction,
   type MountsResult,
 } from "@/app/actions";
 import { inputCls, Field } from "@/components/service/primitives";
+import { useStagedForm, useStagedState, useStaging } from "@/components/service/StagedChanges";
+import { stagedCollection, stagedMountValues } from "@/lib/staged-collections";
 import { cn } from "@/lib/utils";
 
 const TYPE_META: Record<MountType, { label: string; icon: React.ReactNode }> = {
@@ -40,8 +39,31 @@ export function VolumesTab({ service }: { service: Service }) {
     service.kind === "database" ? service.engine : service.kind;
   const [mounts, setMounts] = useState<Mount[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
+  const [adding, setAdding] = useStagedState("mount:adding", false);
+  const [newId, setNewId] = useStagedState("mount:new-id", "");
+  const [editing, setEditing] = useStagedState<string | null>("mount:editing", null);
+  const { operations, pending, stage, discard } = useStaging();
+  const visibleMounts = mounts && stagedCollection<Mount>(mounts, operations, {
+    key: (mount) => mount.mountId, create: "createMountAction", update: "updateMountAction", remove: "removeMountAction",
+    added: (op) => {
+      const input = op.args[0] as CreateMountInput;
+      return { mountId: op.id, type: input.type, mountPath: input.mountPath,
+        volumeName: input.volumeName ?? null, hostPath: input.hostPath ?? null,
+        filePath: input.filePath ?? null, content: input.content ?? null };
+    },
+    updated: (mount, op) => ({ ...mount, ...op.args[1] as MountPatch }),
+  });
+
+  function remove(mount: Mount) {
+    if (!confirm(`Stage removal of mount at "${mount.mountPath}"?`)) return;
+    if (operations.some((op) => op.id === mount.mountId && op.action === "createMountAction")) {
+      discard(mount.mountId);
+      return;
+    }
+    const original = mounts?.find((item) => item.mountId === mount.mountId) ?? mount;
+    stage({ id: `mount:${mount.mountId}`, action: "removeMountAction", args: [mount.mountId],
+      changes: [{ field: "Mount", before: `${mountSource(original)} → ${original.mountPath}`, after: null }] });
+  }
 
   const applyResult = useCallback((res: MountsResult) => {
     if (res.ok) {
@@ -51,10 +73,6 @@ export function VolumesTab({ service }: { service: Service }) {
       setLoadError(res.error);
     }
   }, []);
-
-  const reload = useCallback(async () => {
-    applyResult(await listMountsAction(serviceType, service.id));
-  }, [applyResult, serviceType, service.id]);
 
   // Initial load. Kicking the fetch off with .then (rather than awaiting in the
   // effect body) keeps the state update in a microtask; the guard drops a
@@ -67,13 +85,12 @@ export function VolumesTab({ service }: { service: Service }) {
     return () => {
       live = false;
     };
-  }, [applyResult, serviceType, service.id]);
+  }, [applyResult, serviceType, service.id, service]);
 
   return (
     <div className="space-y-4">
       <p className="text-xs text-[var(--color-fg-muted)]">
-        Persistent storage for this service. Redeploy the service for mount changes to take
-        effect.
+        Persistent storage for this service. Mount changes are staged until you deploy.
       </p>
 
       {loadError && <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>}
@@ -82,18 +99,19 @@ export function VolumesTab({ service }: { service: Service }) {
         <div className="flex items-center justify-center gap-2 py-6 text-xs text-[var(--color-fg-subtle)]">
           <Loader2 className="size-4 animate-spin" /> loading…
         </div>
-      ) : mounts && mounts.length > 0 ? (
+      ) : visibleMounts && visibleMounts.length > 0 ? (
         <div className="space-y-2">
-          {mounts.map((m) =>
+          {visibleMounts.map((m) =>
             editing === m.mountId ? (
               <MountForm
                 key={m.mountId}
                 serviceType={serviceType}
                 serviceId={service.id}
                 existing={m}
+                original={mounts?.find((mount) => mount.mountId === m.mountId)}
+                draftId={m.mountId}
                 onDone={() => {
                   setEditing(null);
-                  reload();
                 }}
                 onCancel={() => setEditing(null)}
               />
@@ -105,7 +123,8 @@ export function VolumesTab({ service }: { service: Service }) {
                   setAdding(false);
                   setEditing(m.mountId);
                 }}
-                onDeleted={reload}
+                pending={pending}
+                onRemove={() => remove(m)}
               />
             )
           )}
@@ -120,9 +139,9 @@ export function VolumesTab({ service }: { service: Service }) {
         <MountForm
           serviceType={serviceType}
           serviceId={service.id}
+          draftId={newId}
           onDone={() => {
             setAdding(false);
-            reload();
           }}
           onCancel={() => setAdding(false)}
         />
@@ -130,8 +149,10 @@ export function VolumesTab({ service }: { service: Service }) {
         <button
           onClick={() => {
             setEditing(null);
+            setNewId(`mount:add:${crypto.randomUUID()}`);
             setAdding(true);
           }}
+          disabled={pending}
           className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
         >
           <Plus className="size-4" /> Add mount
@@ -144,25 +165,15 @@ export function VolumesTab({ service }: { service: Service }) {
 function MountRow({
   mount,
   onEdit,
-  onDeleted,
+  pending,
+  onRemove,
 }: {
   mount: Mount;
   onEdit: () => void;
-  onDeleted: () => void;
+  pending: boolean;
+  onRemove: () => void;
 }) {
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
   const meta = TYPE_META[mount.type];
-
-  function remove() {
-    if (!confirm(`Remove mount at "${mount.mountPath}"?`)) return;
-    setError(null);
-    start(async () => {
-      const res = await removeMountAction(mount.mountId);
-      if (res.ok) onDeleted();
-      else setError(res.error);
-    });
-  }
 
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5">
@@ -183,7 +194,7 @@ function MountRow({
           <Pencil className="size-3.5" />
         </button>
         <button
-          onClick={remove}
+          onClick={onRemove}
           disabled={pending}
           aria-label={`Remove mount ${mount.mountPath}`}
           className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
@@ -194,7 +205,6 @@ function MountRow({
       <div className="mt-1 truncate font-mono text-[11px] text-[var(--color-fg-subtle)]" title={mountSource(mount)}>
         {mountSource(mount)}
       </div>
-      {error && <p role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );
 }
@@ -203,23 +213,26 @@ function MountForm({
   serviceType,
   serviceId,
   existing,
+  original,
+  draftId,
   onDone,
   onCancel,
 }: {
   serviceType: MountServiceType;
   serviceId: string;
   existing?: Mount;
+  original?: Mount;
+  draftId: string;
   onDone: () => void;
   onCancel: () => void;
 }) {
-  const [type, setType] = useState<MountType>(existing?.type ?? "volume");
-  const [mountPath, setMountPath] = useState(existing?.mountPath ?? "");
-  const [volumeName, setVolumeName] = useState(existing?.volumeName ?? "");
-  const [hostPath, setHostPath] = useState(existing?.hostPath ?? "");
-  const [filePath, setFilePath] = useState(existing?.filePath ?? "");
-  const [content, setContent] = useState(existing?.content ?? "");
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [type, setType] = useStagedState<MountType>(`${draftId}:type`, existing?.type ?? "volume");
+  const [mountPath, setMountPath] = useStagedState(`${draftId}:mountPath`, existing?.mountPath ?? "");
+  const [volumeName, setVolumeName] = useStagedState(`${draftId}:volumeName`, existing?.volumeName ?? "");
+  const [hostPath, setHostPath] = useStagedState(`${draftId}:hostPath`, existing?.hostPath ?? "");
+  const [filePath, setFilePath] = useStagedState(`${draftId}:filePath`, existing?.filePath ?? "");
+  const [content, setContent] = useStagedState(`${draftId}:content`, existing?.content ?? "");
+  const { pending, stage } = useStaging();
 
   const primaryOk =
     type === "volume"
@@ -229,24 +242,33 @@ function MountForm({
         : filePath.trim();
   const valid = Boolean(mountPath.trim() && primaryOk);
 
+  const patch = {
+    type,
+    mountPath: mountPath.trim(),
+    volumeName: type === "volume" ? volumeName.trim() : undefined,
+    hostPath: type === "bind" ? hostPath.trim() : undefined,
+    filePath: type === "file" ? filePath.trim() : undefined,
+    content: type === "file" ? content : undefined,
+  };
+  const diff = stagedMountValues(original, patch);
+  useStagedForm({
+    id: original ? `mount:${original.mountId}` : draftId,
+    action: original ? "updateMountAction" : "createMountAction",
+    args: original ? [original.mountId, patch] : [{ serviceType, serviceId, ...patch }],
+    before: existing ? diff.before : {}, after: existing ? diff.after : {},
+    secretFields: diff.secretFields,
+    error: existing && !valid ? "A mount path and source are required." : undefined,
+  });
+
   function submit() {
     if (!valid) return;
-    setError(null);
-    const patch = {
-      type,
-      mountPath: mountPath.trim(),
-      volumeName: type === "volume" ? volumeName.trim() : undefined,
-      hostPath: type === "bind" ? hostPath.trim() : undefined,
-      filePath: type === "file" ? filePath.trim() : undefined,
-      content: type === "file" ? content : undefined,
-    };
-    start(async () => {
-      const res = existing
-        ? await updateMountAction(existing.mountId, patch)
-        : await createMountAction({ serviceType, serviceId, ...patch });
-      if (res.ok) onDone();
-      else setError(res.error);
-    });
+    if (!existing) {
+      const changes = Object.keys(diff.after).map((field) => ({
+        field, before: diff.before[field], after: diff.after[field], secret: diff.secretFields.includes(field),
+      }));
+      stage({ id: draftId, action: "createMountAction", args: [{ serviceType, serviceId, ...patch }], changes });
+    }
+    onDone();
   }
 
   return (
@@ -257,7 +279,7 @@ function MountForm({
         </span>
         <button
           onClick={onCancel}
-          aria-label="Cancel"
+          aria-label={existing ? "Close mount editor" : "Cancel"}
           className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
         >
           <X className="size-3.5" />
@@ -338,8 +360,6 @@ function MountForm({
         />
       </Field>
 
-      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
-
       <div className="flex justify-end">
         <button
           onClick={submit}
@@ -347,7 +367,7 @@ function MountForm({
           className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
         >
           {pending && <Loader2 className="size-4 animate-spin" />}
-          {existing ? "Save mount" : "Add mount"}
+          {existing ? "Done" : "Add mount"}
         </button>
       </div>
     </div>
