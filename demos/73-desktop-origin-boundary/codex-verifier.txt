@@ -1,0 +1,1 @@
+PASS: 1336 URL policy, navigation/redirect/popup, permission, and IPC assertions

@@ -1,0 +1,17 @@
+== after: navigation / will-navigate
+  dashboard page                               -> allow
+  look-alike host 127.0.0.1:3001.evil.example  -> deny
+  wrong port 127.0.0.1:30011                   -> external
+  arbitrary local file                         -> deny
+  status view + query                          -> deny
+  bundled status view                          -> allow
+  javascript: URL                              -> deny
+== after: permission requests from the dashboard origin
+  clipboard-sanitized-write                    -> granted
+  media                                        -> denied
+  geolocation                                  -> denied
+  notifications                                -> denied
+== after: privileged IPC (getState/action) from the main frame at
+  arbitrary local file                         -> rejected
+  status view + query                          -> rejected
+  bundled status view                          -> ACCEPTED

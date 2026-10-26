@@ -1,0 +1,17 @@
+== before: navigation / will-navigate
+  dashboard page                               -> allow (renders in-app)
+  look-alike host 127.0.0.1:3001.evil.example  -> allow (renders in-app)
+  wrong port 127.0.0.1:30011                   -> allow (renders in-app)
+  arbitrary local file                         -> allow (renders in-app)
+  status view + query                          -> allow (renders in-app)
+  bundled status view                          -> allow (renders in-app)
+  javascript: URL                              -> deny
+== before: permission requests from the dashboard origin
+  clipboard-sanitized-write                    -> granted (Electron default: no permission handler)
+  media                                        -> granted (Electron default: no permission handler)
+  geolocation                                  -> granted (Electron default: no permission handler)
+  notifications                                -> granted (Electron default: no permission handler)
+== before: privileged IPC (getState/action) from the main frame at
+  arbitrary local file                         -> ACCEPTED
+  status view + query                          -> ACCEPTED
+  bundled status view                          -> ACCEPTED
