@@ -1,0 +1,19 @@
+Initializing deployment
+File 'docker-compose.yml' created: ✅
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║ App Name: compose-hack-auxiliary-monitor-xib4qd                              ║
+║ Build Compose 🐳                                                             ║
+║ Detected: 0 mounts 📂                                                        ║
+║ Command: docker compose -p compose-hack-auxiliary-monitor-xib4qd --env-file  ║
+║ .env -f docker-compose.yml up -d --build --remove-orphans                    ║
+║ Source Type: docker raw ✅                                                   ║
+║ Compose Type: docker-compose ✅                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+ Image nginx:deploy-diagnosis-nonexistent Pulling 
+ Image nginx:deploy-diagnosis-nonexistent Error manifest for nginx:deploy-diagnosis-nonexistent not found: manifest unknown: manifest unknown
+Error response from daemon: manifest for nginx:deploy-diagnosis-nonexistent not found: manifest unknown: manifest unknown
+Error: ❌ Docker command failed
+
+Error occurred ❌, check the logs for details.

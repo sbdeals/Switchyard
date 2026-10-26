@@ -1,0 +1,54 @@
+Initializing deployment
+File 'docker-compose.yml' created: ✅
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║ App Name: compose-synthesize-wireless-protocol-uwhh3m                        ║
+║ Build Compose 🐳                                                             ║
+║ Detected: 0 mounts 📂                                                        ║
+║ Command: docker compose -p compose-synthesize-wireless-protocol-uwhh3m       ║
+║ --env-file .env -f docker-compose.yml up -d --build --remove-orphans         ║
+║ Source Type: docker raw ✅                                                   ║
+║ Compose Type: docker-compose ✅                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+ Image compose-synthesize-wireless-protocol-uwhh3m-app Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 610B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 68B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/busybox:1.37
+#3 DONE 0.0s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [1/2] FROM docker.io/library/busybox:1.37
+#5 CACHED
+
+#6 [2/2] RUN exit 137
+#6 ERROR: process "/bin/sh -c exit 137" did not complete successfully: exit code: 137
+------
+ > [2/2] RUN exit 137:
+------
+Dockerfile:2
+
+--------------------
+
+   1 |     FROM busybox:1.37
+
+   2 | >>> RUN exit 137
+
+   3 |     
+
+--------------------
+
+failed to solve: process "/bin/sh -c exit 137" did not complete successfully: exit code: 137
+
+Error: ❌ Docker command failed
+
+Error occurred ❌, check the logs for details.

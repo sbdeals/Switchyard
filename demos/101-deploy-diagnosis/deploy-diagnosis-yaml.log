@@ -1,0 +1,21 @@
+Initializing deployment
+File 'docker-compose.yml' created: ✅
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║ App Name: compose-bypass-bluetooth-port-2guocr                               ║
+║ Build Compose 🐳                                                             ║
+║ Detected: 0 mounts 📂                                                        ║
+║ Command: docker compose -p compose-bypass-bluetooth-port-2guocr --env-file   ║
+║ .env -f docker-compose.yml up -d --build --remove-orphans                    ║
+║ Source Type: docker raw ✅                                                   ║
+║ Compose Type: docker-compose ✅                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+❌ Has occurred an error: Flow sequence in block collection must be sufficiently indented and end with a ] at line 4, column 1:
+
+    image: [unterminated
+
+^
+
+
+Error occurred ❌, check the logs for details.
