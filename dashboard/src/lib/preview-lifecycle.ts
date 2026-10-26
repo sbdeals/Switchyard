@@ -7,7 +7,7 @@ import {
   claimDeployHook, findDeployHook, releaseDeployHook, saveDeployHook, withDeployHookLock,
   type DeployHookRecord,
 } from "./deploy-hook-store";
-import { bridgeImageDomain, parseManaged, repoStack, withManagedAutoDomain } from "./managed-compose";
+import { bridgeImageDomain, parseManaged, parseManagedBuildPlan, repoStack, withManagedAutoDomain } from "./managed-compose";
 import { resolveAppPort } from "./app-port";
 import { fetchRepoExposedPorts } from "./repo-port";
 import { previewRequest, type PreviewRequest } from "./preview-access";
@@ -77,7 +77,7 @@ export function assertPreviewOwner(hook: DeployHookRecord, preview: PreviewRecor
     const source = parseManaged(detail.composeFile);
     if (source?.kind !== "repo" || source.preview?.parentId !== hook.serviceId ||
       source.preview.number !== preview.number || source.preview.marker !== preview.marker) throw new Error("Preview ownership changed.");
-    let expected = repoStack({ ...source, appName: detail.appName });
+    let expected = repoStack({ ...source, appName: detail.appName }, parseManagedBuildPlan(detail.composeFile));
     if (source.autoDomain) expected = withManagedAutoDomain(expected, source.autoDomain);
     // An edited stack could mount another service's volumes. Never pass such
     // a file to Dokploy's down --volumes, even when its identity still matches.
@@ -162,6 +162,7 @@ async function upsertPreview(hook: DeployHookRecord, event: PullRequestEvent, ap
     parent.environment.projectId !== hook.previewAccess?.projectId || source.repoUrl !== hook.repoUrl) {
     throw new Error("Preview parent changed.");
   }
+  const plan = parseManagedBuildPlan(parent.composeFile);
   let preview = hook.previews?.find((item) => item.number === event.number);
   let detail: PreviewCompose;
   if (!preview) {
@@ -201,10 +202,10 @@ async function upsertPreview(hook: DeployHookRecord, event: PullRequestEvent, ap
     appName: detail.appName, repoUrl: event.repoUrl, branch: event.branch, commit: event.sha,
     subdirectory: source.subdirectory, dockerfile: source.dockerfile,
     preview: { parentId: hook.serviceId, number: event.number, marker: preview.marker, title: event.title },
-  });
+  }, plan);
   const env = previewEnvironment(parent.env);
   const port = resolveAppPort({ image: `${detail.appName}-app:latest`, env,
-    exposedPorts: await fetchRepoExposedPorts({ ...source, repoUrl: event.repoUrl, branch: event.sha }) });
+    exposedPorts: plan ? [`${plan.port}/tcp`] : await fetchRepoExposedPorts({ ...source, repoUrl: event.repoUrl, branch: event.sha }) });
   let domain = detail.domains?.find((item) => item.serviceName === "app");
   const previousSource = parseManaged(detail.composeFile);
   const auto = previousSource?.kind === "repo" ? previousSource.autoDomain : undefined;

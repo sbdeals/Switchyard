@@ -8,7 +8,7 @@ vi.mock("./session", () => ({
   openSession: () => ({ dokployCookie: "dokploy-session=test" }),
 }));
 vi.mock("./docker", () => ({ inspectImageExposedPorts: vi.fn() }));
-vi.mock("./repo-port", () => ({ fetchRepoExposedPorts: async () => [] }));
+vi.mock("./repo-port", () => ({ fetchRepoExposedPorts: async () => [], fetchRepoBuildFiles: async () => null }));
 
 import {
   composeLifecycleAction,
@@ -22,6 +22,7 @@ import {
 import { inspectImageExposedPorts } from "./docker";
 import { ensureBridgeAutoDomain } from "./dokploy";
 import { parseManaged, repoStack } from "./managed-compose";
+import { detectBuildPlan } from "./build-plan";
 
 const appName = "welcome-a1b2";
 const repoUrl = "https://github.com/docker/welcome-to-docker";
@@ -78,6 +79,15 @@ afterEach(() => {
 });
 
 describe("bridge Git quick deploy", () => {
+  it("respects PORT ahead of the detected builder port when generating a URL", async () => {
+    const plan = detectBuildPlan({ files: ["index.html"], contents: {} });
+    detail.composeFile = repoStack({ appName, repoUrl, branch: "main" }, plan);
+    detail.env = "PORT=9090";
+    await ensureBridgeAutoDomain("compose-1");
+    expect(requests.find(({ procedure }) => procedure === "domain.create")?.body).toMatchObject({ port: 9090 });
+    expect(inspectImageExposedPorts).not.toHaveBeenCalled();
+  });
+
   it("creates a managed repo stack and attaches its public URL before deploying", async () => {
     expect(await quickDeployRepoAction(repoUrl, "main", "environment-1"))
       .toEqual({ ok: true, id: "compose-1" });
@@ -122,7 +132,7 @@ describe("bridge Git quick deploy", () => {
   it("returns actionable GitHub App errors before resolving an environment or creating anything", async () => {
     expect(await quickDeployGithubAction(githubInput)).toEqual({
       ok: false,
-      error: "GitHub App deploys need Swarm. On this host, deploy a public repo URL with a Dockerfile, or push an image to a registry and deploy the image.",
+      error: "GitHub App deploys need Swarm. On this host, deploy a public repo URL (Dockerfile or auto-detected Node/Python/Go/static app), or push an image to a registry and deploy the image.",
     });
     expect(requests).toEqual([]);
   });

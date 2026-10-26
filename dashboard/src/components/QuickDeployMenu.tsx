@@ -220,6 +220,10 @@ export function QuickDeployMenu({
                   className="min-w-0 flex-1 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                 />
               </div>
+              <p className="mb-2 px-2 text-[11px] leading-relaxed text-[var(--color-fg-subtle)]">
+                Auto-detects Node, Python, Go and static sites on public GitHub, GitLab and Bitbucket repos.
+                On bridge hosts, other Git hosts or unavailable public files use a Dockerfile.
+              </p>
               <button
                 onClick={() => {
                   setOpen(false);

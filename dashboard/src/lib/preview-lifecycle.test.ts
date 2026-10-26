@@ -21,6 +21,8 @@ import { cleanupPreviewContainers } from "./preview-cleanup";
 import { deleteOwnedPreview, type PreviewCompose } from "./preview-lifecycle";
 import { githubRepo, PREVIEW_LIMIT } from "./pr-previews";
 import { parseManaged, repoStack } from "./managed-compose";
+import { detectBuildPlan } from "./build-plan";
+import { fetchRepoExposedPorts } from "./repo-port";
 
 const repoUrl = "https://github.com/acme/web.git";
 const sha = "a".repeat(40);
@@ -176,6 +178,69 @@ describe("signed PR lifecycle on the existing deploy hook", () => {
     expect((await deliver()).status).toBe(202);
     expect(services[1].environmentId).toBe("production");
     expect(calls("environment.create")).toHaveLength(0);
+  });
+
+  it.each([
+    ["node", { files: ["package.json"], contents: { "package.json": '{"scripts":{"start":"node server.js"}}' } }, 3000],
+    ["python", { files: ["requirements.txt", "app.py"], contents: { "requirements.txt": "flask" } }, 8000],
+    ["go", { files: ["go.mod"], contents: {} }, 8080],
+    ["static", { files: ["index.html"], contents: {} }, 80],
+  ] as const)("inherits the parent's %s recipe, port and build path through synchronize and close", async (kind, files, port) => {
+    const plan = detectBuildPlan({ files: [...files.files], contents: files.contents });
+    parent.composeFile = repoStack({ appName: parent.appName, repoUrl, branch: "main", subdirectory: "apps/web" }, plan);
+    parent.env = "DEMO=parent-value";
+    const original = parent.composeFile;
+    expect((await deliver()).status).toBe(202);
+    const child = services[1];
+    expect(parseManaged(child.composeFile)).toMatchObject({
+      buildKind: kind, buildPort: port, subdirectory: "apps/web", commit: sha,
+      autoDomain: { port }, preview: { parentId: "parent", number: 12 },
+    });
+    expect(child.composeFile).toContain(`${repoUrl}#${sha}:apps/web`);
+    const inline = (file: string) => file.match(/      dockerfile_inline: \|\n(?:        .*\n)+/)?.[0];
+    expect(inline(original)).toBeDefined();
+    expect(inline(child.composeFile)).toBe(inline(original));
+    expect(child.domains?.[0].port).toBe(port);
+    expect(fetchRepoExposedPorts).not.toHaveBeenCalled();
+
+    parent.env = "PORT=9090";
+    expect((await deliver(payload("synchronize", 12, "c".repeat(40)))).status).toBe(202);
+    expect(calls("compose.create")).toHaveLength(1);
+    expect(child.composeFile).toContain(`${repoUrl}#${"c".repeat(40)}:apps/web`);
+    expect(inline(child.composeFile)).toBe(inline(original));
+    expect(parseManaged(child.composeFile)).toMatchObject({ buildKind: kind, buildPort: port, autoDomain: { port: 9090 } });
+    expect(child.domains?.[0].port).toBe(9090);
+    expect((await deliver(payload("closed"))).status).toBe(202);
+    expect(services).toEqual([parent]);
+    expect(saved().previews).toEqual([]);
+    expect(parent.composeFile).toBe(original);
+  });
+
+  it.each([undefined, "Dockerfile", "docker/Production"])("preserves Dockerfile builds (%s) and their port detection", async (dockerfile) => {
+    parent.composeFile = repoStack({ appName: parent.appName, repoUrl, branch: "main", subdirectory: "apps/web", dockerfile });
+    parent.env = "";
+    expect((await deliver()).status).toBe(202);
+    const child = services[1];
+    const managed = parseManaged(child.composeFile);
+    expect(managed).toMatchObject({ subdirectory: "apps/web", commit: sha });
+    expect(managed).not.toHaveProperty("buildKind");
+    expect(managed).not.toHaveProperty("buildPort");
+    if (dockerfile) expect(managed).toHaveProperty("dockerfile", dockerfile);
+    expect(child.composeFile).toContain(`${repoUrl}#${sha}:apps/web`);
+    expect(child.composeFile).not.toContain("dockerfile_inline:");
+    if (dockerfile === "docker/Production") expect(child.composeFile).toContain("      dockerfile: docker/Production\n");
+    else expect(child.composeFile).not.toContain("      dockerfile:");
+    expect(fetchRepoExposedPorts).toHaveBeenCalledWith(expect.objectContaining({ repoUrl, branch: sha, subdirectory: "apps/web", ...(dockerfile ? { dockerfile } : {}) }));
+    expect(child.domains?.[0].port).toBe(8080);
+    expect((await deliver(payload("closed"))).status).toBe(202);
+    expect(services).toEqual([parent]);
+  });
+
+  it("rejects a missing generated recipe before creating a preview", async () => {
+    parent.composeFile = parent.composeFile.replace("services:", "  buildKind: node\n  buildPort: 3000\nservices:");
+    expect((await deliver()).status).toBe(503);
+    expect(calls("compose.create")).toHaveLength(0);
+    expect(dispatchComposeHook).not.toHaveBeenCalled();
   });
 
   it("updates the automatic URL port with parent env, preserving an explicit domain edit", async () => {
@@ -390,7 +455,9 @@ describe("owned cleanup", () => {
     expect(cleanupPreviewContainers).not.toHaveBeenCalled();
   });
 
-  it("never deletes an edited preview stack that could mount foreign volumes", async () => {
+  it.each([false, true])("never deletes an edited preview stack that could mount foreign volumes (auto-detected=%s)", async (detected) => {
+    if (detected) parent.composeFile = repoStack({ appName: parent.appName, repoUrl, branch: "main" },
+      detectBuildPlan({ files: ["index.html"], contents: {} }));
     await deliver();
     services[1].composeFile += "\nvolumes:\n  shared:\n    name: parent-data\n";
     expect((await deliver(payload("closed"))).status).toBe(503);
