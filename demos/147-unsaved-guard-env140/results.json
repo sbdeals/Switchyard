@@ -1,0 +1,76 @@
+{
+  "base": "http://127.0.0.1:3079",
+  "slug": "unsaved-guard-env140-20261026-0755",
+  "sentinel": "unsaved-guard-env140-20261026-0755-SENTINEL-9f2d47",
+  "checks": [
+    {
+      "name": "HTML before Variables contains the service but no sentinel",
+      "passed": true,
+      "bytes": 76911,
+      "sha256": "f271db8241a7f23739f240a8cfae8382514822a8456db192b5da0c70d73d73cb"
+    },
+    {
+      "name": "RSC before Variables contains the service but no sentinel",
+      "passed": true,
+      "bytes": 25947,
+      "sha256": "160450bef129adc46aac9c0e35d8f07d252a74c5e5458cf580ac41a43eb6682f"
+    },
+    {
+      "name": "Every serialized service has env:null and every database has databasePassword:null",
+      "passed": true,
+      "services": 14
+    },
+    {
+      "name": "Navigating away while Variables loads does not prompt",
+      "passed": true
+    },
+    {
+      "name": "Variables loads the sentinel on demand and starts clean",
+      "passed": true
+    },
+    {
+      "name": "Tab navigation prompts; Keep editing preserves draft and restores focus",
+      "passed": true
+    },
+    {
+      "name": "Drawer close also guards the Variables draft",
+      "passed": true
+    },
+    {
+      "name": "Save succeeds and clears the dirty state",
+      "passed": true
+    },
+    {
+      "name": "Saved baseline persists after leaving and reopening Variables",
+      "passed": true
+    },
+    {
+      "name": "Changing back to the old value is dirty against the saved baseline",
+      "passed": true
+    },
+    {
+      "name": "Discard drops the draft and reloads the saved value",
+      "passed": true
+    },
+    {
+      "name": "Browser reload is guarded and cancel preserves the draft",
+      "passed": true
+    },
+    {
+      "name": "Fresh RSC still excludes env after saving",
+      "passed": true
+    }
+  ],
+  "cleanup": [
+    {
+      "kind": "compose",
+      "id": "oshCxtXe4s7d4VxdB-V-j",
+      "deleted": true
+    },
+    {
+      "kind": "project",
+      "id": "VRKgobrC3R-wWR5SfcPI5",
+      "deleted": true
+    }
+  ]
+}
