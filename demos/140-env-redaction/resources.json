@@ -1,0 +1,19 @@
+{
+  "projectId": "z6sWKyAIc_6OS85eWWW7D",
+  "created": [
+    {
+      "type": "application",
+      "id": "BUpYEuKLXE3-DDAWF-fEQ",
+      "name": "env-redaction-app-mvp5wxza",
+      "sentinel": "ENV_REDACTION_APPLICATION_48b9659308614aa3859aa7681732acab",
+      "env": "PROOF_SENTINEL=ENV_REDACTION_APPLICATION_48b9659308614aa3859aa7681732acab\nLOG_LEVEL=info"
+    },
+    {
+      "type": "compose",
+      "id": "uu7HDyearKbnrK4RwYnBo",
+      "name": "env-redaction-compose-mvp5wxza",
+      "sentinel": "ENV_REDACTION_COMPOSE_40d484469ca349c1a09f8f11fce5a09d",
+      "env": "PROOF_SENTINEL=ENV_REDACTION_COMPOSE_40d484469ca349c1a09f8f11fce5a09d\nLOG_LEVEL=info"
+    }
+  ]
+}

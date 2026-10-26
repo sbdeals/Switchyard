@@ -1,0 +1,83 @@
+{
+  "base": "http://127.0.0.1:3071",
+  "startedAt": "2026-10-26T11:17:32.038Z",
+  "services": [
+    {
+      "type": "application",
+      "name": "env-redaction-app-mvp5wxza",
+      "id": "BUpYEuKLXE3-DDAWF-fEQ",
+      "loadActionContainsOwnSentinel": true,
+      "loadActionExcludesOtherSentinel": true,
+      "editorLoaded": true,
+      "loadingSkeleton": true,
+      "saveRevalidationRedacted": true,
+      "savedViaUI": true,
+      "apiRoundTrip": true,
+      "savedBaseline": true,
+      "reopenedRoundTrip": true
+    },
+    {
+      "type": "compose",
+      "name": "env-redaction-compose-mvp5wxza",
+      "id": "uu7HDyearKbnrK4RwYnBo",
+      "loadActionContainsOwnSentinel": true,
+      "loadActionExcludesOtherSentinel": true,
+      "editorLoaded": true,
+      "loadingSkeleton": true,
+      "saveRevalidationRedacted": true,
+      "savedViaUI": true,
+      "apiRoundTrip": true,
+      "savedBaseline": true,
+      "reopenedRoundTrip": true
+    }
+  ],
+  "cleanup": [
+    {
+      "type": "compose",
+      "id": "uu7HDyearKbnrK4RwYnBo",
+      "deletedViaApi": true
+    },
+    {
+      "type": "application",
+      "id": "BUpYEuKLXE3-DDAWF-fEQ",
+      "deletedViaApi": true
+    },
+    {
+      "type": "project",
+      "id": "z6sWKyAIc_6OS85eWWW7D",
+      "deletedViaApi": true,
+      "absenceVerified": true
+    }
+  ],
+  "beforeVariables": {
+    "html": {
+      "bytes": 80290,
+      "sha256": "9892c83f5f59316847a0154ea84b75902c1c8e7f87698866d15b89d7bb0be5c8",
+      "fixturesPresent": true,
+      "sentinelsAbsent": true
+    },
+    "rsc": {
+      "bytes": 26893,
+      "sha256": "9cd02d89fc8664b37dca0e601049b8858246a37c842039a09648c9148841264c",
+      "fixturesPresent": true,
+      "sentinelsAbsent": true
+    }
+  },
+  "afterSaveAndClose": {
+    "html": {
+      "bytes": 80290,
+      "sha256": "9892c83f5f59316847a0154ea84b75902c1c8e7f87698866d15b89d7bb0be5c8",
+      "fixturesPresent": true,
+      "sentinelsAbsent": true
+    },
+    "rsc": {
+      "bytes": 26893,
+      "sha256": "82b69cae9436088f9e43f359ec82bca10bcab94a5fbb7e76a08c23138e7a0765",
+      "fixturesPresent": true,
+      "sentinelsAbsent": true
+    }
+  },
+  "passed": true,
+  "completedAt": "2026-10-26T11:17:44.806Z",
+  "video": "/workspace/sy-codex-notes/fix/env-redaction-proof/video/page@d7db65a7e0914bbb3a3076b972c4c7f5.webm"
+}
