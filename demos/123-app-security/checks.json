@@ -1,0 +1,9 @@
+[
+  "Invalid regex rejected before mutation",
+  "URL preview expands capture group",
+  "Redirect create/edit/toggle persisted through native API",
+  "Password create/replace readback verified; input clears; cancel clears; no automatic deployment",
+  "No saved password in dashboard action responses",
+  "Curl without/with credentials: 000/000",
+  "Redirect and basic-auth delete confirmed by API readback"
+]

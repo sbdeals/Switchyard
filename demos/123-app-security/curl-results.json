@@ -1,0 +1,11 @@
+{
+  "url": "http://app-security-mvp31fny.172.30.0.2.sslip.io/",
+  "withoutCredentials": {
+    "status": "000",
+    "exitCode": 28
+  },
+  "withCredentials": {
+    "status": "000",
+    "exitCode": 28
+  }
+}

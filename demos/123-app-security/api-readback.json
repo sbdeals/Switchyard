@@ -1,0 +1,28 @@
+{
+  "applicationId": "7BAIsPCawMKGxFUeA84NN",
+  "name": "app-security-mvp31fny",
+  "host": "app-security-mvp31fny.172.30.0.2.sslip.io",
+  "redirects": [
+    {
+      "redirectId": "lT4sqbDoJR1Oh7E458yms",
+      "regex": "^http://app-security-mvp31fny[.]172[.]30[.]0[.]2[.]sslip[.]io/old/(.*)$",
+      "replacement": "http://app-security-mvp31fny.172.30.0.2.sslip.io/updated/${1}",
+      "permanent": false
+    }
+  ],
+  "security": [
+    {
+      "securityId": "HhKUr-FfkEsMMST-N3iV8",
+      "username": "app-security-viewer",
+      "password": "[redacted]"
+    }
+  ],
+  "deploymentsBeforeExplicitDeploy": 0,
+  "checks": [
+    "Invalid regex rejected before mutation",
+    "URL preview expands capture group",
+    "Redirect create/edit/toggle persisted through native API",
+    "Password create/replace readback verified; input clears; cancel clears; no automatic deployment",
+    "No saved password in dashboard action responses"
+  ]
+}
