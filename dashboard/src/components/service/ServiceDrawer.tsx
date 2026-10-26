@@ -450,7 +450,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "variables" && <VariablesTab key={service.id} service={service} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
               {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
               {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
