@@ -2,33 +2,35 @@
 
 import { useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Plus, Pencil, Trash2, FolderGit2, Layers, Loader2 } from "lucide-react";
+import { X, Plus, Settings, Trash2, FolderGit2, Layers, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ProjectNode } from "@/lib/dokploy";
 import {
   createProjectAction,
-  renameProjectAction,
-  removeProjectAction,
   createEnvironmentAction,
-  renameEnvironmentAction,
   removeEnvironmentAction,
   type ActionResult,
 } from "@/app/actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { ProjectSettings } from "@/components/ProjectSettings";
 
 export function ProjectsPanel({
   open,
   onClose,
   projects,
+  selectedProjectId,
 }: {
   open: boolean;
   onClose: () => void;
   projects: ProjectNode[];
+  selectedProjectId: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [newProject, setNewProject] = useState("");
+  const [settingsProjectId, setSettingsProjectId] = useState<string | null>(null);
+  const close = () => { setSettingsProjectId(null); onClose(); };
   const [newEnv, setNewEnv] = useState<Record<string, string>>({});
 
   const act = (fn: () => Promise<ActionResult>) => {
@@ -40,11 +42,6 @@ export function ProjectsPanel({
     });
   };
 
-  const rename = (current: string, fn: (name: string) => Promise<ActionResult>) => {
-    const name = prompt("New name", current);
-    if (name && name.trim() && name !== current) act(() => fn(name.trim()));
-  };
-
   return (
     <AnimatePresence>
       {open && (
@@ -54,9 +51,9 @@ export function ProjectsPanel({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={close} />
           <FocusTrapPanel
-            onClose={onClose}
+            onClose={close}
             role="dialog"
             aria-modal="true"
             aria-labelledby="projects-panel-title"
@@ -67,9 +64,9 @@ export function ProjectsPanel({
             className="relative flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
-              <h2 id="projects-panel-title" className="text-sm font-semibold">Projects &amp; environments</h2>
+              <h2 id="projects-panel-title" className="text-sm font-semibold">{settingsProjectId ? "Project settings" : "Projects & environments"}</h2>
               <button
-                onClick={onClose}
+                onClick={close}
                 aria-label="Close projects"
                 className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
               >
@@ -77,6 +74,16 @@ export function ProjectsPanel({
               </button>
             </div>
 
+            {settingsProjectId ? (
+              <ProjectSettings
+                key={settingsProjectId}
+                projectId={settingsProjectId}
+                selectedProjectId={selectedProjectId}
+                onBack={() => setSettingsProjectId(null)}
+                onDeleted={() => setSettingsProjectId(null)}
+              />
+            ) : (
+            <>
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
               {projects.map((p) => (
                 <div
@@ -86,19 +93,14 @@ export function ProjectsPanel({
                   <div className="flex items-center gap-2">
                     <FolderGit2 className="size-4 text-[var(--color-brand)]" />
                     <span className="flex-1 truncate text-sm font-medium">{p.name}</span>
-                    <IconBtn title="Rename project" onClick={() => rename(p.name, (n) => renameProjectAction(p.projectId, n))}>
-                      <Pencil className="size-3.5" />
-                    </IconBtn>
-                    <IconBtn
-                      title="Delete project"
-                      danger
-                      onClick={() => {
-                        if (confirm(`Delete project "${p.name}" and everything in it?`))
-                          act(() => removeProjectAction(p.projectId));
-                      }}
+                    <button
+                      type="button"
+                      onClick={() => setSettingsProjectId(p.projectId)}
+                      aria-label={`Project settings for ${p.name}`}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)]"
                     >
-                      <Trash2 className="size-3.5" />
-                    </IconBtn>
+                      <Settings className="size-3.5" /> Project settings
+                    </button>
                   </div>
 
                   <div className="mt-2 space-y-1 pl-6">
@@ -106,9 +108,6 @@ export function ProjectsPanel({
                       <div key={e.environmentId} className="flex items-center gap-2 text-xs">
                         <Layers className="size-3.5 text-[var(--color-fg-subtle)]" />
                         <span className="flex-1 truncate text-[var(--color-fg-muted)]">{e.name}</span>
-                        <IconBtn title="Rename environment" onClick={() => rename(e.name, (n) => renameEnvironmentAction(e.environmentId, n))}>
-                          <Pencil className="size-3" />
-                        </IconBtn>
                         <IconBtn
                           title="Delete environment"
                           danger
@@ -186,6 +185,8 @@ export function ProjectsPanel({
                 </button>
               </div>
             </div>
+            </>
+            )}
           </FocusTrapPanel>
         </motion.div>
       )}

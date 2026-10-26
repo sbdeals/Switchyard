@@ -6,10 +6,7 @@ import {
   createDatabase,
   databaseAction,
   createProject,
-  renameProject,
-  removeProject,
   createEnvironment,
-  renameEnvironment,
   removeEnvironment,
   listProjects,
   saveEnvironment,
@@ -99,6 +96,13 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import {
+  getProjectSettings,
+  updateProjectSettings,
+  updateProjectEnvironment,
+  deleteProjectSettings,
+} from "@/lib/project-settings-server";
+import type { ProjectSettings } from "@/lib/project-settings";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -223,11 +227,25 @@ export async function saveEnvironmentAction(
 export async function createProjectAction(name: string): Promise<ActionResult> {
   return wrap(() => createProject(name));
 }
-export async function renameProjectAction(id: string, name: string): Promise<ActionResult> {
-  return wrap(() => renameProject(id, name));
+export async function getProjectSettingsAction(id: string): Promise<{ ok: true; project: ProjectSettings } | { ok: false; error: string }> {
+  try {
+    return { ok: true, project: await getProjectSettings(id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return fail(e);
+  }
 }
-export async function removeProjectAction(id: string): Promise<ActionResult> {
-  return wrap(() => removeProject(id));
+export async function updateProjectAction(id: string, name: string, description: string): Promise<ActionResult> {
+  return wrap(() => updateProjectSettings(id, name, description));
+}
+export async function removeProjectAction(
+  id: string,
+  typedName: string,
+  selectedProjectId: string | null,
+  acknowledged: boolean,
+  reviewedInventory: string,
+): Promise<ActionResult> {
+  return wrap(() => deleteProjectSettings(id, typedName, selectedProjectId, acknowledged, reviewedInventory));
 }
 export async function createEnvironmentAction(
   projectId: string,
@@ -236,7 +254,7 @@ export async function createEnvironmentAction(
   return wrap(() => createEnvironment(projectId, name));
 }
 export async function renameEnvironmentAction(id: string, name: string): Promise<ActionResult> {
-  return wrap(() => renameEnvironment(id, name));
+  return wrap(() => updateProjectEnvironment(id, name));
 }
 export async function removeEnvironmentAction(id: string): Promise<ActionResult> {
   return wrap(() => removeEnvironment(id));
