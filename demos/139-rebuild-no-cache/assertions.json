@@ -1,0 +1,40 @@
+{
+  "passed": true,
+  "confirmation": "Clean cache on every build? Builds will be slower. This setting stays enabled until you turn it off. Saving does not deploy.",
+  "noImplicitDeploy": true,
+  "cancelledConfirmationNoMutation": true,
+  "normal": {
+    "cleanCache": false,
+    "cachedBuildSteps": [
+      "#6 CACHED",
+      "#7 CACHED",
+      "#8 CACHED"
+    ],
+    "deploymentId": "VEUCQgdTOQu-gpnaFjadr",
+    "title": "Rebuild deployment",
+    "description": "",
+    "status": "error",
+    "createdAt": "2026-10-26T11:05:36.623Z",
+    "cachedLines": [
+      "#6 CACHED",
+      "#7 CACHED",
+      "#8 CACHED"
+    ],
+    "buildFinished": true,
+    "swarmFailure": true
+  },
+  "noCache": {
+    "cleanCache": true,
+    "cachedBuildSteps": [],
+    "deploymentId": "gfcF96f0Gd3T6khpQrViA",
+    "title": "rebuild-no-cache proof: fresh layers",
+    "description": "Explicit rebuild with persistent Clean cache on build enabled. Local VM build proof; deployment may fail without Swarm.",
+    "status": "error",
+    "createdAt": "2026-10-26T11:05:40.205Z",
+    "cachedLines": [
+      "#4 CACHED"
+    ],
+    "buildFinished": true,
+    "swarmFailure": true
+  }
+}

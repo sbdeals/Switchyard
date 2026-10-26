@@ -1,0 +1,11 @@
+{
+  "deploymentId": "xH8iVM9RFf_a9XOajspBn",
+  "title": "ci: pin actions to full commit SHAs (#186)\n\n- lucacome/docker-image-update-checker: v2 -> a233de05...\n- actions/checkout: v4 -> 34e11487...\n- docker/setup-qemu-action: v3 -> c7c53464...\n- docker/setup-buildx-action: v3 -> 8d2750c6...\n- docker/login-action: v3 -> c94ce9fb...\n- docker/build-push-action: v6 -> 10e90e36...\n- github/codeql-action/init: v3 -> ebcb5b36...\n- github/codeql-action/analyze: v3 -> ebcb5b36...\n\nCo-authored-by: eepifanova <eepifanova@users.noreply.github.com>\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>",
+  "description": "Commit: 611fa05748a4031841e5607cd3069288b0aa9973",
+  "status": "error",
+  "createdAt": "2026-10-26T11:03:40.179Z",
+  "cachedLines": [],
+  "noCache": false,
+  "buildFinished": true,
+  "swarmFailure": true
+}

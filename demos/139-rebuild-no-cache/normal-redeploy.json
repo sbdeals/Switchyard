@@ -1,0 +1,20 @@
+{
+  "cleanCache": false,
+  "cachedBuildSteps": [
+    "#6 CACHED",
+    "#7 CACHED",
+    "#8 CACHED"
+  ],
+  "deploymentId": "VEUCQgdTOQu-gpnaFjadr",
+  "title": "Rebuild deployment",
+  "description": "",
+  "status": "error",
+  "createdAt": "2026-10-26T11:05:36.623Z",
+  "cachedLines": [
+    "#6 CACHED",
+    "#7 CACHED",
+    "#8 CACHED"
+  ],
+  "buildFinished": true,
+  "swarmFailure": true
+}

@@ -1,0 +1,14 @@
+{
+  "cleanCache": true,
+  "cachedBuildSteps": [],
+  "deploymentId": "gfcF96f0Gd3T6khpQrViA",
+  "title": "rebuild-no-cache proof: fresh layers",
+  "description": "Explicit rebuild with persistent Clean cache on build enabled. Local VM build proof; deployment may fail without Swarm.",
+  "status": "error",
+  "createdAt": "2026-10-26T11:05:40.205Z",
+  "cachedLines": [
+    "#4 CACHED"
+  ],
+  "buildFinished": true,
+  "swarmFailure": true
+}
