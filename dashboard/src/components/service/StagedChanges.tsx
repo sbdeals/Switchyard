@@ -13,6 +13,7 @@ import { useDialogFocus } from "@/components/use-focus-trap";
 interface StagingContextValue {
   operations: StagedOperation[];
   drafts: Record<string, unknown>;
+  applied: Record<string, string>;
   stage: (operation: StagedOperation) => void;
   discard: (id?: string) => void;
   setDraft: (key: string, value: unknown) => void;
@@ -132,7 +133,7 @@ export function StagingProvider({ service: selectedService, services, children }
     });
   }
 
-  const value: StagingContextValue = { operations: state.operations, drafts: state.drafts, stage, discard, setDraft, pending, setBarContainer, hasChanges, deploy, hasServiceChanges, revision: revisions[key] ?? 0, requestLeave };
+  const value: StagingContextValue = { operations: state.operations, drafts: state.drafts, applied: state.applied, stage, discard, setDraft, pending, setBarContainer, hasChanges, deploy, hasServiceChanges, revision: revisions[key] ?? 0, requestLeave };
   const describe = (id: string) => reportLabels[key]?.[id] ?? id;
   const bar = service && (hasChanges || report || requestError) && (
         <div className={`${barContainer ? "mx-4 mt-3" : "fixed top-24 left-1/2 w-[min(38rem,calc(100vw-2rem))] -translate-x-1/2"} z-[55] rounded-xl border border-[var(--color-brand)]/50 bg-[var(--color-bg-elevated)] shadow-2xl`} aria-label="Staged changes">

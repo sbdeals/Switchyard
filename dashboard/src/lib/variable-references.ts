@@ -1,5 +1,5 @@
 import type { Service } from "@/lib/dokploy";
-import { referenceableKeys } from "@/lib/reference-vars";
+import { referenceableKeys } from "@/lib/reference-keys";
 import { resolveTemplate, type RefTarget } from "@/lib/references";
 import { variableRows, type VariableRow, type VariableRowIssue } from "@/lib/variable-rows";
 
@@ -28,8 +28,7 @@ export function referenceSuggestions(
     .filter((s) => s.projectId === self.projectId && s.environmentId === self.environmentId);
   const suggestions = new Map<string, ReferenceSuggestion>();
   for (const service of local) {
-    const current = service === self && template !== undefined ? { ...service, env: template } : service;
-    const { own, builtin } = referenceableKeys(current);
+    const { own, builtin } = referenceableKeys(service, service === self ? template : undefined);
     for (const [keys, kind] of [[own, "variable"], [builtin, "builtin"]] as const) {
       for (const key of keys) {
         if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
@@ -99,6 +98,15 @@ export function validateReferenceSyntax(value: string): string[] {
     else if (!inner.trim()) issues.add("A reference cannot be empty.");
   }
   return [...issues];
+}
+
+/** Immediate checks need only the editor's draft, never sibling values. */
+export function validateVariableReferenceSyntax(
+  template: string,
+  rows: readonly Pick<VariableRow, "index" | "key" | "value">[] = variableRows(template)
+): VariableRowIssue[] {
+  return rows.flatMap((row) => validateReferenceSyntax(row.value)
+    .map((message) => ({ index: row.index, key: row.key, message })));
 }
 
 /** Check every physical row, including duplicates and quoted multiline values. */

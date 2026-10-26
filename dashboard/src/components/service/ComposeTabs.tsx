@@ -12,6 +12,7 @@ import { ContextMenu } from "@/components/ContextMenu";
 import { deploymentMenuItems } from "@/lib/context-menu";
 import {
   composeLifecycleAction,
+  loadServiceEnvAction,
   rollbackComposeAction,
 } from "@/app/actions";
 import {
@@ -166,20 +167,39 @@ function PreviousDeploys({ compose, managed, pending, staged, error, rollback }:
  * a compose project on the local bridge network.
  */
 function ManagedOverview({ compose, managed }: { compose: ComposeService; managed: ManagedMeta }) {
-  const conn =
-    managed.kind === "database"
-      ? managedConnectionString(managed.engine, compose.appName, compose.env)
-      : null;
+  const [conn, setConn] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function revealConnection() {
+    if (managed.kind !== "database") return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        const result = await loadServiceEnvAction("compose", compose.id);
+        if (result.ok) setConn(managedConnectionString(managed.engine, compose.appName, result.env));
+        else setError(result.error);
+      } catch {
+        setError("Could not load connection string.");
+      }
+    });
+  }
+
   return (
     <div className="space-y-4">
-      {conn && (
+      {managed.kind === "database" && (
         <Field label="Connection string">
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
+          {conn ? <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
             <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
               {conn}
             </code>
             <CopyButton text={conn} />
-          </div>
+          </div> : (
+            <Btn onClick={revealConnection} disabled={pending}>
+              {pending && <Loader2 className="size-3 animate-spin" />} Reveal connection string
+            </Btn>
+          )}
+          {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
         </Field>
       )}
       <div className="grid grid-cols-2 gap-3">

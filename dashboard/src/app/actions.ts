@@ -12,6 +12,8 @@ import {
   renameEnvironment,
   removeEnvironment,
   listProjects,
+  getServiceEnvironment,
+  getDatabasePassword,
   updateDatabase,
   reloadDatabase,
   request,
@@ -256,6 +258,31 @@ export async function saveEnvironmentAction(
   env: string
 ): Promise<ActionResult> {
   return wrap(() => saveServiceEnv({ kind: "database", engine, id }, env));
+}
+
+/** Environment values are fetched only on demand by an open service panel. */
+export async function loadServiceEnvAction(
+  type: MountServiceType,
+  id: string
+): Promise<{ ok: true; env: string } | { ok: false; error: string }> {
+  try {
+    return { ok: true, env: await getServiceEnvironment(type, id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load environment variables." };
+  }
+}
+
+export async function loadDatabasePasswordAction(
+  engine: Engine,
+  id: string
+): Promise<{ ok: true; password: string | null } | { ok: false; error: string }> {
+  try {
+    return { ok: true, password: await getDatabasePassword(engine, id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load database credentials." };
+  }
 }
 
 // --- projects & environments ------------------------------------------------

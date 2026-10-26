@@ -7,6 +7,7 @@ import {
   referenceOptionIndex,
   referenceSuggestions,
   validateReferenceSyntax,
+  validateVariableReferenceSyntax,
   validateVariableReferences,
   type ReferenceSuggestion,
 } from "@/lib/variable-references";
@@ -14,19 +15,26 @@ import {
 const web: ComposeService = {
   kind: "compose", id: "web-1", name: "web", appName: "web-abc", status: "done",
   projectId: "project-1", projectName: "Project", environmentId: "env-1", environmentName: "test",
-  dockerImage: "nginx:alpine", env: "TOKEN=secret-web-value", createdAt: null, cpuLimit: null, memoryLimit: null,
+  dockerImage: "nginx:alpine", env: null, createdAt: null, cpuLimit: null, memoryLimit: null,
+  referenceKeys: { own: ["TOKEN"], builtin: ["SWITCHYARD_HOST", "SWITCHYARD_SERVICE_NAME"] },
   replicas: null, composeFile: null, composeType: "docker-compose", domains: [], deployments: [],
   managed: { kind: "image", image: "nginx:alpine" },
 };
 const database: Database = {
   ...web, kind: "database", id: "db-1", name: "Main DB.v2", appName: "db-abc",
-  engine: "postgres", databaseName: "demo", databaseUser: "demo", databasePassword: "secret-db-password",
-  externalPort: null, command: null, env: "CUSTOM=secret-db-value",
+  engine: "postgres", databaseName: "demo", databaseUser: "demo", databasePassword: null,
+  externalPort: null, command: null,
+  referenceKeys: { own: ["CUSTOM"], builtin: ["SWITCHYARD_HOST", "SWITCHYARD_SERVICE_NAME", "DATABASE_URL"] },
 };
 
 describe("referenceSuggestions", () => {
   it("offers own and built-in variable names without copying their values", () => {
-    const suggestions = referenceSuggestions([web, database], web);
+    const unreadable = {
+      ...database,
+      get env(): never { throw new Error("Suggestions must not read env values"); },
+      get databasePassword(): never { throw new Error("Suggestions must not read passwords"); },
+    };
+    const suggestions = referenceSuggestions([web, unreadable], web);
     expect(suggestions).toContainEqual({ label: "Main DB.v2.CUSTOM", insertText: "${{Main DB.v2.CUSTOM}}", kind: "variable", self: false });
     expect(suggestions).toContainEqual({ label: "Main DB.v2.DATABASE_URL", insertText: "${{Main DB.v2.DATABASE_URL}}", kind: "builtin", self: false });
     expect(suggestions).toContainEqual({ label: "web.SWITCHYARD_HOST", insertText: "${{web.SWITCHYARD_HOST}}", kind: "builtin", self: true });
@@ -52,9 +60,23 @@ describe("referenceSuggestions", () => {
     expect(suggestions.some((s) => s.label === "web.BAD.KEY")).toBe(false);
   });
 
-  it("decodes stored reference annotations before listing variable keys", () => {
-    const service = { ...web, env: "# switchyard:ref URL=${{db.DATABASE_URL}}\nURL=resolved-secret" };
-    expect(referenceSuggestions([], service).filter((s) => s.kind === "variable").map((s) => s.label)).toEqual(["web.URL"]);
+  it("uses loaded and edited self keys without inspecting stored env values", () => {
+    const service = { ...web, env: "HIDDEN=stored-secret" };
+    const suggestions = referenceSuggestions([], service, "# comment\nURL=${{db.DATABASE_URL}}\nNEW=typed-secret");
+    expect(suggestions.filter((s) => s.kind === "variable").map((s) => s.label)).toEqual(["web.URL", "web.NEW"]);
+    expect(JSON.stringify(suggestions)).not.toMatch(/HIDDEN|TOKEN|stored-secret|typed-secret/);
+  });
+
+  it("reveals built-ins when a draft removes a saved override", () => {
+    const service = { ...web, referenceKeys: { own: ["SWITCHYARD_HOST"], builtin: ["SWITCHYARD_HOST"] } };
+    expect(referenceSuggestions([], service, "")).toEqual([
+      { label: "web.SWITCHYARD_HOST", insertText: "${{web.SWITCHYARD_HOST}}", kind: "builtin", self: true },
+    ]);
+  });
+
+  it("never falls back to env values when page key metadata is absent", () => {
+    const service = { ...web, referenceKeys: undefined, env: "HIDDEN=stored-secret" };
+    expect(referenceSuggestions([], service)).toEqual([]);
   });
 });
 
@@ -66,7 +88,7 @@ const suggestions: ReferenceSuggestion[] = [
 
 describe("reference completion", () => {
   it("excludes only the edited self key, keeping other self keys and the same key on another service", () => {
-    const other = { ...web, id: "other", name: "other", env: "DEMO_URL=other-value" };
+    const other = { ...web, id: "other", name: "other", referenceKeys: { ...web.referenceKeys!, own: ["DEMO_URL"] } };
     const candidates = referenceSuggestions([web, other], web, "DEMO_URL=original\nOTHER_KEY=other-self-value");
     const value = "http://${{";
     const completion = getReferenceCompletion(value, value.length, candidates, "DEMO_URL")!;
@@ -108,8 +130,8 @@ describe("reference completion", () => {
 
   it("puts service-name prefix matches before substring matches within their group", () => {
     const candidates = referenceSuggestions([
-      { ...web, id: "substring", name: "my-api", env: "URL=one", appName: "" },
-      { ...web, id: "prefix", name: "api", env: "URL=two", appName: "" },
+      { ...web, id: "substring", name: "my-api", referenceKeys: { own: ["URL"], builtin: ["SWITCHYARD_SERVICE_NAME"] }, appName: "" },
+      { ...web, id: "prefix", name: "api", referenceKeys: { own: ["URL"], builtin: ["SWITCHYARD_SERVICE_NAME"] }, appName: "" },
     ], web);
     expect(getReferenceCompletion("${{API", 6, candidates)?.suggestions.map((suggestion) => suggestion.label)).toEqual([
       "api.URL", "my-api.URL", "api.SWITCHYARD_SERVICE_NAME", "my-api.SWITCHYARD_SERVICE_NAME",
@@ -196,6 +218,25 @@ describe("validateReferenceSyntax", () => {
     expect(validateReferenceSyntax("${{Main DB.v2.DATABASE_URL}}/${{TOKEN}}/${{project.KEY}}/${{environment.KEY}}/${{vault.KEY}}")).toEqual([]);
     expect(validateReferenceSyntax("literal-$${{unfinished")).toEqual([]);
     expect(validateReferenceSyntax("literal")).toEqual([]);
+  });
+});
+
+describe("validateVariableReferenceSyntax", () => {
+  it("checks physical multiline rows immediately without resolving sibling values", () => {
+    expect(validateVariableReferenceSyntax('# comment\nMULTI="first\n${{db.TOKEN\nlast"\nURL=${{db.TOKEN}}')).toEqual([
+      { index: 1, key: "MULTI", message: "Finish the reference with }}." },
+    ]);
+  });
+
+  it("keeps table row indices for duplicate and temporary keys", () => {
+    expect(validateVariableReferenceSyntax("", [
+      { index: 3, key: "#", value: "${{" },
+      { index: 7, key: "URL", value: "${{ }}" },
+      { index: 9, key: "URL", value: "${{db.TOKEN}}" },
+    ])).toEqual([
+      { index: 3, key: "#", message: "Finish the reference with }}." },
+      { index: 7, key: "URL", message: "A reference cannot be empty." },
+    ]);
   });
 });
 

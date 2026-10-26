@@ -1,8 +1,8 @@
 /**
  * Built-in variables a service exposes to `${{ServiceName.VAR}}` references
  * (see lib/references.ts), plus the glue that turns the workspace's services
- * into resolver targets. Client-safe: the Variables tab uses it for the picker
- * and live validation; the server uses it to resolve before saving/deploying.
+ * into resolver targets. The server resolves values before saving/deploying;
+ * the Variables picker receives only the available variable names.
  *
  * Every service:
  *   SWITCHYARD_HOST          internal hostname other services reach it at
@@ -14,6 +14,7 @@
  *   them <ENGINE>_USER / <ENGINE>_DATABASE — plus the libpq PG* set for Postgres.
  * A service's own variables take precedence over these names.
  */
+import "server-only";
 import type { Engine, Service } from "@/lib/dokploy";
 import { connectionString } from "@/lib/connection";
 import { ENGINE_META } from "@/lib/engines";
@@ -73,7 +74,7 @@ function databaseParts(s: Service): DbParts | null {
   return null;
 }
 
-/** The built-in variables for one service (values included — server/UI only). */
+/** The built-in variables for one service (values included — server only). */
 export function builtinVars(s: Service): Record<string, string> {
   const vars: Record<string, string> = {};
   if (s.appName) vars.SWITCHYARD_HOST = s.appName;
@@ -124,9 +125,10 @@ export function referenceTargets(
   }));
 }
 
-/** Variable names a service offers to references (own first, then built-ins). */
-export function referenceableKeys(s: Service): { own: string[]; builtin: string[] } {
+/** Compute non-secret picker metadata before the service's values are redacted. */
+export function computeReferenceKeys(s: Service): { own: string[]; builtin: string[] } {
   const own = Object.keys(parseEnv(decodeStoredEnv(s.env)));
-  const builtin = Object.keys(builtinVars(s)).filter((k) => !own.includes(k));
+  // Keep shadowed built-ins so deleting a draft override reveals its name.
+  const builtin = Object.keys(builtinVars(s));
   return { own, builtin };
 }
