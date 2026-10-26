@@ -1,0 +1,21 @@
+{
+  "base": "http://127.0.0.1:3063",
+  "results": [
+    "Created only session-owned service-notes project, app and compose; no deployment",
+    "Shift+Enter inserts newline without saving",
+    "Enter saves trimmed app note; saving/saved states; Dokploy persistence",
+    "Escape cancels draft and keeps drawer open",
+    "Application notes survive reload",
+    "650-character input caps at 500 with counter and persists to compose",
+    "Compose long note survives reload",
+    "Script note persists after reload as literal text without script DOM or execution",
+    "Canvas shows truncated first lines, with full multiline native tooltips on both nodes",
+    "Deleted/out-of-workspace service returns generic error and retains editable draft"
+  ],
+  "cleanup": [
+    "application.delete: removed during stale-service test",
+    "compose.delete: removed",
+    "project.remove: removed"
+  ],
+  "projectAbsent": true
+}
