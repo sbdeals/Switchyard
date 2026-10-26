@@ -1,0 +1,247 @@
+{
+  "slug": "onboarding-870316ea",
+  "email": "onboarding-870316ea@example.invalid",
+  "startedAt": "2026-10-26T09:14:21.393Z",
+  "api": [
+    {
+      "procedure": "organization.active",
+      "status": 200
+    },
+    {
+      "procedure": "organization.create",
+      "status": 200
+    },
+    {
+      "procedure": "auth/organization/set-active",
+      "status": 200
+    },
+    {
+      "procedure": "user.createUserWithCredentials",
+      "status": 200
+    },
+    {
+      "procedure": "domain.delete",
+      "status": 200
+    },
+    {
+      "procedure": "compose.create",
+      "status": 200
+    },
+    {
+      "procedure": "compose.update",
+      "status": 200
+    },
+    {
+      "procedure": "compose.deploy",
+      "status": 200
+    },
+    {
+      "procedure": "auth/organization/set-active",
+      "status": 200
+    },
+    {
+      "procedure": "application.delete",
+      "status": 200
+    },
+    {
+      "procedure": "compose.delete",
+      "status": 200
+    },
+    {
+      "procedure": "project.remove",
+      "status": 200
+    },
+    {
+      "procedure": "project.remove",
+      "status": 200
+    },
+    {
+      "procedure": "user.remove",
+      "status": 200
+    },
+    {
+      "procedure": "auth/organization/set-active",
+      "status": 200
+    },
+    {
+      "procedure": "organization.delete",
+      "status": 200
+    }
+  ],
+  "checks": [
+    {
+      "name": "New throwaway user created through Dokploy API",
+      "passed": true
+    },
+    {
+      "name": "New organization is empty before first login",
+      "passed": true
+    },
+    {
+      "name": "Empty workspace shows checklist at 0 of 5",
+      "passed": true
+    },
+    {
+      "name": "Empty state action: Deploy from GitHub repo",
+      "passed": true
+    },
+    {
+      "name": "Empty state action: Deploy a Docker image",
+      "passed": true
+    },
+    {
+      "name": "Empty state action: Add a database",
+      "passed": true
+    },
+    {
+      "name": "Mobile page has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "768x600 action center is unobstructed: Deploy from GitHub repo",
+      "passed": true
+    },
+    {
+      "name": "768x600 action center is unobstructed: Deploy a Docker image",
+      "passed": true
+    },
+    {
+      "name": "768x600 action center is unobstructed: Add a database",
+      "passed": true
+    },
+    {
+      "name": "Create a project link updates checklist to 1 of 5",
+      "passed": true
+    },
+    {
+      "name": "Public image successfully deployed",
+      "passed": false,
+      "status": "error"
+    },
+    {
+      "name": "Service milestone reflects real deployment result",
+      "passed": true
+    },
+    {
+      "name": "Fallback public image runs through existing Compose API",
+      "passed": true,
+      "status": "done"
+    },
+    {
+      "name": "Real successful fallback deployment updates first-service milestone",
+      "passed": true
+    },
+    {
+      "name": "Dismissal persists after reload",
+      "passed": true
+    },
+    {
+      "name": "Dismissal key contains a user hash, not the email",
+      "passed": true
+    },
+    {
+      "name": "Variable checklist link saves a real variable",
+      "passed": true
+    },
+    {
+      "name": "Second environment created through checklist link",
+      "passed": true
+    },
+    {
+      "name": "Selected empty project shows create actions while another project has services",
+      "passed": true
+    },
+    {
+      "name": "Empty project grid also shows create actions",
+      "passed": true
+    },
+    {
+      "name": "Domain checklist link saves a local-only HTTP domain",
+      "passed": true
+    },
+    {
+      "name": "Checklist automatically hides after all real milestones",
+      "passed": true
+    },
+    {
+      "name": "Throwaway workspace empty after cleanup",
+      "passed": true
+    }
+  ],
+  "limitations": [
+    "Native Docker-image application did not deploy successfully on this non-Swarm local host. That failed application is not counted as deployed; no state was fabricated.",
+    "Compose fallback was created through the existing Dokploy API for state-progress proof. Successful image deployment through the empty-state action remains unproven."
+  ],
+  "screenshots": [
+    "01-empty-workspace.png",
+    "02-empty-mobile.png",
+    "02b-empty-768x600.png",
+    "03-project-created.png",
+    "04-image-action.png",
+    "05-deployment-result.png",
+    "06-real-checklist-progress.png",
+    "07-compose-fallback-progress.png",
+    "08-dismissed-after-reload.png",
+    "09-variable-link.png",
+    "10-variable-progress.png",
+    "11-environment-progress.png",
+    "12-selected-empty-project.png",
+    "12b-selected-empty-project-grid.png",
+    "13-domain-link.png",
+    "14-domain-progress.png",
+    "15-final-checklist-state.png"
+  ],
+  "cleanup": [
+    {
+      "type": "application",
+      "id": "4_yj_SSmIHXT9i3682dgY",
+      "deleted": true
+    },
+    {
+      "type": "compose",
+      "id": "eldgMoBDTmCxkB4JkWxjv",
+      "deleted": true
+    },
+    {
+      "type": "project",
+      "id": "WY7UkTOYxhv_rBrtuxtwG",
+      "deleted": true
+    },
+    {
+      "type": "project",
+      "id": "Sb2ew-14cuKFGp4n94Mal",
+      "deleted": true
+    },
+    {
+      "type": "user",
+      "id": "ggic05jgGcrWX5rG9bOBB",
+      "deleted": true
+    },
+    {
+      "type": "organization",
+      "id": "WcpiYfRsqRgzUyEeNIIGl",
+      "deleted": true
+    }
+  ],
+  "blockedExternalRequests": 1,
+  "organizationId": "WcpiYfRsqRgzUyEeNIIGl",
+  "userId": "ggic05jgGcrWX5rG9bOBB",
+  "applicationId": "4_yj_SSmIHXT9i3682dgY",
+  "deploymentStatus": "error",
+  "deploymentRecords": [
+    {
+      "status": "error"
+    }
+  ],
+  "initialAutomaticDomainsRemoved": 1,
+  "composeId": "eldgMoBDTmCxkB4JkWxjv",
+  "composeStatus": "done",
+  "composeRuntime": [
+    "onboarding-870316ea-compose-ywfda5-web-1\tUp Less than a second\ttraefik/whoami:v1.10"
+  ],
+  "dismissalKeys": [
+    "switchyard:onboarding-dismissed:a0ef92f27bbdd89495822676a67cfee504d9231d1786cc04e9fc4bd56b88910d"
+  ],
+  "video": "onboarding-checklist.mp4",
+  "finishedAt": "2026-10-26T09:14:45.505Z"
+}

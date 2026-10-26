@@ -83,3 +83,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#110](https://github.com/sbdeals/Switchyard/pull/110) | codex/project-settings (main) | Project settings + danger zone | [110-project-settings](110-project-settings/) | Codex mp4+pngs | deleted from Dokploy+Docker ✓ |
 | [#111](https://github.com/sbdeals/Switchyard/pull/111) | codex/service-duplicate (main) | Duplicate service | [111-service-duplicate](111-service-duplicate/) | Codex mp4+pngs | copy w/ fresh volume, both running ✓ |
 | [#112](https://github.com/sbdeals/Switchyard/pull/112) | codex/resource-limits (main) | Resource limits units + presets | [112-resource-limits](112-resource-limits/) | Codex mp4+pngs | 0.5 CPU/512 MiB readback ✓ |
+| [#113](https://github.com/sbdeals/Switchyard/pull/113) | codex/onboarding-checklist (main) | Onboarding empty states + checklist | [113-onboarding-checklist](113-onboarding-checklist/) | Codex mp4+pngs | 23/24 (native deploy: no swarm) |
