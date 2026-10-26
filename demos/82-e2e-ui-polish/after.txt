@@ -1,0 +1,9 @@
+--- 390x844: document scrollWidth=390 viewport=390 -> no overflow
+--- logs filter "zz-no-such-line": "No logs match" + Clear filter button
+after Clear filter: filter=""
+--- variables draft after switching Logs -> Variables: KEPT
+close drawer (Esc) with unsaved draft: confirm dialogs=["Discard unsaved variable or Compose edits and close?"]; drawer still open (dismissed)
+accept confirm: drawer closed
+--- after Stop: card inline action button: Start (see after-4-stopped-card.png)
+drawer header: compose-5f72 | Stopped | Compose · e2e-round1-renamed / production | Stopped
+lifecycle buttons: Start, Redeploy

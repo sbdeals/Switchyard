@@ -1,0 +1,7 @@
+--- 390x844: document scrollWidth=473 viewport=390 -> HORIZONTAL OVERFLOW
+--- logs filter "zz-no-such-line": shows "waiting for logs…" spinner (misleading)
+--- variables draft after switching Logs -> Variables: LOST
+close drawer (Esc) with unsaved draft: confirm dialogs=[]; drawer CLOSED, draft silently lost
+--- after Stop: card inline action button: Deploy (see before-4-stopped-card.png)
+drawer header: compose-5f72 | Idle | Compose · e2e-round1-renamed / production | Last deploy: Never deployed
+lifecycle buttons: Deploy
