@@ -344,17 +344,25 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
-  const [tab, setTab] = useState<TabId>("overview");
+export function ServiceDrawer({
+  service,
+  onClose,
+  initialTab = "overview",
+}: {
+  service: Service | null;
+  onClose: () => void;
+  initialTab?: "overview" | "domains" | "variables";
+}) {
+  const [tab, setTab] = useState<TabId>(initialTab);
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
-  // Reset to Overview when a different service is opened (adjust state during
+  // Reset to the requested section when a service is opened (adjust state during
   // render — the React-recommended alternative to a resetting effect).
   const [shownId, setShownId] = useState<string | null>(null);
-  if (service && service.id !== shownId) {
-    setShownId(service.id);
-    setTab("overview");
+  if ((service?.id ?? null) !== shownId) {
+    setShownId(service?.id ?? null);
+    setTab(initialTab);
   }
   const baseTabs =
     service?.kind === "application"

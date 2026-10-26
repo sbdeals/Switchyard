@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,8 @@ import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { GettingStarted } from "@/components/GettingStarted";
+import { getWorkspaceScope, type OnboardingItem } from "@/lib/onboarding";
 import { cn } from "@/lib/utils";
 
 type View = "canvas" | "grid";
@@ -19,28 +21,57 @@ export function Workspace({
   services,
   projects,
   edges,
+  userId,
 }: {
   services: Service[];
   projects: ProjectNode[];
   edges: ServiceEdge[];
+  userId: string | null;
 }) {
   const [view, setView] = useState<View>("canvas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [deployOpen, setDeployOpen] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [selectedTab, setSelectedTab] = useState<"overview" | "domains" | "variables">("overview");
   const router = useRouter();
+  const scope = getWorkspaceScope(projects, services, edges, projectId);
+
+  // Refresh deploy results so the checklist follows an in-flight first deploy.
+  const deploying = services.some((service) => service.status === "running");
+  useEffect(() => {
+    if (!deploying) return;
+    const timer = window.setInterval(() => router.refresh(), 3000);
+    return () => window.clearInterval(timer);
+  }, [deploying, router]);
+
+  const openService = (id: string, tab: typeof selectedTab = "overview") => {
+    setSelectedTab(tab);
+    setSelectedId(id);
+  };
 
   // Re-resolve the selected service from fresh props so the drawer updates.
   const selected = services.find((s) => s.id === selectedId) ?? null;
 
   // Open the new service's drawer and pull fresh state in.
   const onDeployed = (id: string) => {
-    setSelectedId(id);
+    openService(id);
     router.refresh();
+  };
+
+  const navigateChecklist = (item: OnboardingItem) => {
+    if (item.id === "project" || item.id === "environment") {
+      setProjectsOpen(true);
+    } else if (item.serviceId) {
+      openService(item.serviceId, item.id === "domain" ? "domains" : item.id === "variable" ? "variables" : "overview");
+    } else {
+      setDeployOpen(true);
+    }
   };
 
   return (
     <MotionConfig reducedMotion="user">
-    <div className="mx-auto max-w-7xl px-6 py-8">
+    <div className="mx-auto max-w-7xl px-4 pb-24 pt-16 sm:px-6 sm:pt-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
@@ -53,7 +84,18 @@ export function Workspace({
             Apps and databases across your Dokploy projects.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {projects.length > 0 && (
+            <select
+              aria-label="Filter by project"
+              value={scope.project?.projectId ?? ""}
+              onChange={(event) => setProjectId(event.target.value || null)}
+              className="max-w-48 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-3 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
+            >
+              <option value="">All projects</option>
+              {projects.map((project) => <option key={project.projectId} value={project.projectId}>{project.name}</option>)}
+            </select>
+          )}
           <div className="flex rounded-lg border border-[var(--color-border-strong)] p-0.5">
             <ViewToggle active={view === "canvas"} onClick={() => setView("canvas")}>
               <Network className="size-3.5" /> Canvas
@@ -74,25 +116,26 @@ export function Workspace({
           >
             <RefreshCw className="size-3.5" /> Refresh
           </button>
-          <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
+          <QuickDeployMenu key={scope.project?.projectId ?? "all"} projects={scope.projects} onDeployed={onDeployed} menuOpen={deployOpen} onMenuOpenChange={setDeployOpen} />
         </div>
       </header>
 
-      {services.length === 0 ? (
-        <EmptyState projects={projects} onDeployed={onDeployed} />
+      {scope.services.length === 0 ? (
+        <EmptyState key={scope.project?.projectId ?? "all"} projects={scope.projects} projectName={scope.project?.name} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={(s) => setSelectedId(s.id)} />
+        <FlowCanvas services={scope.services} allServices={services} edges={scope.edges} onSelect={(s) => openService(s.id)} />
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
-            {services.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => setSelectedId(s.id)} />
+            {scope.services.map((s) => (
+              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => openService(s.id)} />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
 
-      <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
+      <GettingStarted key={userId} projects={projects} services={services} userId={userId} onNavigate={navigateChecklist} />
+      <ServiceDrawer key={selectedTab} service={selected} initialTab={selectedTab} onClose={() => setSelectedId(null)} />
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
       <AgentPanel />
     </div>
@@ -128,25 +171,27 @@ function ViewToggle({
 
 function EmptyState({
   projects,
+  projectName,
   onDeployed,
 }: {
   projects: ProjectNode[];
+  projectName?: string;
   onDeployed: (id: string) => void;
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-border-strong)] py-20 text-center"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="rounded-2xl border border-dashed border-[var(--color-border-strong)] px-5 py-10 text-center sm:px-10 sm:py-14"
     >
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
+      <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
         <Boxes className="size-7" />
       </div>
-      <h2 className="mt-4 font-medium">No services yet</h2>
-      <p className="mb-5 mt-1 max-w-sm text-sm text-[var(--color-fg-muted)]">
-        Deploy an app from a Docker image, or spin up a managed database in one click.
+      <h2 className="mt-4 text-lg font-semibold">{projectName ? `${projectName} is ready for its first service` : "Bring your first project to life"}</h2>
+      <p className="mx-auto mb-7 mt-2 max-w-md text-sm text-[var(--color-fg-muted)]">
+        Start with your code, a container image, or a database. We&apos;ll help you get it running.
       </p>
-      <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
+      <QuickDeployMenu variant="cards" projects={projects} onDeployed={onDeployed} />
     </motion.div>
   );
 }
