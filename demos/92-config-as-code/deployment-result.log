@@ -1,0 +1,15 @@
+#12 DONE 0.0s
+
+#13 exporting to image
+#13 exporting layers
+#13 exporting layers 1.7s done
+#13 writing image sha256:3499fddc2a322b4409f52ad0e39afa8ff6860dd36721bb6c3479007d45506ab1 done
+#13 naming to docker.io/library/app-compress-optical-transmitter-8q58el done
+#13 DONE 1.8s
+=== Successfully Built! ===
+
+Run:
+  docker run -it app-compress-optical-transmitter-8q58el
+✅ Nixpacks build completed.
+(HTTP code 503) unexpected - This node is not a swarm manager. Use "docker swarm init" or "docker swarm join" to connect this node to swarm and try again. 
+Error occurred ❌, check the logs for details.
