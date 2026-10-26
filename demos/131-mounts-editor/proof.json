@@ -1,0 +1,105 @@
+{
+  "base": "http://127.0.0.1:3062",
+  "slug": "mounts-editor-1793010555157",
+  "checks": [
+    "Existing bind source/path displayed read-only without edit/remove controls.",
+    "Equivalent duplicate mount path /data/ rejected in the editor.",
+    "application.one readback confirms volume name/path, file path/content, and application serviceType.",
+    "File edit saves content while preserving its managed source filename; immediate-visibility notice shown.",
+    "Cancel confirmation preserves all mounts.",
+    "application.one confirms removal, file/bind retained, and zero deployments throughout."
+  ],
+  "screenshots": [
+    "01-bind-read-only.png",
+    "02-volume-added.png",
+    "03-duplicate-rejected.png",
+    "04-file-form.png",
+    "05-volume-and-file.png",
+    "06-file-edit-notice.png",
+    "07-volume-removed.png"
+  ],
+  "before": {
+    "applicationId": "YqelkWec3T5MKk_A9ertl",
+    "name": "mounts-editor-1793010555157-app",
+    "dockerImage": "nginx:alpine",
+    "deploymentCount": 0,
+    "mounts": [
+      {
+        "mountId": "U8Y5-cwfxjG9a0p_yWSop",
+        "type": "bind",
+        "mountPath": "/fixture",
+        "volumeName": null,
+        "hostPath": "/tmp/mounts-editor-1793010555157",
+        "filePath": null,
+        "serviceType": "application"
+      }
+    ]
+  },
+  "afterAdd": {
+    "applicationId": "YqelkWec3T5MKk_A9ertl",
+    "name": "mounts-editor-1793010555157-app",
+    "dockerImage": "nginx:alpine",
+    "deploymentCount": 0,
+    "mounts": [
+      {
+        "mountId": "U8Y5-cwfxjG9a0p_yWSop",
+        "type": "bind",
+        "mountPath": "/fixture",
+        "volumeName": null,
+        "hostPath": "/tmp/mounts-editor-1793010555157",
+        "filePath": null,
+        "serviceType": "application"
+      },
+      {
+        "mountId": "mvrTKNF1-YFFuGYZ-Bynd",
+        "type": "volume",
+        "mountPath": "/data",
+        "volumeName": "mounts-editor-1793010555157-data",
+        "hostPath": null,
+        "filePath": null,
+        "serviceType": "application"
+      },
+      {
+        "mountId": "jLntNH9Sav0uuEPv_R9Of",
+        "type": "file",
+        "mountPath": "/etc/mounts-editor.conf",
+        "volumeName": null,
+        "hostPath": null,
+        "filePath": "0c141fa5-ab48-4b94-a45c-d7e9cc8ff221.conf",
+        "serviceType": "application",
+        "contentMatches": true
+      }
+    ]
+  },
+  "confirmation": "Remove mount at \"/data\"? Data in named volumes is NOT deleted. Applies on next deploy.",
+  "afterRemove": {
+    "applicationId": "YqelkWec3T5MKk_A9ertl",
+    "name": "mounts-editor-1793010555157-app",
+    "dockerImage": "nginx:alpine",
+    "deploymentCount": 0,
+    "mounts": [
+      {
+        "mountId": "U8Y5-cwfxjG9a0p_yWSop",
+        "type": "bind",
+        "mountPath": "/fixture",
+        "volumeName": null,
+        "hostPath": "/tmp/mounts-editor-1793010555157",
+        "filePath": null,
+        "serviceType": "application"
+      },
+      {
+        "mountId": "jLntNH9Sav0uuEPv_R9Of",
+        "type": "file",
+        "mountPath": "/etc/mounts-editor.conf",
+        "volumeName": null,
+        "hostPath": null,
+        "filePath": "0c141fa5-ab48-4b94-a45c-d7e9cc8ff221.conf",
+        "serviceType": "application",
+        "contentMatches": true
+      }
+    ]
+  },
+  "runtime": "No deploy requested. Host is not a Swarm manager; runtime attachment/data persistence is unproven.",
+  "result": "PASS",
+  "cleanup": "Throwaway application and project deleted via Dokploy API; project absence verified."
+}
