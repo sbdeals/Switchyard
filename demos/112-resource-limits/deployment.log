@@ -1,0 +1,38 @@
+Initializing deployment
+Pulling redis:7-alpine
+7-alpine: Pulling from library/redis
+759efa4719c9: Pulling fs layer
+964ae3503686: Pulling fs layer
+6577e1d2b27e: Pulling fs layer
+5e61c876e615: Pulling fs layer
+766c91354b27: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+8bfa4f5e3c40: Pulling fs layer
+766c91354b27: Waiting
+5e61c876e615: Waiting
+4f4fb700ef54: Waiting
+8bfa4f5e3c40: Waiting
+964ae3503686: Verifying Checksum
+964ae3503686: Download complete
+6577e1d2b27e: Verifying Checksum
+6577e1d2b27e: Download complete
+759efa4719c9: Download complete
+759efa4719c9: Pull complete
+964ae3503686: Pull complete
+6577e1d2b27e: Pull complete
+766c91354b27: Download complete
+4f4fb700ef54: Download complete
+5e61c876e615: Verifying Checksum
+5e61c876e615: Download complete
+8bfa4f5e3c40: Verifying Checksum
+8bfa4f5e3c40: Download complete
+5e61c876e615: Pull complete
+766c91354b27: Pull complete
+4f4fb700ef54: Pull complete
+8bfa4f5e3c40: Pull complete
+Digest: sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
+Status: Downloaded newer image for redis:7-alpine
+docker.io/library/redis:7-alpine
+✅ Pulling image completed.
+(HTTP code 503) unexpected - This node is not a swarm manager. Use "docker swarm init" or "docker swarm join" to connect this node to swarm and try again. 
+Error occurred ❌, check the logs for details.

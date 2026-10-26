@@ -1,0 +1,11 @@
+{
+  "applicationId": "T-UhbNTwF6iYsbhoeDdlg",
+  "name": "resource-limits-r1-1793005811716-app",
+  "appName": "resource-limits-r1-1793005811716-app-0hej9k",
+  "applicationStatus": "idle",
+  "cpuLimit": "500000000",
+  "memoryLimit": "536870912",
+  "cpuReservation": null,
+  "memoryReservation": null,
+  "deploymentCount": 0
+}
