@@ -1,0 +1,11 @@
+{
+  "base": "http://127.0.0.1:3028",
+  "checks": [
+    "Two Compose services, source files, service variables and shared environment variables copied; no domains/deployments; autoDeploy off.",
+    "Copy variables off leaves both shared and service variables empty.",
+    "Existing target name is rejected before mutation.",
+    "Throwaway project deleted through dashboard."
+  ],
+  "cleaned": true,
+  "cleanupVerified": true
+}

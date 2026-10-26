@@ -67,3 +67,4 @@ All demos were recorded against a live bridge-mode Dokploy + Switchyard dashboar
 | [#94](https://github.com/sbdeals/Switchyard/pull/94) | codex/canvas-ref-edges (main) | Canvas edges from ${{}} refs | [94-canvas-ref-edges](94-canvas-ref-edges/) | before/after png + r1 mp4 | explicit+inferred+broken ✓ |
 | [#95](https://github.com/sbdeals/Switchyard/pull/95) | codex/cli-link-vars (codex/cli-up) | CLI link + variables, .env excluded | [95-cli-link-vars](95-cli-link-vars/) | before/after txt + live transcript | .env excluded, masked vars ✓ |
 | [#96](https://github.com/sbdeals/Switchyard/pull/96) | codex/deploy-commit-info (main) | Commit SHA + subject per deploy | [96-deploy-commit-info](96-deploy-commit-info/) | Codex proof pngs | SHA+subject on 2 deploys ✓ |
+| [#97](https://github.com/sbdeals/Switchyard/pull/97) | codex/env-duplicate (main) | Duplicate environment | [97-env-duplicate](97-env-duplicate/) | Codex mp4+pngs | 2 services copied, no domains ✓ |
