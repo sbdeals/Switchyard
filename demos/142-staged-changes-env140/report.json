@@ -1,0 +1,103 @@
+{
+  "slug": "staged-changes-env140-mvp6wsnc",
+  "checks": [
+    {
+      "name": "Sentinels absent from authenticated HTML and RSC before tab opens",
+      "passed": true,
+      "payloads": [
+        {
+          "kind": "HTML",
+          "bytes": 112498,
+          "contentType": "text/html; charset=utf-8",
+          "sentinelPresent": false
+        },
+        {
+          "kind": "RSC",
+          "bytes": 38124,
+          "contentType": "text/x-component",
+          "sentinelPresent": false
+        }
+      ]
+    },
+    {
+      "name": "On-demand load decodes stored references and starts clean",
+      "passed": true
+    },
+    {
+      "name": "Reference picker retains custom keys without loading their values",
+      "passed": true
+    },
+    {
+      "name": "Variable context menu remains available",
+      "passed": true
+    },
+    {
+      "name": "Three-key diff uses loaded baseline and survives tab switching without saving",
+      "passed": true
+    },
+    {
+      "name": "Review masks old and new values and lists exactly the changed keys",
+      "passed": true
+    },
+    {
+      "name": "Discard reloads the real clean baseline",
+      "passed": true
+    },
+    {
+      "name": "One deploy applies edits, resolves reference values, and resets the editor baseline",
+      "passed": true
+    },
+    {
+      "name": "Exactly one successful deployment starts a container with the staged values and resolved reference",
+      "passed": true
+    },
+    {
+      "name": "Editing and reverting after save compares against the saved baseline",
+      "passed": true
+    },
+    {
+      "name": "Managed database connection reveals the real credentials on demand",
+      "passed": true
+    },
+    {
+      "name": "Native database connection and password reveal work without page-data credentials",
+      "passed": true
+    }
+  ],
+  "resources": [
+    {
+      "kind": "compose",
+      "id": "fq7e9CRuSFk3Bu4wgH2QD",
+      "name": "staged-changes-env140-mvp6wsnc-redis"
+    },
+    {
+      "kind": "redis",
+      "id": "G4aC3lTcgbVH1yTQMt71O",
+      "name": "staged-changes-env140-mvp6wsnc-native"
+    },
+    {
+      "kind": "compose",
+      "id": "lCzNGuNThX9CLX1zWjrPZ",
+      "name": "staged-changes-env140-mvp6wsnc-app"
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "staged-changes-env140-mvp6wsnc-app",
+      "deleted": true
+    },
+    {
+      "name": "staged-changes-env140-mvp6wsnc-native",
+      "deleted": true
+    },
+    {
+      "name": "staged-changes-env140-mvp6wsnc-redis",
+      "deleted": true
+    },
+    {
+      "name": "staged-changes-env140-mvp6wsnc",
+      "deleted": true
+    }
+  ],
+  "success": true
+}
