@@ -1,0 +1,8 @@
+services:
+  volume-usage-writer:
+    image: alpine:3.20
+    command: ["sh", "-c", "dd if=/dev/zero of=/data/proof.bin bs=1048576 count=50 && sync && sleep infinity"]
+    volumes:
+      - volume-usage-data:/data
+volumes:
+  volume-usage-data:

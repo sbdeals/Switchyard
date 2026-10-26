@@ -1,0 +1,8 @@
+{
+  "port": 3034,
+  "service": "volume-usage-proof",
+  "volume": "volume-usage-data",
+  "serviceUsage": "50 MiB on disk",
+  "projectUsage": "Volume disk usage: 50 MiB",
+  "capturedAt": "2026-10-26T08:26:38.507Z"
+}
