@@ -1,8 +1,9 @@
 "use client";
 
-import { useReducer, useState, useTransition } from "react";
+import { useEffect, useReducer, useState, useTransition } from "react";
 import type { Service } from "@/lib/dokploy";
 import {
+  loadServiceEnvAction,
   saveEnvironmentAction,
   saveApplicationEnvAction,
   saveComposeEnvAction,
@@ -12,7 +13,8 @@ import { appendDotenvKey, diffDotenvRaw, parseDotenvRaw, removeDotenvKey, setDot
 import { Btn, inputCls, RemoveBtn, SaveRow, useSavedFlash } from "@/components/service/primitives";
 
 export function VariablesTab({ service }: { service: Service }) {
-  const [editor, dispatch] = useReducer(dotenvEditorReducer, service.env ?? "", createEditorState);
+  const serviceType = service.kind === "database" ? service.engine : service.kind;
+  const [editor, dispatch] = useReducer(dotenvEditorReducer, null, createEditorState);
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
   const [pending, start] = useTransition();
@@ -20,10 +22,27 @@ export function VariablesTab({ service }: { service: Service }) {
   const [error, setError] = useState<string | null>(null);
   const [exported, setExported] = useState<string | null>(null);
 
+  useEffect(() => {
+    let live = true;
+    loadServiceEnvAction(serviceType, service.id).then((res) => {
+      if (!live) return;
+      if (res.ok) {
+        dispatch({ type: "loaded", env: res.env });
+      } else {
+        dispatch({ type: "failed", error: res.error });
+      }
+    }).catch(() => {
+      if (live) dispatch({ type: "failed", error: "Could not load environment variables." });
+    });
+    return () => {
+      live = false;
+    };
+  }, [serviceType, service.id]);
+
   const parsed = parseDotenvRaw(editor.text);
-  const baseline = parseDotenvRaw(service.env ?? "");
+  const baseline = parseDotenvRaw(editor.baseline ?? "");
   const changes = diffDotenvRaw(baseline.variables, parsed.variables);
-  const dirty = editor.text !== (service.env ?? "");
+  const dirty = editor.baseline !== null && editor.text !== editor.baseline;
   const invalid = parsed.errors.length > 0;
   const reviewing = editor.review !== null;
   const count = Object.keys(parsed.variables).length;
@@ -77,6 +96,21 @@ export function VariablesTab({ service }: { service: Service }) {
     } catch {
       setError("Could not export variables. Try again or copy from the raw editor.");
     }
+  }
+
+  if (editor.loadError) {
+    return <p role="alert" className="text-xs text-[var(--color-danger)]">{editor.loadError}</p>;
+  }
+
+  if (editor.baseline === null) {
+    return (
+      <div role="status" aria-label="Loading environment variables" className="space-y-3 animate-pulse">
+        <span className="sr-only">Loading environment variables…</span>
+        <div className="h-4 w-3/4 rounded bg-[var(--color-surface-hover)]" />
+        <div className="h-64 rounded-lg bg-[var(--color-surface-hover)]" />
+        <div className="h-8 w-28 rounded bg-[var(--color-surface-hover)]" />
+      </div>
+    );
   }
 
   return (

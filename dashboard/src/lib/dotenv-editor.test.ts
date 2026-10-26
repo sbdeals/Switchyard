@@ -7,6 +7,8 @@ describe("createEditorState", () => {
     const text = "# stored comment\r\n\r\nexport KEY='first'\r\nKEY=last\r\nEMPTY=\r\n";
     expect(createEditorState(text)).toEqual({
       text,
+      baseline: text,
+      loadError: null,
       mode: "rows",
       review: null,
       exporting: null,
@@ -15,19 +17,66 @@ describe("createEditorState", () => {
 
   it("preserves invalid stored text in raw mode so errors can be repaired", () => {
     const text = "# keep this\r\nBAD-KEY=value\r\nVALID=yes";
-    expect(createEditorState(text)).toEqual({ text, mode: "raw", review: null, exporting: null });
+    expect(createEditorState(text)).toEqual({ text, baseline: text, loadError: null, mode: "raw", review: null, exporting: null });
     expect(createEditorState("").mode).toBe("rows");
   });
 });
 
 describe("dotenvEditorReducer", () => {
+  it("starts unloaded without treating redacted page data as an empty saved environment", () => {
+    expect(createEditorState(null)).toEqual({
+      text: "", baseline: null, loadError: null, mode: "rows", review: null, exporting: null,
+    });
+  });
+
+  it.each(["", "# loaded\r\nKEY='value'\r\n", "KEY=value\nINVALID LINE"])(
+    "seeds the draft, baseline and initial mode from the loaded environment %j",
+    (env) => {
+      const state = dotenvEditorReducer(createEditorState(null), { type: "loaded", env });
+      expect(state).toEqual(createEditorState(env));
+      expect(state.text).toBe(state.baseline);
+    },
+  );
+
+  it("blocks editing, mode switches, review and export until loading succeeds", () => {
+    const initial = createEditorState(null);
+    const failed = dotenvEditorReducer(initial, { type: "failed", error: "Could not load variables" });
+    expect(failed.loadError).toBe("Could not load variables");
+    expect(failed.baseline).toBeNull();
+    for (const state of [initial, failed]) {
+      expect(dotenvEditorReducer(state, { type: "edit", text: "KEY=draft" })).toBe(state);
+      expect(dotenvEditorReducer(state, { type: "mode", mode: "raw" })).toBe(state);
+      expect(dotenvEditorReducer(state, { type: "review" })).toBe(state);
+      expect(dotenvEditorReducer(state, { type: "export", kind: "copy" })).toBe(state);
+      expect(dotenvEditorReducer(state, { type: "export", kind: "download" })).toBe(state);
+    }
+    expect(dotenvEditorReducer(failed, { type: "loaded", env: "KEY=loaded" })).toEqual(createEditorState("KEY=loaded"));
+  });
+
+  it("uses loaded values for review and export and clears confirmations on a loading failure", () => {
+    const env = "# loaded\nSECRET=loaded-value";
+    let state = dotenvEditorReducer(createEditorState(null), { type: "loaded", env });
+    state = dotenvEditorReducer(state, { type: "review" });
+    expect(state.review).toBe(env);
+    state = dotenvEditorReducer(state, { type: "export", kind: "download" });
+    expect(state.exporting).toBe("download");
+    expect(state.text).toBe(env);
+    state = dotenvEditorReducer(state, { type: "failed", error: "Could not reload variables" });
+    expect(state.review).toBeNull();
+    expect(state.exporting).toBeNull();
+    expect(dotenvEditorReducer(state, { type: "edit", text: "SECRET=changed" })).toBe(state);
+    expect(dotenvEditorReducer(state, { type: "review" })).toBe(state);
+    expect(dotenvEditorReducer(state, { type: "export", kind: "copy" })).toBe(state);
+  });
+
   it("keeps edits local and clears stale review and export confirmations", () => {
     const initial = createEditorState("KEY=original");
     const reviewed = dotenvEditorReducer(initial, { type: "review" });
     const exporting = dotenvEditorReducer(reviewed, { type: "export", kind: "copy" });
     const edited = dotenvEditorReducer(exporting, { type: "edit", text: "# draft\nKEY=changed" });
 
-    expect(edited).toEqual({ text: "# draft\nKEY=changed", mode: "rows", review: null, exporting: null });
+    expect(edited).toEqual({ text: "# draft\nKEY=changed", baseline: "KEY=original", loadError: null, mode: "rows", review: null, exporting: null });
+    expect(edited.text).not.toBe(edited.baseline);
     expect(initial.text).toBe("KEY=original");
     expect(reviewed.review).toBe("KEY=original");
   });
@@ -90,8 +139,22 @@ describe("dotenvEditorReducer", () => {
     state = dotenvEditorReducer(state, { type: "export", kind: "download" });
     const saved = dotenvEditorReducer(state, { type: "saved", text: submitted });
 
-    expect(saved).toEqual({ text: "# temporary\nKEY='new value'", mode: "raw", review: null, exporting: null });
+    expect(saved).toEqual({ text: submitted, baseline: submitted, loadError: null, mode: "raw", review: null, exporting: null });
     expect(state.text).toBe("# temporary\nKEY='new value'");
+  });
+
+  it("updates the saved baseline while preserving newer edits and their dirty state", () => {
+    let state = dotenvEditorReducer(createEditorState(null), { type: "loaded", env: "KEY=old" });
+    state = dotenvEditorReducer(state, { type: "edit", text: "KEY=submitted" });
+    state = dotenvEditorReducer(state, { type: "review" });
+    const submitted = state.review!;
+    state = dotenvEditorReducer(state, { type: "edit", text: "KEY=newer" });
+    state = dotenvEditorReducer(state, { type: "saved", text: submitted });
+    expect(state.baseline).toBe(submitted);
+    expect(state.text).toBe("KEY=newer");
+    expect(state.text).not.toBe(state.baseline);
+    expect(state.review).toBeNull();
+    expect(state.exporting).toBeNull();
   });
 
   it("leaves an untouched load, mode switch, review and save round trip byte-identical", () => {

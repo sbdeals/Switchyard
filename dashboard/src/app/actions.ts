@@ -12,6 +12,8 @@ import {
   renameEnvironment,
   removeEnvironment,
   listProjects,
+  getServiceEnvironment,
+  getDatabasePassword,
   saveEnvironment,
   updateDatabase,
   reloadDatabase,
@@ -216,6 +218,32 @@ export async function saveEnvironmentAction(
   env: string
 ): Promise<ActionResult> {
   return wrap(() => saveEnvironment(engine, id, env));
+}
+
+/** Environment values are fetched only by the open Variables tab. */
+export async function loadServiceEnvAction(
+  type: MountServiceType,
+  id: string
+): Promise<{ ok: true; env: string } | { ok: false; error: string }> {
+  try {
+    return { ok: true, env: await getServiceEnvironment(type, id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load environment variables." };
+  }
+}
+
+/** Database passwords never travel with workspace page props. */
+export async function loadDatabasePasswordAction(
+  engine: Engine,
+  id: string
+): Promise<{ ok: true; password: string | null } | { ok: false; error: string }> {
+  try {
+    return { ok: true, password: await getDatabasePassword(engine, id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load database credentials." };
+  }
 }
 
 // --- projects & environments ------------------------------------------------
