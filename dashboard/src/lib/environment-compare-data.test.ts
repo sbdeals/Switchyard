@@ -17,9 +17,10 @@ import {
 
 type FixtureEnvironment = {
   environmentId: string;
-  applications?: { applicationId: string }[];
-  compose?: { composeId: string }[];
-};
+} & Partial<Record<
+  "applications" | "compose" | "postgres" | "mysql" | "mariadb" | "mongo" | "redis",
+  Record<string, string>[]
+>>;
 
 let tree: { projectId: string; environments: FixtureEnvironment[] }[];
 let details: Record<string, Record<string, unknown>>;
@@ -140,6 +141,15 @@ describe("environment comparison scope", () => {
     expect(request.mock.calls).toEqual([["project.all"], ["project.all"]]);
   });
 
+  it("does not reveal a service removed from the current tree after comparison", async () => {
+    expect((await compareEnvironmentsAction("project-owned", "env-a", "env-b")).ok).toBe(true);
+    request.mockClear();
+    for (const environment of tree[0].environments) environment.applications = [];
+    expect((await revealEnvironmentVariableAction("project-owned", "env-a", "env-b", "web", "SHARED")).ok).toBe(false);
+    expect(request.mock.calls[0]).toEqual(["project.all"]);
+    expect(request.mock.calls.some(([path]) => path.startsWith("application.one"))).toBe(false);
+  });
+
   it("rejects a service that moved between project.all and its detail request", async () => {
     details["application.one?applicationId=app-a"].environmentId = "env-other";
     await expect(loadComparisonPair("project-owned", "env-a", "env-b"))
@@ -160,6 +170,35 @@ describe("environment comparison scope", () => {
 });
 
 describe("comparison metadata", () => {
+  it.each(["postgres", "mysql", "mariadb", "mongo", "redis"] as const)("returns only key/diff data for %s variables and never database passwords", async (engine) => {
+    for (const [index, side] of ["a", "b"].entries()) {
+      tree[0].environments[index][engine] = [{ [`${engine}Id`]: `database-${side}` }];
+      details[`${engine}.one?${engine}Id=database-${side}`] = {
+        environmentId: `env-${side}`,
+        name: "database",
+        databasePassword: `private-database-password-${side}`,
+        databaseRootPassword: `private-root-password-${side}`,
+        password: `private-password-${side}`,
+        env: `DATABASE_URL=postgres://user:private-url-${side}@database:5432/db\nSAME=private-same`,
+      };
+    }
+    const result = await compareEnvironmentsAction("project-owned", "env-a", "env-b");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected comparison.");
+    const row = result.rows.find((row) => row.name === "database");
+    expect(row?.variables).toEqual([
+      { key: "DATABASE_URL", status: "changed" },
+      { key: "SAME", status: "unchanged" },
+    ]);
+    expect(row?.a).toMatchObject({ id: "database-a", kind: engine });
+    expect(row?.b).toMatchObject({ id: "database-b", kind: engine });
+    expect(JSON.stringify(result)).not.toContain("private-");
+    expect(JSON.stringify(result)).not.toContain("Password");
+    expect(row?.a).not.toHaveProperty("env");
+    expect(row?.b).not.toHaveProperty("env");
+    expect((await revealEnvironmentVariableAction("project-owned", "env-a", "env-b", "database", "databasePassword")).ok).toBe(false);
+  });
+
   it("extracts application, custom git, and compose metadata without exposing configuration", async () => {
     const result = await compareEnvironmentsAction("project-owned", "env-a", "env-b");
     expect(result.ok).toBe(true);

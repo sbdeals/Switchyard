@@ -14,6 +14,8 @@ import {
   KeyRound,
   Eye,
   EyeOff,
+  Copy,
+  Check,
   Box,
   Globe,
   Layers,
@@ -30,7 +32,7 @@ import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { connectionString } from "@/lib/connection";
-import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
+import { lifecycleAction, loadDatabasePasswordAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
 import { BackupsTab } from "@/components/service/BackupsTab";
@@ -59,7 +61,6 @@ import {
   inputCls,
   Field,
   Info,
-  CopyButton,
   LifecycleButtons,
   SaveRow,
   DangerZone,
@@ -450,7 +451,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "variables" && <VariablesTab key={`${service.kind}:${service.id}`} service={service} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
               {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
               {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
@@ -546,22 +547,12 @@ const useDbLifecycle = (db: Database) =>
 function OverviewTab({ db }: { db: Database }) {
   const meta = ENGINE_META[db.engine];
   const { pending, error, run } = useDbLifecycle(db);
-  const conn = connectionString(db);
 
   return (
     <div className="space-y-5">
       <LifecycleButtons status={db.status} pending={pending} error={error} run={run} />
 
-      {conn && (
-        <Field label="Connection string">
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
-            <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
-              {conn}
-            </code>
-            <CopyButton text={conn} />
-          </div>
-        </Field>
-      )}
+      <DatabaseSecretRow key={`${db.engine}:${db.id}`} db={db} connection />
 
       <div className="grid grid-cols-2 gap-3">
         <Info label="Image" value={db.dockerImage ?? "—"} mono />
@@ -653,7 +644,7 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
         <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
       </div>
 
-      <PasswordRow db={db} />
+      <DatabaseSecretRow key={`${db.engine}:${db.id}`} db={db} />
 
       <Info label="App name" value={db.appName} mono />
       <Info label="Created" value={db.createdAt ? new Date(db.createdAt).toLocaleString() : "—"} />
@@ -669,26 +660,63 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
   );
 }
 
-function PasswordRow({ db }: { db: Database }) {
-  const [show, setShow] = useState(false);
-  if (!db.databasePassword) return null;
+function DatabaseSecretRow({ db, connection = false }: { db: Database; connection?: boolean }) {
+  const [value, setValue] = useState<string | null>(null);
+  const [pending, startLoad] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [copied, flashCopied] = useSavedFlash(1200);
+  const label = connection ? "Connection string" : "Password";
+  const format = (password: string) => connection
+    ? connectionString({ ...db, databasePassword: password }) ?? ""
+    : password;
+
+  function load(copy: boolean) {
+    setError(null);
+    startLoad(async () => {
+      try {
+        const res = await loadDatabasePasswordAction(db.engine, db.id);
+        if (!res.ok) { setError(res.error); return; }
+        const text = format(res.password);
+        if (copy) {
+          await navigator.clipboard.writeText(text);
+          flashCopied();
+        } else {
+          setValue(text);
+        }
+      } catch {
+        setError(copy ? "Could not copy to clipboard." : "Could not load database password.");
+      }
+    });
+  }
+
   return (
-    <Field label="Password" hint="rotation coming soon">
+    <Field label={label} hint={connection ? undefined : "rotation coming soon"}>
       <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2">
         <code className="flex-1 truncate font-mono text-xs text-[var(--color-fg-muted)]">
-          {show ? db.databasePassword : "•".repeat(16)}
+          {value ?? format("•".repeat(16))}
         </code>
         <button
           type="button"
-          onClick={() => setShow((s) => !s)}
-          aria-label={show ? "Hide password" : "Show password"}
-          aria-pressed={show}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+          onClick={() => value === null ? load(false) : setValue(null)}
+          disabled={pending}
+          aria-label={`${value === null ? "Show" : "Hide"} ${label.toLowerCase()}`}
+          aria-pressed={value !== null}
+          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
         >
-          {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+          {value !== null ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
         </button>
-        <CopyButton text={db.databasePassword} />
+        <button
+          type="button"
+          onClick={() => load(true)}
+          disabled={pending}
+          aria-label={`Copy ${label.toLowerCase()}`}
+          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+        >
+          {copied ? <Check className="size-3.5 text-[var(--color-ok)]" /> : <Copy className="size-3.5" />}
+          <span aria-live="polite" className="sr-only">{copied ? "Copied" : ""}</span>
+        </button>
       </div>
+      {error && <p role="alert" className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
     </Field>
   );
 }
