@@ -1,0 +1,221 @@
+[
+  {
+    "name": "/compose-back-up-auxiliary-monitor-iz2zhu-web-1",
+    "state": {
+      "Status": "running",
+      "Running": true,
+      "Paused": false,
+      "Restarting": false,
+      "OOMKilled": false,
+      "Dead": false,
+      "Pid": 538935,
+      "ExitCode": 0,
+      "Error": "",
+      "StartedAt": "2026-10-26T06:54:25.518832914Z",
+      "FinishedAt": "0001-01-01T00:00:00Z",
+      "Health": {
+        "Status": "healthy",
+        "FailingStreak": 0,
+        "Log": [
+          {
+            "Start": "2026-10-26T02:55:56.317349528-04:00",
+            "End": "2026-10-26T02:55:56.36837714-04:00",
+            "ExitCode": 0,
+            "Output": ""
+          },
+          {
+            "Start": "2026-10-26T02:55:57.369062406-04:00",
+            "End": "2026-10-26T02:55:57.433606702-04:00",
+            "ExitCode": 0,
+            "Output": ""
+          },
+          {
+            "Start": "2026-10-26T02:55:58.434750752-04:00",
+            "End": "2026-10-26T02:55:58.497151953-04:00",
+            "ExitCode": 0,
+            "Output": ""
+          },
+          {
+            "Start": "2026-10-26T02:55:59.498515114-04:00",
+            "End": "2026-10-26T02:55:59.554805529-04:00",
+            "ExitCode": 0,
+            "Output": ""
+          },
+          {
+            "Start": "2026-10-26T02:56:00.556125203-04:00",
+            "End": "2026-10-26T02:56:00.626534557-04:00",
+            "ExitCode": 0,
+            "Output": ""
+          }
+        ]
+      }
+    },
+    "command": [
+      "nginx",
+      "-g",
+      "daemon off;"
+    ],
+    "healthTest": [
+      "CMD-SHELL",
+      "status=$(curl --disable --noproxy '*' --globoff --silent --output /dev/null --write-out '%{http_code}' --max-time 1 --url 'http://127.0.0.1:80/') && case \"$status\" in 2[0-9][0-9]) exit 0;; *) exit 1;; esac"
+    ],
+    "service": "hc-predeploy-pass"
+  },
+  {
+    "name": "/compose-back-up-auxiliary-monitor-iz2zhu-sy-predeploy-1",
+    "state": {
+      "Status": "exited",
+      "Running": false,
+      "Paused": false,
+      "Restarting": false,
+      "OOMKilled": false,
+      "Dead": false,
+      "Pid": 0,
+      "ExitCode": 0,
+      "Error": "",
+      "StartedAt": "2026-10-26T06:54:24.84687418Z",
+      "FinishedAt": "2026-10-26T06:54:24.847450507Z"
+    },
+    "command": [
+      "echo hc-predeploy-passed"
+    ],
+    "healthTest": [
+      "NONE"
+    ],
+    "service": "hc-predeploy-pass"
+  },
+  {
+    "name": "/compose-calculate-virtual-driver-dmdsat-web-1",
+    "state": {
+      "Status": "running",
+      "Running": true,
+      "Paused": false,
+      "Restarting": false,
+      "OOMKilled": false,
+      "Dead": false,
+      "Pid": 539299,
+      "ExitCode": 0,
+      "Error": "",
+      "StartedAt": "2026-10-26T06:54:28.370674544Z",
+      "FinishedAt": "0001-01-01T00:00:00Z",
+      "Health": {
+        "Status": "unhealthy",
+        "FailingStreak": 86,
+        "Log": [
+          {
+            "Start": "2026-10-26T02:55:55.935750976-04:00",
+            "End": "2026-10-26T02:55:55.999266815-04:00",
+            "ExitCode": 1,
+            "Output": ""
+          },
+          {
+            "Start": "2026-10-26T02:55:57.000022039-04:00",
+            "End": "2026-10-26T02:55:57.067516509-04:00",
+            "ExitCode": 1,
+            "Output": ""
+          },
+          {
+            "Start": "2026-10-26T02:55:58.068997864-04:00",
+            "End": "2026-10-26T02:55:58.136455911-04:00",
+            "ExitCode": 1,
+            "Output": ""
+          },
+          {
+            "Start": "2026-10-26T02:55:59.137874226-04:00",
+            "End": "2026-10-26T02:55:59.19673925-04:00",
+            "ExitCode": 1,
+            "Output": ""
+          },
+          {
+            "Start": "2026-10-26T02:56:00.198029817-04:00",
+            "End": "2026-10-26T02:56:00.273601607-04:00",
+            "ExitCode": 1,
+            "Output": ""
+          }
+        ]
+      }
+    },
+    "command": [
+      "nginx",
+      "-g",
+      "daemon off;"
+    ],
+    "healthTest": [
+      "CMD-SHELL",
+      "status=$(curl --disable --noproxy '*' --globoff --silent --output /dev/null --write-out '%{http_code}' --max-time 1 --url 'http://127.0.0.1:80/hc-missing') && case \"$status\" in 2[0-9][0-9]) exit 0;; *) exit 1;; esac"
+    ],
+    "service": "hc-predeploy-fail"
+  },
+  {
+    "name": "/compose-calculate-virtual-driver-dmdsat-sy-predeploy-1",
+    "state": {
+      "Status": "exited",
+      "Running": false,
+      "Paused": false,
+      "Restarting": false,
+      "OOMKilled": false,
+      "Dead": false,
+      "Pid": 0,
+      "ExitCode": 0,
+      "Error": "",
+      "StartedAt": "2026-10-26T06:54:27.697948971Z",
+      "FinishedAt": "2026-10-26T06:54:27.699520271Z"
+    },
+    "command": [
+      "echo hc-predeploy-passed"
+    ],
+    "healthTest": [
+      "NONE"
+    ],
+    "service": "hc-predeploy-fail"
+  },
+  {
+    "name": "/compose-bypass-neural-matrix-sy1th7-web-1",
+    "state": {
+      "Status": "created",
+      "Running": false,
+      "Paused": false,
+      "Restarting": false,
+      "OOMKilled": false,
+      "Dead": false,
+      "Pid": 0,
+      "ExitCode": 0,
+      "Error": "",
+      "StartedAt": "0001-01-01T00:00:00Z",
+      "FinishedAt": "0001-01-01T00:00:00Z"
+    },
+    "command": [
+      "nginx",
+      "-g",
+      "daemon off;"
+    ],
+    "healthTest": [
+      "CMD-SHELL",
+      "status=$(curl --disable --noproxy '*' --globoff --silent --output /dev/null --write-out '%{http_code}' --max-time 1 --url 'http://127.0.0.1:80/') && case \"$status\" in 2[0-9][0-9]) exit 0;; *) exit 1;; esac"
+    ],
+    "service": "hc-predeploy-abort"
+  },
+  {
+    "name": "/compose-bypass-neural-matrix-sy1th7-sy-predeploy-1",
+    "state": {
+      "Status": "exited",
+      "Running": false,
+      "Paused": false,
+      "Restarting": false,
+      "OOMKilled": false,
+      "Dead": false,
+      "Pid": 0,
+      "ExitCode": 17,
+      "Error": "",
+      "StartedAt": "2026-10-26T06:54:38.747478472Z",
+      "FinishedAt": "2026-10-26T06:54:38.749212456Z"
+    },
+    "command": [
+      "echo hc-predeploy-failed; exit 17"
+    ],
+    "healthTest": [
+      "NONE"
+    ],
+    "service": "hc-predeploy-abort"
+  }
+]
