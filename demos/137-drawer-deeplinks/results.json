@@ -1,0 +1,49 @@
+{
+  "base": "http://127.0.0.1:3067",
+  "checks": [
+    {
+      "label": "Created only a slug-prefixed throwaway application through dashboard API",
+      "id": "srbsA77cIxpwKVBwdeCqv",
+      "name": "drawer-deeplinks-proof-1793012036606"
+    },
+    {
+      "label": "Existing service read-only: open push, tab replace, Back/Forward, close push, zero page/RSC fetches"
+    },
+    {
+      "label": "Back returns to the previous service and Forward restores the throwaway and its tab"
+    },
+    {
+      "label": "Throwaway drawer Copy link matches service and selected tab"
+    },
+    {
+      "label": "Reload restores the same service and Logs tab"
+    },
+    {
+      "label": "Pasted link in a fresh authenticated context restores service and tab"
+    },
+    {
+      "label": "Invalid tab falls back to Overview and is removed; unrelated params and Next history state survive"
+    },
+    {
+      "label": "Stale service closes drawer, shows toast, removes invalid params and preserves Next history state"
+    },
+    {
+      "label": "Unauthenticated deep link survives real login round-trip"
+    },
+    {
+      "label": "Unsafe login return path falls back to local workspace"
+    },
+    {
+      "label": "Clipboard rejection presents address-bar fallback"
+    },
+    {
+      "label": "No browser page errors"
+    },
+    {
+      "label": "Deleted the session throwaway via dashboard API; its old deep link is now stale"
+    }
+  ],
+  "pageErrors": [],
+  "video": "drawer-deeplinks-proof.mp4",
+  "videoDurationSeconds": 42.433332
+}
