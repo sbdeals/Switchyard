@@ -1,0 +1,86 @@
+## before (1c959e9 + worktree)
+$ switchyard --help
+Usage: switchyard [options] [command]
+
+One-command install & management for the Dokploy + Switchyard stack.
+Stands up Dokploy, registers the admin, and runs the Switchyard dashboard as a
+managed container.
+
+Options:
+  -V, --version                            output the version number
+  -h, --help                               display help for command
+
+Commands:
+  up [options]                             Install/converge the whole stack (idempotent — also upgrades)
+  status                                   Show stack status, container health, and URLs
+  deploy [options] [path]                  Deploy a directory to Dokploy (the Railway up equivalent)
+  down [options]                           Stop the stack; --purge also deletes network, secrets, and data volumes
+  config [options] <action> [key] [value]  Read or change persisted settings (set recreates the container)
+  local-ingress <action>                   Opt-in demo Traefik on alternate ports (Docker Desktop; HTTP-only, NOT real TLS)
+  doctor                                   Check prerequisites and stack health (read-only)
+  logs [options] [target]                  Tail logs: switchyard (container) or dokploy (service)
+  open                                     Open the dashboard in your browser
+  claude [args...]                         Launch Claude Code here (installs the CLI first if needed)
+  help [command]                           display help for command
+
+$ switchyard link --help
+Usage: switchyard [options] [command]
+
+One-command install & management for the Dokploy + Switchyard stack.
+Stands up Dokploy, registers the admin, and runs the Switchyard dashboard as a
+managed container.
+
+Options:
+  -V, --version                            output the version number
+  -h, --help                               display help for command
+
+Commands:
+  up [options]                             Install/converge the whole stack (idempotent — also upgrades)
+  status                                   Show stack status, container health, and URLs
+  deploy [options] [path]                  Deploy a directory to Dokploy (the Railway up equivalent)
+  down [options]                           Stop the stack; --purge also deletes network, secrets, and data volumes
+  config [options] <action> [key] [value]  Read or change persisted settings (set recreates the container)
+  local-ingress <action>                   Opt-in demo Traefik on alternate ports (Docker Desktop; HTTP-only, NOT real TLS)
+  doctor                                   Check prerequisites and stack health (read-only)
+  logs [options] [target]                  Tail logs: switchyard (container) or dokploy (service)
+  open                                     Open the dashboard in your browser
+  claude [args...]                         Launch Claude Code here (installs the CLI first if needed)
+  help [command]                           display help for command
+
+$ switchyard variables --help
+Usage: switchyard [options] [command]
+
+One-command install & management for the Dokploy + Switchyard stack.
+Stands up Dokploy, registers the admin, and runs the Switchyard dashboard as a
+managed container.
+
+Options:
+  -V, --version                            output the version number
+  -h, --help                               display help for command
+
+Commands:
+  up [options]                             Install/converge the whole stack (idempotent — also upgrades)
+  status                                   Show stack status, container health, and URLs
+  deploy [options] [path]                  Deploy a directory to Dokploy (the Railway up equivalent)
+  down [options]                           Stop the stack; --purge also deletes network, secrets, and data volumes
+  config [options] <action> [key] [value]  Read or change persisted settings (set recreates the container)
+  local-ingress <action>                   Opt-in demo Traefik on alternate ports (Docker Desktop; HTTP-only, NOT real TLS)
+  doctor                                   Check prerequisites and stack health (read-only)
+  logs [options] [target]                  Tail logs: switchyard (container) or dokploy (service)
+  open                                     Open the dashboard in your browser
+  claude [args...]                         Launch Claude Code here (installs the CLI first if needed)
+  help [command]                           display help for command
+
+$ switchyard deploy --help
+Usage: switchyard deploy [options] [path]
+
+Deploy a directory to Dokploy (the Railway up equivalent)
+
+Arguments:
+  path              directory to deploy (default: ".")
+
+Options:
+  --service <name>  application name (default: directory name)
+  --project <name>  project to reuse or create (default: the only project)
+  --detach          return once the upload has queued a deployment
+  -h, --help        display help for command

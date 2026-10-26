@@ -1,0 +1,69 @@
+## after (1c959e9 + worktree)
+$ switchyard --help
+Usage: switchyard [options] [command]
+
+One-command install & management for the Dokploy + Switchyard stack.
+Stands up Dokploy, registers the admin, and runs the Switchyard dashboard as a
+managed container.
+
+Options:
+  -V, --version                             output the version number
+  -h, --help                                display help for command
+
+Commands:
+  up [options]                              Install/converge the whole stack (idempotent — also upgrades)
+  status                                    Show stack status, container health, and URLs
+  deploy [options] [path]                   Deploy a directory to Dokploy (the Railway up equivalent)
+  link [options]                            Link the current directory to an existing Dokploy application
+  variables [options] [action] [values...]  List or edit an application's environment variables
+  down [options]                            Stop the stack; --purge also deletes network, secrets, and data volumes
+  config [options] <action> [key] [value]   Read or change persisted settings (set recreates the container)
+  local-ingress <action>                    Opt-in demo Traefik on alternate ports (Docker Desktop; HTTP-only, NOT real TLS)
+  doctor                                    Check prerequisites and stack health (read-only)
+  logs [options] [target]                   Tail logs: switchyard (container) or dokploy (service)
+  open                                      Open the dashboard in your browser
+  claude [args...]                          Launch Claude Code here (installs the CLI first if needed)
+  help [command]                            display help for command
+
+$ switchyard link --help
+Usage: switchyard link [options]
+
+Link the current directory to an existing Dokploy application
+
+Options:
+  --project <name-or-id>  project to link (default: the only project)
+  --service <name-or-id>  application to link (default: directory name or the
+                          only application)
+  -h, --help              display help for command
+
+$ switchyard variables --help
+Usage: switchyard variables [options] [action] [values...]
+
+List or edit an application's environment variables
+
+Arguments:
+  action            list, set, or unset (default: "list")
+  values            KEY=VALUE pairs for set, or keys for unset
+
+Options:
+  --service <name>  application name or ID (default: linked service)
+  --reveal          show variable values when listing
+  --deploy          redeploy after saving variables
+  -h, --help        display help for command
+
+$ switchyard deploy --help
+Usage: switchyard deploy [options] [path]
+
+Deploy a directory to Dokploy (the Railway up equivalent)
+
+Arguments:
+  path              directory to deploy (default: ".")
+
+Options:
+  --service <name>  application name (default: linked service or directory name)
+  --project <name>  project to reuse or create (default: linked project or the
+                    only project)
+  --detach          return once the upload has queued a deployment
+  --include-env     allow .env and .env.* files in the upload (ignore rules
+                    still apply)
+  -h, --help        display help for command

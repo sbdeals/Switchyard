@@ -1,0 +1,113 @@
+Local CLI link/variables/deploy proof: 2026-10-26T07:44:35.449Z
+Target: http://localhost:3000 only. CLI config supplied through an anonymous memory descriptor using the approved local demo helper; credentials are never printed or written to a config file.
+The actual built CLI binary runs every command. A fetch observer copies the exact multipart ZIP without changing the upload.
+Commands are spaced 22 seconds apart: the local auth endpoint returned HTTP 429 on the fourth rapid sign-in.
+Created throwaway project clv-mvoyb3i1 (jzLFDBjiR4y1bDfZf6w8S), app clv-mvoyb3i1-web (3_UlZWg2iRXzHi8E1z8hY).
+$ switchyard link --project clv-mvoyb3i1 --service clv-mvoyb3i1-web
+Linked clv-mvoyb3i1/production/clv-mvoyb3i1-web (3_UlZWg2iRXzHi8E1z8hY).
+Saved .switchyard/link.json. Add .switchyard/ to your .gitignore.
+.switchyard/link.json: {"projectId":"jzLFDBjiR4y1bDfZf6w8S","environmentId":"FVvruia37ywHKWT9Q3v-_","applicationId":"3_UlZWg2iRXzHi8E1z8hY"}
+$ switchyard variables set CLV_GREETING=hello CLV_TEMP=remove-me
+Variables saved; redeploy to apply (switchyard deploy).
+$ switchyard variables
+KEEP=********
+CLV_GREETING=********
+CLV_TEMP=********
+$ switchyard variables list --reveal
+KEEP=unchanged
+CLV_GREETING=hello
+CLV_TEMP=remove-me
+$ switchyard variables unset CLV_TEMP
+Variables saved; redeploy to apply.
+$ switchyard variables list --service clv-mvoyb3i1-web
+KEEP=********
+CLV_GREETING=********
+API assertions passed: set/list/unset preserve unrelated env lines, comments, and buildArgs.
+$ switchyard deploy --detach
+Excluded env files: .env. Use --include-env to opt in (ignore rules still apply).
+Packed 3 files (437 bytes); build: dockerfile.
+Deploying clv-mvoyb3i1/production/clv-mvoyb3i1-web (3_UlZWg2iRXzHi8E1z8hY).
+Upload accepted; deployment queued.
+No domain configured. Add one in the dashboard to expose this application.
+$ unzip -l /workspace/sy-codex-notes/fix/clv-upload.zip
+Archive:  /workspace/sy-codex-notes/fix/clv-upload.zip
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+       25  1980-01-01 00:00   .env.example
+       98  1980-01-01 00:00   Dockerfile
+       16  1980-01-01 00:00   index.html
+---------                     -------
+      139                     3 files
+ZIP assertions passed: .env absent; .env.example present; .switchyard absent.
+Local deployment clUQQai1l3VAd25KLhKfZ: running
+Local deployment clUQQai1l3VAd25KLhKfZ: error
+Live proof FAILED: Local build ended with status error
+Cleanup: application.delete succeeded for 3_UlZWg2iRXzHi8E1z8hY
+Cleanup: project.remove succeeded; project absent from project.all.
+Removed local throwaway source/config observer; retained proof text and captured ZIP.
+Cleanup: dockerImage.removeImage succeeded for session-built clv-mvoyb3i1-web-uysdgy:latest.
+
+Supplement: determine runtime failure and prove variables --deploy via the built command workflows using one local authenticated client.
+Created only session-owned project/app: clv-runtime-mvoyk0fz, s0GVi3KUpEFo6Eu8Um2K4
+Linked clv-runtime-mvoyk0fz/production/clv-runtime-mvoyk0fz-web (s0GVi3KUpEFo6Eu8Um2K4).
+Saved .switchyard/link.json. Add .switchyard/ to your .gitignore.
+Excluded env files: .env. Use --include-env to opt in (ignore rules still apply).
+Packed 3 files (437 bytes); build: dockerfile.
+Deploying clv-runtime-mvoyk0fz/production/clv-runtime-mvoyk0fz-web (s0GVi3KUpEFo6Eu8Um2K4).
+Upload accepted; deployment queued.
+No domain configured. Add one in the dashboard to expose this application.
+Session-owned build logs:
+Initializing deployment
+Building clv-runtime-mvoyk0fz-web-fbuh9q
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 135B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/busybox:1.37
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/busybox:1.37
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 53B done
+#5 DONE 0.0s
+
+#6 [2/2] COPY index.html /www/index.html
+#6 CACHED
+
+#7 exporting to image
+#7 exporting layers done
+#7 writing image sha256:61cccca9e6b8a89189366f4a96f47592485d31a57bb943e4d1fa92ae8d384077 done
+#7 naming to docker.io/library/clv-runtime-mvoyk0fz-web-fbuh9q done
+#7 DONE 0.0s
+✅ Docker build completed.
+(HTTP code 503) unexpected - This node is not a swarm manager. Use "docker swarm init" or "docker swarm join" to connect this node to swarm and try again. 
+Error occurred ❌, check the logs for details.
+
+Runtime limitation confirmed: Docker image built successfully; Dokploy cannot start the app because the host is not a Swarm manager. No swarm changes attempted.
+$ switchyard variables set CLV_APPLY=queued --deploy
+Variables saved; deployment queued.
+API assertions passed: variables --deploy saved env and created deployment VEmVgJfL9cGWhkIATR4IW (status error).
+CLI feature proof PASS: link, masked/revealed variables, set/unset preservation, env-file exclusion in the exact uploaded ZIP, and --deploy queueing. Running app/HTTP response remains unproven on this non-manager host.
+Cleanup: application.delete succeeded for s0GVi3KUpEFo6Eu8Um2K4
+Cleanup: project.remove succeeded; project absent from project.all.
+Cleanup: dockerImage.removeImage succeeded for session-built clv-runtime-mvoyk0fz-web-fbuh9q:latest.
+Cleanup: local throwaway source removed.
+
+Final checks on the completed diff:
+$ cd /workspace/wt-cli-link-vars/cli && npm run typecheck
+PASS: tsc --noEmit.
+$ cd /workspace/wt-cli-link-vars/cli && npm test
+PASS: tsup build and node:test; 149 tests, 149 pass, 0 fail.
+$ cd /workspace/wt-cli-link-vars && git diff --check
+PASS.
+Read-only image inventory: both session-built clv image tags absent after API cleanup.
+No dashboard files or lockfiles changed; no git commit/push performed.
+Limitations: running app/HTTP response unproven because host is not a Swarm manager; native build success and API queueing are proven. Rapid independent CLI sign-ins encounter local Dokploy HTTP 429, so process-level proof spaced commands. Values that cannot be safely encoded as dotenv are rejected.
