@@ -2,6 +2,7 @@ import { unstable_rethrow } from "next/navigation";
 
 import { loadWorkspace, inferEdges } from "@/lib/dokploy";
 import { redactServiceForClient } from "@/lib/service-redaction";
+import { redactErrorMessage } from "@/lib/error-redaction";
 import { ensureCollector } from "@/lib/collector";
 import { Workspace } from "@/components/Workspace";
 import { LogoutButton } from "@/components/LogoutButton";
@@ -22,7 +23,7 @@ export default async function Page() {
     // Let framework control-flow errors (e.g. redirect to /login on an expired
     // session) propagate instead of rendering them as an error panel.
     unstable_rethrow(e);
-    message = e instanceof Error ? e.message : String(e);
+    message = redactErrorMessage(e, "Could not load workspace.");
   }
 
   if (result) {
