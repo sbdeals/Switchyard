@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Plus, Pencil, Trash2, FolderGit2, Layers, Loader2 } from "lucide-react";
+import { X, Plus, Pencil, Trash2, FolderGit2, Layers, Loader2, Settings2, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ProjectNode } from "@/lib/dokploy";
 import {
@@ -15,6 +15,7 @@ import {
   type ActionResult,
 } from "@/app/actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { SharedVariablesPanel } from "@/components/SharedVariablesPanel";
 
 export function ProjectsPanel({
   open,
@@ -30,6 +31,8 @@ export function ProjectsPanel({
   const [error, setError] = useState<string | null>(null);
   const [newProject, setNewProject] = useState("");
   const [newEnv, setNewEnv] = useState<Record<string, string>>({});
+  const [settingsId, setSettingsId] = useState<string | null>(null);
+  const settingsProject = projects.find((p) => p.projectId === settingsId);
 
   const act = (fn: () => Promise<ActionResult>) => {
     setError(null);
@@ -64,10 +67,13 @@ export function ProjectsPanel({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className="relative flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
+            className={`relative flex max-h-[80vh] w-full ${settingsProject ? "max-w-2xl" : "max-w-lg"} flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl`}
           >
             <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
-              <h2 id="projects-panel-title" className="text-sm font-semibold">Projects &amp; environments</h2>
+              <div className="flex min-w-0 items-center gap-2">
+                {settingsProject && <IconBtn title="Back to projects" onClick={() => setSettingsId(null)}><ArrowLeft className="size-4" /></IconBtn>}
+                <h2 id="projects-panel-title" className="truncate text-sm font-semibold">{settingsProject ? `${settingsProject.name} · Settings` : "Projects & environments"}</h2>
+              </div>
               <button
                 onClick={onClose}
                 aria-label="Close projects"
@@ -78,7 +84,7 @@ export function ProjectsPanel({
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              {projects.map((p) => (
+              {settingsProject ? <SharedVariablesPanel key={settingsProject.projectId} project={settingsProject} /> : projects.map((p) => (
                 <div
                   key={p.projectId}
                   className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
@@ -86,6 +92,9 @@ export function ProjectsPanel({
                   <div className="flex items-center gap-2">
                     <FolderGit2 className="size-4 text-[var(--color-brand)]" />
                     <span className="flex-1 truncate text-sm font-medium">{p.name}</span>
+                    <IconBtn title={`Settings for ${p.name}`} onClick={() => setSettingsId(p.projectId)}>
+                      <Settings2 className="size-3.5" />
+                    </IconBtn>
                     <IconBtn title="Rename project" onClick={() => rename(p.name, (n) => renameProjectAction(p.projectId, n))}>
                       <Pencil className="size-3.5" />
                     </IconBtn>
@@ -155,7 +164,7 @@ export function ProjectsPanel({
               )}
             </div>
 
-            <div className="border-t border-[var(--color-border)] px-5 py-4">
+            {!settingsProject && <div className="border-t border-[var(--color-border)] px-5 py-4">
               {error && <p role="alert" className="mb-2 text-xs text-[var(--color-danger)]">{error}</p>}
               <div className="flex items-center gap-2">
                 <input
@@ -185,7 +194,7 @@ export function ProjectsPanel({
                   Project
                 </button>
               </div>
-            </div>
+            </div>}
           </FocusTrapPanel>
         </motion.div>
       )}
