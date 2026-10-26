@@ -26,7 +26,13 @@ vi.mock("@/lib/engines", () => import("./engines"));
 vi.mock("@/lib/names", () => import("./names"));
 
 import { saveApplicationBuildArgs, saveApplicationEnvironment } from "./dokploy";
-import { saveApplicationBuildArgsAction } from "../app/actions";
+import {
+  loadApplicationBuildArgsAction,
+  loadServiceEnvAction,
+  saveApplicationBuildArgsAction,
+  saveApplicationEnvAction,
+} from "../app/actions";
+import { initialVariablesEditorState, variablesEditorReducer } from "./variables-editor";
 
 const ownedTree = [{ environments: [{ applications: [{ applicationId: "owned-app" }] }] }];
 const fetchMock = vi.fn<typeof fetch>();
@@ -119,6 +125,81 @@ describe("saveApplicationEnvironment", () => {
       cookie: "test-user=own-session",
       body: { applicationId: "owned-app", env },
     }]);
+  });
+
+  it("saves the lazily loaded runtime env, preserving build settings when page env is null", async () => {
+    const env = "TOKEN=loaded-runtime\nKEEP=existing";
+    fetchMock
+      .mockResolvedValueOnce(Response.json(ownedTree))
+      .mockResolvedValueOnce(Response.json({ env, buildArgs: "BUILD=keep", buildSecrets: "SECRET=keep" }))
+      .mockResolvedValueOnce(Response.json({}));
+
+    // The redacted page has no editor baseline; only the action can initialize it.
+    expect(initialVariablesEditorState.baseline).toBeNull();
+    const loaded = await loadServiceEnvAction("application", "owned-app");
+    if (!loaded.ok) throw new Error(loaded.error);
+    const editor = variablesEditorReducer(initialVariablesEditorState, { type: "loaded", env: loaded.env });
+    const edited = variablesEditorReducer(editor, { type: "edited", value: `${editor.value}\nNEW=added` });
+    expect(await saveApplicationEnvAction("owned-app", edited.value)).toEqual({ ok: true });
+
+    expect(requests().at(-1)).toMatchObject({
+      endpoint: "/api/application.update",
+      body: { applicationId: "owned-app", env: `${env}\nNEW=added` },
+    });
+    expect(Object.keys(requests().at(-1)!.body)).toEqual(["applicationId", "env"]);
+  });
+});
+
+describe("loadApplicationBuildArgsAction", () => {
+  it("checks ownership and returns only build arguments using the user's session", async () => {
+    const id = "owned/app?x=1";
+    const buildArgs = "GREETING=build-args-load-sentinel";
+    fetchMock
+      .mockResolvedValueOnce(Response.json([{ environments: [{ applications: [{ applicationId: id }] }] }]))
+      .mockResolvedValueOnce(Response.json({ buildArgs, env: "TOKEN=runtime-secret", buildSecrets: "TOKEN=build-secret" }));
+
+    expect(await loadApplicationBuildArgsAction(id)).toEqual({ ok: true, buildArgs });
+    expect(requests().map(({ endpoint, cookie }) => ({ endpoint, cookie }))).toEqual([
+      { endpoint: "/api/project.all", cookie: "test-user=own-session" },
+      { endpoint: "/api/application.one", cookie: "test-user=own-session" },
+    ]);
+    expect(String(fetchMock.mock.calls[1][0])).toContain(`applicationId=${encodeURIComponent(id)}`);
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it.each(["foreign-app", ""])("does not read an unowned application (%j)", async (id) => {
+    fetchMock.mockResolvedValueOnce(Response.json(ownedTree));
+
+    expect(await loadApplicationBuildArgsAction(id)).toEqual({ ok: false, error: "Could not load build arguments." });
+    expect(requests().map(({ endpoint }) => endpoint)).toEqual(["/api/project.all"]);
+  });
+
+  it("does not accept an ID belonging to a different service kind", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json([{ environments: [{ compose: [{ composeId: "owned-app" }] }] }]));
+
+    expect(await loadApplicationBuildArgsAction("owned-app")).toEqual({ ok: false, error: "Could not load build arguments." });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([null, undefined, ""])("normalizes empty build args (%s) for editing", async (buildArgs) => {
+    fetchMock.mockResolvedValueOnce(Response.json(ownedTree)).mockResolvedValueOnce(Response.json({ buildArgs }));
+
+    expect(await loadApplicationBuildArgsAction("owned-app")).toEqual({ ok: true, buildArgs: "" });
+  });
+
+  it("sanitizes failed detail reads", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json(ownedTree)).mockResolvedValueOnce(
+      new Response("TOKEN=build-args-error-secret", { status: 500 })
+    );
+
+    expect(await loadApplicationBuildArgsAction("owned-app")).toEqual({ ok: false, error: "Could not load build arguments." });
+  });
+
+  it("preserves login redirects for expired sessions", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("Unauthorized", { status: 401 }));
+
+    await expect(loadApplicationBuildArgsAction("owned-app")).rejects.toThrow("NEXT_REDIRECT");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
