@@ -1,0 +1,15 @@
+{
+  "base": "http://127.0.0.1:3024",
+  "checks": [
+    "Two real Compose services interleave chronologically; both JSON and plain log lines present.",
+    "Multi-select excludes logx-a; error plus payment search shows only logx-b payment errors.",
+    "JSON row expands to indented nested data.",
+    "All three time-range controls issue scoped requests and return bounded snapshots.",
+    "Pausing stops polling; manual refresh works paused; resuming immediately fetches and then polls again.",
+    "The throwaway project's empty default environment shows no fixture logs.",
+    "Malformed range=400, unknown project=403, anonymous API request=401.",
+    "Pausing before the initial response displays the paused state instead of an endless spinner.",
+    "No browser runtime errors."
+  ],
+  "at": "2026-10-26T07:33:44.818Z"
+}
