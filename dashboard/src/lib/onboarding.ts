@@ -28,10 +28,6 @@ export function getWorkspaceScope(
   };
 }
 
-function hasVariable(env: string | null): boolean {
-  return (env ?? "").split("\n").some((line) => /^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=/.test(line.trim()));
-}
-
 /** Milestones come only from workspace records, never remembered click events. */
 export function getOnboardingChecklist(projects: readonly ProjectNode[], services: readonly Service[]) {
   const firstProject = projects[0];
@@ -44,7 +40,7 @@ export function getOnboardingChecklist(projects: readonly ProjectNode[], service
     service.kind !== "database" && service.domains.some((domain) => domain.host.trim().length > 0),
   );
   const domainTarget = domainService ?? services.find((service) => service.kind !== "database");
-  const variableService = services.find((service) => hasVariable(service.env));
+  const variableService = services.find((service) => service.hasVariables);
   const environmentProject = projects.find((project) =>
     new Set(project.environments.map((environment) => environment.environmentId)).size > 1,
   );

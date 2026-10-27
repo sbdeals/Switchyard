@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ComposeService, Database, ProjectNode } from "./dokploy";
+import { redactServiceForClient } from "./service-redaction";
 import { dismissOnboarding, getOnboardingChecklist, getWorkspaceScope, isOnboardingDismissed, onboardingStorageKey } from "./onboarding";
 
 function project(projectId = "project-1", environmentIds = ["production"]): ProjectNode {
@@ -60,11 +61,11 @@ describe("getOnboardingChecklist", () => {
   });
 
   it.each([null, "", " \n\t", "# KEY=value\n  # ANOTHER=value", "not an assignment", "=value", "1KEY=value"])("ignores non-variable env content %j", (env) => {
-    expect(getOnboardingChecklist([], [database({ env })]).items[3].done).toBe(false);
+    expect(getOnboardingChecklist([], [redactServiceForClient(database({ env }))]).items[3].done).toBe(false);
   });
 
   it.each(["KEY=value", "EMPTY=", " # comment\n KEY = value\n", "export KEY=value"])("counts a saved variable in %j", (env) => {
-    expect(getOnboardingChecklist([], [database({ env })]).items[3]).toMatchObject({ done: true, serviceId: "db-1" });
+    expect(getOnboardingChecklist([], [redactServiceForClient(database({ env }))]).items[3]).toMatchObject({ done: true, serviceId: "db-1" });
   });
 
   it("requires two distinct environments in the same project", () => {
@@ -85,7 +86,7 @@ describe("getOnboardingChecklist", () => {
       status: "done", env: "GREETING=hello",
       domains: [{ domainId: "domain-1", host: "example.test", https: false, port: 80, path: null, certificateType: "none", serviceName: "web" }],
     });
-    const state = getOnboardingChecklist([project("project-1", ["production", "staging"])], [service]);
+    const state = getOnboardingChecklist([project("project-1", ["production", "staging"])], [redactServiceForClient(service)]);
     expect(state.completedCount).toBe(5);
     expect(state.complete).toBe(true);
     expect(state.items[2]).toMatchObject({ done: true, serviceId: "compose-1" });

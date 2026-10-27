@@ -10,31 +10,40 @@ import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
+import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { GettingStarted } from "@/components/GettingStarted";
 import { getWorkspaceScope, type OnboardingItem } from "@/lib/onboarding";
+import { useServiceDeeplink } from "@/components/use-service-deeplink";
+import { DirtyGuardProvider } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
 
 type View = "canvas" | "grid";
 
-export function Workspace({
-  services,
-  projects,
-  edges,
-  userId,
-}: {
+type WorkspaceProps = {
   services: Service[];
   projects: ProjectNode[];
   edges: ServiceEdge[];
   userId: string | null;
-}) {
+};
+
+export function Workspace(props: WorkspaceProps) {
+  return <DirtyGuardProvider><WorkspaceContent {...props} /></DirtyGuardProvider>;
+}
+
+function WorkspaceContent({
+  services,
+  projects,
+  edges,
+  userId,
+}: WorkspaceProps) {
   const [view, setView] = useState<View>("canvas");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [selectedTab, setSelectedTab] = useState<"overview" | "domains" | "variables">("overview");
   const router = useRouter();
+  const drawer = useServiceDeeplink(services);
+  const { onDeployed } = drawer;
   const scope = getWorkspaceScope(projects, services, edges, projectId);
 
   // Refresh deploy results so the checklist follows an in-flight first deploy.
@@ -45,25 +54,11 @@ export function Workspace({
     return () => window.clearInterval(timer);
   }, [deploying, router]);
 
-  const openService = (id: string, tab: typeof selectedTab = "overview") => {
-    setSelectedTab(tab);
-    setSelectedId(id);
-  };
-
-  // Re-resolve the selected service from fresh props so the drawer updates.
-  const selected = services.find((s) => s.id === selectedId) ?? null;
-
-  // Open the new service's drawer and pull fresh state in.
-  const onDeployed = (id: string) => {
-    openService(id);
-    router.refresh();
-  };
-
   const navigateChecklist = (item: OnboardingItem) => {
     if (item.id === "project" || item.id === "environment") {
       setProjectsOpen(true);
     } else if (item.serviceId) {
-      openService(item.serviceId, item.id === "domain" ? "domains" : item.id === "variable" ? "variables" : "overview");
+      drawer.open(item.serviceId, item.id === "domain" ? "domains" : item.id === "variable" ? "variables" : "overview");
     } else {
       setDeployOpen(true);
     }
@@ -123,19 +118,26 @@ export function Workspace({
       {scope.services.length === 0 ? (
         <EmptyState key={scope.project?.projectId ?? "all"} projects={scope.projects} projectName={scope.project?.name} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={scope.services} allServices={services} edges={scope.edges} onSelect={(s) => openService(s.id)} />
+        <PanelErrorBoundary>
+          <FlowCanvas services={scope.services} allServices={services} edges={scope.edges} onSelect={(s) => drawer.open(s.id)} />
+        </PanelErrorBoundary>
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {scope.services.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => openService(s.id)} />
+              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => drawer.open(s.id)} />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
 
       <GettingStarted key={userId} projects={projects} services={services} userId={userId} onNavigate={navigateChecklist} />
-      <ServiceDrawer key={selectedTab} service={selected} initialTab={selectedTab} onClose={() => setSelectedId(null)} />
+      <ServiceDrawer service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
+      {drawer.notFound && (
+        <div role="status" className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-4 py-2 text-sm shadow-lg">
+          Service not found
+        </div>
+      )}
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
       <AgentPanel />
     </div>

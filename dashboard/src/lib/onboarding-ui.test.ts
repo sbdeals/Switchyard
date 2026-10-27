@@ -6,6 +6,8 @@ import { GettingStarted } from "../components/GettingStarted";
 import { QuickDeployMenu } from "../components/QuickDeployMenu";
 import { Workspace } from "../components/Workspace";
 import { ServiceDrawer } from "../components/service/ServiceDrawer";
+import { DirtyGuardProvider } from "../components/DirtyGuard";
+import { redactServiceForClient } from "./service-redaction";
 
 // Keep these render tests local: server actions and unrelated drawer panels never run.
 vi.mock("@/app/actions", () => ({
@@ -13,7 +15,10 @@ vi.mock("@/app/actions", () => ({
   createComposeAction: vi.fn(), listTemplatesAction: vi.fn(), quickDeployTemplateAction: vi.fn(),
   lifecycleAction: vi.fn(), updateDatabaseAction: vi.fn(),
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 vi.mock("@/lib/engines", async () => import("./engines"));
 vi.mock("@/lib/onboarding", async () => import("./onboarding"));
 vi.mock("@/lib/service-meta", async () => import("./service-meta"));
@@ -36,6 +41,7 @@ vi.mock("@/components/service/MetricsTab", () => ({ MetricsTab: () => null }));
 vi.mock("@/components/service/LogsTab", () => ({ LogsTab: () => null }));
 vi.mock("@/components/service/ConsoleTab", () => ({ ConsoleTab: () => null }));
 vi.mock("@/components/service/DataTab", () => ({ DataTab: () => null }));
+vi.mock("@/components/service/ConnectTab", () => ({ ConnectTab: () => null }));
 vi.mock("@/components/service/networking", () => ({ NetworkingTab: () => "Networking panel" }));
 vi.mock("@/components/service/AppTabs", () => ({
   AppOverviewTab: () => null, AppBuildTab: () => null, AppDeployTab: () => null,
@@ -48,7 +54,7 @@ vi.mock("@/components/service/ComposeTabs", () => ({
 vi.mock("@/components/service/primitives", () => ({
   inputCls: "", Field: () => null, Info: () => null, CopyButton: () => null,
   LifecycleButtons: () => null, SaveRow: () => null, DangerZone: () => null,
-  useLifecycle: vi.fn(), useSavedFlash: vi.fn(),
+  useLifecycle: vi.fn(), useSavedFlash: () => [false, vi.fn()],
 }));
 
 const project: ProjectNode = {
@@ -149,7 +155,7 @@ describe("getting-started card", () => {
     const html = renderToStaticMarkup(createElement(GettingStarted, {
       ...props,
       projects: [{ ...project, environments: [...project.environments, { environmentId: "staging", name: "Staging" }] }],
-      services: [{ ...service, env: "GREETING=hello", domains: [{ domainId: "domain-1", host: "example.test", https: false, port: 80, path: null, certificateType: "none", serviceName: "web" }] }],
+      services: [redactServiceForClient({ ...service, env: "GREETING=hello", domains: [{ domainId: "domain-1", host: "example.test", https: false, port: 80, path: null, certificateType: "none", serviceName: "web" }] })],
     }));
     expect(html).toBe("");
   });
@@ -158,10 +164,14 @@ describe("getting-started card", () => {
 describe("checklist service destinations", () => {
   it.each([
     ["overview", "Overview panel"], ["variables", "Variables panel"], ["domains", "Networking panel"],
-  ] as const)("opens the %s tab with its accessible selected state", (initialTab, content) => {
-    const html = renderToStaticMarkup(createElement(ServiceDrawer, { service, initialTab, onClose: vi.fn() }));
-    expect(html).toContain(`id="drawer-tab-${initialTab}" aria-selected="true"`);
-    expect(html).toContain(`aria-labelledby="drawer-tab-${initialTab}"`);
+  ] as const)("opens the %s tab with its accessible selected state", (tab, content) => {
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+      createElement(ServiceDrawer, {
+        service, tab, sessionKey: `${service.id}:${tab}`, onTabChange: vi.fn(), onClose: vi.fn(),
+      }),
+    ));
+    expect(html).toContain(`id="drawer-tab-${tab}" aria-selected="true"`);
+    expect(html).toContain(`aria-labelledby="drawer-tab-${tab}"`);
     expect(html).toContain(content);
   });
 });
