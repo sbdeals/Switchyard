@@ -1,0 +1,84 @@
+{
+  "projects": [
+    {
+      "projectId": "project-shop",
+      "name": "Shop",
+      "env": "PROJECT_TOKEN=secret-project-env",
+      "buildArgs": "PROJECT_BUILD=secret-project-build-args",
+      "buildSecrets": "PROJECT_BUILD_TOKEN=secret-project-build-secrets",
+      "config": { "token": "secret-project-config" },
+      "environments": [
+        {
+          "environmentId": "env-production",
+          "name": "Production",
+          "env": "ENV_TOKEN=secret-production-env",
+          "buildArgs": "ENV_BUILD=secret-production-build-args",
+          "buildSecrets": "ENV_BUILD_TOKEN=secret-production-build-secrets",
+          "config": { "token": "secret-production-config" },
+          "applications": [{ "applicationId": "app-web", "env": "TOKEN=secret-tree-app-env" }],
+          "postgres": [{ "postgresId": "db-postgres", "env": "TOKEN=secret-tree-postgres-env", "databasePassword": "secret-tree-postgres-password" }],
+          "mysql": [{ "mysqlId": "db-mysql", "env": "TOKEN=secret-tree-mysql-env", "databasePassword": "secret-tree-mysql-password" }],
+          "redis": [{ "redisId": "db-redis", "env": "TOKEN=secret-tree-redis-env", "databasePassword": "secret-tree-redis-password" }]
+        },
+        {
+          "environmentId": "env-staging",
+          "name": "Staging",
+          "env": "ENV_TOKEN=secret-staging-env",
+          "buildArgs": "ENV_BUILD=secret-staging-build-args",
+          "buildSecrets": "ENV_BUILD_TOKEN=secret-staging-build-secrets",
+          "config": { "token": "secret-staging-config" },
+          "compose": [{ "composeId": "compose-worker", "env": "TOKEN=secret-tree-compose-env" }],
+          "mariadb": [{ "mariadbId": "db-mariadb", "env": "TOKEN=secret-tree-mariadb-env", "databasePassword": "secret-tree-mariadb-password" }],
+          "mongo": [{ "mongoId": "db-mongo", "env": "TOKEN=secret-tree-mongo-env", "databasePassword": "secret-tree-mongo-password" }]
+        }
+      ]
+    }
+  ],
+  "details": {
+    "application.one?applicationId=app-web": {
+      "name": "Web", "appName": "shop-web", "applicationStatus": "running",
+      "env": "API_TOKEN=secret-app-env\nPUBLIC_URL=https://example.test",
+      "buildArgs": "BUILD_TOKEN=secret-app-build-args",
+      "buildSecrets": "BUILD_SECRET=secret-app-build-secrets",
+      "password": "secret-app-registry-password",
+      "config": { "token": "secret-app-config" }
+    },
+    "compose.one?composeId=compose-worker": {
+      "name": "Worker", "appName": "shop-worker", "composeStatus": "idle",
+      "env": "QUEUE_TOKEN=secret-compose-env",
+      "buildArgs": "BUILD_TOKEN=secret-compose-build-args",
+      "buildSecrets": "BUILD_SECRET=secret-compose-build-secrets",
+      "composeFile": "services: secret-compose-file",
+      "config": { "token": "secret-compose-config" }
+    },
+    "postgres.one?postgresId=db-postgres": {
+      "name": "Postgres", "appName": "shop-postgres", "applicationStatus": "running",
+      "env": "DB_TOKEN=secret-postgres-env",
+      "databasePassword": "secret-postgres-password",
+      "buildArgs": "BUILD_TOKEN=secret-postgres-build-args",
+      "buildSecrets": "BUILD_SECRET=secret-postgres-build-secrets"
+    },
+    "mysql.one?mysqlId=db-mysql": {
+      "name": "MySQL", "appName": "shop-mysql", "applicationStatus": "idle",
+      "env": "DB_TOKEN=secret-mysql-env",
+      "databasePassword": "secret-mysql-password",
+      "rootPassword": "secret-mysql-root-password"
+    },
+    "mariadb.one?mariadbId=db-mariadb": {
+      "name": "MariaDB", "appName": "shop-mariadb", "applicationStatus": "running",
+      "env": "DB_TOKEN=secret-mariadb-env",
+      "databasePassword": "secret-mariadb-password",
+      "rootPassword": "secret-mariadb-root-password"
+    },
+    "mongo.one?mongoId=db-mongo": {
+      "name": "Mongo", "appName": "shop-mongo", "applicationStatus": "error",
+      "env": "DB_TOKEN=secret-mongo-env",
+      "databasePassword": "secret-mongo-password"
+    },
+    "redis.one?redisId=db-redis": {
+      "name": "Redis", "appName": "shop-redis", "applicationStatus": "running",
+      "env": "DB_TOKEN=secret-redis-env",
+      "databasePassword": "secret-redis-password"
+    }
+  }
+}
