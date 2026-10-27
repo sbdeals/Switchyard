@@ -3,6 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { isGitSource } from "@/lib/deploy-triggers";
+import { DeployTriggerSettings } from "./DeployTriggerSettings";
 import { DomainHttpsToggle, useDomainHttps } from "@/components/service/DomainHttpsToggle";
 import { validatePort } from "@/lib/validation";
 import { DomainStatus } from "@/components/service/DomainStatus";
@@ -286,6 +288,7 @@ export function ComposeSettingsTab({
 }) {
   return (
     <div className="space-y-5">
+      {isGitSource(compose.sourceType) && <DeployTriggerSettings key={compose.id} service={compose} />}
       <Info label="App name" value={compose.appName} mono />
       <Info
         label="Created"

@@ -8,6 +8,7 @@ import {
   updateApplicationAction,
   updateDatabaseAction,
   updateGitDeployAction,
+  updateAppGitBranchAction,
 } from "../app/actions";
 import { ENGINES, type DockerRegistryPatch, type MountServiceType } from "./dokploy";
 
@@ -127,6 +128,37 @@ const readers = [
     error: "Could not load service commands.",
   })),
 ];
+
+describe("branch-only server action", () => {
+  it("saves only the branch without resubmitting stored credentials or triggers", async () => {
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json(projectsWith("application")))
+      .mockResolvedValueOnce(Response.json({
+        sourceType: "git", customGitUrl: "https://user:SENTINEL_git@host/repo.git",
+        autoDeploy: true, watchPaths: ["src/**"],
+      }))
+      .mockResolvedValueOnce(Response.json({}));
+    expect(await updateAppGitBranchAction("owned-id", " feature/next ")).toEqual({ ok: true });
+    expect(mocks.fetch).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(mocks.fetch.mock.calls[2][1].body)).toEqual({
+      applicationId: "owned-id", customGitBranch: "feature/next",
+    });
+  });
+
+  it.each(["read", "write"])("hides backend secrets on a failed %s", async (stage) => {
+    mocks.fetch.mockResolvedValueOnce(Response.json(projectsWith("application")));
+    if (stage === "write") mocks.fetch.mockResolvedValueOnce(Response.json({ sourceType: "git" }));
+    mocks.fetch.mockResolvedValueOnce(new Response("SENTINEL_private_backend_detail", { status: 500 }));
+    expect(await updateAppGitBranchAction("owned-id", "main")).toEqual({
+      ok: false, error: "Could not save Git branch.",
+    });
+  });
+
+  it("preserves expired-session redirects", async () => {
+    mocks.fetch.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    await expect(updateAppGitBranchAction("owned-id", "main")).rejects.toBe(mocks.redirect);
+  });
+});
 
 describe.each(readers)("$name lazy loading", ({ type, run, error }) => {
   it("rejects another account's service before reading detail", async () => {
