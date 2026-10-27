@@ -2,18 +2,18 @@
 
 import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
-import { Rocket, ChevronRight } from "lucide-react";
+import { Rocket, Play, ChevronRight } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import { lifecycleAction, appLifecycleAction, composeLifecycleAction } from "@/lib/client-actions";
-import { serviceAccent, serviceSubtitle } from "@/lib/service-meta";
+import { resolveServiceAction, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceLogo } from "@/components/canvas/ServiceNode";
 import { StatusBadge } from "@/components/StatusBadge";
 
 /**
  * Compact card: identity + status at a glance, click to open the drawer where
- * all config, lifecycle, logs and metrics live. A one-click Deploy shows inline
- * only when the service hasn't been deployed yet.
+ * all config, lifecycle, logs and metrics live. Deploy or Start shows inline
+ * when the service isn't running yet.
  */
 export function ServiceCard({
   service,
@@ -29,20 +29,22 @@ export function ServiceCard({
   selectionDisabled?: boolean;
 }) {
   const accent = serviceAccent(service);
+  const action = resolveServiceAction(service.status, service.runtime);
   const logos = useTemplateLogos();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   const deploy = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!action) return;
     setError(null);
     startTransition(async () => {
       const res =
         service.kind === "database"
-          ? await lifecycleAction(service.engine, service.id, "deploy")
+          ? await lifecycleAction(service.engine, service.id, action)
           : service.kind === "compose"
-            ? await composeLifecycleAction(service.id, "deploy")
-            : await appLifecycleAction(service.id, "deploy");
+            ? await composeLifecycleAction(service.id, action)
+            : await appLifecycleAction(service.id, action);
       if (!res.ok) setError(res.error);
     });
   };
@@ -97,21 +99,22 @@ export function ServiceCard({
             {serviceSubtitle(service)}
           </div>
         </div>
-        <StatusBadge status={service.status} />
+        <StatusBadge status={service.status} runtime={service.runtime} />
       </div>
 
       <div className="mt-3 flex items-center justify-between">
         <span className="truncate text-xs text-[var(--color-fg-subtle)]">
           {service.projectName} / {service.environmentName}
         </span>
-        {service.status === "idle" ? (
+        {action === "deploy" || action === "start" ? (
           <button
             type="button"
             onClick={deploy}
             disabled={pending}
             className="relative z-10 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
           >
-            <Rocket className="size-3.5" /> Deploy
+            {action === "start" ? <Play className="size-3.5" /> : <Rocket className="size-3.5" />}
+            {action === "start" ? "Start" : "Deploy"}
           </button>
         ) : (
           <ChevronRight className="size-4 text-[var(--color-fg-subtle)] transition-transform group-hover:translate-x-0.5" />

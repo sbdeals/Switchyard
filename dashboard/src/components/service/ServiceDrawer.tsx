@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useDialogFocus } from "@/components/use-focus-trap";
-import { DirtyGuardScope } from "@/components/DirtyGuard";
+import { DirtyGuardScope, useDirtyGuard } from "@/components/DirtyGuard";
 import {
   X,
   Rocket,
@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
-import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
+import { LAST_DEPLOY_LABEL, resolveServiceState, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceLogo } from "@/components/canvas/ServiceNode";
 import { lifecycleAction, updateDatabaseAction } from "@/lib/client-actions";
@@ -72,6 +72,8 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { ResourceSettings } from "@/components/service/ResourceSettings";
+import { resourceInputs } from "@/lib/resource-limits";
 import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
 import { DiagnosisCard } from "@/components/service/DiagnosisCard";
 import { getServiceTabs, type TabId } from "@/lib/deeplink";
@@ -493,7 +495,9 @@ function Header({
             {serviceLabel(service)} · {service.projectName} / {service.environmentName}
           </div>
           <div className="text-[11px] text-[var(--color-fg-subtle)]">
-            Last deploy: {LAST_DEPLOY_LABEL[service.status] ?? service.status}
+            {resolveServiceState(service.status, service.runtime) === "stopped"
+              ? "Stopped"
+              : `Last deploy: ${LAST_DEPLOY_LABEL[service.status] ?? service.status}`}
           </div>
           <ServiceNotes key={service.id} id={service.id} description={service.description} />
         </div>
@@ -519,10 +523,11 @@ const useDbLifecycle = (db: Database) =>
 function OverviewTab({ db }: { db: Database }) {
   const meta = ENGINE_META[db.engine];
   const { pending, error, run } = useDbLifecycle(db);
+  const resources = resourceInputs(db);
 
   return (
     <div className="space-y-5">
-      <LifecycleButtons status={db.status} pending={pending} error={error} run={run} />
+      <LifecycleButtons status={db.status} runtime={db.runtime} pending={pending} error={error} run={run} />
 
       <div className="grid grid-cols-2 gap-3">
         <Info label="Image" value={db.dockerImage ?? "—"} mono />
@@ -533,8 +538,8 @@ function OverviewTab({ db }: { db: Database }) {
         <Info
           label="Resources"
           value={
-            db.cpuLimit || db.memoryLimit
-              ? `${db.cpuLimit ?? "∞"} CPU · ${db.memoryLimit ?? "∞"} mem`
+            resources.cpuLimit || resources.memoryLimit
+              ? `${resources.cpuLimit || "∞"} CPU · ${resources.memoryLimit || "unlimited memory"}`
               : "unlimited"
           }
         />
@@ -550,8 +555,6 @@ function SettingsTab({ db, services, onSelectService, onClose }: PortConflictPro
   const [name, setName] = useState(db.name);
   const [version, setVersion] = useState(currentVersion);
   const [port, setPort] = useState(db.externalPort != null ? String(db.externalPort) : "");
-  const [cpu, setCpu] = useState(db.cpuLimit ?? "");
-  const [mem, setMem] = useState(db.memoryLimit ?? "");
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -562,9 +565,8 @@ function SettingsTab({ db, services, onSelectService, onClose }: PortConflictPro
   const dirty =
     name !== db.name ||
     version !== currentVersion ||
-    portChanged ||
-    cpu !== (db.cpuLimit ?? "") ||
-    mem !== (db.memoryLimit ?? "");
+    portChanged;
+  useDirtyGuard("Settings", dirty);
 
   function save() {
     if (!validPort) return;
@@ -574,8 +576,6 @@ function SettingsTab({ db, services, onSelectService, onClose }: PortConflictPro
     if (version !== currentVersion) patch.dockerImage = `${meta.image}:${version}`;
     if (portChanged)
       patch.externalPort = port ? Number(port) : null;
-    if (cpu !== (db.cpuLimit ?? "")) patch.cpuLimit = cpu || null;
-    if (mem !== (db.memoryLimit ?? "")) patch.memoryLimit = mem || null;
     startSave(async () => {
       const res = await updateDatabaseAction(db.engine, db.id, db.appName, patch);
       if (res.ok) flashSaved();
@@ -607,17 +607,13 @@ function SettingsTab({ db, services, onSelectService, onClose }: PortConflictPro
               className={inputCls}
             />
           </Field>
-          <Field label="CPU limit" hint='e.g. "0.5"'>
-            <input value={cpu} onChange={(e) => setCpu(e.target.value)} placeholder="unlimited" className={inputCls} />
-          </Field>
-          <Field label="Memory limit" hint='e.g. "256m"'>
-            <input value={mem} onChange={(e) => setMem(e.target.value)} placeholder="unlimited" className={inputCls} />
-          </Field>
         </div>
         <PortConflictWarning warnings={warnings} onSelectService={onSelectService} />
         {!validPort && <p role="alert" className="text-xs text-[var(--color-danger)]">Use a port from 1 to 65535, or leave it blank.</p>}
         <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty || !validPort} onSave={save} label={warnings.length ? "Save anyway" : "Save changes"} />
       </div>
+
+      <ResourceSettings key={db.id} service={db} />
 
       <Info label="App name" value={db.appName} mono />
       <Info label="Created" value={db.createdAt ? new Date(db.createdAt).toLocaleString() : "—"} />

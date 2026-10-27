@@ -63,6 +63,7 @@ export function SessionExpiredBanner() {
 export const quickDeployDatabaseAction = guardAction(serverActions.quickDeployDatabaseAction);
 export const lifecycleAction = guardAction(serverActions.lifecycleAction);
 export const updateDatabaseAction = guardAction(serverActions.updateDatabaseAction);
+export const updateResourcesAction = guardAction(serverActions.updateResourcesAction);
 export const saveEnvironmentAction = guardAction(serverActions.saveEnvironmentAction);
 export const createProjectAction = guardAction(serverActions.createProjectAction);
 export const renameProjectAction = guardAction(serverActions.renameProjectAction);

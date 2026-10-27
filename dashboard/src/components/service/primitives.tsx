@@ -28,12 +28,13 @@ import {
   Network,
   Sparkles,
 } from "lucide-react";
-import type { Action, AppDomain, Service, ServiceStatus } from "@/lib/dokploy";
+import type { Action, AppDomain, Service, ServiceRuntime, ServiceStatus } from "@/lib/dokploy";
 import type { ActionResult } from "@/app/actions";
 import { appLifecycleAction, composeLifecycleAction, lifecycleAction } from "@/lib/client-actions";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { serviceDeleteImpact } from "@/lib/delete-impact";
 import { StatusBadge } from "@/components/StatusBadge";
+import { resolveServiceAction } from "@/lib/service-meta";
 import { cn } from "@/lib/utils";
 
 export const inputCls =
@@ -241,9 +242,11 @@ export function RemoveBtn({
 export function PublicUrlBar({
   domains,
   status,
+  runtime,
 }: {
   domains: AppDomain[];
   status: ServiceStatus;
+  runtime?: ServiceRuntime;
 }) {
   const primary = domains.find((d) => d.https) ?? domains[0];
   const url = primary ? `${primary.https ? "https" : "http"}://${primary.host}` : null;
@@ -271,7 +274,7 @@ export function PublicUrlBar({
         )}
       </div>
       <div className="shrink-0">
-        <StatusBadge status={status} />
+        <StatusBadge status={status} runtime={runtime} />
       </div>
     </div>
   );
@@ -304,33 +307,36 @@ export function PrivateNetwork({ host }: { host: string }) {
 /** Deploy / Start / Stop / Redeploy buttons driven by the service status. */
 export function LifecycleButtons({
   status,
+  runtime,
   pending,
   error,
   run,
 }: {
   status: ServiceStatus;
+  runtime?: ServiceRuntime;
   pending: boolean;
   error: string | null;
   run: (action: Action) => void;
 }) {
+  const action = resolveServiceAction(status, runtime);
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        {status === "idle" ? (
+        {action === "deploy" ? (
           <Btn onClick={() => run("deploy")} disabled={pending} primary>
             <Rocket className="size-3.5" /> Deploy
           </Btn>
-        ) : status === "done" ? (
+        ) : action === "stop" ? (
           <Btn onClick={() => run("stop")} disabled={pending}>
             <Square className="size-3.5" /> Stop
           </Btn>
-        ) : (
+        ) : action === "start" ? (
           <Btn onClick={() => run("start")} disabled={pending}>
             <Play className="size-3.5" /> Start
           </Btn>
-        )}
-        {status !== "idle" && (
-          <Btn onClick={() => run("deploy")} disabled={pending}>
+        ) : null}
+        {action !== "deploy" && (
+          <Btn onClick={() => run("deploy")} disabled={pending || !action}>
             <RefreshCw className="size-3.5" /> Redeploy
           </Btn>
         )}
