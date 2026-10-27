@@ -5,7 +5,12 @@ function stripErrorCredentials(message: string): string {
   return message.replace(
     /(?:[a-z][a-z\d+.-]*:\/{1,2}|\/\/)[^/?#"'<>\\\r\n]*@[^/?#"'<>\\\s]*/gi,
     stripUrlCredentials,
-  ).replace(/\/api\/deploy\/[^/\s"'<>?\\#]+/gi, "/api/deploy/***");
+  ).replace(/\/api\/deploy\/[^/\s"'<>?\\#]+/gi, "/api/deploy/***")
+    .replace(/(\b(?:(?:proxy-)?authorization|set-cookie|cookie|x-api-key)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\r\n"'<>]+)/gi, "$1***")
+    .replace(/(\bBearer\s+)(?:"[^"]*"|'[^']*'|[^\s"'<>]+)/gi, "$1***")
+    .replace(/([?&](?:[a-z\d_-]*[_-])?(?:token|secret|password|api[_-]?key|auth(?:orization)?)=)[^&#\s"'<>\\]*/gi, "$1***")
+    // Keep query parameters out of env matching so URL fragments survive.
+    .replace(/((?:^|[^\w?&-])(?:[a-z\d_]*_)?(?:TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY|ACCESS_KEY)(?:_[a-z\d_]*)?\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s"'<>]+)/gi, "$1***");
 }
 
 /** Keep useful diagnostics without echoing credentials or submitted secrets. */

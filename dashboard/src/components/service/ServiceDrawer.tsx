@@ -30,6 +30,7 @@ import { ENGINE_META } from "@/lib/engines";
 import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
+import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { VariablesTab } from "@/components/service/VariablesTab";
 import { BackupsTab } from "@/components/service/BackupsTab";
 import { VolumesTab } from "@/components/service/VolumesTab";
@@ -347,8 +348,8 @@ export function ServiceDrawer({ service, tab, onTabChange, onClose }: {
               ))}
             </nav>
 
-            <div
-              key={service.id}
+            <PanelErrorBoundary
+              key={`${service.kind}:${service.id}:${tab}`}
               id="drawer-tabpanel"
               role="tabpanel"
               aria-labelledby={`drawer-tab-${tab}`}
@@ -402,7 +403,7 @@ export function ServiceDrawer({ service, tab, onTabChange, onClose }: {
                     <AppSettingsTab app={service} onClose={onClose} />
                   </div>
                 ))}
-            </div>
+            </PanelErrorBoundary>
           </motion.aside>
         </>
       )}

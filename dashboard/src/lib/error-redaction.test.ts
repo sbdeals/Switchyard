@@ -29,6 +29,44 @@ describe("redactErrorMessage", () => {
     expect(redactErrorMessage(message, fallback)).toBe(message);
   });
 
+  it.each([
+    ["Request failed: Bearer BEARER_SENTINEL", "Request failed: Bearer ***"],
+    ["Authorization: Custom AUTH_SENTINEL\nInvalid URL", "Authorization: ***\nInvalid URL"],
+    ["Authorization: Custom prefix,AUTH_SENTINEL;OTHER_SENTINEL\nInvalid URL", "Authorization: ***\nInvalid URL"],
+    ['{"Authorization": "Bearer AUTH_JSON_SENTINEL"}', '{"Authorization": ***}'],
+    ["Cookie: better-auth.session_token=COOKIE_SENTINEL\nInvalid URL", "Cookie: ***\nInvalid URL"],
+    ["x-api-key: APIKEY_SENTINEL\nInvalid URL", "x-api-key: ***\nInvalid URL"],
+    ["https://host/api?token=QUERY_SENTINEL&retry=1", "https://host/api?token=***&retry=1"],
+    ["https://host/api?access_token=ACCESS_SENTINEL#status", "https://host/api?access_token=***#status"],
+    ["https://host/api?token=prefix,QUERY_SENTINEL;OTHER_SENTINEL&retry=1#status", "https://host/api?token=***&retry=1#status"],
+    ["SECRET=ENV_SENTINEL; Invalid URL", "SECRET=*** Invalid URL"],
+    ["SECRET=prefix,ENV_SENTINEL&OTHER_SENTINEL Invalid URL", "SECRET=*** Invalid URL"],
+    ['APP_SECRET="ENV_SENTINEL with spaces"; Invalid URL', "APP_SECRET=***; Invalid URL"],
+    ["SECRET_KEY='ENV_SENTINEL with spaces'; Invalid URL", "SECRET_KEY=***; Invalid URL"],
+  ])("scrubs structured credentials without submitted values (%s)", (message, expected) => {
+    expect(redactErrorMessage(new Error(message), fallback)).toBe(expected);
+    expect(redactErrorMessage(message, fallback)).toBe(expected);
+  });
+
+  it("only reads the message, scrubbing credentials without exposing stack or cause", () => {
+    const error = new Error([
+      "Invalid URL http://USER_SENTINEL:PASSWORD_SENTINEL@host/api?token=QUERY_SENTINEL",
+      "Bearer BEARER_SENTINEL",
+      "Authorization: Basic AUTH_SENTINEL",
+      "SECRET=ENV_SENTINEL",
+    ].join("\n"), { cause: new Error("Bearer CAUSE_SENTINEL") });
+    error.stack = "Authorization: STACK_SENTINEL";
+
+    const message = redactErrorMessage(error, fallback);
+    expect(message).toBe([
+      "Invalid URL http://host/api?token=***",
+      "Bearer ***",
+      "Authorization: ***",
+      "SECRET=***",
+    ].join("\n"));
+    expect(message).not.toContain("SENTINEL");
+  });
+
   it("replaces every occurrence of submitted values, longest first", () => {
     expect(redactErrorMessage("Invalid SECRET_LONG, SECRET and SECRET_LONG", fallback, ["SECRET", "SECRET_LONG"]))
       .toBe("Invalid ***, *** and ***");
