@@ -1,3 +1,7 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { STORE_SERVICE, STORE_VOLUME } from "../core/config.js";
 import { docker, dockerInherit, dockerOk } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
@@ -132,17 +136,26 @@ async function createServices(dokployPort: number, log: (m: string) => void): Pr
 async function ensureMetricsStore(storePassword: string, log: (m: string) => void): Promise<void> {
   if (await serviceExists(STORE_SERVICE)) return;
   log(`Creating service ${STORE_SERVICE} (metrics store) ...`);
-  const code = await dockerInherit([
-    "service", "create", "--detach", "--name", STORE_SERVICE,
-    "--constraint", "node.role==manager",
-    "--network", "dokploy-network",
-    "--env", "POSTGRES_USER=switchyard",
-    "--env", "POSTGRES_DB=switchyard",
-    "--env", `POSTGRES_PASSWORD=${storePassword}`,
-    "--mount", `type=volume,source=${STORE_VOLUME},target=/var/lib/postgresql/data`,
-    "postgres:16",
-  ]);
-  if (code !== 0) throw new UserError(`Creating ${STORE_SERVICE} failed.`);
+  const dir = await mkdtemp(join(tmpdir(), "switchyard-store-"));
+  try {
+    const envFile = join(dir, "env");
+    // Docker reads name-only env-file entries from its client environment.
+    // Keeping the value out of the line-based file also preserves newlines.
+    await writeFile(envFile, "POSTGRES_PASSWORD\n", { mode: 0o600, flag: "wx" });
+    const code = await dockerInherit([
+      "service", "create", "--detach", "--name", STORE_SERVICE,
+      "--constraint", "node.role==manager",
+      "--network", "dokploy-network",
+      "--env", "POSTGRES_USER=switchyard",
+      "--env", "POSTGRES_DB=switchyard",
+      "--env-file", envFile,
+      "--mount", `type=volume,source=${STORE_VOLUME},target=/var/lib/postgresql/data`,
+      "postgres:16",
+    ], { env: { ...process.env, POSTGRES_PASSWORD: storePassword } });
+    if (code !== 0) throw new UserError(`Creating ${STORE_SERVICE} failed.`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 export const dockerDesktopPlatform: PlatformModule = {

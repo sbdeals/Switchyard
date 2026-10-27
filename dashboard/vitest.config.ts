@@ -1,9 +1,12 @@
 import { fileURLToPath } from "node:url";
+import { configDefaults, defineConfig } from "vitest/config";
 
-const config = {
+export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
-};
-
-export default config;
+  test: {
+    environment: "node",
+    exclude: [...configDefaults.exclude, ".next/**"],
+  },
+});
