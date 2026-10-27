@@ -243,6 +243,7 @@ export interface ServiceRef {
 /**
  * Enumerate every service across the workspace, enriched with per-service
  * detail (an N+1 fan-out, same as the dashboard's loadWorkspace).
+ * Includes raw env for manage_env; discovery responses must project metadata only.
  */
 export async function listServices(): Promise<ServiceSummary[]> {
   const tree = await rawTree();
