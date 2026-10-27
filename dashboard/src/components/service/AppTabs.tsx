@@ -1247,7 +1247,6 @@ export function AppDeployTab({ app }: { app: Application }) {
 }
 
 export function AppSettingsTab({ app, onClose }: { app: Application; onClose: () => void }) {
-  const { pending: lifePending, error: lifeError, run } = useAppLifecycle(app);
   const [name, setName] = useState(app.name);
   const [cpu, setCpu] = useState(app.cpuLimit ?? "");
   const [mem, setMem] = useState(app.memoryLimit ?? "");
@@ -1311,11 +1310,9 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
       <Info label="App name" value={app.appName} mono />
 
       <DangerZone
-        name={app.name}
+        service={app}
         message="Destroying removes the application and its container."
-        pending={lifePending}
-        error={lifeError}
-        onDestroy={() => run("remove", onClose)}
+        onDeleted={onClose}
       />
     </div>
   );

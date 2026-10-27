@@ -274,7 +274,6 @@ export function ComposeSettingsTab({
   compose: ComposeService;
   onClose: () => void;
 }) {
-  const { pending, error, run } = useComposeLifecycle(compose);
   return (
     <div className="space-y-5">
       <Info label="App name" value={compose.appName} mono />
@@ -283,11 +282,9 @@ export function ComposeSettingsTab({
         value={compose.createdAt ? new Date(compose.createdAt).toLocaleString() : "—"}
       />
       <DangerZone
-        name={compose.name}
+        service={compose}
         message="Destroying removes the stack and all its containers."
-        pending={pending}
-        error={error}
-        onDestroy={() => run("remove", onClose)}
+        onDeleted={onClose}
       />
     </div>
   );
