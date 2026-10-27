@@ -16,14 +16,12 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  id-token: write # npm --provenance
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Tag must match cli/package.json and desktop/package.json versions
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -49,7 +47,7 @@ jobs:
     needs: check
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # create the draft release
     steps:
       - name: Create draft release for the tag (skip if one already exists)
         env:
@@ -69,23 +67,26 @@ jobs:
   image:
     needs: check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push the dashboard image to GHCR
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/switchyard
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=latest
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: dashboard
           push: true
@@ -98,9 +99,12 @@ jobs:
   npm:
     needs: image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm --provenance
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
@@ -133,15 +137,16 @@ jobs:
   desktop:
     needs: [image, release]
     permissions:
-      contents: write
+      actions: read # SignPath reads job details and the unsigned artifact
+      contents: write # upload desktop installers and update metadata
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - run: npm ci
@@ -223,7 +228,7 @@ jobs:
             # NuGet provider install first avoids the runner's interactive
             # prompt (electron-builder#8828).
             Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
-            Install-Module -Name TrustedSigning -Force -Scope CurrentUser -Repository PSGallery
+            Install-Module -Name TrustedSigning -RequiredVersion 0.5.8 -Force -Scope CurrentUser -Repository PSGallery
             @(
               "AZURE_TENANT_ID=$env:S_AZURE_TENANT_ID"
               "AZURE_CLIENT_ID=$env:S_AZURE_CLIENT_ID"
@@ -258,14 +263,14 @@ jobs:
       - name: Upload unsigned installer for SignPath
         if: matrix.os == 'windows-latest' && env.SIGNPATH_ACTIVE == 'true'
         id: unsigned
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: win-unsigned-installer
           path: desktop/release/Switchyard-Setup-*.exe
           if-no-files-found: error
       - name: Sign the installer via SignPath
         if: matrix.os == 'windows-latest' && env.SIGNPATH_ACTIVE == 'true'
-        uses: signpath/github-action-submit-signing-request@v1.2
+        uses: signpath/github-action-submit-signing-request@4f13d373e8f0cd8d3c0465ff4877feff27aed2ae # v1.2 (same version as before; bump separately)
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
@@ -320,7 +325,7 @@ jobs:
     if: ${{ !cancelled() && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # update release assets/notes and publish the draft
     steps:
       - name: Locate the tag's release and verify required assets
         id: locate
@@ -423,7 +428,7 @@ jobs:
 
           The builds aren't code-signed yet (signing is planned):
 
-          - **Windows:** SmartScreen may warn → **More info** → **Run anyway**.
+          - **Windows:** SmartScreen may warn → **More info** → **Run anyway**. (Or skip the warning entirely by installing from a terminal instead: \`winget install sbdeals.Switchyard\`.)
           - **macOS 15 and later:** open the app once (it gets blocked), then **System Settings → Privacy & Security** → scroll down → **Open Anyway**.
           - **macOS 14 and earlier:** right-click the app → **Open** → **Open**.
           - **Intel Macs:** no installer yet — use \`npx switchyard-cli up\` in Terminal.
@@ -456,3 +461,31 @@ jobs:
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
             -f tag_name="$GITHUB_REF_NAME" -F draft=false -f make_latest=true >/dev/null
           echo "published release $GITHUB_REF_NAME (id $RELEASE_ID) as Latest"
+
+  # Bump the winget manifest so `winget install sbdeals.Switchyard` serves this
+  # release. winget-fetched installers carry no browser mark-of-the-web, so
+  # users see no SmartScreen "Windows protected your PC" dialog — signed or
+  # not. Opt-in like the signing legs: without the WINGET_TOKEN secret
+  # (classic PAT, public_repo scope) the job logs a skip and exits green.
+  # wingetcreate submits the version-bump PR to microsoft/winget-pkgs from the
+  # token owner's fork; the package must already exist there — the one-time
+  # bootstrap submission is documented in desktop/README.md. Runs after
+  # `publish` because winget-pkgs validation downloads the installer URL,
+  # which 404s while the release is still a draft.
+  winget:
+    needs: publish
+    runs-on: windows-latest
+    steps:
+      - name: Submit manifest update to winget-pkgs (skips without WINGET_TOKEN)
+        shell: pwsh
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if (-not $env:WINGET_TOKEN) {
+            Write-Host "WINGET_TOKEN not set - skipping winget submission"
+            exit 0
+          }
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME/Switchyard-Setup-$version.exe"
+          Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          .\wingetcreate.exe update sbdeals.Switchyard --version $version --urls $url --submit --token $env:WINGET_TOKEN
