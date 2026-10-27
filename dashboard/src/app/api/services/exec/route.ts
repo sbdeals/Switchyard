@@ -1,5 +1,6 @@
 import { runExec } from "@/lib/docker";
 import { knownAppNames } from "@/lib/dokploy";
+import { runConsoleCommand } from "@/lib/console-exec";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,14 +41,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runExec(app, command);
+    const result = await runConsoleCommand(command, (argv) => runExec(app, argv));
     if (!result) {
       return Response.json({ error: "container is not running" }, { status: 409 });
     }
     return Response.json(result);
   } catch (e) {
-    // e.g. the image has no shell: the OCI runtime rejects the exec at start.
-    // Surface it as stderr so the terminal shows the reason instead of a 500.
+    // Preserve other Docker errors in the transcript instead of returning a 500.
     const message = e instanceof Error ? e.message : String(e);
     return Response.json({ stdout: "", stderr: message, exitCode: null, truncated: false });
   }

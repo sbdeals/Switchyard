@@ -36,6 +36,7 @@ import { serviceDeleteImpact } from "@/lib/delete-impact";
 import { StatusBadge } from "@/components/StatusBadge";
 import { resolveServiceAction } from "@/lib/service-meta";
 import { cn } from "@/lib/utils";
+import { preferredPublicDomain } from "@/lib/domain-https";
 
 export const inputCls =
   "min-w-0 w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50";
@@ -235,8 +236,7 @@ export function RemoveBtn({
 // --- networking blocks ----------------------------------------------------------
 
 /**
- * Railway-style Overview header: the primary public URL (first https domain,
- * else first domain) as a clickable link, plus the health badge. Shared by
+ * Overview header: prefer usable HTTPS, then HTTP, with the health badge. Shared by
  * applications and compose (both carry `domains`).
  */
 export function PublicUrlBar({
@@ -248,7 +248,7 @@ export function PublicUrlBar({
   status: ServiceStatus;
   runtime?: ServiceRuntime;
 }) {
-  const primary = domains.find((d) => d.https) ?? domains[0];
+  const primary = preferredPublicDomain(domains);
   const url = primary ? `${primary.https ? "https" : "http"}://${primary.host}` : null;
   return (
     <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3.5">
