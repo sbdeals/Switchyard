@@ -38,6 +38,7 @@ import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { ImageUpdatePanel } from "@/components/service/ImageUpdatePanel";
 import { CopyLinkButton } from "@/components/service/CopyLinkButton";
 import { ConnectTab } from "@/components/service/ConnectTab";
 import {
@@ -71,6 +72,8 @@ import {
 import { cn } from "@/lib/utils";
 import { ResourceSettings } from "@/components/service/ResourceSettings";
 import { resourceInputs } from "@/lib/resource-limits";
+import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
+import { DiagnosisCard } from "@/components/service/DiagnosisCard";
 import { getServiceTabs, type TabId } from "@/lib/deeplink";
 
 const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
@@ -281,6 +284,13 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
   const tabs = service ? getServiceTabs(service) : [];
+  const latestDeployment = service && service.kind !== "database"
+    ? [...service.deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    : undefined;
+  function openDiagnosisTab(target: DiagnosisTab) {
+    onTabChange(target);
+    document.getElementById(`drawer-tab-${target}`)?.focus();
+  }
 
   return (
     <AnimatePresence>
@@ -362,6 +372,16 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
               tabIndex={0}
               className="flex-1 overflow-auto p-5"
             >
+              {tab === "overview" && service.kind !== "database" && latestDeployment?.status === "error" && (
+                <div className="mb-5">
+                  <DiagnosisCard
+                    key={latestDeployment.deploymentId}
+                    deploymentId={latestDeployment.deploymentId}
+                    serviceKind={service.kind}
+                    onNavigate={openDiagnosisTab}
+                  />
+                </div>
+              )}
               {tab === "overview" &&
                 (service.kind === "database" ? (
                   <OverviewTab db={service} />
@@ -370,6 +390,14 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
+              {tab === "overview" && (service.kind !== "application" || service.sourceType === "docker") && (
+                <ImageUpdatePanel
+                  key={`${service.kind}:${service.id}:${service.dockerImage}`}
+                  kind={service.kind}
+                  id={service.id}
+                  image={service.dockerImage}
+                />
+              )}
               {tab === "connect" && service.kind === "database" && <ConnectTab key={service.id} db={service} />}
               {tab === "variables" && <VariablesTab key={`${service.kind}:${service.id}`} service={service} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
@@ -382,10 +410,10 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
                 <ComposeDomainsTab compose={service} />
               )}
               {tab === "deployments" && service.kind === "application" && (
-                <DeploymentsTab key={service.id} app={service} />
+                <DeploymentsTab key={service.id} app={service} onNavigate={openDiagnosisTab} />
               )}
               {tab === "deployments" && service.kind === "compose" && (
-                <DeploymentHistory deployments={service.deployments} />
+                <DeploymentHistory deployments={service.deployments} serviceKind="compose" onNavigate={openDiagnosisTab} />
               )}
               {tab === "schedules" && service.kind === "application" && (
                 <SchedulesTab app={service} />

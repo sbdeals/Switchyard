@@ -116,6 +116,7 @@ import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
 import { updateResourceSettings } from "@/lib/resource-settings";
 import type { ResourceInputs } from "@/lib/resource-limits";
+import { parseAppPort } from "@/lib/app-port";
 import { validateMount } from "@/lib/mounts";
 import { preserveUrlCredentials } from "@/lib/url-credentials";
 import { redactErrorMessage } from "@/lib/error-redaction";
@@ -354,11 +355,13 @@ export async function removeEnvironmentAction(id: string): Promise<ActionResult>
 export async function quickDeployImageAction(
   image: string,
   name?: string,
-  environmentId?: string
+  environmentId?: string,
+  port?: string
 ): Promise<QuickDeployResult> {
   return wrapId(async () => {
     const trimmed = image.trim();
     if (!trimmed) throw new Error("Image is required.");
+    const explicitPort = parseAppPort(port);
     // Derive a friendly name from the image (e.g. "nginx:alpine" -> "nginx").
     const derived = trimmed.split("/").pop()!.split(":")[0];
     const id = await createApplication(
@@ -367,7 +370,7 @@ export async function quickDeployImageAction(
     );
     await setAppDockerSource(id, trimmed);
     await applicationAction(id, "deploy");
-    await mintAutoDomain(id);
+    await mintAutoDomain(id, explicitPort);
     return id;
   });
 }
@@ -399,9 +402,9 @@ export async function quickDeployRepoAction(
  * Linux/Traefik path — see `ensureAutoDomain`). Never fails the deploy over
  * domain creation; the user can always add one in the Domains tab.
  */
-async function mintAutoDomain(applicationId: string): Promise<void> {
+async function mintAutoDomain(applicationId: string, port?: number): Promise<void> {
   try {
-    await ensureAutoDomain(applicationId);
+    await ensureAutoDomain(applicationId, port);
   } catch {
     /* leave the app domain-less rather than failing the deploy */
   }
