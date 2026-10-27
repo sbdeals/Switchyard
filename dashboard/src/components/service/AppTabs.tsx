@@ -35,7 +35,6 @@ import type {
   Schedule,
 } from "@/lib/dokploy";
 import {
-  appLifecycleAction,
   updateApplicationAction,
   saveAppBuildTypeAction,
   setAppDockerSourceAction,
@@ -59,18 +58,16 @@ import {
   inputCls,
   Field,
   Info,
-  CopyButton,
-  LifecycleButtons,
   SaveRow,
   DangerZone,
   PublicUrlBar,
   PrivateNetwork,
   GenerateUrlBtn,
-  useLifecycle,
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
 import { AppDeployControls } from "@/components/service/AppDeployControls";
+import { ImageTagPicker } from "@/components/service/ImageTagPicker";
 import { DomainStatus } from "@/components/service/DomainStatus";
 import { ComposeExportButton } from "@/components/service/ComposeExportDialog";
 import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
@@ -95,9 +92,6 @@ const BUILD_TYPE_LABELS: Record<BuildType, string> = {
 const BUILD_TYPES = Object.keys(BUILD_TYPE_LABELS) as BuildType[];
 
 const CERT_TYPES: CertificateType[] = ["none", "letsencrypt", "custom"];
-
-const useAppLifecycle = (app: Application) =>
-  useLifecycle((action) => appLifecycleAction(app.id, action));
 
 export function AppOverviewTab({ app }: { app: Application }) {
   return (
@@ -440,7 +434,7 @@ function WebhookUrl({ app }: { app: Application }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
+      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-2.5">
         <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
           {url ?? "••••••••••••••••"}
         </code>
@@ -828,14 +822,7 @@ function DockerSourceForm({ app }: { app: Application }) {
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-[var(--color-fg)]">Image &amp; registry</h3>
-      <Field label="Image" hint="repo:tag">
-        <input
-          value={image}
-          onChange={(e) => setImage(e.target.value)}
-          placeholder="registry.example.com/app:latest"
-          className={inputCls}
-        />
-      </Field>
+      <ImageTagPicker image={image} currentImage={app.dockerImage ?? ""} onChange={setImage} />
       <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
         <p className="text-[11px] text-[var(--color-fg-subtle)]">
           Leave username or password blank to keep saved credentials. Clear credentials for public images.
