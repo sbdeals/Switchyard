@@ -1,3 +1,5 @@
+import { safeNextPath } from "./deeplink";
+
 /** Shared contract between the proxy and client-side action callers. */
 export const SESSION_EXPIRED_MESSAGE = "Your session expired. Sign in again.";
 
@@ -29,17 +31,12 @@ export async function callAction<T>(
   }
 }
 
-/** Only allow local return paths, including their query and fragment. */
+/** Compatibility name for callers of the original recovery helper. */
 export function safeReturnTo(value: unknown): string {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) return "/";
-  if (/[\\\u0000-\u0020\u007f]/.test(value)) return "/";
-  const url = new URL(value, "http://localhost");
-  // Dot segments can normalize a seemingly local path into //another-host.
-  if (url.pathname.startsWith("//")) return "/";
-  if (url.pathname.replace(/\/+$/, "") === "/login") return "/";
-  return url.pathname + url.search + url.hash;
+  return safeNextPath(value);
 }
 
-export function signInHref(returnTo: string): string {
-  return `/login?next=${encodeURIComponent(safeReturnTo(returnTo))}`;
+export function signInHref(nextPath: string): string {
+  // Clear a locally valid but upstream-revoked cookie using main's expiry flow.
+  return `/api/session/expired?next=${encodeURIComponent(safeNextPath(nextPath))}`;
 }

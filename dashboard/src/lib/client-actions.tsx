@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import * as serverActions from "@/app/actions";
+import { getDatabaseConnectionAction as serverGetDatabaseConnectionAction } from "@/app/db-connect-actions";
 import { logoutAction as serverLogoutAction } from "@/app/login/actions";
 import { callAction, SESSION_EXPIRED_MESSAGE, signInHref } from "@/lib/action-call";
 import { useDialogFocus } from "@/components/use-focus-trap";
@@ -120,6 +121,14 @@ export const listMountsAction = guardAction(serverActions.listMountsAction);
 export const createMountAction = guardAction(serverActions.createMountAction);
 export const updateMountAction = guardAction(serverActions.updateMountAction);
 export const removeMountAction = guardAction(serverActions.removeMountAction);
+
+export const loadServiceEnvAction = guardAction(serverActions.loadServiceEnvAction);
+export const loadServiceWebhookAction = guardAction(serverActions.loadServiceWebhookAction);
+export const loadComposeFileAction = guardAction(serverActions.loadComposeFileAction);
+export const loadServiceCommandsAction = guardAction(serverActions.loadServiceCommandsAction);
+export const updateRedirectAction = guardAction(serverActions.updateRedirectAction);
+export const updateSecurityAction = guardAction(serverActions.updateSecurityAction);
+export const getDatabaseConnectionAction = guardAction(serverGetDatabaseConnectionAction);
 
 /** Sign-out always leaves the workspace, even if the session is already gone. */
 export async function logoutAction(): Promise<void> {

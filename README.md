@@ -42,6 +42,13 @@ everything.
    Prefer browsing the [release page](https://github.com/sbdeals/Switchyard/releases/latest)?
    Its notes open with a "which file do I download" table — everything else
    under Assets is auto-updater plumbing you can ignore.
+
+   On Windows you can skip the download **and** the SmartScreen warning in
+   one move by installing from a terminal instead:
+
+   ```powershell
+   winget install sbdeals.Switchyard
+   ```
 2. **Run it.** The build isn't code-signed yet, so both OSes will warn you the
    first time:
    - **Windows:** SmartScreen may warn; click **More info → Run anyway**.
@@ -74,14 +81,19 @@ stack, reset everything, launch at login (on by default, so it's always warm),
 and auto-update. Closing the window keeps everything running; "Quit" does too.
 Your apps only stop if you ask for **Stop stack**.
 
-> **Docker Desktop VM resets:** Docker Desktop runs everything in a Linux VM
-> whose root filesystem — including Dokploy's `/etc/dokploy` config tree — is
-> rebuilt when the VM is recreated (Docker Desktop updates, "Reset to factory
-> defaults", some restarts). Your containers, images, and **named volumes
-> always survive**. Switchyard self-heals the rest: the next launch (or
-> `switchyard up`) detects stacks the reset broke and redeploys them, and
-> templates deployed from the dashboard keep database data in named volumes so
-> a reset can't take data with it.
+> **Docker Desktop VM resets:** named volumes survive container recreation,
+> Switchyard/Dokploy upgrades, and Docker Desktop restarts. VM disk recreation
+> preserves them only if Docker keeps the volume data. If the VM's
+> `/etc/dokploy` config tree is lost but Dokploy's database and volumes survive,
+> the next launch (or `switchyard up`) can redeploy affected stacks.
+> Dashboard templates use named volumes for recognized database data binds.
+>
+> **Named-volume persistence is not a backup.** Docker Desktop's "Reset to
+> factory defaults", "Clean / Purge data", and uninstalling Docker Desktop
+> delete containers, images, and volumes; Switchyard cannot restore deleted
+> data. Back up first using
+> [Docker's backup/restore guide](https://docs.docker.com/desktop/settings-and-maintenance/backup-and-restore/)
+> and [Dokploy database backups](https://docs.dokploy.com/docs/core/databases/backups).
 
 Source lives in [`desktop/`](desktop/). It drives the exact same converge
 logic as the CLI below, so the app and `switchyard up` can be used
@@ -137,6 +149,11 @@ additionally offers to set up Claude Code:
 Re-running `up` is safe: it converges, and upgrades when a newer version is
 out. Settings are changed *after* setup with
 `switchyard config set <key> <value>`. Full reference: [docs/cli.md](docs/cli.md).
+
+Deploy a local directory with `switchyard deploy` (the Railway `up`
+equivalent), or `switchyard deploy ./my-app --service web --project demos`.
+Add `--detach` to return after queuing. `switchyard up` still starts the
+platform. See [deploy options and build requirements](docs/cli.md#deploy-a-directory).
 
 > The npm package is **`switchyard-cli`** (the bare npm name `switchyard` is an
 > unrelated squatted package; don't `npx switchyard`).
@@ -203,6 +220,7 @@ Claude Code here), `make doctor` (check prerequisites).
 | [Architecture](docs/architecture.md) | The BFF design, data model, SSE logs/metrics, canvas internals |
 | [Launch tooling](docs/launch-tooling.md) | Every make target and script, and why they exist |
 | [Troubleshooting](docs/troubleshooting.md) | Symptom → cause → fix, for both platforms |
+| [Licensing notes](docs/licensing-notes.md) | How Switchyard relates to Dokploy's dual license, and what to re-check on Dokploy upgrades |
 
 ## Repo layout
 

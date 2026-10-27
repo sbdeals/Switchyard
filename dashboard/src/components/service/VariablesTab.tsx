@@ -1,21 +1,46 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useReducer, useState, useTransition } from "react";
 import type { Service } from "@/lib/dokploy";
+import { initialVariablesEditorState, variablesEditorReducer } from "@/lib/variables-editor";
 import {
+  loadServiceEnvAction,
   saveEnvironmentAction,
   saveApplicationEnvAction,
   saveComposeEnvAction,
 } from "@/lib/client-actions";
 import { SaveRow, useSavedFlash } from "@/components/service/primitives";
+import { useDirtyGuard } from "@/components/DirtyGuard";
 
 export function VariablesTab({ service }: { service: Service }) {
-  const [value, setValue] = useState(service.env ?? "");
+  const serviceType = service.kind === "database" ? service.engine : service.kind;
+  const [{ value, baseline, loadError }, dispatch] = useReducer(
+    variablesEditorReducer,
+    initialVariablesEditorState,
+  );
   const [pending, start] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
 
-  const dirty = value !== (service.env ?? "");
+  useEffect(() => {
+    let live = true;
+    loadServiceEnvAction(serviceType, service.id).then((res) => {
+      if (!live) return;
+      if (res.ok) {
+        dispatch({ type: "loaded", env: res.env });
+      } else {
+        dispatch({ type: "failed", error: res.error });
+      }
+    }).catch(() => {
+      if (live) dispatch({ type: "failed", error: "Could not load environment variables." });
+    });
+    return () => {
+      live = false;
+    };
+  }, [serviceType, service.id]);
+
+  const dirty = baseline !== null && loadError === null && value !== baseline;
+  useDirtyGuard("Variables", dirty);
   const count = value.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).length;
 
   function save() {
@@ -27,9 +52,27 @@ export function VariablesTab({ service }: { service: Service }) {
           : service.kind === "compose"
             ? await saveComposeEnvAction(service.id, value)
             : await saveApplicationEnvAction(service.id, value);
-      if (res.ok) flashSaved();
+      if (res.ok) {
+        dispatch({ type: "saved", submittedValue: value });
+        flashSaved();
+      }
       else setError(res.error);
     });
+  }
+
+  if (loadError) {
+    return <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>;
+  }
+
+  if (baseline === null) {
+    return (
+      <div role="status" aria-label="Loading environment variables" className="space-y-3 animate-pulse">
+        <span className="sr-only">Loading environment variables…</span>
+        <div className="h-4 w-3/4 rounded bg-[var(--color-surface-hover)]" />
+        <div className="h-64 rounded-lg bg-[var(--color-surface-hover)]" />
+        <div className="h-8 w-28 rounded bg-[var(--color-surface-hover)]" />
+      </div>
+    );
   }
 
   return (
@@ -40,7 +83,7 @@ export function VariablesTab({ service }: { service: Service }) {
       </p>
       <textarea
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => dispatch({ type: "edited", value: e.target.value })}
         spellCheck={false}
         placeholder={"DATABASE_URL=postgres://…\nLOG_LEVEL=info"}
         aria-label="Environment variables, one KEY=value per line"

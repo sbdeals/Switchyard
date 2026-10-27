@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { safeNextPath } from "@/lib/deeplink";
 import { SESSION_COOKIE, openSession } from "@/lib/session";
-import { safeReturnTo } from "@/lib/action-call";
 import { LoginForm } from "./LoginForm";
 
 // Reads the session cookie, so it must render per request.
@@ -14,15 +14,13 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string | string[]; expired?: string | string[] }>;
 }) {
   const params = await searchParams;
-  const next = safeReturnTo(params.next);
-  // Dokploy rejected the session upstream: show the form even though the sealed
-  // cookie still opens locally, otherwise / and /login redirect to each other.
-  const expired = params.expired !== undefined;
+  const nextPath = safeNextPath(params.next);
   // Already signed in? Skip the form.
   const store = await cookies();
-  if (!expired && openSession(store.get(SESSION_COOKIE)?.value)) {
-    redirect(next);
+  if (openSession(store.get(SESSION_COOKIE)?.value)) {
+    redirect(nextPath);
   }
+  const expired = params.expired === "1";
 
   return (
     <main className="flex min-h-full items-center justify-center px-6 py-16">
@@ -43,7 +41,7 @@ export default async function LoginPage({
             {expired ? "Your session expired. Sign in again." : "Use your Dokploy account."}
           </p>
         </div>
-        <LoginForm next={next} />
+        <LoginForm nextPath={nextPath} />
       </div>
     </main>
   );

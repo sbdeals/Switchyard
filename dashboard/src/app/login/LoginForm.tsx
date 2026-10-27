@@ -9,7 +9,7 @@ const initialState: LoginState = {};
 const inputClass =
   "rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50";
 
-export function LoginForm({ next }: { next: string }) {
+export function LoginForm({ nextPath }: { nextPath: string }) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const signup = mode === "signup";
 
@@ -21,7 +21,7 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <form action={signup ? signupFormAction : loginFormAction} className="flex flex-col gap-3">
-      <input type="hidden" name="next" value={next} />
+      <input type="hidden" name="next" value={nextPath} />
       {signup ? (
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-[var(--color-fg-muted)]">Name</span>

@@ -15,7 +15,9 @@
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { SESSION_EXPIRED_MESSAGE, signInHref } from "@/lib/action-call";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/action-call";
+
+import { safeNextPath } from "@/lib/deeplink";
 
 // Mirror of SESSION_COOKIE in src/lib/session.ts (kept a literal so the proxy
 // bundle stays free of node:crypto).
@@ -25,11 +27,12 @@ const SESSION_COOKIE = "switchyard_session";
  * Paths reachable without a session:
  *  - /login          the sign-in page AND its Server Action POST target
  *  - /api/health     the installer's liveness/deep probe (shallow + ?deep=1)
+ *  - /api/session/expired clears stale sessions before returning to /login
  * Next static assets are excluded by the matcher below, so the login page can
  * load its CSS/JS while unauthenticated.
  */
 function isPublic(pathname: string): boolean {
-  return pathname === "/login" || pathname === "/api/health";
+  return pathname === "/login" || pathname === "/api/health" || pathname === "/api/session/expired";
 }
 
 export function authDecision(
@@ -42,6 +45,7 @@ export function authDecision(
   // A Next-Action header must never bypass authentication on an API route.
   if (pathname === "/api" || pathname.startsWith("/api/")) return "unauthorized";
   if (method === "POST" && hasActionHeader) return "expired-action";
+  if (hasActionHeader) return "unauthorized";
   return "login";
 }
 
@@ -73,7 +77,8 @@ export function proxy(request: NextRequest): NextResponse {
     );
   }
 
-  const loginUrl = new URL(signInHref(pathname + request.nextUrl.search), request.url);
+  const loginUrl = new URL("/login", request.url);
+  loginUrl.searchParams.set("next", safeNextPath(pathname + request.nextUrl.search));
   return NextResponse.redirect(loginUrl);
 }
 
