@@ -19,11 +19,12 @@
  */
 import "server-only";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
+import { formatBackupError, validateS3Endpoint } from "./backup-errors";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
@@ -381,6 +382,32 @@ type ReqInit = { method?: "GET" | "POST"; body?: unknown };
  * logic. Prefer the typed helpers where they exist.
  */
 export async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
+  if (!/^(destination|backup)\./.test(path)) return requestDokploy<T>(path, init);
+  const input = init.body && typeof init.body === "object" ? init.body : {};
+  if (/^destination\.(testConnection|create|update)(?:\?|$)/.test(path)) {
+    const error = validateS3Endpoint("endpoint" in input ? input.endpoint : undefined);
+    if (error) throw new Error(error);
+  }
+  return withBackupErrors(() => requestDokploy<T>(path, init), input);
+}
+
+async function withBackupErrors<T>(
+  fn: () => Promise<T>,
+  input: Parameters<typeof formatBackupError>[1] = {}
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    unstable_rethrow(e);
+    // Do not retain the original error as a cause: it may contain credentials.
+    // JSON.parse errors can quote a truncated credential that no longer matches
+    // its literal value, so don't forward the parser's response excerpt either.
+    const error = e instanceof SyntaxError ? "Dokploy returned an invalid JSON response." : e;
+    throw new Error(formatBackupError(error, input));
+  }
+}
+
+async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
   const cookie = await userCookie();
   let res: Response;
   try {
@@ -416,7 +443,10 @@ export async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
   if (res.status === 401) redirect("/login");
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Dokploy ${path} failed (${res.status}): ${body.slice(0, 300)}`);
+    // Backup errors are sanitized and summarized by withBackupErrors first;
+    // truncating here could expose a partial secret or discard rclone's cause.
+    const detail = /^(destination|backup)\./.test(path) ? body : body.slice(0, 300);
+    throw new Error(`Dokploy ${path} failed (${res.status}): ${detail}`);
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : null) as T;
@@ -2152,6 +2182,10 @@ export interface RestoreBackupInput {
  * transport is rejected, a `ws` client against `/drawer-logs` is the fallback.
  */
 export async function restoreBackup(input: RestoreBackupInput): Promise<void> {
+  return withBackupErrors(() => restoreBackupWithLogs(input));
+}
+
+async function restoreBackupWithLogs(input: RestoreBackupInput): Promise<void> {
   const payload = {
     databaseId: input.databaseId,
     databaseType: input.engine,
@@ -2173,12 +2207,12 @@ export async function restoreBackup(input: RestoreBackupInput): Promise<void> {
   if (res.status === 401) redirect("/login");
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Dokploy restore failed (${res.status}): ${body.slice(0, 300)}`);
+    throw new Error(`Dokploy restore failed (${res.status}): ${body}`);
   }
   // Drain the stream to EOF — the subscription closes when the restore finishes.
   const text = await res.text();
   const err = text.match(/Error:\s*([^"\\\n]+)/);
-  if (err) throw new Error(err[1].trim().slice(0, 300));
+  if (err) throw new Error(text);
 }
 
 // --- templates (one-click catalog) ------------------------------------------
