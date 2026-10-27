@@ -6,7 +6,6 @@ import { useDialogFocus } from "@/components/use-focus-trap";
 import { DirtyGuardScope } from "@/components/DirtyGuard";
 import {
   X,
-  Database as DatabaseIcon,
   Rocket,
   Cpu,
   ScrollText,
@@ -14,9 +13,7 @@ import {
   SlidersHorizontal,
   KeyRound,
   Plug,
-  Box,
   Globe,
-  Layers,
   FileCode,
   Archive,
   Hammer,
@@ -30,6 +27,8 @@ import {
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
+import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
+import { ServiceLogo } from "@/components/canvas/ServiceNode";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
@@ -40,6 +39,7 @@ import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { ImageUpdatePanel } from "@/components/service/ImageUpdatePanel";
 import { CopyLinkButton } from "@/components/service/CopyLinkButton";
 import { ConnectTab } from "@/components/service/ConnectTab";
 import {
@@ -51,6 +51,8 @@ import {
   DeploymentHistory,
   SchedulesTab,
 } from "@/components/service/AppTabs";
+import { PortConflictWarning, type PortConflictProps } from "@/components/service/PortConflictWarning";
+import { getPortWarnings, isValidPort } from "@/lib/port-conflicts";
 import { AppHttpSettings, NetworkingTab } from "@/components/service/networking";
 import {
   ComposeOverviewTab,
@@ -69,6 +71,8 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
+import { DiagnosisCard } from "@/components/service/DiagnosisCard";
 import { getServiceTabs, type TabId } from "@/lib/deeplink";
 
 const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
@@ -82,7 +86,7 @@ const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   deployments: { label: "Deploys", icon: <Rocket className="size-4" /> },
   schedules: { label: "Schedules", icon: <Clock className="size-4" /> },
   editor: { label: "Compose", icon: <FileCode className="size-4" /> },
-  volumes: { label: "Volumes", icon: <HardDrive className="size-4" /> },
+  volumes: { label: "Volumes & mounts", icon: <HardDrive className="size-4" /> },
   metrics: { label: "Metrics", icon: <Cpu className="size-4" /> },
   logs: { label: "Logs", icon: <ScrollText className="size-4" /> },
   console: { label: "Console", icon: <TerminalSquare className="size-4" /> },
@@ -268,7 +272,7 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, tab, sessionKey, onTabChange, onClose, onDuplicate }: {
+export function ServiceDrawer({ service, services, onSelectService, tab, sessionKey, onTabChange, onClose, onDuplicate }: PortConflictProps & {
   service: Service | null;
   tab: TabId;
   sessionKey: string | null;
@@ -280,6 +284,13 @@ export function ServiceDrawer({ service, tab, sessionKey, onTabChange, onClose, 
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
   const tabs = service ? getServiceTabs(service) : [];
+  const latestDeployment = service && service.kind !== "database"
+    ? [...service.deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    : undefined;
+  function openDiagnosisTab(target: DiagnosisTab) {
+    onTabChange(target);
+    document.getElementById(`drawer-tab-${target}`)?.focus();
+  }
 
   return (
     <AnimatePresence>
@@ -361,6 +372,16 @@ export function ServiceDrawer({ service, tab, sessionKey, onTabChange, onClose, 
               tabIndex={0}
               className="flex-1 overflow-auto p-5"
             >
+              {tab === "overview" && service.kind !== "database" && latestDeployment?.status === "error" && (
+                <div className="mb-5">
+                  <DiagnosisCard
+                    key={latestDeployment.deploymentId}
+                    deploymentId={latestDeployment.deploymentId}
+                    serviceKind={service.kind}
+                    onNavigate={openDiagnosisTab}
+                  />
+                </div>
+              )}
               {tab === "overview" &&
                 (service.kind === "database" ? (
                   <OverviewTab db={service} />
@@ -369,28 +390,36 @@ export function ServiceDrawer({ service, tab, sessionKey, onTabChange, onClose, 
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
+              {tab === "overview" && (service.kind !== "application" || service.sourceType === "docker") && (
+                <ImageUpdatePanel
+                  key={`${service.kind}:${service.id}:${service.dockerImage}`}
+                  kind={service.kind}
+                  id={service.id}
+                  image={service.dockerImage}
+                />
+              )}
               {tab === "connect" && service.kind === "database" && <ConnectTab key={service.id} db={service} />}
               {tab === "variables" && <VariablesTab key={`${service.kind}:${service.id}`} service={service} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
               {tab === "deploy" && service.kind === "application" && <AppDeployTab key={service.id} app={service} />}
               {tab === "build" && service.kind === "application" && <AppBuildTab key={service.id} app={service} />}
               {tab === "domains" && service.kind === "application" && (
-                <NetworkingTab app={service} />
+                <NetworkingTab app={service} services={services} onSelectService={onSelectService} />
               )}
               {tab === "domains" && service.kind === "compose" && (
                 <ComposeDomainsTab compose={service} />
               )}
               {tab === "deployments" && service.kind === "application" && (
-                <DeploymentsTab key={service.id} app={service} />
+                <DeploymentsTab key={service.id} app={service} onNavigate={openDiagnosisTab} />
               )}
               {tab === "deployments" && service.kind === "compose" && (
-                <DeploymentHistory deployments={service.deployments} />
+                <DeploymentHistory deployments={service.deployments} serviceKind="compose" onNavigate={openDiagnosisTab} />
               )}
               {tab === "schedules" && service.kind === "application" && (
                 <SchedulesTab app={service} />
               )}
               {tab === "editor" && service.kind === "compose" && (
-                <ComposeEditorTab key={service.id} compose={service} />
+                <ComposeEditorTab key={service.id} compose={service} services={services} onSelectService={onSelectService} />
               )}
               {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
@@ -399,7 +428,7 @@ export function ServiceDrawer({ service, tab, sessionKey, onTabChange, onClose, 
               {tab === "backups" && service.kind === "database" && <BackupsTab db={service} />}
               {tab === "settings" &&
                 (service.kind === "database" ? (
-                  <SettingsTab db={service} onClose={onClose} />
+                  <SettingsTab db={service} services={services} onSelectService={onSelectService} onClose={onClose} />
                 ) : service.kind === "compose" ? (
                   <ComposeSettingsTab compose={service} onClose={onClose} />
                 ) : (
@@ -429,16 +458,17 @@ function Header({
   titleId: string;
 }) {
   const accent = serviceAccent(service);
-  const Icon = service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
+  const logos = useTemplateLogos();
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
       <div className="flex items-center gap-3">
-        <div
-          className="flex size-11 items-center justify-center rounded-xl"
-          style={{ backgroundColor: `${accent}1a`, color: accent }}
-        >
-          <Icon className="size-5.5" />
-        </div>
+        <ServiceLogo
+          service={service}
+          logo={resolveServiceLogo(service, logos)}
+          accent={accent}
+          size="size-11"
+          rounded="rounded-xl"
+        />
         <div>
           <div className="flex items-center gap-2">
             <h2 id={titleId} className="font-semibold">
@@ -508,7 +538,7 @@ function OverviewTab({ db }: { db: Database }) {
   );
 }
 
-function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
+function SettingsTab({ db, services, onSelectService, onClose }: PortConflictProps & { db: Database; onClose: () => void }) {
   const { pending: lifePending, error: lifeError, run } = useDbLifecycle(db);
   const meta = ENGINE_META[db.engine];
   const currentVersion = db.dockerImage?.split(":")[1] ?? meta.versions[0];
@@ -521,20 +551,24 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [saveError, setSaveError] = useState<string | null>(null);
+  const portChanged = port !== (db.externalPort != null ? String(db.externalPort) : "");
+  const validPort = !port || isValidPort(Number(port));
+  const warnings = getPortWarnings(services, db.id, portChanged && port ? [{ port: Number(port), protocol: "tcp" }] : []);
 
   const dirty =
     name !== db.name ||
     version !== currentVersion ||
-    port !== (db.externalPort != null ? String(db.externalPort) : "") ||
+    portChanged ||
     cpu !== (db.cpuLimit ?? "") ||
     mem !== (db.memoryLimit ?? "");
 
   function save() {
+    if (!validPort) return;
     setSaveError(null);
     const patch: DatabasePatch = {};
     if (name !== db.name) patch.name = name.trim();
     if (version !== currentVersion) patch.dockerImage = `${meta.image}:${version}`;
-    if (port !== (db.externalPort != null ? String(db.externalPort) : ""))
+    if (portChanged)
       patch.externalPort = port ? Number(port) : null;
     if (cpu !== (db.cpuLimit ?? "")) patch.cpuLimit = cpu || null;
     if (mem !== (db.memoryLimit ?? "")) patch.memoryLimit = mem || null;
@@ -576,7 +610,9 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
             <input value={mem} onChange={(e) => setMem(e.target.value)} placeholder="unlimited" className={inputCls} />
           </Field>
         </div>
-        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
+        <PortConflictWarning warnings={warnings} onSelectService={onSelectService} />
+        {!validPort && <p role="alert" className="text-xs text-[var(--color-danger)]">Use a port from 1 to 65535, or leave it blank.</p>}
+        <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty || !validPort} onSave={save} label={warnings.length ? "Save anyway" : "Save changes"} />
       </div>
 
       <Info label="App name" value={db.appName} mono />

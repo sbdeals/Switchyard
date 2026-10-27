@@ -2,22 +2,25 @@
 
 import { useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
+import { Activity, Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, ScrollText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
+import { ActivityPanel } from "@/components/ActivityPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { DuplicateServiceDialog } from "@/components/service/DuplicateServiceDialog";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
+import { ProjectLogs } from "@/components/ProjectLogs";
 import { useServiceDeeplink } from "@/components/use-service-deeplink";
 import { DirtyGuardProvider } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
 
-type View = "canvas" | "grid";
+type View = "canvas" | "grid" | "logs";
 
 type WorkspaceProps = {
   services: Service[];
@@ -37,6 +40,7 @@ function WorkspaceContent({
   const [view, setView] = useState<View>("canvas");
   const [duplicateSource, setDuplicateSource] = useState<Service | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const router = useRouter();
   const drawer = useServiceDeeplink(services);
   const { onDeployed } = drawer;
@@ -56,13 +60,16 @@ function WorkspaceContent({
             Apps and databases across your Dokploy projects.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-[var(--color-border-strong)] p-0.5">
             <ViewToggle active={view === "canvas"} onClick={() => setView("canvas")}>
               <Network className="size-3.5" /> Canvas
             </ViewToggle>
             <ViewToggle active={view === "grid"} onClick={() => setView("grid")}>
               <LayoutGrid className="size-3.5" /> Grid
+            </ViewToggle>
+            <ViewToggle active={view === "logs"} onClick={() => setView("logs")}>
+              <ScrollText className="size-3.5" /> Logs
             </ViewToggle>
           </div>
           <button
@@ -72,22 +79,33 @@ function WorkspaceContent({
             <FolderGit2 className="size-3.5" /> Projects
           </button>
           <button
+            onClick={() => setActivityOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+          >
+            <Activity className="size-3.5" /> Activity
+          </button>
+          <button
             onClick={() => router.refresh()}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
           >
             <RefreshCw className="size-3.5" /> Refresh
           </button>
+          <KeyboardShortcuts />
           <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
         </div>
       </header>
 
-      {services.length === 0 ? (
+      {view === "logs" ? (
+        <ProjectLogs projects={projects} />
+      ) : services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
         <PanelErrorBoundary>
           <FlowCanvas
             services={services}
             edges={edges}
+            projects={projects}
+            onDeployed={onDeployed}
             onSelect={(s) => drawer.open(s.id)}
             onDuplicate={setDuplicateSource}
           />
@@ -102,7 +120,7 @@ function WorkspaceContent({
         </motion.div>
       )}
 
-      <ServiceDrawer service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} onDuplicate={setDuplicateSource} />
+      <ServiceDrawer services={services} onSelectService={drawer.open} service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} onDuplicate={setDuplicateSource} />
       {duplicateSource && (
         <DuplicateServiceDialog
           key={`${duplicateSource.kind}:${duplicateSource.id}`}
@@ -123,6 +141,17 @@ function WorkspaceContent({
         </div>
       )}
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
+      {activityOpen && (
+        <ActivityPanel
+          projects={projects}
+          onClose={() => setActivityOpen(false)}
+          onSelect={(entry) => {
+            setActivityOpen(false);
+            drawer.open(entry.serviceId, "deployments");
+            router.refresh();
+          }}
+        />
+      )}
       <AgentPanel />
     </div>
     </MotionConfig>
