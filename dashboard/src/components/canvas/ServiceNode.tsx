@@ -4,6 +4,7 @@ import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { Service } from "@/lib/dokploy";
 import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
+import { SHORTCUTS } from "@/lib/shortcuts";
 import { resolveServiceIcon } from "@/lib/service-icon";
 import { ServiceIcon } from "@/components/ServiceIcon";
 
@@ -26,7 +27,7 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
       aria-label={`${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""} — open details`}
       onClick={() => onSelect(service)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (SHORTCUTS.openService.keys.some((key) => key === e.key)) {
           e.preventDefault();
           onSelect(service);
         }
