@@ -63,6 +63,7 @@ describe("workspace activity deployment fields", () => {
         ...deployment,
         title: "Fix deployment timeout",
         rollbackId: null,
+        commit: null,
       });
       expect(service.deployments[1]).toMatchObject({
         description: null,
