@@ -369,7 +369,7 @@ async function userCookie(): Promise<string> {
   return session.dokployCookie;
 }
 
-type ReqInit = { method?: "GET" | "POST"; body?: unknown };
+type ReqInit = { method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal };
 
 /**
  * User-serving Dokploy request. Threads the per-user cookie via next/headers so
@@ -427,7 +427,9 @@ async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
         cache: "no-store",
         // Bound the call so an unresponsive Dokploy backend can't hang the caller
         // indefinitely (e.g. the agent's tool loop, which awaits each tool inline).
-        signal: AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
+        signal: init.signal
+          ? AbortSignal.any([init.signal, AbortSignal.timeout(DOKPLOY_TIMEOUT_MS)])
+          : AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
       });
       if (await isInvalidOrigin(attempt)) continue;
       workingOrigin = origin;
