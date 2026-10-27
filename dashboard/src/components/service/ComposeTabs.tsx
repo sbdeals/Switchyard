@@ -37,8 +37,8 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   const { pending, error, run } = useComposeLifecycle(compose);
   return (
     <div className="space-y-5">
-      <PublicUrlBar domains={compose.domains} status={compose.status} />
-      <LifecycleButtons status={compose.status} pending={pending} error={error} run={run} />
+      <PublicUrlBar domains={compose.domains} status={compose.status} runtime={compose.runtime} />
+      <LifecycleButtons status={compose.status} runtime={compose.runtime} pending={pending} error={error} run={run} />
       <p className="text-xs text-[var(--color-fg-muted)]">
         A raw <code className="font-mono">docker-compose</code> stack. Edit the file in the Compose
         tab, then deploy.
