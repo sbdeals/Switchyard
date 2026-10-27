@@ -18,6 +18,15 @@ const api = vi.hoisted(() => ({
   composeAction: vi.fn(),
   databaseAction: vi.fn(),
   removeDestination: vi.fn(),
+  // Mirror lib/dokploy's ownership check against the mocked workspace so the
+  // lookup ordering assertions below still apply (plain fn: survives resetAllMocks).
+  requireServiceOwnership: async (type: string, id: string) => {
+    const { services } = await api.loadWorkspace();
+    const kind = type === "application" || type === "compose" ? type : "database";
+    if (!services.some((service: { id: string; kind: string; engine?: string }) =>
+      service.id === id && service.kind === kind && (kind !== "database" || service.engine === type)
+    )) throw new Error("Service unavailable.");
+  },
 }));
 const revalidatePath = vi.hoisted(() => vi.fn());
 

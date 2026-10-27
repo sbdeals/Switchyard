@@ -188,21 +188,6 @@ async function resolveTargetEnv(environmentId?: string): Promise<string> {
   return after[0].environmentId;
 }
 
-/** Resolve membership from the current user's workspace before deleting. */
-async function requireServiceOwnership(
-  id: string,
-  kind: "application" | "compose" | "database",
-  engine?: Engine
-): Promise<void> {
-  const { services } = await loadWorkspace();
-  if (!services.some((service) =>
-    service.id === id && service.kind === kind &&
-    (service.kind !== "database" || service.engine === engine)
-  )) {
-    throw new Error("Service not found in this workspace.");
-  }
-}
-
 // --- databases ----------------------------------------------------------------
 
 /**
@@ -233,7 +218,7 @@ export async function lifecycleAction(
   action: Action
 ): Promise<ActionResult> {
   return wrap(async () => {
-    if (action === "remove") await requireServiceOwnership(id, "database", engine);
+    if (action === "remove") await requireServiceOwnership(engine, id);
     await databaseAction(engine, id, action);
   });
 }
@@ -489,7 +474,7 @@ export async function quickDeployGithubAction(input: {
 
 export async function appLifecycleAction(id: string, action: Action): Promise<ActionResult> {
   return wrap(async () => {
-    if (action === "remove") await requireServiceOwnership(id, "application");
+    if (action === "remove") await requireServiceOwnership("application", id);
     await applicationAction(id, action);
   });
 }
@@ -822,7 +807,7 @@ export async function createComposeAction(
 
 export async function composeLifecycleAction(id: string, action: Action): Promise<ActionResult> {
   return wrap(async () => {
-    if (action === "remove") await requireServiceOwnership(id, "compose");
+    if (action === "remove") await requireServiceOwnership("compose", id);
     await composeAction(id, action);
   });
 }
