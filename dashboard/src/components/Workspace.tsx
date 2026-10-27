@@ -101,7 +101,7 @@ function WorkspaceContent({
         </motion.div>
       )}
 
-      <ServiceDrawer service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
+      <ServiceDrawer services={services} onSelectService={drawer.open} service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
       {drawer.notFound && (
         <div role="status" className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-4 py-2 text-sm shadow-lg">
           Service not found

@@ -275,6 +275,7 @@ export interface ComposeService extends ServiceBase {
   composeType: string | null;
   /** Safe metadata computed on the server before composeFile is redacted. */
   serviceNames?: string[];
+  publishedPorts?: { port: number; protocol: "tcp" | "udp" }[];
   hasPostgres?: boolean;
   /** Public domains routed to the stack's services (Dokploy `domains`). */
   domains: AppDomain[];
