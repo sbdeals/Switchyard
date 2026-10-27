@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useDialogFocus } from "@/components/use-focus-trap";
 import { DirtyGuardScope, useDirtyGuard } from "@/components/DirtyGuard";
@@ -22,9 +22,11 @@ import {
   Server,
   TerminalSquare,
   Table2,
+  Copy,
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
+import { newestDeployment } from "@/lib/deployment-commit";
 import { LAST_DEPLOY_LABEL, resolveServiceState, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceLogo } from "@/components/canvas/ServiceNode";
@@ -39,6 +41,7 @@ import { LogsTab } from "@/components/service/LogsTab";
 import { DeploymentLogs } from "@/components/service/DeploymentLogs";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { DeploymentCommitInfo } from "@/components/service/DeploymentCommitInfo";
 import { ServiceNotes } from "@/components/service/ServiceNotes";
 import { ImageUpdatePanel } from "@/components/service/ImageUpdatePanel";
 import { CopyLinkButton } from "@/components/service/CopyLinkButton";
@@ -264,7 +267,7 @@ function ResizeHandle({
       onPointerCancel={endDrag}
       onDoubleClick={reset}
       onKeyDown={onKeyDown}
-      className="group absolute inset-y-0 left-0 z-10 flex w-2 -translate-x-1/2 cursor-col-resize touch-none items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/60"
+      className="group absolute inset-y-0 left-0 z-10 hidden w-2 -translate-x-1/2 cursor-col-resize touch-none items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/60 sm:flex"
     >
       {/* Visible grip: subtle by default, brightens on hover/focus. */}
       <span
@@ -275,13 +278,14 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, services, onSelectService, tab, sessionKey, deploymentId, onTabChange, onClose }: PortConflictProps & {
+export function ServiceDrawer({ service, services, onSelectService, tab, sessionKey, deploymentId, onTabChange, onClose, onDuplicate }: PortConflictProps & {
   service: Service | null;
   tab: TabId;
   sessionKey: string | null;
   deploymentId?: string | null;
   onTabChange: (tab: TabId) => void;
   onClose: () => void;
+  onDuplicate: (service: Service) => void;
 }) {
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
@@ -323,13 +327,13 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
             exit={{ x: "100%" }}
             transition={{ type: "spring", stiffness: 320, damping: 34 }}
             // Width is a layout property; the slide-in animates `x` (transform),
-            // so resizing and the framer-motion animation never fight. maxWidth
-            // is a CSS backstop for the same 90vw cap the JS clamp enforces.
-            style={{ width, maxWidth: "90vw" }}
-            className="fixed inset-y-0 right-0 z-50 flex flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
+            // so resizing and the framer-motion animation never fight. Phones
+            // use the full viewport; larger screens retain the resizable width.
+            style={{ "--drawer-width": `${width}px` } as CSSProperties}
+            className="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl max-lg:[&_a]:min-h-10 max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10 max-lg:[&_input:not([type=checkbox])]:min-h-10 max-lg:[&_select]:min-h-10 sm:w-[var(--drawer-width)] sm:max-w-[90vw] sm:border-l"
           >
             <ResizeHandle width={width} apply={applyWidth} reset={resetWidth} />
-            <Header service={service} onClose={onClose} titleId={titleId} />
+            <Header service={service} onClose={onClose} onDuplicate={() => onDuplicate(service)} titleId={titleId} />
             <nav
               role="tablist"
               aria-label="Service sections"
@@ -348,7 +352,7 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
                 );
                 el?.focus();
               }}
-              className="flex gap-1 overflow-x-auto border-b border-[var(--color-border)] px-4 [scrollbar-width:thin]"
+              className="flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--color-border)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] [scrollbar-width:thin]"
             >
               {tabs.map((id) => (
                 <button
@@ -380,7 +384,7 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
               role="tabpanel"
               aria-labelledby={`drawer-tab-${tab}`}
               tabIndex={0}
-              className="flex-1 overflow-auto p-5"
+              className="min-h-0 min-w-0 flex-1 overflow-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:p-5 sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pl-[max(1.25rem,env(safe-area-inset-left))] sm:pr-[max(1.25rem,env(safe-area-inset-right))]"
             >
               {tab === "overview" && service.kind !== "database" && latestDeployment?.status === "error" && (
                 <div className="mb-5">
@@ -466,16 +470,19 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
 function Header({
   service,
   onClose,
+  onDuplicate,
   titleId,
 }: {
   service: Service;
   onClose: () => void;
+  onDuplicate: () => void;
   titleId: string;
 }) {
   const accent = serviceAccent(service);
   const logos = useTemplateLogos();
+  const latest = service.kind === "database" ? null : newestDeployment(service.deployments);
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
+    <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--color-border)] p-4 pt-[max(1rem,env(safe-area-inset-top))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <ServiceLogo
           service={service}
@@ -485,13 +492,13 @@ function Header({
           rounded="rounded-xl"
         />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h2 id={titleId} className="font-semibold">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h2 id={titleId} className="min-w-0 truncate font-semibold" title={service.name}>
               {service.name}
             </h2>
             <StatusBadge status={service.status} runtime={service.runtime} />
           </div>
-          <div className="text-xs text-[var(--color-fg-muted)]">
+          <div className="break-words text-xs text-[var(--color-fg-muted)]">
             {serviceLabel(service)} · {service.projectName} / {service.environmentName}
           </div>
           <div className="text-[11px] text-[var(--color-fg-subtle)]">
@@ -499,6 +506,7 @@ function Header({
               ? "Stopped"
               : `Last deploy: ${LAST_DEPLOY_LABEL[service.status] ?? service.status}`}
           </div>
+          <DeploymentCommitInfo commit={latest?.commit ?? null} />
           <ServiceNotes key={service.id} id={service.id} description={service.description} />
         </div>
       </div>
@@ -506,9 +514,18 @@ function Header({
         <CopyLinkButton key={service.id} />
         <button
           type="button"
+          onClick={onDuplicate}
+          aria-label="Duplicate service"
+          title="Duplicate service"
+          className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+        >
+          <Copy className="size-4" />
+        </button>
+        <button
+          type="button"
           onClick={onClose}
           aria-label="Close service details"
-          className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
         >
           <X className="size-4" />
         </button>

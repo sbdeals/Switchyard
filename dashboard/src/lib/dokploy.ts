@@ -23,11 +23,18 @@ import { redirect, unstable_rethrow } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
+import { buildDeployOptionsPayload, getDeployOptionsState, type DeployOptionsRequest } from "./deploy-options";
 import { resolveAppPort } from "./app-port";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
 import { isGitSource, parseDeployTriggers, type DeployTriggerKind } from "./deploy-triggers";
 import { variableValues, type SharedScope, type SharedVariables, type SharedVariableKeys } from "./shared-variables";
 import { formatBackupError, validateS3Endpoint } from "./backup-errors";
+import {
+  normalizeDeploymentCommit,
+  type DeploymentCommit,
+  type DeploymentCommitFields,
+  type DeploymentSource,
+} from "./deployment-commit";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
@@ -171,6 +178,8 @@ export interface AppDeployment {
   status: string;
   title: string;
   createdAt: string;
+  commit: DeploymentCommit | null;
+  /** Dokploy timestamps are nullable; older deployments may not have timings. */
   description: string | null;
   startedAt: string | null;
   finishedAt: string | null;
@@ -267,6 +276,8 @@ export interface Application extends ServiceBase {
   /** When true, hitting the deploy webhook redeploys the app. */
   autoDeploy: boolean;
   triggerType: "push" | "tag" | null;
+  /** Persistent: every build skips its cache until disabled. */
+  cleanCache: boolean;
   /** Branch the webhook must match to trigger a deploy (customGitBranch). */
   branch: string | null;
   /** Build path within the repo (customGitBuildPath). */
@@ -320,6 +331,7 @@ export interface ProjectNode {
   projectId: string;
   name: string;
   environments: EnvironmentNode[];
+  volumeSizeBytes?: number | null;
 }
 
 // --- session handling -------------------------------------------------------
@@ -835,7 +847,7 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
         command: d.command ?? null,
         replicas: d.replicas ?? null,
         mounts: mapMountTypes(d.mounts),
-        deployments: d.deployments ? mapDeployments(d.deployments) : undefined,
+        deployments: d.deployments ? mapDeployments(d.deployments, {}) : undefined,
       } satisfies Database;
     })
   );
@@ -959,7 +971,7 @@ export async function reloadDatabase(engine: Engine, id: string, appName: string
 
 // --- applications -----------------------------------------------------------
 
-interface RawApplicationDetail {
+interface RawApplicationDetail extends DeploymentSource {
   name?: string;
   appName?: string;
   applicationStatus?: ServiceStatus;
@@ -972,6 +984,7 @@ interface RawApplicationDetail {
   watchPaths?: string[] | null;
   autoDeploy?: boolean | null;
   triggerType?: "push" | "tag" | null;
+  cleanCache?: boolean | null;
   refreshToken?: string | null;
   owner?: string | null;
   repository?: string | null;
@@ -1027,7 +1040,7 @@ interface RawDomain {
 }
 
 /** Deployment shape returned nested under `application.one` / `compose.one`. */
-interface RawDeployment {
+interface RawDeployment extends DeploymentCommitFields {
   deploymentId: string;
   status?: string;
   title?: string;
@@ -1052,12 +1065,13 @@ function mapDomains(domains: RawDomain[] | undefined): AppDomain[] {
 }
 
 /** Normalize a nested deployments array (shared by applications and compose). */
-function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment[] {
+function mapDeployments(deployments: RawDeployment[] | undefined, source: DeploymentSource): AppDeployment[] {
   return (deployments ?? []).map((dp) => ({
     deploymentId: dp.deploymentId,
     status: dp.status ?? "idle",
     title: dp.title ?? dp.description ?? "Deployment",
     createdAt: dp.createdAt ?? "",
+    commit: normalizeDeploymentCommit(dp, source),
     description: dp.description ?? null,
     startedAt: dp.startedAt ?? null,
     finishedAt: dp.finishedAt ?? null,
@@ -1127,10 +1141,11 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
           securityId: s.securityId,
           username: s.username ?? "",
         })),
-        deployments: mapDeployments(d.deployments),
+        deployments: mapDeployments(d.deployments, d),
         mounts: mapMountTypes(d.mounts),
         autoDeploy: d.autoDeploy ?? false,
         triggerType: d.triggerType ?? null,
+        cleanCache: d.cleanCache ?? false,
         branch: d.branch ?? d.customGitBranch ?? null,
         buildPath: d.customGitBuildPath ?? null,
         gitUrl: d.customGitUrl ?? null,
@@ -1540,6 +1555,31 @@ export async function applicationAction(id: string, action: Action): Promise<voi
   // does not exist — it 404s, which used to break the Destroy button).
   const proc = action === "remove" ? "delete" : action;
   await request(`application.${proc}`, { method: "POST", body: { applicationId: id } });
+}
+
+/** Check the user's project tree before applying a narrowly scoped deploy option. */
+export async function applyDeployOptions(id: string, input: DeployOptionsRequest): Promise<void> {
+  const { procedure, body } = buildDeployOptionsPayload(id, input);
+  const applications = collectIds(await rawTree(), (env) =>
+    (env.applications ?? []).map((app) => app.applicationId)
+  );
+  if (!applications.some((app) => app.id === id)) throw new Error("Unknown application.");
+  const app = await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(id)}`
+  );
+  const state = getDeployOptionsState({
+    pending: false,
+    status: app.applicationStatus ?? "idle",
+    sourceType: app.sourceType ?? null,
+  });
+  const disabled = input.kind === "clean-cache" ? state.cacheDisabled
+    : input.kind === "deploy" ? state.deployDisabled : state.redeployDisabled;
+  if (disabled) {
+    throw new Error("Application is not ready.");
+  }
+  // cleanCache is persistent in Dokploy 0.30.10. Saving never queues a build;
+  // temporarily toggling it around an asynchronous deploy would race the worker.
+  await request(procedure, { method: "POST", body });
 }
 
 export interface DomainInput {
@@ -2094,7 +2134,7 @@ export async function removeMount(mountId: string): Promise<void> {
 
 // --- compose ----------------------------------------------------------------
 
-interface RawComposeDetail {
+interface RawComposeDetail extends DeploymentSource {
   name?: string;
   description?: string | null;
   appName?: string;
@@ -2148,7 +2188,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         composeFile: d.composeFile ?? null,
         composeType: d.composeType ?? null,
         domains: mapDomains(d.domains),
-        deployments: mapDeployments(d.deployments),
+        deployments: mapDeployments(d.deployments, d),
         mounts: mapMountTypes(d.mounts),
       } satisfies ComposeService;
     })

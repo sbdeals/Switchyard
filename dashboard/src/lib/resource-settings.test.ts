@@ -4,6 +4,8 @@ import { updateResourceSettings } from "./resource-settings";
 import { updateResourcesAction } from "@/app/actions";
 import type { ResourceInputs } from "./resource-limits";
 
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: vi.fn() }));
 vi.mock("./dokploy", () => ({

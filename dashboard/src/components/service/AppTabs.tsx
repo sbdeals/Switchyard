@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   Globe,
   ExternalLink,
@@ -35,7 +36,6 @@ import type {
   Schedule,
 } from "@/lib/dokploy";
 import {
-  appLifecycleAction,
   updateApplicationAction,
   saveAppBuildTypeAction,
   setAppDockerSourceAction,
@@ -59,18 +59,28 @@ import {
   inputCls,
   Field,
   Info,
-  LifecycleButtons,
   SaveRow,
   DangerZone,
   PublicUrlBar,
   PrivateNetwork,
   GenerateUrlBtn,
-  useLifecycle,
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
 import { isGitSource } from "@/lib/deploy-triggers";
 import { DeployTriggerSettings } from "./DeployTriggerSettings";
+import { DeploymentCommitInfo } from "@/components/service/DeploymentCommitInfo";
+import {
+  durationBarHeight,
+  formatAbsoluteTime,
+  formatDuration,
+  formatRelativeTime,
+  getDeploymentDuration,
+  getDeployStats,
+  isDeploymentRunning,
+  sortDeployments,
+} from "@/lib/deploy-stats";
+import { AppDeployControls } from "@/components/service/AppDeployControls";
 import { validateCron, validatePort } from "@/lib/validation";
 import { ResourceSettings } from "@/components/service/ResourceSettings";
 import { ImageTagPicker } from "@/components/service/ImageTagPicker";
@@ -99,17 +109,12 @@ const BUILD_TYPES = Object.keys(BUILD_TYPE_LABELS) as BuildType[];
 
 const CERT_TYPES: CertificateType[] = ["none", "letsencrypt", "custom"];
 
-const useAppLifecycle = (app: Application) =>
-  useLifecycle((action) => appLifecycleAction(app.id, action));
-
 export function AppOverviewTab({ app }: { app: Application }) {
-  const { pending, error, run } = useAppLifecycle(app);
-
   return (
     <div className="space-y-5">
       <PublicUrlBar domains={app.domains} status={app.status} runtime={app.runtime} />
 
-      <LifecycleButtons status={app.status} runtime={app.runtime} pending={pending} error={error} run={run} />
+      <AppDeployControls app={app} />
 
       <PrivateNetwork host={app.appName} />
 
@@ -147,7 +152,7 @@ function DomainFields({
   return (
     <div className="space-y-3">
       <div className="flex items-end gap-2">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Field label="Host">
             <input
               value={value.host}
@@ -157,7 +162,7 @@ function DomainFields({
             />
           </Field>
         </div>
-        <div className="w-24">
+        <div className="w-24 shrink-0">
           <Field label="Container port">
             <input
               value={value.port}
@@ -169,7 +174,7 @@ function DomainFields({
         </div>
       </div>
       <div className="flex items-end gap-2">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Field label="Certificate">
             <select
               value={value.certificateType}
@@ -184,7 +189,7 @@ function DomainFields({
             </select>
           </Field>
         </div>
-        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs text-[var(--color-fg-muted)]">
+        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs text-[var(--color-fg-muted)] max-lg:min-h-10">
           <input
             type="checkbox"
             checked={value.https}
@@ -289,7 +294,7 @@ function DomainRow({ d, appId }: { d: AppDomain; appId: string }) {
             setEditing(true);
           }}
           disabled={pending}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
           title="Edit domain"
           aria-label="Edit domain"
           aria-expanded={editing}
@@ -299,7 +304,7 @@ function DomainRow({ d, appId }: { d: AppDomain; appId: string }) {
         <button
           onClick={remove}
           disabled={pending}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
           title="Remove domain"
           aria-label="Remove domain"
         >
@@ -549,27 +554,122 @@ export function DeploymentHistory({ deployments: history, serviceKind, onNavigat
   serviceKind: "application" | "compose";
   onNavigate: (tab: DiagnosisTab) => void;
 }) {
-  const deployments = [...history].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const router = useRouter();
+  const [now, setNow] = useState<number | null>(null);
+  const deployments = sortDeployments(history);
+  const stats = getDeployStats(history);
+  const lastSuccessfulAt = stats.lastSuccessful?.finishedAt && Number.isFinite(Date.parse(stats.lastSuccessful.finishedAt))
+    ? stats.lastSuccessful.finishedAt
+    : stats.lastSuccessful?.createdAt;
+  const bars = [...stats.recent].reverse().map((deployment) => ({
+    deployment,
+    duration: getDeploymentDuration(deployment, now ?? NaN),
+  }));
+  const maxDuration = Math.max(0, ...bars.map(({ duration }) => duration ?? 0));
   const color = (s: string) =>
     s === "done" ? "var(--color-ok)" : s === "error" ? "var(--color-danger)" : s === "running" ? "var(--color-warn)" : "var(--color-idle)";
+
+  useEffect(() => {
+    const initialTick = window.setTimeout(() => setNow(Date.now()), 0);
+    const running = history.filter(isDeploymentRunning);
+    const tick = running.some((deployment) => getDeploymentDuration(deployment, Date.now()) !== null)
+      ? window.setInterval(() => setNow(Date.now()), 1000)
+      : undefined;
+    const refresh = running.length > 0
+      ? window.setInterval(() => router.refresh(), 5000)
+      : undefined;
+    return () => {
+      window.clearTimeout(initialTick);
+      window.clearInterval(tick);
+      window.clearInterval(refresh);
+    };
+  }, [history, router]);
+
   return (
     <div className="space-y-2">
+      {stats.recent.length > 0 && (
+        <section aria-label="Deployment insights" className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold">Last {stats.recent.length} deployments</h3>
+            <svg
+              width={bars.length * 10}
+              height={36}
+              viewBox={`0 0 ${bars.length * 10} 36`}
+              role="img"
+              aria-label="Deployment durations, oldest to newest. Green: successful; red: failed; grey: other. Dashes: duration unavailable."
+            >
+              {bars.map(({ deployment, duration }, index) => {
+                const height = durationBarHeight(duration, maxDuration);
+                const barColor = deployment.status === "done"
+                  ? "var(--color-ok)"
+                  : deployment.status === "error" ? "var(--color-danger)" : "var(--color-idle)";
+                return (
+                  <g key={deployment.deploymentId}>
+                    <title>{`${deployment.title}: ${deployment.status}, ${duration === null ? "duration unavailable" : formatDuration(duration)}. ${formatAbsoluteTime(deployment.createdAt)}`}</title>
+                    {duration === null ? (
+                      <line x1={index * 10 + 1} x2={index * 10 + 7} y1={34} y2={34} stroke={barColor} strokeWidth={2} />
+                    ) : (
+                      <rect x={index * 10 + 1} y={34 - height} width={6} height={height} rx={1} fill={barColor} />
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div title="Successful deploys divided by successful and failed deploys. Cancelled, queued and running deploys are excluded.">
+              <dt className="text-[11px] text-[var(--color-fg-subtle)]">Success rate</dt>
+              <dd className="mt-1 text-sm font-medium tabular-nums">{stats.successRate === null ? "—" : `${Math.round(stats.successRate)}%`}</dd>
+            </div>
+            <div title={stats.medianDurationMs === null ? "duration unavailable" : "Median completed deployment duration"}>
+              <dt className="text-[11px] text-[var(--color-fg-subtle)]">Median duration</dt>
+              <dd className="mt-1 text-sm font-medium tabular-nums">{formatDuration(stats.medianDurationMs)}</dd>
+            </div>
+            <div title={stats.p90DurationMs === null ? "duration unavailable" : "90th percentile completed deployment duration"}>
+              <dt className="text-[11px] text-[var(--color-fg-subtle)]">p90 duration</dt>
+              <dd className="mt-1 text-sm font-medium tabular-nums">{formatDuration(stats.p90DurationMs)}</dd>
+            </div>
+            <div title={lastSuccessfulAt ? formatAbsoluteTime(lastSuccessfulAt) : "No successful deployment in this history"}>
+              <dt className="text-[11px] text-[var(--color-fg-subtle)]">Last successful</dt>
+              <dd className="mt-1 text-sm font-medium">{lastSuccessfulAt && now !== null ? formatRelativeTime(lastSuccessfulAt, now) : "—"}</dd>
+            </div>
+          </dl>
+          <p className="text-[10px] text-[var(--color-fg-subtle)]">
+            {stats.durationCount} completed duration {stats.durationCount === 1 ? "sample" : "samples"}. Missing timestamps: duration unavailable (—).
+          </p>
+        </section>
+      )}
       <p className="mb-1 text-xs text-[var(--color-fg-muted)]">Deployment history (newest first).</p>
       {deployments.length === 0 ? (
         <p className="text-xs text-[var(--color-fg-subtle)]">No deployments yet.</p>
       ) : (
-        deployments.map((d) => (
-          <div
-            key={d.deploymentId}
-            className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
-          >
-            <div className="flex items-center gap-3">
+        deployments.map((d) => {
+          const duration = getDeploymentDuration(d, now ?? NaN);
+          const durationLabel = duration === null
+            ? "duration unavailable"
+            : `${isDeploymentRunning(d) ? "running " : ""}${formatDuration(duration)}`;
+          return (
+            <div
+              key={d.deploymentId}
+              className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
+            >
+              <div className="flex items-center gap-3">
               <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
               {d.rollbackId && <span className="sr-only">{d.status}</span>}
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm">{d.title}</div>
-                <div className="text-[11px] text-[var(--color-fg-subtle)]">
-                  {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
+                {!d.commit?.subject && <div className="truncate text-sm">{d.title}</div>}
+                <DeploymentCommitInfo commit={d.commit} />
+                {d.description && d.description !== d.title && (
+                  <p className="whitespace-pre-wrap break-words text-xs text-[var(--color-fg-muted)]">{d.description}</p>
+                )}
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-fg-subtle)]">
+                  <span title={formatAbsoluteTime(d.createdAt)}>
+                    {now === null ? "—" : formatRelativeTime(d.createdAt, now)}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span title={durationLabel} aria-label={durationLabel} className="tabular-nums">
+                    {duration === null ? "—" : durationLabel}
+                  </span>
                 </div>
               </div>
               {d.rollbackId ? (
@@ -578,11 +678,12 @@ export function DeploymentHistory({ deployments: history, serviceKind, onNavigat
                 <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
               )}
             </div>
-            {d.status === "error" && (
-              <DiagnosisCard deploymentId={d.deploymentId} serviceKind={serviceKind} onNavigate={onNavigate} />
-            )}
-          </div>
-        ))
+              {d.status === "error" && (
+                <DiagnosisCard deploymentId={d.deploymentId} serviceKind={serviceKind} onNavigate={onNavigate} />
+              )}
+            </div>
+          );
+        })
       )}
     </div>
   );
@@ -625,7 +726,7 @@ function RedeployToggle({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
+    <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)] max-lg:min-h-10">
       <input
         type="checkbox"
         checked={checked}
@@ -736,7 +837,7 @@ function BuildStrategyForm({ app }: { app: Application }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <RedeployToggle checked={redeploy} onChange={setRedeploy} />
         <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
       </div>
@@ -825,14 +926,14 @@ function DockerSourceForm({ app }: { app: Application }) {
                 placeholder={app.hasRegistryPassword ? "Password saved — leave blank to keep" : ""}
                 disabled={clearCredentials}
                 autoComplete="off"
-                className={inputCls}
+                className={`${inputCls} max-lg:pr-12`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((s) => !s)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 aria-pressed={showPassword}
-                className="absolute inset-y-0 right-2 flex items-center text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+                className="absolute inset-y-0 right-2 flex items-center justify-center text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
               >
                 {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
               </button>
@@ -849,7 +950,7 @@ function DockerSourceForm({ app }: { app: Application }) {
           Clear credentials (including registry URL) on save
         </label>
       </div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <RedeployToggle checked={redeploy} onChange={setRedeploy} />
         <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
       </div>
@@ -923,7 +1024,7 @@ function StartCommandForm({ app, onSaved }: { app: Application; onSaved: (comman
           className={`${inputCls} font-mono`}
         />
       </Field>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <RedeployToggle checked={redeploy} onChange={setRedeploy} />
         <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
       </div>
@@ -1674,7 +1775,7 @@ function IconBtn({
       aria-expanded={ariaExpanded}
       onClick={onClick}
       disabled={disabled}
-      className="rounded-md p-1.5 text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)] disabled:opacity-40"
+      className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)] disabled:opacity-40"
     >
       {children}
     </button>

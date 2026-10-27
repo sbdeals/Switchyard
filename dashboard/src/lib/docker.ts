@@ -10,6 +10,7 @@
 import "server-only";
 import Docker from "dockerode";
 import type { Duplex } from "node:stream";
+import type { DockerVolumeUsage } from "./volume-usage";
 import { parseDockerLogLines, type LogStream } from "./log-export";
 import type { ImageServiceKind, RunningServiceImage } from "./image-update";
 import { sumContainerSamples, toContainerSample, type ContainerSample } from "./container-stats";
@@ -57,6 +58,56 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
       },
     );
   });
+}
+
+const VOLUME_USAGE_CACHE_MS = 30_000;
+let volumeUsageCache: { expiresAt: number; volumes: DockerVolumeUsage[] | null } | null = null;
+let volumeUsageRequest: Promise<DockerVolumeUsage[] | null> | null = null;
+
+/** Read volume sizes once per 30 seconds, sharing in-flight requests across callers. */
+export async function listVolumeDiskUsage(): Promise<DockerVolumeUsage[] | null> {
+  if (volumeUsageCache && Date.now() < volumeUsageCache.expiresAt) {
+    return volumeUsageCache.volumes;
+  }
+  if (volumeUsageRequest) return volumeUsageRequest;
+
+  const controller = new AbortController();
+  volumeUsageRequest = withTimeout(
+    new Promise<unknown>((resolve, reject) => {
+      // dockerode.df currently drops query options, so use its existing socket modem.
+      docker.modem.dial({
+        path: "/system/df?",
+        method: "GET",
+        options: { type: "volume" },
+        statusCodes: { 200: true, 500: "server error" },
+        abortSignal: controller.signal,
+      }, (error, data) => {
+        if (error) reject(error);
+        else resolve(data);
+      });
+    }),
+    DOCKER_OP_TIMEOUT_MS,
+    "volume disk usage",
+  ).then((data) => {
+    if (!data || typeof data !== "object" || !("Volumes" in data) || !Array.isArray(data.Volumes)) {
+      return null;
+    }
+    if (!data.Volumes.every((volume) => volume && typeof volume.Name === "string")) {
+      return null;
+    }
+    return data.Volumes as DockerVolumeUsage[];
+  }).catch(() => {
+    controller.abort();
+    return null;
+  }).then((volumes) => {
+    // Cache unavailable results too, so an offline daemon is not hammered on every render.
+    volumeUsageCache = { expiresAt: Date.now() + VOLUME_USAGE_CACHE_MS, volumes };
+    return volumes;
+  }).finally(() => {
+    volumeUsageRequest = null;
+  });
+
+  return volumeUsageRequest;
 }
 
 /** Inspect an image already pulled locally; missing images/daemons use fallbacks. */
