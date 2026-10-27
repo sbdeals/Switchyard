@@ -2313,6 +2313,7 @@ export async function deployTemplate(
       `compose.one?composeId=${encodeURIComponent(created.composeId)}`
     );
     const rewrite = rewriteDataBindsToVolumes(detail.composeFile ?? "");
+    if (rewrite.error) console.warn("[templates]", rewrite.error);
     if (rewrite.rewritten.length > 0) {
       await request("compose.update", {
         method: "POST",
