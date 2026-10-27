@@ -4,12 +4,14 @@
  * Our BFF runs on the host with access to the Docker socket (the same one
  * Dokploy uses), so we read container logs and stats straight from the Docker
  * API instead of reverse-engineering Dokploy's WebSocket transport. A Dokploy
- * service's `appName` is the prefix of its Swarm task container name.
+ * service's `appName` identifies its Swarm service, stack namespace, or compose
+ * project label.
  */
 import "server-only";
 import Docker from "dockerode";
 import type { Duplex } from "node:stream";
 import type { ImageServiceKind, RunningServiceImage } from "./image-update";
+import { sumContainerSamples, toContainerSample, type ContainerSample } from "./container-stats";
 
 const socketPath = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
 const docker = new Docker({ socketPath });
@@ -175,6 +177,31 @@ export function demuxDockerFrames(buf: Buffer): string {
   return Buffer.concat(parts).toString("utf8");
 }
 
+/** Match exact ownership labels, falling back to legacy names only if unlabeled. */
+export function matchServiceContainers(
+  containers: Docker.ContainerInfo[],
+  appName: string,
+): Docker.ContainerInfo[] {
+  if (!appName) return [];
+  const ownershipLabels = [
+    "com.docker.swarm.service.name",
+    "com.docker.stack.namespace",
+    "com.docker.compose.project",
+  ];
+  const owned = containers.filter((c) =>
+    ownershipLabels.some((label) => c.Labels?.[label] === appName),
+  );
+  if (owned.length > 0) return owned;
+
+  const escapedName = appName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const taskName = new RegExp(`^/?${escapedName}\\.\\d+\\.`);
+  return containers.filter((c) =>
+    ownershipLabels.every((label) => c.Labels?.[label] === undefined) &&
+    c.Labels?.["com.docker.compose.service"] === undefined &&
+    c.Names.some((name) => name.replace(/^\//, "") === appName || taskName.test(name)),
+  );
+}
+
 /**
  * Resolve a Dokploy appName to its running container id (most recent).
  *
@@ -190,16 +217,11 @@ export async function findContainerId(
   if (!appName) return null;
   if (allowed && !allowed.has(appName)) return null;
   const containers = await withTimeout(
-    docker.listContainers({ all: false, filters: { name: [appName] } }),
+    docker.listContainers({ all: false }),
     DOCKER_OP_TIMEOUT_MS,
     `Listing containers for ${appName}`,
   );
-  if (containers.length === 0) return null;
-  // Prefer an exact task match; otherwise the first running one.
-  const match =
-    containers.find((c) => c.Names.some((n) => n.replace(/^\//, "").startsWith(appName))) ??
-    containers[0];
-  return match.Id;
+  return matchServiceContainers(containers, appName)[0]?.Id ?? null;
 }
 
 /** Read image metadata only from running containers with the exact owner label. */
@@ -269,6 +291,7 @@ export async function followLogs(
   const out = new PassThrough();
   container.modem.demuxStream(raw, out, out);
   raw.on("end", () => out.end());
+  raw.on("close", () => out.end());
   raw.on("error", (e: Error) => out.destroy(e));
 
   return {
@@ -289,6 +312,108 @@ export interface Sample {
   memUsed: number; // bytes
   memLimit: number; // bytes
   memPct: number; // percent
+}
+
+export interface ServiceStats {
+  status: "running" | "not-running" | "unavailable";
+  sample: ContainerSample | null;
+  containers: number;
+}
+
+// Leave headroom for authorization timing differences between five-second polls.
+const STATS_TTL_MS = 4_500;
+const STATS_CONCURRENCY = 4;
+const statsCache = new Map<string, { at: number; value: ServiceStats }>();
+const statsInFlight = new Map<string, Promise<ServiceStats>>();
+let activeStatsReads = 0;
+const queuedStatsReads: (() => void)[] = [];
+
+/** Bound both the wait and the socket call, without releasing a still-busy slot. */
+function statsRead<T>(read: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+      const queued = queuedStatsReads.indexOf(run);
+      if (queued !== -1) queuedStatsReads.splice(queued, 1);
+      reject(new DockerTimeoutError("Service metrics read timed out"));
+    }, DOCKER_OP_TIMEOUT_MS);
+    const run = () => {
+      activeStatsReads++;
+      Promise.resolve()
+        .then(() => read(controller.signal))
+        .then(resolve, reject)
+        .finally(() => {
+          clearTimeout(timer);
+          activeStatsReads--;
+          queuedStatsReads.shift()?.();
+        });
+    };
+    if (activeStatsReads < STATS_CONCURRENCY) run();
+    else queuedStatsReads.push(run);
+  });
+}
+
+function belongsToService(container: Docker.ContainerInfo, appName: string): boolean {
+  const project = container.Labels?.["com.docker.compose.project"];
+  const service = container.Labels?.["com.docker.swarm.service.name"];
+  if (project || service) return project === appName || service === appName;
+  // Legacy tasks may lack labels. Require a whole name or exact Swarm task
+  // identity, never a prefix ("app" must not include "app-other").
+  const escaped = appName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const task = new RegExp(`^${escaped}\\.\\d+\\.[a-z0-9]+$`, "i");
+  return (container.Names ?? []).some((name) => {
+    const bare = name.replace(/^\//, "");
+    return bare === appName || task.test(bare);
+  });
+}
+
+/** Read only: GET container list and GET stats?stream=false for owned services. */
+export async function readServiceStats(appName: string, allowed: Set<string>): Promise<ServiceStats> {
+  const unavailable: ServiceStats = { status: "unavailable", sample: null, containers: 0 };
+  // Check before either cache: an authorized caller must never warm access for
+  // another user whose workspace does not contain the service.
+  if (!appName || !allowed.has(appName)) return unavailable;
+  const now = Date.now();
+  for (const [key, entry] of statsCache) {
+    if (now - entry.at >= STATS_TTL_MS) statsCache.delete(key);
+  }
+  const cached = statsCache.get(appName);
+  if (cached) return cached.value;
+  const pending = statsInFlight.get(appName);
+  if (pending) return pending;
+
+  const read = async (): Promise<ServiceStats> => {
+    let containers = 0;
+    try {
+      const listed = await statsRead((abortSignal) =>
+        docker.listContainers({ all: false, abortSignal }),
+      );
+      const running = listed.filter((container) =>
+        container.State === "running" && belongsToService(container, appName),
+      );
+      containers = running.length;
+      if (!containers) return { status: "not-running", sample: null, containers: 0 };
+      const samples = await Promise.all(running.map((container) =>
+        statsRead(async (abortSignal) => {
+          const options = { stream: false as const, abortSignal };
+          const stats = await docker.getContainer(container.Id).stats(options);
+          return toContainerSample(stats);
+        }),
+      ));
+      return { status: "running", sample: sumContainerSamples(samples), containers };
+    } catch {
+      // A missing container or failed read must not masquerade as a partial sum.
+      return { status: "unavailable", sample: null, containers };
+    }
+  };
+  const request = read().then((value) => {
+    if (statsCache.size >= 200) statsCache.delete(statsCache.keys().next().value!);
+    statsCache.set(appName, { at: now, value });
+    return value;
+  }).finally(() => statsInFlight.delete(appName));
+  statsInFlight.set(appName, request);
+  return request;
 }
 
 function toSample(s: Docker.ContainerStats): Sample {
@@ -534,11 +659,11 @@ export interface PgContainer {
  * List the running Postgres containers that belong to a Dokploy service
  * `appName`. This covers BOTH data models the Data tab supports:
  *   - a Dokploy-managed Postgres database (its single Swarm task container,
- *     name-prefixed by the appName, image `postgres:*`), and
+ *     service-name label equal to appName, image `postgres:*`), and
  *   - Postgres containers inside a compose stack (the stack's containers share
- *     the compose-project name prefix; we keep the ones whose image is postgres).
- * The Docker `name` filter is a substring match, so we re-check the prefix to
- * avoid a coincidental match, then keep only postgres-imaged containers.
+ *     compose-project or stack-namespace label equal to appName; we keep only
+ *     postgres-imaged containers).
+ * Unlabeled legacy containers must have an exact name or Swarm task name match.
  *
  * Callers MUST have already validated `appName` against the user's known
  * Dokploy services (see knownAppNames) — this helper trusts its input, exactly
@@ -547,12 +672,11 @@ export interface PgContainer {
 export async function listPgContainers(appName: string): Promise<PgContainer[]> {
   if (!appName) return [];
   const containers = await withTimeout(
-    docker.listContainers({ all: false, filters: { name: [appName] } }),
+    docker.listContainers({ all: false }),
     DOCKER_OP_TIMEOUT_MS,
     `Listing postgres containers for ${appName}`,
   );
-  return containers
-    .filter((c) => c.Names.some((n) => n.replace(/^\//, "").startsWith(appName)))
+  return matchServiceContainers(containers, appName)
     .filter((c) => /postgres/i.test(c.Image))
     .map((c) => {
       const name = (c.Names[0] ?? "").replace(/^\//, "");
@@ -599,17 +723,20 @@ export interface PsqlResult {
 /**
  * Run one psql invocation inside a Postgres container and capture its output.
  *
- * The SQL is delivered over the exec's **stdin**, never interpolated into argv
- * or a shell — `Cmd` is a fixed `psql` argument vector, so no query text can be
- * reinterpreted as arguments or shell metacharacters. psql runs in `--csv` mode
+ * Read-only SQL is passed as one `--command` argument, prefixed with a SQL
+ * comment so psql always sends it to the server, never interpreting meta-commands.
+ * PGOPTIONS makes transactions read-only without adding command tags to the CSV;
+ * standard_conforming_strings matches the classifier's literal handling. `-X`
+ * prevents psqlrc from overriding these settings. Write mode keeps using stdin.
+ * Neither path uses a shell. psql runs in `--csv` mode
  * with `ON_ERROR_STOP=1` (so a SQL error exits non-zero) and a distinctive null
  * marker so the parser can tell SQL NULL from an empty string. `-w` prevents a
  * password prompt from silently consuming the SQL on stdin; PGPASSWORD (from the
  * container's own env) covers password-auth images.
  *
- * We DON'T half-close stdin to signal end-of-input: over a Windows named pipe
- * (Docker Desktop) the FIN races the data flush, so psql can see an empty stdin
- * and exit 0 with no output. Instead we terminate the input with `\n;\n\q\n`:
+ * In write mode we DON'T half-close stdin to signal end-of-input: over a Windows
+ * named pipe (Docker Desktop) the FIN races the data flush, so psql can see an
+ * empty stdin and exit 0 with no output. Instead we end input with `\n;\n\q\n`:
  * the `;` completes the trailing statement (so a missing final semicolon still
  * runs) and psql's `\q` makes it exit cleanly. An unterminated string/comment
  * therefore never reaches `\q`; that case is caught by the timeout below, which
@@ -620,15 +747,15 @@ export interface PsqlResult {
 export async function runPsqlCsv(
   target: { id: string; identity: PgIdentity },
   sql: string,
-  opts: { timeoutMs?: number; maxBytes?: number; nullMarker: string },
+  opts: { timeoutMs?: number; maxBytes?: number; nullMarker: string; readOnly?: boolean },
 ): Promise<PsqlResult | null> {
-  const { timeoutMs = 20_000, maxBytes = 5_000_000, nullMarker } = opts;
+  const { timeoutMs = 20_000, maxBytes = 5_000_000, nullMarker, readOnly = true } = opts;
   const container = docker.getContainer(target.id);
   const { user, db, password } = target.identity;
 
   const exec = await withTimeout(
     container.exec({
-      // Fixed argv. The SQL is NOT here — it is written to stdin below.
+      // SQL in read-only mode is a single argument, never shell-interpolated.
       Cmd: [
         "psql",
         "-U",
@@ -641,8 +768,14 @@ export async function runPsqlCsv(
         "ON_ERROR_STOP=1",
         "-P",
         `null=${nullMarker}`,
+        ...(readOnly ? ["-X", "--command", `/* Read-only query */\n${sql}`] : []),
       ],
-      Env: password ? [`PGPASSWORD=${password}`] : [],
+      Env: [
+        ...(password ? [`PGPASSWORD=${password}`] : []),
+        ...(readOnly
+          ? ["PGOPTIONS=-c default_transaction_read_only=on -c standard_conforming_strings=on"]
+          : []),
+      ],
       AttachStdin: true,
       AttachStdout: true,
       AttachStderr: true,
@@ -678,10 +811,9 @@ export async function runPsqlCsv(
   collect(outS, (t) => (stdout += t));
   collect(errS, (t) => (stderr += t));
 
-  // Send the SQL followed by a terminator + `\q` (see the doc comment for why we
-  // don't half-close). psql runs the statement(s), then quits and closes the
-  // exec stream, which resolves the wait below.
-  stream.write(Buffer.from(`${sql}\n;\n\\q\n`, "utf8"));
+  // Write mode uses a terminator + `\q` rather than half-closing stdin (see above).
+  // Read-only mode exits after --command, without interpreting any input as psql.
+  if (!readOnly) stream.write(Buffer.from(`${sql}\n;\n\\q\n`, "utf8"));
 
   await new Promise<void>((resolve) => {
     let done = false;

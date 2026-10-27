@@ -13,6 +13,17 @@
 
 set -euo pipefail
 
+# The CLI passes secrets across sudo via a private file instead of argv.
+# Direct callers can continue exporting the same variables themselves.
+if [ -n "${SWITCHYARD_ENV_FILE:-}" ]; then
+  case "$-" in *a*) switchyard_allexport=1 ;; *) switchyard_allexport=0 ;; esac
+  set -a
+  # shellcheck source=/dev/null
+  . "$SWITCHYARD_ENV_FILE"
+  if [ "$switchyard_allexport" = 0 ]; then set +a; fi
+  unset SWITCHYARD_ENV_FILE switchyard_allexport
+fi
+
 DOCKER_DAEMON_JSON="/etc/docker/daemon.json"
 REGISTRY_MIRROR="https://mirror.gcr.io"
 DOCKERD_LOG="/var/log/dockerd.log"
