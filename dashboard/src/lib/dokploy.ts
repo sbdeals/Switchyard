@@ -26,6 +26,7 @@ import { randomServiceName } from "./names";
 import { buildDeployOptionsPayload, getDeployOptionsState, type DeployOptionsRequest } from "./deploy-options";
 import { resolveAppPort } from "./app-port";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
+import { hasPublicLetsEncryptEmail } from "./domain-https";
 import { variableValues, type SharedScope, type SharedVariables, type SharedVariableKeys } from "./shared-variables";
 import { formatBackupError, validateS3Endpoint } from "./backup-errors";
 import {
@@ -1471,6 +1472,15 @@ export interface DomainInput {
   https: boolean;
   certificateType: CertificateType;
   path?: string;
+}
+
+/** Return only certificate readiness; never send instance settings to the client. */
+export async function domainHttpsConfigured(): Promise<boolean> {
+  // Dokploy exposes this read via tRPC, with a SuperJSON response envelope.
+  const response = await request<{
+    result?: { data?: { json?: { letsEncryptEmail?: string | null } | null } };
+  }>("trpc/settings.getWebServerSettings");
+  return hasPublicLetsEncryptEmail(response?.result?.data?.json?.letsEncryptEmail);
 }
 
 /**
