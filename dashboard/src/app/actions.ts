@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
+import { randomUUID } from "node:crypto";
 import {
   createDatabase,
   databaseAction,
@@ -62,6 +63,7 @@ import {
   updateSchedule,
   deleteSchedule,
   runSchedule,
+  listScheduleExecutions,
   listMounts,
   createMount,
   updateMount,
@@ -75,6 +77,7 @@ import {
   type Engine,
   type DokployTemplate,
   type Schedule,
+  type AppDeployment,
   type CreateScheduleInput,
   type UpdateScheduleInput,
   type Mount,
@@ -114,6 +117,7 @@ import {
   deleteProjectSettings,
 } from "@/lib/project-settings-server";
 import type { ProjectSettings } from "@/lib/project-settings";
+import { validateMount } from "@/lib/mounts";
 import { preserveUrlCredentials } from "@/lib/url-credentials";
 import { redactErrorMessage } from "@/lib/error-redaction";
 import { validateRedirect, validateBasicAuth } from "@/lib/app-security";
@@ -788,8 +792,51 @@ export async function deleteScheduleAction(scheduleId: string): Promise<ActionRe
   return wrap(() => deleteSchedule(scheduleId));
 }
 
-export async function runScheduleAction(scheduleId: string): Promise<ActionResult> {
-  return wrap(() => runSchedule(scheduleId));
+export type ScheduleExecution = Pick<AppDeployment, "deploymentId" | "status" | "createdAt">;
+export type ScheduleExecutionsResult =
+  | { ok: true; executions: ScheduleExecution[] }
+  | { ok: false; error: string };
+
+export async function listScheduleExecutionsAction(scheduleId: string): Promise<ScheduleExecutionsResult> {
+  try {
+    const executions = await listScheduleExecutions(scheduleId);
+    return {
+      ok: true,
+      executions: executions.map(({ deploymentId, status, createdAt }) => ({
+        deploymentId, status, createdAt,
+      })),
+    };
+  } catch (e) {
+    unstable_rethrow(e);
+    return fail(e);
+  }
+}
+
+export type RunScheduleResult = { ok: true; message: string } | { ok: false; error: string };
+
+function scheduleRunResult(status: string | undefined): RunScheduleResult {
+  if (status === "error") {
+    return {
+      ok: false,
+      error: "Schedule failed. Make sure the service is running and check the command and shell. See execution history below.",
+    };
+  }
+  return {
+    ok: true,
+    message: status === "done" ? "Completed — see history below." : "Started — see history below.",
+  };
+}
+
+export async function runScheduleAction(scheduleId: string): Promise<RunScheduleResult> {
+  try {
+    // Dokploy can return HTTP 200 with status "error"; surface it.
+    const result = await runSchedule(scheduleId);
+    revalidatePath("/");
+    return scheduleRunResult(result?.status);
+  } catch (e) {
+    unstable_rethrow(e);
+    return fail(e);
+  }
 }
 
 // --- compose ----------------------------------------------------------------
@@ -960,21 +1007,80 @@ export async function listMountsAction(
   try {
     return { ok: true, mounts: await listMounts(serviceType, serviceId) };
   } catch (e) {
-    return fail(e);
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load mounts." };
   }
 }
 
 export async function createMountAction(input: CreateMountInput): Promise<ActionResult> {
-  return wrap(() => createMount(input));
+  try {
+    const mounts = await listMounts(input.serviceType, input.serviceId);
+    // Dokploy writes filePath beneath its managed files directory. Never accept
+    // a client-supplied source path, or reuse a filename belonging to another mount.
+    const mount = {
+      type: input.type,
+      mountPath: input.mountPath,
+      ...(input.type === "volume" ? { volumeName: input.volumeName } : {
+        filePath: `${randomUUID()}.conf`,
+        content: input.content,
+      }),
+    };
+    const error = validateMount(mount, mounts);
+    if (error) return { ok: false, error };
+    await createMount({ serviceType: input.serviceType, serviceId: input.serviceId, ...mount });
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not add mount." };
+  }
 }
 
 export async function updateMountAction(
+  serviceType: MountServiceType,
+  serviceId: string,
   mountId: string,
   patch: MountPatch
 ): Promise<ActionResult> {
-  return wrap(() => updateMount(mountId, patch));
+  try {
+    const mounts = await listMounts(serviceType, serviceId);
+    const existing = mounts.find((mount) => mount.mountId === mountId);
+    if (!existing || existing.type === "bind" || (patch.type && patch.type !== existing.type)) {
+      return { ok: false, error: "Could not update mount." };
+    }
+    const mount = {
+      type: existing.type,
+      mountPath: patch.mountPath ?? existing.mountPath,
+      ...(existing.type === "volume" ? { volumeName: patch.volumeName ?? existing.volumeName ?? "" } : {
+        filePath: existing.filePath ?? "",
+        content: patch.content ?? existing.content ?? "",
+      }),
+    };
+    const error = validateMount(mount, mounts, mountId);
+    if (error) return { ok: false, error };
+    await updateMount(mountId, mount);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not update mount." };
+  }
 }
 
-export async function removeMountAction(mountId: string): Promise<ActionResult> {
-  return wrap(() => removeMount(mountId));
+export async function removeMountAction(
+  serviceType: MountServiceType,
+  serviceId: string,
+  mountId: string
+): Promise<ActionResult> {
+  try {
+    const mounts = await listMounts(serviceType, serviceId);
+    const mount = mounts.find((mount) => mount.mountId === mountId);
+    if (!mount || mount.type === "bind") return { ok: false, error: "Could not remove mount." };
+    await removeMount(mountId);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not remove mount." };
+  }
 }

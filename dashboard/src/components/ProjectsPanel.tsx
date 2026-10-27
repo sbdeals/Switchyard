@@ -13,6 +13,7 @@ import {
 } from "@/app/actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
 import { ProjectSettings } from "@/components/ProjectSettings";
+import { DuplicateEnvironmentForm } from "@/components/DuplicateEnvironmentForm";
 
 export function ProjectsPanel({
   open,
@@ -30,8 +31,15 @@ export function ProjectsPanel({
   const [error, setError] = useState<string | null>(null);
   const [newProject, setNewProject] = useState("");
   const [settingsProjectId, setSettingsProjectId] = useState<string | null>(null);
-  const close = () => { setSettingsProjectId(null); onClose(); };
   const [newEnv, setNewEnv] = useState<Record<string, string>>({});
+  const [duplicate, setDuplicate] = useState<{ project: ProjectNode; environmentId: string; name: string } | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
+  const close = () => {
+    if (duplicating) return;
+    setSettingsProjectId(null);
+    setDuplicate(null);
+    onClose();
+  };
 
   const act = (fn: () => Promise<ActionResult>) => {
     setError(null);
@@ -64,9 +72,10 @@ export function ProjectsPanel({
             className="relative flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
-              <h2 id="projects-panel-title" className="text-sm font-semibold">{settingsProjectId ? "Project settings" : "Projects & environments"}</h2>
+              <h2 id="projects-panel-title" className="text-sm font-semibold">{settingsProjectId ? "Project settings" : duplicate ? "Duplicate environment" : "Projects & environments"}</h2>
               <button
                 onClick={close}
+                disabled={duplicating}
                 aria-label="Close projects"
                 className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
               >
@@ -85,7 +94,15 @@ export function ProjectsPanel({
             ) : (
             <>
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              {projects.map((p) => (
+              {duplicate ? (
+                <DuplicateEnvironmentForm
+                  project={duplicate.project}
+                  environmentId={duplicate.environmentId}
+                  environmentName={duplicate.name}
+                  onBack={() => setDuplicate(null)}
+                  onBusyChange={setDuplicating}
+                />
+              ) : projects.map((p) => (
                 <div
                   key={p.projectId}
                   className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
@@ -108,6 +125,13 @@ export function ProjectsPanel({
                       <div key={e.environmentId} className="flex items-center gap-2 text-xs">
                         <Layers className="size-3.5 text-[var(--color-fg-subtle)]" />
                         <span className="flex-1 truncate text-[var(--color-fg-muted)]">{e.name}</span>
+                        <button
+                          onClick={() => setDuplicate({ project: p, environmentId: e.environmentId, name: e.name })}
+                          aria-label={`Duplicate ${e.name} environment`}
+                          className="rounded-md px-1.5 py-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)]"
+                        >
+                          Duplicate
+                        </button>
                         <IconBtn
                           title="Delete environment"
                           danger
@@ -149,12 +173,12 @@ export function ProjectsPanel({
                   </div>
                 </div>
               ))}
-              {projects.length === 0 && (
+              {!duplicate && projects.length === 0 && (
                 <p className="text-center text-xs text-[var(--color-fg-subtle)]">No projects yet.</p>
               )}
             </div>
 
-            <div className="border-t border-[var(--color-border)] px-5 py-4">
+            {!duplicate && <div className="border-t border-[var(--color-border)] px-5 py-4">
               {error && <p role="alert" className="mb-2 text-xs text-[var(--color-danger)]">{error}</p>}
               <div className="flex items-center gap-2">
                 <input
@@ -184,7 +208,7 @@ export function ProjectsPanel({
                   Project
                 </button>
               </div>
-            </div>
+            </div>}
             </>
             )}
           </FocusTrapPanel>
