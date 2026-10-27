@@ -5,12 +5,21 @@ import { useDialogFocus } from "@/components/use-focus-trap";
 import { createDirtyRegistry, decideDirtyNavigation, discardMessage } from "@/lib/dirty-guard";
 
 type GuardContext = {
-  register: (key: string, label: string, dirty: boolean) => void;
+  register: (key: string, label: string, dirty: boolean, scope: string) => void;
   unregister: (key: string) => void;
   navigate: (action: () => void, sameTarget?: boolean) => void;
+  getState: (scope: string | null) => { labels: string[]; pending: boolean };
+  activateScope: (scope: string | null) => void;
+  activeScope: string | null;
+  session: number;
 };
 
 const DirtyContext = createContext<GuardContext | null>(null);
+const ScopeContext = createContext<string | null>(null);
+
+export function DirtyGuardScope({ scope, children }: { scope: string; children: React.ReactNode }) {
+  return <ScopeContext.Provider value={scope}>{children}</ScopeContext.Provider>;
+}
 
 function useGuardContext() {
   const context = useContext(DirtyContext);
@@ -21,15 +30,17 @@ function useGuardContext() {
 /** Each mounted form owns its registration, even when several share a label. */
 export function useDirtyGuard(id: string, dirty: boolean) {
   const key = useId();
-  const { register, unregister } = useGuardContext();
+  const scope = useContext(ScopeContext);
+  const { register, unregister, activeScope } = useGuardContext();
   useLayoutEffect(() => {
-    register(key, id, dirty);
+    if (scope === null || scope !== activeScope) return;
+    register(key, id, dirty, scope);
     return () => unregister(key);
-  }, [key, id, dirty, register, unregister]);
+  }, [key, id, dirty, scope, activeScope, register, unregister]);
 }
 
 export function useGuardedNavigation() {
-  return useGuardContext().navigate;
+  return useGuardContext();
 }
 
 type PendingNavigation = { action: () => void; labels: string[]; focus: HTMLElement | null };
@@ -37,13 +48,33 @@ type PendingNavigation = { action: () => void; labels: string[]; focus: HTMLElem
 export function DirtyGuardProvider({ children }: { children: React.ReactNode }) {
   const [registry] = useState(createDirtyRegistry);
   const [dirty, setDirty] = useState(false);
+  const [session, setSession] = useState(0);
+  const [activeScope, setActiveScope] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingNavigation | null>(null);
   const pendingRef = useRef<PendingNavigation | null>(null);
   const lastField = useRef<HTMLElement | null>(null);
+  const scopeRef = useRef<string | null>(null);
 
-  const register = useCallback((key: string, label: string, changed: boolean) => {
-    registry.set(key, label, changed);
+  const register = useCallback((key: string, label: string, changed: boolean, scope: string) => {
+    // An exiting animated drawer must not register again after it has closed.
+    if (scope !== scopeRef.current) return;
+    registry.set(key, label, changed, scope);
     setDirty(registry.labels().length > 0);
+  }, [registry]);
+
+  const getState = useCallback((scope: string | null) => ({
+    labels: scope === null ? [] : registry.labels(scope),
+    pending: pendingRef.current !== null,
+  }), [registry]);
+  const activateScope = useCallback((scope: string | null) => {
+    registry.retainScope(scope);
+    setDirty(registry.labels().length > 0);
+    if (scopeRef.current === scope) return;
+    scopeRef.current = scope;
+    setActiveScope(scope);
+    pendingRef.current = null;
+    setPending(null);
+    lastField.current = null;
   }, [registry]);
   const unregister = useCallback((key: string) => {
     registry.remove(key);
@@ -51,7 +82,7 @@ export function DirtyGuardProvider({ children }: { children: React.ReactNode }) 
   }, [registry]);
 
   const navigate = useCallback((action: () => void, sameTarget = false) => {
-    const labels = registry.labels();
+    const labels = scopeRef.current === null ? [] : registry.labels(scopeRef.current);
     const decision = decideDirtyNavigation(labels, pendingRef.current !== null, sameTarget);
     if (decision === "ignore") return;
     if (decision === "proceed") {
@@ -84,6 +115,7 @@ export function DirtyGuardProvider({ children }: { children: React.ReactNode }) 
     if (discard) {
       registry.clear();
       setDirty(false);
+      setSession((value) => value + 1);
       request.action();
     } else {
       // Let the dialog's focus-trap cleanup finish before returning to the field.
@@ -93,7 +125,8 @@ export function DirtyGuardProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const context = useMemo(() => ({ register, unregister, navigate }), [register, unregister, navigate]);
+  const context = useMemo(() => ({ register, unregister, navigate, getState, activateScope, activeScope, session }),
+    [register, unregister, navigate, getState, activateScope, activeScope, session]);
   return (
     <DirtyContext.Provider value={context}>
       <div className="contents" onFocusCapture={(event) => {

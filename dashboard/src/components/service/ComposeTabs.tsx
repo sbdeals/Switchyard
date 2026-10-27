@@ -67,7 +67,7 @@ export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
   const [pending, start] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
-  const dirty = value !== baseline;
+  const dirty = baseline !== null && loadError === null && value !== baseline;
   useDirtyGuard("Compose", dirty);
 
   function save(redeploy: boolean) {

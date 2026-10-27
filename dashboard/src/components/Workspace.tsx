@@ -12,19 +12,26 @@ import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { useServiceDeeplink } from "@/components/use-service-deeplink";
+import { DirtyGuardProvider } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
 
 type View = "canvas" | "grid";
 
-export function Workspace({
-  services,
-  projects,
-  edges,
-}: {
+type WorkspaceProps = {
   services: Service[];
   projects: ProjectNode[];
   edges: ServiceEdge[];
-}) {
+};
+
+export function Workspace(props: WorkspaceProps) {
+  return <DirtyGuardProvider><WorkspaceContent {...props} /></DirtyGuardProvider>;
+}
+
+function WorkspaceContent({
+  services,
+  projects,
+  edges,
+}: WorkspaceProps) {
   const [view, setView] = useState<View>("canvas");
   const [projectsOpen, setProjectsOpen] = useState(false);
   const router = useRouter();
@@ -85,7 +92,7 @@ export function Workspace({
         </motion.div>
       )}
 
-      <ServiceDrawer service={drawer.service} tab={drawer.tab} onTabChange={drawer.selectTab} onClose={drawer.close} />
+      <ServiceDrawer service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
       {drawer.notFound && (
         <div role="status" className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-4 py-2 text-sm shadow-lg">
           Service not found

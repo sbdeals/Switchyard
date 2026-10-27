@@ -39,7 +39,7 @@ export function VariablesTab({ service }: { service: Service }) {
     };
   }, [serviceType, service.id]);
 
-  const dirty = value !== baseline;
+  const dirty = baseline !== null && loadError === null && value !== baseline;
   useDirtyGuard("Variables", dirty);
   const count = value.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).length;
 

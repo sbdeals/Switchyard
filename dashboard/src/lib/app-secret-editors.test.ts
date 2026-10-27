@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppBuildTab, AppDeployTab, DeploymentsTab } from "../components/service/AppTabs";
+import { DirtyGuardProvider } from "../components/DirtyGuard";
 import { loadServiceCommandsAction, loadServiceWebhookAction } from "@/app/actions";
 import type { Application } from "./dokploy";
 
@@ -57,7 +58,9 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("application secret editors", () => {
   it("renders a masked webhook with explicit reveal and copy controls without loading it", () => {
-    const html = renderToStaticMarkup(createElement(DeploymentsTab, { app }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+      createElement(DeploymentsTab, { app }),
+    ));
 
     expect(html).toContain("••••••••••••••••");
     expect(html).toContain('aria-label="Reveal deploy webhook"');
@@ -67,7 +70,9 @@ describe("application secret editors", () => {
   });
 
   it("uses only hasWebhook to show webhook availability", () => {
-    const html = renderToStaticMarkup(createElement(DeploymentsTab, { app: { ...app, hasWebhook: false } }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+      createElement(DeploymentsTab, { app: { ...app, hasWebhook: false } }),
+    ));
 
     expect(html).toContain("No webhook token yet");
     expect(html).not.toContain("Reveal deploy webhook");
@@ -79,7 +84,9 @@ describe("application secret editors", () => {
     ["Build", AppBuildTab, "Custom run command"],
     ["Deploy", AppDeployTab, "Test command"],
   ] as const)("keeps the %s command editor unmounted until its secret request resolves", (_, tab, field) => {
-    const html = renderToStaticMarkup(createElement(tab, { app }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+      createElement(tab, { app }),
+    ));
 
     expect(html).toContain('aria-label="Loading service commands"');
     expect(html).not.toContain("sentinel-command");
