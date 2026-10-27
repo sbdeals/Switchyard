@@ -110,6 +110,65 @@ test("packDirectory applies Docker wildcards and parent negation independently o
   assert.equal(packed.hasDockerfile, true);
 });
 
+test("packDirectory excludes env files at every depth despite ignore negations, keeping examples", async (t) => {
+  const root = await fixture(t, {
+    ".gitignore": "!.env*\n!.switchyard/\n",
+    ".dockerignore": "!**/.env*\n!**/.switchyard/**\n",
+    Dockerfile: "FROM scratch",
+    ".env": "PRIVATE=root",
+    ".env.local": "PRIVATE=local",
+    ".env.example": "PUBLIC=example",
+    ".env.example.local": "PRIVATE=example-local",
+    ".envrc": "keep",
+    "nested/.env": "PRIVATE=nested",
+    "nested/.env.production": "PRIVATE=production",
+    "nested/.env.example": "PUBLIC=nested-example",
+    ".switchyard/link.json": "omit",
+    "nested/.switchyard/link.json": "omit",
+  });
+  const packed = await packDirectory(root);
+  assert.deepEqual(packed.excludedEnvFiles.sort(), [".env", ".env.example.local", ".env.local", "nested/.env", "nested/.env.production"].sort());
+  assert.deepEqual(packed.files.sort(), [".dockerignore", ".env.example", ".envrc", ".gitignore", "Dockerfile", "nested/.env.example"].sort());
+  const entries = unzip(packed.archive);
+  assert.ok([...entries.keys()].every((name) => !name.includes(".switchyard")));
+  assert.ok([...entries.values()].every((entry) => !entry.data.toString().startsWith("PRIVATE=")));
+});
+
+test("packDirectory includeEnv opts into env files while honoring ignores and excluding local links", async (t) => {
+  const root = await fixture(t, {
+    ".gitignore": ".env.gitignored\n.env.example\n!.switchyard/\n",
+    ".dockerignore": "**/.env.dockerignored\n!**/.switchyard/**\n",
+    ".env": "PRIVATE=root",
+    ".env.gitignored": "omit",
+    ".env.example": "omit",
+    "nested/.env.local": "PRIVATE=nested",
+    "nested/.env.dockerignored": "omit",
+    ".switchyard/link.json": "omit",
+    "nested/.switchyard/link.json": "omit",
+  });
+  const packed = await packDirectory(root, { includeEnv: true });
+  assert.deepEqual(packed.excludedEnvFiles, []);
+  assert.deepEqual(packed.files.sort(), [".dockerignore", ".env", ".gitignore", "nested/.env.local"].sort());
+  const entries = unzip(packed.archive);
+  assert.equal(entries.get(".env").data.toString(), "PRIVATE=root");
+  assert.equal(entries.get("nested/.env.local").data.toString(), "PRIVATE=nested");
+  assert.ok([...entries.keys()].every((name) => !name.includes(".switchyard")));
+});
+
+test("packDirectory skips excluded env files before reading or counting their bytes", async (t) => {
+  const root = await fixture(t, {
+    Dockerfile: "FROM scratch",
+    ".env": "x".repeat(4097),
+    "nested/.env.secret": "x".repeat(4097),
+    ".switchyard/.gitignore": "x".repeat(4097),
+  });
+  const packed = await packDirectory(root, { maxBytes: 4096 });
+  assert.deepEqual(packed.files, ["Dockerfile"]);
+  assert.deepEqual(packed.excludedEnvFiles, [".env", "nested/.env.secret"]);
+  assert.equal(packed.totalBytes, Buffer.byteLength("FROM scratch"));
+  await assert.rejects(packDirectory(root, { maxBytes: 4096, includeEnv: true }), /upload too large/);
+});
+
 test("packDirectory honors Dockerfile-specific ignores and detects a Git-excluded Dockerfile", async (t) => {
   const root = await fixture(t, {
     ".gitignore": "Dockerfile\n",
