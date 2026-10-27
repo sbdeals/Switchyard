@@ -6,7 +6,8 @@
 # service MUST join that network and use --endpoint-mode dnsrr (this kernel has
 # no IP_VS, so Swarm VIPs don't route — same constraint as the Dokploy stack).
 #
-# Usage:  sudo SWITCHYARD_METRICS_PASSWORD=... scripts/switchyard-store-up.sh
+# Usage:  export SWITCHYARD_METRICS_PASSWORD first, then:
+#         sudo --preserve-env=SWITCHYARD_METRICS_PASSWORD bash scripts/switchyard-store-up.sh
 # Env:    SWITCHYARD_METRICS_PASSWORD  required — Postgres superuser password
 #         SWITCHYARD_STORE_IMAGE       Postgres image (default postgres:16)
 
@@ -34,16 +35,23 @@ if service_exists "$STORE_SERVICE"; then
 fi
 
 log "Creating the metrics store service ($STORE_SERVICE, --endpoint-mode dnsrr)..."
-docker service create --detach \
+# Env-file name-only entries are resolved from the Docker client's environment.
+# Unlike a literal KEY=value line, this also preserves newlines in the password.
+STORE_ENV_FILE="$(mktemp)"
+trap 'rm -f -- "$STORE_ENV_FILE"' EXIT
+printf '%s\n' POSTGRES_PASSWORD > "$STORE_ENV_FILE"
+POSTGRES_PASSWORD="$SWITCHYARD_METRICS_PASSWORD" docker service create --detach \
   --name "$STORE_SERVICE" \
   --network dokploy-network \
   --endpoint-mode dnsrr \
   --constraint 'node.role==manager' \
   --env POSTGRES_USER=switchyard \
   --env POSTGRES_DB=switchyard \
-  --env "POSTGRES_PASSWORD=${SWITCHYARD_METRICS_PASSWORD}" \
+  --env-file "$STORE_ENV_FILE" \
   --mount "type=volume,source=${STORE_VOLUME},target=/var/lib/postgresql/data" \
   "$STORE_IMAGE"
+rm -f -- "$STORE_ENV_FILE"
+trap - EXIT
 
 log "Waiting for the metrics store to converge..."
 if wait_service_converged "$STORE_SERVICE" 60; then
