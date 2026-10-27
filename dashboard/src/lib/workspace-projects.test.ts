@@ -76,7 +76,7 @@ function mount() {
       if (++renders > 10) throw new Error("Workspace did not settle");
       index = 0;
       changed = false;
-      const wrapper = Workspace({ services: [service], projects: [], edges: [] });
+      const wrapper = Workspace({ services: [service], projects: [], graph: { edges: [], warnings: [] } });
       const content = wrapper.props.children;
       tree = content.type(content.props);
     } while (changed);
