@@ -5,6 +5,7 @@ const { loadWorkspace, readDeploymentLogs } = vi.hoisted(() => ({
   readDeploymentLogs: vi.fn(),
 }));
 
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/dokploy", () => ({ loadWorkspace, readDeploymentLogs }));
 vi.mock("@/lib/deployment-logs", () => import("./deployment-logs"));
 vi.mock("next/navigation", () => ({

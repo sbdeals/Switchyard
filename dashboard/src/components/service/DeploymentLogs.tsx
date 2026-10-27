@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
-import { deploymentForService } from "@/lib/deployment-logs";
+import { deploymentForService } from "@/lib/deployment-selection";
 
 export function DeploymentLogs({
   service,

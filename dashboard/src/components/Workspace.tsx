@@ -2,16 +2,18 @@
 
 import { useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, ScrollText } from "lucide-react";
+import { Activity, Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, ScrollText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
+import { ActivityPanel } from "@/components/ActivityPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { ProjectLogs } from "@/components/ProjectLogs";
 import { useServiceDeeplink } from "@/components/use-service-deeplink";
 import { DeployNotifications } from "@/components/DeployNotifications";
@@ -43,6 +45,7 @@ function WorkspaceContent({
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [deployment, setDeployment] = useState<DeploymentEvent | null>(null);
+  const [activityOpen, setActivityOpen] = useState(false);
   const router = useRouter();
   const { services, projects, edges } = useWorkspacePolling({
     services: initialServices,
@@ -74,7 +77,7 @@ function WorkspaceContent({
             Apps and databases across your Dokploy projects.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             aria-label="Current project"
             value={currentProject ?? ""}
@@ -119,17 +122,24 @@ function WorkspaceContent({
             <FolderGit2 className="size-3.5" /> Projects
           </button>
           <button
+            onClick={() => setActivityOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+          >
+            <Activity className="size-3.5" /> Activity
+          </button>
+          <button
             onClick={() => router.refresh()}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
           >
             <RefreshCw className="size-3.5" /> Refresh
           </button>
+          <KeyboardShortcuts />
           <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
         </div>
       </header>
 
       {view === "logs" ? (
-        <ProjectLogs projects={projects} />
+        <ProjectLogs key={currentProject ?? "all"} projects={projects} selectedProjectId={currentProject} />
       ) : visibleServices.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
@@ -153,6 +163,18 @@ function WorkspaceContent({
         </div>
       )}
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
+      {activityOpen && (
+        <ActivityPanel
+          projects={projects}
+          onClose={() => setActivityOpen(false)}
+          onSelect={(entry) => navigate(() => {
+            setActivityOpen(false);
+            setDeployment(null);
+            drawer.open(entry.serviceId, "deployments");
+            router.refresh();
+          })}
+        />
+      )}
       <AgentPanel />
     </div>
     </MotionConfig>
