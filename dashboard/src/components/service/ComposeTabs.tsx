@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { validateComposeFile } from "@/lib/compose-validation";
 import { getPortWarnings, parseComposePorts } from "@/lib/port-conflicts";
 import { PortConflictWarning, type PortConflictProps } from "@/components/service/PortConflictWarning";
 import { useDirtyGuard } from "@/components/DirtyGuard";
@@ -76,11 +77,17 @@ export function ComposeEditorTab({ compose, services, onSelectService }: PortCon
   function save(redeploy: boolean) {
     if (baseline === null || loadError) return;
     setError(null);
+    const issue = validateComposeFile(value, redeploy);
+    if (redeploy && issue) {
+      setError(issue);
+      return;
+    }
     start(async () => {
       const res = await saveComposeFileAction(compose.id, value, redeploy);
       if (res.ok) {
         setBaseline(value);
-        flashSaved();
+        if (issue) setError(`Saved as draft. ${issue} Fix the YAML before deploying.`);
+        else flashSaved();
       } else setError(res.error);
     });
   }
@@ -113,7 +120,7 @@ export function ComposeEditorTab({ compose, services, onSelectService }: PortCon
         >
           {warnings.length ? "Save anyway" : "Save"}
         </button>
-        <SaveRow saving={pending} saved={saved} error={error} onSave={() => save(true)} label={warnings.length ? "Save anyway & deploy" : "Save & deploy"} />
+        <SaveRow saving={pending} saved={saved && !error} error={error} onSave={() => save(true)} label={warnings.length ? "Save anyway & deploy" : "Save & deploy"} />
       </div>
     </div>
   );

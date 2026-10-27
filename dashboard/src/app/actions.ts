@@ -116,6 +116,7 @@ import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
 import { updateResourceSettings } from "@/lib/resource-settings";
 import type { ResourceInputs } from "@/lib/resource-limits";
+import { validateComposeFile } from "@/lib/compose-validation";
 import { parseAppPort } from "@/lib/app-port";
 import { validateMount } from "@/lib/mounts";
 import { preserveUrlCredentials } from "@/lib/url-credentials";
@@ -869,6 +870,10 @@ export async function saveComposeFileAction(
   composeFile: string,
   redeploy = false
 ): Promise<ActionResult> {
+  if (redeploy) {
+    const error = validateComposeFile(composeFile, true);
+    if (error) return { ok: false, error };
+  }
   return wrapSensitive(async () => {
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");
