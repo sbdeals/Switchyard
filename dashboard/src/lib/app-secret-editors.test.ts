@@ -13,6 +13,8 @@ vi.mock("@/lib/client-actions", () => ({
 }));
 // #129: DeploymentHistory refreshes running deploys through the app router.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 // AppTabs -> AppDeployControls imports the server-only deploy options action.
 vi.mock("@/app/deploy-actions", () => ({ deployOptionsAction: vi.fn() }));
 // AppTabs -> ComposeExportDialog imports the server-only compose export action.
