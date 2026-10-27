@@ -118,7 +118,7 @@ function SecretValue({ label, preview, load }: { label: string; preview: string;
 
   return (
     <Field label={label}>
-      <div className="flex items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
+      <div className="flex items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-2.5">
         <code className="min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-[11px] text-[var(--color-fg-muted)]">
           {shown ? value : preview}
         </code>

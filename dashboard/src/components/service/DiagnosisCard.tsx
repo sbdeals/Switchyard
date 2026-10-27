@@ -88,7 +88,7 @@ export function DiagnosisDetails({ diagnosis, serviceKind, onNavigate }: {
       <p className="text-sm font-medium text-[var(--color-fg)]">{diagnosis.cause}</p>
       {!diagnosis.ruleId && <p className="text-xs text-[var(--color-fg-muted)]">Last 20 build log lines:</p>}
       {/* React text children escape log content; never render logs as HTML. */}
-      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[#0b0b10] p-2.5 font-mono text-[11px] leading-relaxed text-[var(--color-fg-muted)]">
+      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[var(--color-code-bg)] p-2.5 font-mono text-[11px] leading-relaxed text-[var(--color-fg-muted)]">
         {diagnosis.excerpt || "The build log is empty."}
       </pre>
       {diagnosis.fix && <p className="text-xs leading-relaxed text-[var(--color-fg-muted)]">{diagnosis.fix}</p>}
