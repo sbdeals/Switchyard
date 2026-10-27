@@ -10,6 +10,7 @@
 import "server-only";
 import Docker from "dockerode";
 import type { Duplex } from "node:stream";
+import type { ImageServiceKind, RunningServiceImage } from "./image-update";
 import { sumContainerSamples, toContainerSample, type ContainerSample } from "./container-stats";
 
 const socketPath = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
@@ -55,6 +56,20 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
       },
     );
   });
+}
+
+/** Inspect an image already pulled locally; missing images/daemons use fallbacks. */
+export async function readImageExposedPorts(image: string): Promise<string[]> {
+  try {
+    const detail = await withTimeout(
+      docker.getImage(image).inspect(),
+      DOCKER_OP_TIMEOUT_MS,
+      "Reading image ports",
+    );
+    return Object.keys(detail.Config?.ExposedPorts ?? {});
+  } catch {
+    return [];
+  }
 }
 
 // --- runtime truth ----------------------------------------------------------
@@ -221,6 +236,43 @@ export async function findContainerId(
     `Listing containers for ${appName}`,
   );
   return matchServiceContainers(containers, appName)[0]?.Id ?? null;
+}
+
+/** Read image metadata only from running containers with the exact owner label. */
+export async function inspectServiceImages(
+  appName: string,
+  kind: ImageServiceKind,
+): Promise<RunningServiceImage[]> {
+  if (!appName) return [];
+  const ownerLabel = kind === "compose"
+    ? "com.docker.compose.project"
+    : "com.docker.swarm.service.name";
+  const containers = await withTimeout(
+    docker.listContainers({ all: false, filters: { label: [`${ownerLabel}=${appName}`] } }),
+    DOCKER_OP_TIMEOUT_MS,
+    "Listing service images",
+  );
+  const images: RunningServiceImage[] = [];
+  for (const container of containers) {
+    if (container.Labels?.[ownerLabel] !== appName) continue;
+    const inspected = await withTimeout(
+      docker.getContainer(container.Id).inspect(),
+      DOCKER_OP_TIMEOUT_MS,
+      "Inspecting service container",
+    );
+    if (!inspected.State.Running || inspected.Config.Labels?.[ownerLabel] !== appName) continue;
+    const image = await withTimeout(
+      docker.getImage(inspected.Image).inspect(),
+      DOCKER_OP_TIMEOUT_MS,
+      "Inspecting service image",
+    );
+    images.push({
+      image: inspected.Config.Image,
+      repoDigests: image.RepoDigests ?? [],
+      ...(kind === "compose" ? { serviceName: inspected.Config.Labels?.["com.docker.compose.service"] } : {}),
+    });
+  }
+  return images;
 }
 
 export interface LogLine {

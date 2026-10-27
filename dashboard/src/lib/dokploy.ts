@@ -23,6 +23,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
+import { resolveAppPort } from "./app-port";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
 import { hasPublicLetsEncryptEmail } from "./domain-https";
 import { formatBackupError, validateS3Endpoint } from "./backup-errors";
@@ -30,6 +31,7 @@ import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
   listRuntimeStates,
+  readImageExposedPorts,
   type ServiceRuntime,
 } from "./docker";
 
@@ -158,6 +160,9 @@ export interface AppDeployment {
   status: string;
   title: string;
   createdAt: string;
+  description: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
   /**
    * Non-null when this deployment produced a restorable image snapshot
    * (Dokploy only records these when the app deploys to a registry). Feeds
@@ -233,8 +238,10 @@ export interface Application extends ServiceBase {
   dockerBuildStage: string | null;
   /** Custom start/run command appended to the container's entrypoint. */
   command: string | null;
-  /** Registry host for docker-image apps (credentials are never read back). */
+  /** Registry details for docker-image apps. The stored password stays server-side. */
   registryUrl: string | null;
+  registryUsername: string | null;
+  hasRegistryPassword: boolean;
   domains: AppDomain[];
   redirects: AppRedirect[];
   ports: AppPort[];
@@ -274,6 +281,7 @@ export interface ComposeService extends ServiceBase {
   composeType: string | null;
   /** Safe metadata computed on the server before composeFile is redacted. */
   serviceNames?: string[];
+  publishedPorts?: { port: number; protocol: "tcp" | "udp" }[];
   hasPostgres?: boolean;
   /** Public domains routed to the stack's services (Dokploy `domains`). */
   domains: AppDomain[];
@@ -618,6 +626,8 @@ export async function getApplicationSource(id: string): Promise<{
   gitUrl: string | null;
   dockerImage: string | null;
   registryUrl: string | null;
+  username: string | null;
+  password: string | null;
 }> {
   await requireServiceOwnership("application", id);
   const detail = await request<RawApplicationDetail>(
@@ -627,6 +637,8 @@ export async function getApplicationSource(id: string): Promise<{
     gitUrl: detail.customGitUrl ?? null,
     dockerImage: detail.dockerImage ?? null,
     registryUrl: detail.registryUrl ?? null,
+    username: detail.username ?? null,
+    password: detail.password ?? null,
   };
 }
 
@@ -884,6 +896,8 @@ interface RawApplicationDetail {
   dockerBuildStage?: string | null;
   command?: string | null;
   registryUrl?: string | null;
+  username?: string | null;
+  password?: string | null;
   env?: string | null;
   buildArgs?: string | null;
   buildSecrets?: string | null;
@@ -932,6 +946,9 @@ interface RawDeployment {
   status?: string;
   title?: string;
   createdAt?: string;
+  description?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
   rollbackId?: string | null;
 }
 
@@ -953,8 +970,11 @@ function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment
   return (deployments ?? []).map((dp) => ({
     deploymentId: dp.deploymentId,
     status: dp.status ?? "idle",
-    title: dp.title ?? "Deployment",
+    title: dp.title ?? dp.description ?? "Deployment",
     createdAt: dp.createdAt ?? "",
+    description: dp.description ?? null,
+    startedAt: dp.startedAt ?? null,
+    finishedAt: dp.finishedAt ?? null,
     rollbackId: dp.rollbackId ?? null,
   }));
 }
@@ -985,6 +1005,8 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
         dockerBuildStage: d.dockerBuildStage ?? null,
         command: d.command ?? null,
         registryUrl: d.registryUrl ?? null,
+        registryUsername: d.username ?? null,
+        hasRegistryPassword: Boolean(d.password),
         env: d.env ?? null,
         createdAt: d.createdAt ?? null,
         cpuLimit: d.cpuLimit ?? null,
@@ -1036,20 +1058,38 @@ export async function createApplication(name: string, environmentId: string): Pr
   return created.applicationId;
 }
 
-/** Point an application at a public/private Docker image. */
+export interface DockerRegistryPatch {
+  /** Empty or omitted credentials preserve their stored values. */
+  username?: string | null;
+  password?: string | null;
+  /** Omit to preserve the registry host; an empty string resets it. */
+  registryUrl?: string | null;
+  /** Explicitly remove the username, password, and registry host. */
+  clearCredentials?: boolean;
+}
+
+/** Point an application at an image, preserving untouched registry credentials. */
 export async function setAppDockerSource(
   applicationId: string,
   dockerImage: string,
-  registry?: { username: string; password: string; registryUrl: string }
+  registry?: DockerRegistryPatch,
+  /** Reuse the server-only snapshot already read and authorized by the action. */
+  stored?: Pick<RawApplicationDetail, "username" | "password" | "registryUrl">
 ): Promise<void> {
+  const clear = registry?.clearCredentials === true;
+  // saveDockerProvider overwrites all three fields. Read the current secrets
+  // server-side so an image-only edit never sends empty credentials.
+  const current = clear ? null : stored ?? await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(applicationId)}`
+  );
   await request("application.saveDockerProvider", {
     method: "POST",
     body: {
       applicationId,
       dockerImage,
-      username: registry?.username ?? null,
-      password: registry?.password ?? null,
-      registryUrl: registry?.registryUrl ?? null,
+      username: clear ? null : (registry?.username || current?.username) ?? null,
+      password: clear ? null : (registry?.password || current?.password) ?? null,
+      registryUrl: clear ? null : registry?.registryUrl ?? current?.registryUrl ?? null,
     },
   });
 }
@@ -1535,9 +1575,6 @@ export async function deleteSecurity(securityId: string): Promise<void> {
 // mode it is unset, so auto-URL is a no-op and a deploy simply leaves the app
 // without a domain.
 
-/** Container port auto-domains route to (Nixpacks/Node apps default here). */
-const AUTO_DOMAIN_PORT = 3000;
-
 /** True for hosts we mint automatically (traefik.me / sslip.io wildcards). */
 export function isAutoDomainHost(host: string): boolean {
   return /\.traefik\.me$|\.sslip\.io$/i.test(host.trim());
@@ -1579,11 +1616,12 @@ async function generateTraefikMeHost(appName: string): Promise<string | null> {
 async function createDomainRecord(
   applicationId: string,
   host: string,
+  port: number,
   certificateType: "none" | "letsencrypt"
 ): Promise<void> {
   await request("domain.create", {
     method: "POST",
-    body: { applicationId, host, port: AUTO_DOMAIN_PORT, https: true, certificateType },
+    body: { applicationId, host, port, https: true, certificateType },
   });
 }
 
@@ -1593,7 +1631,7 @@ async function createDomainRecord(
  * dev). Idempotent: if the app already carries an auto-domain the existing host
  * is returned without creating a second one.
  */
-export async function ensureAutoDomain(applicationId: string): Promise<string | null> {
+export async function ensureAutoDomain(applicationId: string, explicitPort?: number): Promise<string | null> {
   const hostIp = process.env.SWITCHYARD_HOST_IP?.trim();
   if (!hostIp) return null; // Docker Desktop / dev: Traefik unmanaged, no-op.
 
@@ -1607,13 +1645,22 @@ export async function ensureAutoDomain(applicationId: string): Promise<string | 
   const existing = (detail.domains ?? []).find((d) => isAutoDomainHost(d.host));
   if (existing) return existing.host;
 
+  // Deploys are queued: inspect only if the image has already been pulled locally.
+  const port = resolveAppPort({
+    port: explicitPort,
+    image: detail.dockerImage,
+    env: detail.env,
+    exposedPorts: explicitPort === undefined && detail.dockerImage
+      ? await readImageExposedPorts(detail.dockerImage)
+      : [],
+  });
   const generated = await generateTraefikMeHost(appName);
   if (generated) {
-    await createDomainRecord(applicationId, generated, "none");
+    await createDomainRecord(applicationId, generated, port, "none");
     return generated;
   }
   const host = `${appName}.${hostIp}.sslip.io`;
-  await createDomainRecord(applicationId, host, "letsencrypt");
+  await createDomainRecord(applicationId, host, port, "letsencrypt");
   return host;
 }
 
