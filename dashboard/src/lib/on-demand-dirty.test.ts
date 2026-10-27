@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ComposeEditorTab } from "../components/service/ComposeTabs";
 import { VariablesTab } from "../components/service/VariablesTab";
 import type { ComposeService } from "./dokploy";
-import { setVariable, sharedReference } from "./shared-variables";
+import { sharedReference } from "./shared-variables";
+import { appendDotenvKey } from "./dotenv-raw";
+import { createEditorState, dotenvEditorReducer } from "./dotenv-editor";
 import { initialVariablesEditorState, variablesEditorReducer } from "./variables-editor";
 
 const mocks = vi.hoisted(() => ({
@@ -45,14 +47,14 @@ describe.each(["Variables", "Compose"] as const)("%s on-demand dirty baseline", 
     ["failed after editing", variablesEditorReducer(edited, { type: "failed", error: "Load failed" }), false],
   ] as const)("registers the correct guard while %s", (_, state, dirty) => {
     if (tab === "Variables") {
-      mocks.useReducer.mockReturnValue([state, vi.fn()]);
+      mocks.useReducer.mockReturnValue([{ ...createEditorState(state.baseline), text: state.value, loadError: state.loadError }, vi.fn()]);
       VariablesTab({ service });
     } else {
       mocks.useState
         .mockReturnValueOnce([state.value, vi.fn()])
         .mockReturnValueOnce([state.baseline, vi.fn()])
         .mockReturnValueOnce([state.loadError, vi.fn()]);
-      ComposeEditorTab({ compose: service });
+      ComposeEditorTab({ compose: service, services: [service], onSelectService: vi.fn() });
     }
 
     expect(mocks.useDirtyGuard).toHaveBeenCalledExactlyOnceWith(tab, dirty);
@@ -60,16 +62,16 @@ describe.each(["Variables", "Compose"] as const)("%s on-demand dirty baseline", 
 });
 
 it("guards inserted shared references until the submitted value is saved", () => {
-  const inserted = variablesEditorReducer(loaded, {
-    type: "edited",
-    value: setVariable(loaded.value, "API_TOKEN", sharedReference("project", "SHARED_TOKEN")),
+  const inserted = dotenvEditorReducer(createEditorState(loaded.value), {
+    type: "edit",
+    text: appendDotenvKey(loaded.value, "API_TOKEN", sharedReference("project", "SHARED_TOKEN")),
   });
   mocks.useReducer.mockReturnValue([inserted, vi.fn()]);
   VariablesTab({ service });
   expect(mocks.useDirtyGuard).toHaveBeenLastCalledWith("Variables", true);
 
   mocks.useReducer.mockReturnValue([
-    variablesEditorReducer(inserted, { type: "saved", submittedValue: inserted.value }),
+    dotenvEditorReducer(inserted, { type: "saved", text: inserted.text }),
     vi.fn(),
   ]);
   VariablesTab({ service });

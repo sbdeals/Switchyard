@@ -5,7 +5,7 @@ import { SharedVariableEditor, SharedVariablesPanel } from "../components/Shared
 import { DirtyGuardProvider } from "../components/DirtyGuard";
 import { VariablesTab } from "../components/service/VariablesTab";
 import type { ComposeService, ProjectNode } from "./dokploy";
-import { variablesEditorReducer } from "./variables-editor";
+import { dotenvEditorReducer } from "./dotenv-editor";
 
 const mocks = vi.hoisted(() => ({
   useSharedVariables: vi.fn(),
@@ -13,12 +13,15 @@ const mocks = vi.hoisted(() => ({
   loadServiceVariables: vi.fn(),
   saveSharedVariables: vi.fn(),
   saveServiceVariables: vi.fn(),
-  editorState: { value: "", baseline: null as string | null, loadError: null as string | null },
+  editorState: {
+    text: "", baseline: null as string | null, loadError: null as string | null,
+    mode: "rows" as "rows" | "raw", review: null as string | null, exporting: null as "copy" | "download" | null,
+  },
 }));
 
-vi.mock("./variables-editor", async (importOriginal) => ({
-  ...await importOriginal<typeof import("./variables-editor")>(),
-  initialVariablesEditorState: mocks.editorState,
+vi.mock("./dotenv-editor", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./dotenv-editor")>(),
+  createEditorState: () => ({ ...mocks.editorState }),
 }));
 vi.mock("@/components/use-shared-variables", () => ({
   useSharedVariables: mocks.useSharedVariables,
@@ -143,8 +146,8 @@ describe("service shared reference rendering", () => {
     vi.clearAllMocks();
     // Static rendering cannot run effects. Seed the reducer's completed-load
     // state to exercise the UI that follows the ownership-checked action.
-    Object.assign(mocks.editorState, variablesEditorReducer(
-      { value: "", baseline: null, loadError: null },
+    Object.assign(mocks.editorState, dotenvEditorReducer(
+      mocks.editorState,
       { type: "loaded", env: loadedEnv },
     ));
     mocks.useSharedVariableKeys.mockReturnValue({
@@ -153,7 +156,7 @@ describe("service shared reference rendering", () => {
   });
 
   it("renders only a loading state before the service environment is requested", () => {
-    Object.assign(mocks.editorState, { value: "", baseline: null, loadError: null });
+    Object.assign(mocks.editorState, { text: "", baseline: null, loadError: null });
     const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null, createElement(VariablesTab, { service })));
     expect(html).toContain('aria-label="Loading environment variables"');
     expect(html).not.toContain("service-prop-must-not-be-read");
@@ -173,14 +176,14 @@ describe("service shared reference rendering", () => {
     expect(html).toContain('<code>MISSING: ${{environment.UNKNOWN}}</code> — Missing — deployment will fail');
     expect(html).not.toContain("service-prop-must-not-be-read");
     expect(html).toContain(">3 variables</span>");
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Save variables<\/button>/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Review changes<\/button>/);
     expect(mocks.useSharedVariableKeys).toHaveBeenCalledWith("shared-project", "development", service);
     expect(mocks.useSharedVariables).not.toHaveBeenCalled();
     expect(mocks.saveServiceVariables).not.toHaveBeenCalled();
   });
 
   it("counts parsed keys rather than multiline values, duplicate lines or comments", () => {
-    Object.assign(mocks.editorState, variablesEditorReducer(mocks.editorState, {
+    Object.assign(mocks.editorState, dotenvEditorReducer(mocks.editorState, {
       type: "loaded", env: '# comment\nMULTI="first\nsecond"\nDUP=old\nDUP=new\n',
     }));
     const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null, createElement(VariablesTab, { service })));
@@ -204,12 +207,12 @@ describe("service shared reference rendering", () => {
   });
 
   it("does not fall back to page props after an environment load failure", () => {
-    Object.assign(mocks.editorState, { value: "", baseline: null, loadError: "Access denied" });
+    Object.assign(mocks.editorState, { text: "", baseline: null, loadError: "Access denied" });
     const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null, createElement(VariablesTab, { service })));
     expect(html).toMatch(/role="alert"[^>]*>Access denied/);
     expect(html).not.toContain("service-prop-must-not-be-read");
     expect(html).not.toContain("<textarea");
-    expect(html).not.toContain("Save variables");
+    expect(html).not.toContain("Review changes");
   });
 });
 

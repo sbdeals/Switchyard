@@ -1,12 +1,19 @@
-import { createElement } from "react";
+import { createElement, useReducer } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { VariablesTab } from "../components/service/VariablesTab";
 import { loadServiceEnvAction } from "@/app/actions";
 import { DirtyGuardProvider } from "../components/DirtyGuard";
 import type { ComposeService } from "./dokploy";
-import { setVariable, sharedReference } from "./shared-variables";
+import { sharedReference } from "./shared-variables";
+import { appendDotenvKey } from "./dotenv-raw";
+import { createEditorState, dotenvEditorReducer, type EditorState } from "./dotenv-editor";
 import { initialVariablesEditorState, variablesEditorReducer } from "./variables-editor";
+
+vi.mock("react", async (importOriginal) => {
+  const react = await importOriginal<typeof import("react")>();
+  return { ...react, useReducer: vi.fn(react.useReducer) };
+});
 
 vi.mock("@/app/actions", () => ({
   loadServiceEnvAction: vi.fn(),
@@ -18,8 +25,134 @@ vi.mock("@/app/actions", () => ({
 vi.mock("@/components/use-shared-variables", () => ({
   useSharedVariableKeys: vi.fn(() => ({ keys: { project: ["SHARED_TOKEN"], environment: [] } })),
 }));
+const service: ComposeService = {
+  kind: "compose",
+  id: "compose-id",
+  name: "test-compose",
+  appName: "test-compose-app",
+  status: "idle",
+  projectId: "project-id",
+  projectName: "Test project",
+  environmentId: "environment-id",
+  environmentName: "production",
+  dockerImage: null,
+  env: null,
+  createdAt: null,
+  cpuLimit: null,
+  memoryLimit: null,
+  replicas: null,
+  composeFile: null,
+  composeType: "docker-compose",
+  domains: [],
+  deployments: [],
+};
+
+// Server rendering does not run the loading effect. Supply the real reducer's
+// post-action state to check what the component renders after that effect.
+function renderEditor(state: EditorState) {
+  vi.mocked(useReducer).mockReturnValueOnce([state, vi.fn()]);
+  return renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+    createElement(VariablesTab, { service }),
+  ));
+}
+
+function button(html: string, label: string) {
+  const markup = html.match(new RegExp(`<button[^>]*>${label}</button>`))?.[0];
+  expect(markup).toBeDefined();
+  return markup!;
+}
 
 describe("variables editor", () => {
+  it("renders the loading skeleton without exposing the service's env prop", () => {
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+      createElement(VariablesTab, {
+        service: { ...service, env: "TOKEN=env-redaction-prop-sentinel" },
+      }),
+    ));
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-label="Loading environment variables"');
+    expect(html).not.toContain("env-redaction-prop-sentinel");
+    expect(html).not.toContain("<textarea");
+    expect(html).not.toContain("Row editor");
+    expect(html).not.toContain("Raw editor");
+    expect(html).not.toContain("Copy as .env");
+    expect(html).not.toContain("Download .env");
+    expect(html).not.toContain("Review changes");
+  });
+
+  it("renders loaded values in rows and raw modes with a clean baseline", () => {
+    const env = "TOKEN=loaded-value\nEMPTY=";
+    const loaded = dotenvEditorReducer(createEditorState(null), { type: "loaded", env });
+    const rows = renderEditor(loaded);
+
+    expect(rows).not.toContain("Loading environment variables");
+    expect(rows).toContain('aria-label="Value for TOKEN"');
+    expect(rows).toContain(">loaded-value</textarea>");
+    expect(rows).toContain('aria-label="Value for EMPTY"');
+    expect(rows).toContain("Copy as .env");
+    expect(rows).toContain("Download .env");
+    expect(rows).not.toContain('aria-label="Variable changes"');
+    expect(button(rows, "Review changes")).toContain('disabled=""');
+
+    const raw = renderEditor(dotenvEditorReducer(loaded, { type: "mode", mode: "raw" }));
+    expect(raw).toContain('aria-label="Environment variables, one KEY=value per line"');
+    expect(raw).toContain(`>${env}</textarea>`);
+    expect(button(raw, "Review changes")).toContain('disabled=""');
+  });
+
+  it("uses the loaded baseline for masked added, changed and removed review entries", () => {
+    let state = dotenvEditorReducer(createEditorState(null), {
+      type: "loaded", env: "CHANGED=old-secret\nREMOVED=removed-secret\nUNCHANGED=same-secret",
+    });
+    state = dotenvEditorReducer(state, {
+      type: "edit", text: "CHANGED=new-secret\nADDED=added-secret\nUNCHANGED=same-secret",
+    });
+    const draft = renderEditor(state);
+    expect(button(draft, "Review changes")).not.toContain('disabled=""');
+
+    const review = renderEditor(dotenvEditorReducer(state, { type: "review" }));
+    for (const kind of ["added", "changed", "removed"]) expect(review).toContain(`${kind} (1)`);
+    for (const key of ["CHANGED", "ADDED", "REMOVED"]) expect(review).toContain(`${key}=••••••••`);
+    for (const value of ["old-secret", "removed-secret", "same-secret", "new-secret", "added-secret"]) {
+      expect(review).not.toContain(value);
+    }
+    expect(review).not.toContain("UNCHANGED=••••••••");
+    expect(review).not.toContain("<textarea");
+    expect(button(review, "Confirm changes")).not.toContain('disabled=""');
+    expect(review).toContain("Back to editing");
+  });
+
+  it("renders a clean editor after saving the reviewed draft", () => {
+    let state = dotenvEditorReducer(createEditorState(null), { type: "loaded", env: "KEY=original" });
+    state = dotenvEditorReducer(state, { type: "mode", mode: "raw" });
+    state = dotenvEditorReducer(state, { type: "edit", text: "KEY=saved-value" });
+    state = dotenvEditorReducer(state, { type: "review" });
+    state = dotenvEditorReducer(state, { type: "saved", text: state.review! });
+
+    const html = renderEditor(state);
+    expect(html).toContain(">KEY=saved-value</textarea>");
+    expect(html).not.toContain('aria-label="Variable changes"');
+    expect(html).not.toContain("Confirm changes");
+    expect(button(html, "Review changes")).toContain('disabled=""');
+  });
+
+  it("shows a load failure without editors, review or export controls", () => {
+    const failed = dotenvEditorReducer(createEditorState(null), {
+      type: "failed", error: "Could not load environment variables.",
+    });
+    const html = renderEditor(failed);
+
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Could not load environment variables.");
+    expect(html).not.toContain("Loading environment variables");
+    expect(html).not.toContain("<textarea");
+    expect(html).not.toContain("<button");
+  });
+});
+
+// Restored from main: the base reducer still backs dotenvEditorReducer.
+describe("variables editor reducer", () => {
   it("starts loading with no editable environment", () => {
     expect(initialVariablesEditorState).toEqual({ value: "", baseline: null, loadError: null });
     expect(variablesEditorReducer(initialVariablesEditorState, {
@@ -73,19 +206,27 @@ describe("variables editor", () => {
 
   it("keeps inserted shared references dirty until saved against the loaded baseline", () => {
     const env = "# Preserve existing values\nTOKEN=loaded-secret\n";
-    const loaded = variablesEditorReducer(initialVariablesEditorState, { type: "loaded", env });
-    const inserted = variablesEditorReducer(loaded, {
-      type: "edited",
-      value: setVariable(loaded.value, "API_TOKEN", sharedReference("project", "SHARED_TOKEN")),
+    const loaded = dotenvEditorReducer(createEditorState(null), { type: "loaded", env });
+    const inserted = dotenvEditorReducer(loaded, {
+      type: "edit",
+      text: appendDotenvKey(loaded.text, "API_TOKEN", sharedReference("project", "SHARED_TOKEN")),
     });
 
-    expect(inserted.value).toBe(`${env}API_TOKEN=\${{project.SHARED_TOKEN}}\n`);
+    expect(inserted.text).toBe(`${env}API_TOKEN=\${{project.SHARED_TOKEN}}\n`);
     expect(inserted.baseline).toBe(env);
-    expect(inserted.value).not.toBe(inserted.baseline);
+    expect(inserted.text).not.toBe(inserted.baseline);
 
-    const saved = variablesEditorReducer(inserted, { type: "saved", submittedValue: inserted.value });
-    expect(saved.value).toBe(saved.baseline);
-    expect(saved.value).toBe(inserted.value);
+    const review = dotenvEditorReducer(inserted, { type: "review" });
+    expect(review.review).toBe(inserted.text);
+    const html = renderEditor(review);
+    expect(html).toContain("API_TOKEN=••••••••");
+    expect(html).not.toContain("loaded-secret");
+    expect(button(html, "Add shared reference")).toContain('disabled=""');
+    expect(button(html, "Confirm changes")).not.toContain('disabled=""');
+
+    const saved = dotenvEditorReducer(review, { type: "saved", text: review.review! });
+    expect(saved.text).toBe(saved.baseline);
+    expect(saved.text).toBe(inserted.text);
   });
 
   it("renders the loading skeleton without exposing the service's env prop", () => {
