@@ -545,7 +545,7 @@ export class Orchestrator extends EventEmitter {
       saveConfig(loaded.config, loaded.path);
       log("Cleared stored admin credentials (the account was deleted with the data).");
     } catch (e) {
-      this.fail(e);
+      this.fail(e, true);
       this.busy = false;
       return;
     }
@@ -555,7 +555,7 @@ export class Orchestrator extends EventEmitter {
 
   // ---- error handling ------------------------------------------------------------
 
-  private fail(e: unknown): void {
+  private fail(e: unknown, purge = false): void {
     const message = e instanceof Error ? e.message : String(e);
     log(`ERROR: ${message}`);
     this.failActiveStep();
@@ -565,7 +565,13 @@ export class Orchestrator extends EventEmitter {
       { id: "retry", label: "Try again", kind: "primary" },
       { id: "logs", label: "View logs" },
     ];
-    if (/leftover dokploy-postgres volume/i.test(message)) {
+    if (purge) {
+      title = "Reset incomplete";
+      actions = [
+        { id: "freshStart", label: "Retry purge", kind: "danger" },
+        { id: "logs", label: "View logs" },
+      ];
+    } else if (/leftover dokploy-postgres volume/i.test(message)) {
       title = "Data from a previous install";
       actions = [
         { id: "forceKeepData", label: "Keep the old data", kind: "primary" },

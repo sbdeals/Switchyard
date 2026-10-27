@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { safeNextPath } from "@/lib/deeplink";
 import { SESSION_COOKIE, openSession } from "@/lib/session";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LoginForm } from "./LoginForm";
@@ -8,11 +9,16 @@ import { LoginForm } from "./LoginForm";
 // Reads the session cookie, so it must render per request.
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const nextPath = safeNextPath((await searchParams).next);
   // Already signed in? Skip the form.
   const store = await cookies();
   if (openSession(store.get(SESSION_COOKIE)?.value)) {
-    redirect("/");
+    redirect(nextPath);
   }
 
   return (
@@ -37,7 +43,7 @@ export default async function LoginPage() {
             Use your Dokploy account.
           </p>
         </div>
-        <LoginForm />
+        <LoginForm nextPath={nextPath} />
       </div>
     </main>
   );
