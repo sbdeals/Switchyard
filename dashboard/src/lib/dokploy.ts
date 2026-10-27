@@ -26,6 +26,7 @@ import { randomServiceName } from "./names";
 import { resolveAppPort } from "./app-port";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
 import { hasPublicLetsEncryptEmail } from "./domain-https";
+import { variableValues, type SharedScope, type SharedVariables, type SharedVariableKeys } from "./shared-variables";
 import { formatBackupError, validateS3Endpoint } from "./backup-errors";
 import {
   deriveComposeRuntime,
@@ -521,6 +522,7 @@ interface RawEnvironment {
 interface RawProject {
   projectId: string;
   name: string;
+  env?: string | null;
   environments: RawEnvironment[];
 }
 
@@ -569,6 +571,66 @@ function projectsFromTree(tree: RawProject[]): ProjectNode[] {
 
 export async function listProjects(): Promise<ProjectNode[]> {
   return projectsFromTree(await rawTree());
+}
+
+async function sharedVariableTarget(projectId: string, environmentId?: string) {
+  const project = (await rawTree()).find((p) => p.projectId === projectId);
+  if (!project) throw new Error("Project not found or access denied.");
+  const environment = project.environments.find((e) => e.environmentId === environmentId);
+  if (environmentId !== undefined && !environment) {
+    throw new Error("Environment does not belong to this project.");
+  }
+  return { project, environment };
+}
+
+/** Load only the selected scope after checking the current user's project tree. */
+export async function getSharedVariables(
+  projectId: string,
+  environmentId?: string
+): Promise<SharedVariables> {
+  const { project, environment } = await sharedVariableTarget(projectId, environmentId);
+  // v0.30.10 project.all includes project.env, but trims environment columns.
+  const detail = environment
+    ? await request<{ env: string | null }>(
+      `environment.one?environmentId=${encodeURIComponent(environment.environmentId)}`
+    )
+    : null;
+  return { project: project.env ?? "", environment: detail?.env ?? "" };
+}
+
+/** Reference badges/pickers need names only, never the shared values. */
+export async function getSharedVariableKeys(
+  projectId: string,
+  environmentId?: string
+): Promise<SharedVariableKeys> {
+  const shared = await getSharedVariables(projectId, environmentId);
+  return {
+    project: Object.keys(variableValues(shared.project)),
+    environment: Object.keys(variableValues(shared.environment)),
+  };
+}
+
+export async function saveSharedVariables(
+  projectId: string,
+  environmentId: string | undefined,
+  scope: SharedScope,
+  env: string
+): Promise<void> {
+  if (scope !== "project" && scope !== "environment") {
+    throw new Error("Invalid shared variable scope.");
+  }
+  if (typeof env !== "string") throw new Error("Variables must be text.");
+  const { project, environment } = await sharedVariableTarget(projectId, environmentId);
+  // Verified against Dokploy v0.30.10's project/environment update schemas.
+  if (scope === "project") {
+    await request("project.update", { method: "POST", body: { projectId: project.projectId, env } });
+  } else {
+    if (!environment) throw new Error("Select an environment first.");
+    await request("environment.update", {
+      method: "POST",
+      body: { environmentId: environment.environmentId, env },
+    });
+  }
 }
 
 /** Check the current user's workspace before reading or editing secret fields. */

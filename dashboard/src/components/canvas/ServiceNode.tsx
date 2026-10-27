@@ -43,7 +43,7 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
       className="nokey w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
       style={{
         borderColor: selected ? accent : "var(--color-border-strong)",
-        boxShadow: selected ? `0 0 0 1px ${accent}, 0 8px 30px -12px ${accent}80` : undefined,
+        boxShadow: selected ? `0 0 0 1px ${accent}, 0 8px 30px -12px color-mix(in srgb, ${accent} 50%, transparent)` : undefined,
       }}
     >
       <Handle type="target" position={Position.Left} style={{ background: accent, border: "none" }} />
