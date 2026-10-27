@@ -30,6 +30,12 @@ import { hasPublicLetsEncryptEmail } from "./domain-https";
 import { variableValues, type SharedScope, type SharedVariables, type SharedVariableKeys } from "./shared-variables";
 import { formatBackupError, validateS3Endpoint } from "./backup-errors";
 import {
+  normalizeDeploymentCommit,
+  type DeploymentCommit,
+  type DeploymentCommitFields,
+  type DeploymentSource,
+} from "./deployment-commit";
+import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
   listRuntimeStates,
@@ -172,6 +178,7 @@ export interface AppDeployment {
   status: string;
   title: string;
   createdAt: string;
+  commit: DeploymentCommit | null;
   /** Dokploy timestamps are nullable; older deployments may not have timings. */
   description: string | null;
   startedAt: string | null;
@@ -835,7 +842,7 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
         command: d.command ?? null,
         replicas: d.replicas ?? null,
         mounts: mapMountTypes(d.mounts),
-        deployments: d.deployments ? mapDeployments(d.deployments) : undefined,
+        deployments: d.deployments ? mapDeployments(d.deployments, {}) : undefined,
       } satisfies Database;
     })
   );
@@ -959,7 +966,7 @@ export async function reloadDatabase(engine: Engine, id: string, appName: string
 
 // --- applications -----------------------------------------------------------
 
-interface RawApplicationDetail {
+interface RawApplicationDetail extends DeploymentSource {
   name?: string;
   appName?: string;
   applicationStatus?: ServiceStatus;
@@ -1027,7 +1034,7 @@ interface RawDomain {
 }
 
 /** Deployment shape returned nested under `application.one` / `compose.one`. */
-interface RawDeployment {
+interface RawDeployment extends DeploymentCommitFields {
   deploymentId: string;
   status?: string;
   title?: string;
@@ -1052,12 +1059,13 @@ function mapDomains(domains: RawDomain[] | undefined): AppDomain[] {
 }
 
 /** Normalize a nested deployments array (shared by applications and compose). */
-function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment[] {
+function mapDeployments(deployments: RawDeployment[] | undefined, source: DeploymentSource): AppDeployment[] {
   return (deployments ?? []).map((dp) => ({
     deploymentId: dp.deploymentId,
     status: dp.status ?? "idle",
     title: dp.title ?? dp.description ?? "Deployment",
     createdAt: dp.createdAt ?? "",
+    commit: normalizeDeploymentCommit(dp, source),
     description: dp.description ?? null,
     startedAt: dp.startedAt ?? null,
     finishedAt: dp.finishedAt ?? null,
@@ -1127,7 +1135,7 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
           securityId: s.securityId,
           username: s.username ?? "",
         })),
-        deployments: mapDeployments(d.deployments),
+        deployments: mapDeployments(d.deployments, d),
         mounts: mapMountTypes(d.mounts),
         autoDeploy: d.autoDeploy ?? false,
         cleanCache: d.cleanCache ?? false,
@@ -2057,7 +2065,7 @@ export async function removeMount(mountId: string): Promise<void> {
 
 // --- compose ----------------------------------------------------------------
 
-interface RawComposeDetail {
+interface RawComposeDetail extends DeploymentSource {
   name?: string;
   description?: string | null;
   appName?: string;
@@ -2103,7 +2111,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         composeFile: d.composeFile ?? null,
         composeType: d.composeType ?? null,
         domains: mapDomains(d.domains),
-        deployments: mapDeployments(d.deployments),
+        deployments: mapDeployments(d.deployments, d),
         mounts: mapMountTypes(d.mounts),
       } satisfies ComposeService;
     })
