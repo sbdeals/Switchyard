@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 vi.mock("@/lib/dokploy", () => api);
+vi.mock("@/lib/project-settings-server", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: api.revalidatePath }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: api.unstable_rethrow }));
 
