@@ -2,6 +2,9 @@
  * Helpers re-exported for the node:test suite
  * (tests import from dist/lib.js so they run against the built artifact).
  */
+export { connectDeployClient, createDeployCommand, deployDirectory } from "./commands/deploy.js";
+export { DEFAULT_DEPLOY_MAX_BYTES, packDirectory } from "./core/deploy-pack.js";
+export { uploadApplication } from "./core/dokploy-api.js";
 export {
   CONFIG_KEY_TYPES,
   coerceConfigValue,

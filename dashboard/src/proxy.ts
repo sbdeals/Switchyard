@@ -26,11 +26,12 @@ const SESSION_COOKIE = "switchyard_session";
  * Paths reachable without a session:
  *  - /login          the sign-in page AND its Server Action POST target
  *  - /api/health     the installer's liveness/deep probe (shallow + ?deep=1)
+ *  - /api/session/expired clears stale sessions before returning to /login
  * Next static assets are excluded by the matcher below, so the login page can
  * load its CSS/JS while unauthenticated.
  */
 function isPublic(pathname: string): boolean {
-  return pathname === "/login" || pathname === "/api/health";
+  return pathname === "/login" || pathname === "/api/health" || pathname === "/api/session/expired";
 }
 
 export function proxy(request: NextRequest): NextResponse {

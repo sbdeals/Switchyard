@@ -1,15 +1,16 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Database as DatabaseIcon, Box, Layers } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 import { serviceNotesSubtitle } from "@/lib/service-notes";
+import { resolveServiceIcon } from "@/lib/service-icon";
+import { ServiceIcon } from "@/components/ServiceIcon";
 
 export interface ServiceNodeData extends Record<string, unknown> {
   service: Service;
-  /** Catalog logo URL for the app (Railway-style), or null for the generic icon. */
+  /** Exact catalog logo match, or null to use the local badge. */
   logo: string | null;
   onSelect: (service: Service) => void;
 }
@@ -77,42 +78,29 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
   );
 }
 
-/**
- * The app's catalog logo, falling back to the kind icon when there is no match
- * or the CDN asset is missing (it soft-404s to HTML, which <img> treats as a
- * broken image — onError swaps the icon back in).
- */
+/** Shared catalog-first service identity, with local SVG and generic fallbacks. */
 export function ServiceLogo({
   service,
   logo,
   accent,
   size = "size-9",
+  rounded = "rounded-lg",
 }: {
   service: Service;
   logo: string | null;
   accent: string;
   size?: string;
+  rounded?: string;
 }) {
-  const [failed, setFailed] = useState(false);
-  const Icon =
-    service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
   return (
-    <div
-      className={`flex ${size} shrink-0 items-center justify-center overflow-hidden rounded-lg`}
-      style={{ backgroundColor: `${accent}1a`, color: accent }}
-    >
-      {logo && !failed ? (
-        // eslint-disable-next-line @next/next/no-img-element -- remote catalog logos from arbitrary hosts
-        <img
-          src={logo}
-          alt=""
-          className="size-[70%] object-contain"
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        <Icon className="size-[50%]" />
-      )}
-    </div>
+    <ServiceIcon
+      icon={resolveServiceIcon(service)}
+      logo={logo}
+      logoLabel={service.name}
+      accent={accent}
+      size={size}
+      rounded={rounded}
+    />
   );
 }
 
