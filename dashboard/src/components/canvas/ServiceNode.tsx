@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { Service } from "@/lib/dokploy";
+import { hasSelectionModifier } from "@/lib/bulk-selection";
 import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 import { serviceNotesSubtitle } from "@/lib/service-notes";
 import { SHORTCUTS } from "@/lib/shortcuts";
@@ -22,19 +23,24 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
   const status = resolveServiceDisplay(service.status, service.runtime);
   const notesSubtitle = serviceNotesSubtitle(service.description);
 
+  // React Flow's nokey class lets Shift-click select a node; Shift-drag on the
+  // surrounding canvas still starts the selection rectangle.
   return (
     <div
       role="button"
       tabIndex={0}
+      aria-pressed={selected}
       aria-label={`${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""} — open details`}
-      onClick={() => onSelect(service)}
+      onClick={(e) => {
+        if (!hasSelectionModifier(e)) onSelect(service);
+      }}
       onKeyDown={(e) => {
         if (SHORTCUTS.openService.keys.some((key) => key === e.key)) {
           e.preventDefault();
-          onSelect(service);
+          if (!hasSelectionModifier(e)) onSelect(service);
         }
       }}
-      className="w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+      className="nokey w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
       style={{
         borderColor: selected ? accent : "var(--color-border-strong)",
         boxShadow: selected ? `0 0 0 1px ${accent}, 0 8px 30px -12px color-mix(in srgb, ${accent} 50%, transparent)` : undefined,
