@@ -1,4 +1,5 @@
 import { loadConfig, saveConfig, STORE_VOLUME } from "../core/config.js";
+import { CONTROL_PLANE_RESET_NOTICE, CONTROL_PLANE_STOP_NOTICE } from "../core/control-plane.js";
 import { docker, probeDocker } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { LOCAL_INGRESS_CONTAINER } from "../core/local-ingress.js";
@@ -16,26 +17,29 @@ export interface DownFlags {
 export async function downCommand(flags: DownFlags): Promise<void> {
   p.intro(pc.bold(`switchyard v${CLI_VERSION} — down${flags.purge ? " --purge" : ""}`));
   const { config: cfg, path } = loadConfig();
+  p.log.warn(flags.purge ? CONTROL_PLANE_RESET_NOTICE : CONTROL_PLANE_STOP_NOTICE);
 
   if (!flags.yes && process.stdin.isTTY) {
     const message = flags.purge
-      ? "Stop the stack AND DELETE the network, secrets, and data volumes (Dokploy and dashboard data)?"
-      : "Stop the Dokploy services and remove the Switchyard container? (Data volumes survive.)";
+      ? "Delete control-plane data, including dashboard settings and backups in switchyard-data? Deployed workloads and their volumes will be left orphaned."
+      : "Stop the control plane and remove the Switchyard container? Deployed workloads keep running; data volumes survive.";
     if (!(await askConfirm({ message, initialValue: !flags.purge }))) {
       p.cancel("Nothing changed.");
       return;
     }
   } else if (flags.purge && !flags.yes) {
-    throw new UserError("--purge without a TTY requires --yes to confirm deleting all data.");
+    throw new UserError("--purge without a TTY requires --yes to confirm deleting control-plane data.");
   }
 
   if ((await probeDocker()).availability !== "ok") {
     throw new UserError("Docker isn't reachable — nothing to stop (start Docker and re-run if the stack exists).");
   }
 
-  p.log.step("Removing the Switchyard container ...");
-  await docker(["rm", "-f", CONTAINER_NAME]); // tolerate absence
-  await docker(["rm", "-f", LOCAL_INGRESS_CONTAINER]); // opt-in local ingress, if it was running
+  if (cfg.platform === "linux") {
+    p.log.step("Removing the Switchyard container ...");
+    await docker(["rm", "-f", CONTAINER_NAME]); // tolerate absence
+    await docker(["rm", "-f", LOCAL_INGRESS_CONTAINER]); // opt-in local ingress, if it was running
+  }
 
   const platform = platformFor(cfg.platform);
   let failure: string | undefined;
@@ -68,5 +72,7 @@ export async function downCommand(flags: DownFlags): Promise<void> {
     }
   }
 
-  p.outro(flags.purge ? "Stack removed — a fresh slate." : "Stack stopped. Data volumes survive; `switchyard up` brings it back.");
+  p.outro(flags.purge
+    ? "Control plane removed. Workloads and their volumes remain; their Dokploy metadata is gone."
+    : "Control plane stopped. Workloads keep running; `switchyard up` restores management.");
 }
