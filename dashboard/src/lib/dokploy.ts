@@ -178,6 +178,7 @@ export interface AppDeployment {
   title: string;
   createdAt: string;
   commit: DeploymentCommit | null;
+  /** Dokploy timestamps are nullable; older deployments may not have timings. */
   description: string | null;
   startedAt: string | null;
   finishedAt: string | null;
