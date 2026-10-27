@@ -1,5 +1,7 @@
 import type { Service } from "./dokploy";
+import { parseComposePorts } from "./port-conflicts";
 import { stripUrlCredentials } from "./url-credentials";
+import { variableCount } from "./delete-impact";
 
 /** Only service keys are needed by Networking; never pass the YAML to it. */
 function composeServiceNames(file: string | null): string[] {
@@ -26,11 +28,21 @@ const redactUrl = (value: string | null) => value === null ? null : stripUrlCred
 
 /** Redact page props without changing the full services used on the server. */
 export function redactServiceForClient(service: Service): Service {
-  const base = { ...service, env: null, dockerImage: redactUrl(service.dockerImage) };
+  const base = {
+    ...service,
+    environmentVariableCount: service.environmentVariableCount ?? variableCount(service.env),
+    env: null,
+    // Safe boolean for onboarding; kept when an already-redacted service is redacted again.
+    hasVariables: service.hasVariables ?? (service.env ?? "").split("\n").some((line) =>
+      /^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=/.test(line.trim()),
+    ),
+    dockerImage: redactUrl(service.dockerImage),
+  };
   if (base.kind === "compose") {
     return {
       ...base,
       composeFile: null,
+      publishedPorts: parseComposePorts(base.composeFile),
       serviceNames: composeServiceNames(base.composeFile),
       hasPostgres: /^[ \t]*image:[ \t]*["']?[^\n#"']*postgres/im.test(base.composeFile ?? ""),
     };

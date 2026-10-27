@@ -1,9 +1,9 @@
-import type { Service, ServiceRuntime } from "@/lib/dokploy";
+import type { Service, ServiceRuntime, ServiceStatus } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 
 /** Brand accent for applications (databases use their engine accent). */
-export const APP_ACCENT = "#a06bff";
-export const COMPOSE_ACCENT = "#2dd4bf";
+export const APP_ACCENT = "var(--color-brand)";
+export const COMPOSE_ACCENT = "var(--color-teal)";
 
 export function serviceAccent(s: Service): string {
   if (s.kind === "database") return ENGINE_META[s.engine].accent;
@@ -89,17 +89,37 @@ export const LAST_DEPLOY_LABEL: Record<string, string> = {
   idle: "Never deployed",
 };
 
-/**
- * What a status indicator should show: engine truth when we have it, deploy
- * lifecycle otherwise. An in-flight deploy ("Deploying") and a never-deployed
- * service ("Idle") win over the runtime sweep — containers legitimately churn
- * during the former and don't exist yet for the latter.
- */
-export function resolveServiceDisplay(status: string, runtime?: ServiceRuntime): StatusDisplay {
-  if (status === "running" || status === "idle" || !runtime) {
-    return STATUS_META[status] ?? STATUS_META.idle;
+/** Runtime truth shared by badges and lifecycle controls. */
+export function resolveServiceState(status: string, runtime?: ServiceRuntime) {
+  if (status === "running") return "deploying";
+  if (!runtime) return status === "done" ? "running" : status === "error" ? "error" : "idle";
+  // Dokploy uses idle for new and stopped services; existing containers
+  // distinguish a stopped service from one that has never been deployed.
+  if (status === "idle") {
+    if (runtime.total === 0) return "idle";
+    if (runtime.health === "not-running") return "stopped";
   }
-  const meta = RUNTIME_META[runtime.health];
-  if (runtime.health === "running") return meta;
+  return runtime.health;
+}
+
+/** No lifecycle action while a deployment is already in progress. */
+export function resolveServiceAction(status: ServiceStatus, runtime?: ServiceRuntime) {
+  const state = resolveServiceState(status, runtime);
+  if (state === "deploying") return null;
+  // No containers at all (never deployed, or removed): Start has nothing to
+  // start, so offer a fresh deploy instead.
+  if (state === "idle" || runtime?.total === 0) return "deploy";
+  if (state === "running" || state === "degraded") return "stop";
+  return "start";
+}
+
+/** Display the same runtime state on the grid, canvas and drawer. */
+export function resolveServiceDisplay(status: string, runtime?: ServiceRuntime): StatusDisplay {
+  const state = resolveServiceState(status, runtime);
+  if (state === "deploying") return STATUS_META.running;
+  if (state === "idle" || state === "error") return STATUS_META[state];
+  if (state === "stopped") return { ...STATUS_META.idle, label: "Stopped" };
+  const meta = RUNTIME_META[state];
+  if (state === "running" || !runtime) return meta;
   return { ...meta, detail: `${runtime.running}/${runtime.total} containers running` };
 }

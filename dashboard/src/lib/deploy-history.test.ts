@@ -27,6 +27,8 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: lifecycle.refresh }) }));
 vi.mock("@/app/actions", () => ({}));
+// Main's AppTabs imports the server-only compose export action via ComposeExportDialog.
+vi.mock("@/app/compose-export-actions", () => ({ loadComposeExportAction: vi.fn() }));
 vi.mock("@/components/service/primitives", () => ({}));
 vi.mock("@/lib/utils", () => ({}));
 vi.mock("@/lib/deploy-stats", () => import("./deploy-stats"));
@@ -49,7 +51,7 @@ const deployment = (patch: Partial<AppDeployment> = {}): AppDeployment => ({
 function render(deployments: AppDeployment[]) {
   lifecycle.seedClock = true;
   lifecycle.effects = [];
-  return renderToStaticMarkup(createElement(DeploymentHistory, { deployments }));
+  return renderToStaticMarkup(createElement(DeploymentHistory, { deployments, serviceKind: "application", onNavigate: () => {} }));
 }
 
 beforeEach(() => {

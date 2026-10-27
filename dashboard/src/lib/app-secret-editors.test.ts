@@ -10,6 +10,10 @@ vi.mock("@/app/actions", () => ({
   loadServiceCommandsAction: vi.fn(),
   loadServiceWebhookAction: vi.fn(),
 }));
+// #129: DeploymentHistory refreshes running deploys through the app router.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+// AppTabs -> ComposeExportDialog imports the server-only compose export action.
+vi.mock("@/app/compose-export-actions", () => ({ loadComposeExportAction: vi.fn() }));
 
 const app: Application = {
   kind: "application",

@@ -28,13 +28,17 @@ import {
   Network,
   Sparkles,
 } from "lucide-react";
-import type { Action, AppDomain, ServiceStatus } from "@/lib/dokploy";
+import type { Action, AppDomain, Service, ServiceRuntime, ServiceStatus } from "@/lib/dokploy";
 import type { ActionResult } from "@/app/actions";
+import { appLifecycleAction, composeLifecycleAction, lifecycleAction } from "@/app/actions";
+import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
+import { serviceDeleteImpact } from "@/lib/delete-impact";
 import { StatusBadge } from "@/components/StatusBadge";
+import { resolveServiceAction } from "@/lib/service-meta";
 import { cn } from "@/lib/utils";
 
 export const inputCls =
-  "w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50";
+  "min-w-0 w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50";
 
 // --- hooks --------------------------------------------------------------------
 
@@ -160,8 +164,8 @@ export function Field({
   const generated = useId();
   const { nodes, id } = labelTarget(children, generated);
   return (
-    <div>
-      <div className="mb-1.5 flex items-baseline justify-between">
+    <div className="min-w-0">
+      <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
         <label htmlFor={id} className="text-xs font-medium text-[var(--color-fg-muted)]">
           {label}
         </label>
@@ -174,7 +178,7 @@ export function Field({
 
 export function Info({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+    <div className="min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
       <div className="text-xs text-[var(--color-fg-subtle)]">{label}</div>
       <div className={cn("mt-0.5 truncate text-sm", mono && "font-mono text-xs")} title={value}>
         {value}
@@ -194,7 +198,7 @@ export function CopyButton({ text }: { text: string }) {
         flash();
       }}
       aria-label="Copy to clipboard"
-      className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+      className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
     >
       {copied ? <Check className="size-3.5 text-[var(--color-ok)]" /> : <Copy className="size-3.5" />}
       <span aria-live="polite" className="sr-only">
@@ -221,7 +225,7 @@ export function RemoveBtn({
       onClick={onClick}
       disabled={pending}
       aria-label={label}
-      className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
+      className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
     >
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
     </button>
@@ -238,9 +242,11 @@ export function RemoveBtn({
 export function PublicUrlBar({
   domains,
   status,
+  runtime,
 }: {
   domains: AppDomain[];
   status: ServiceStatus;
+  runtime?: ServiceRuntime;
 }) {
   const primary = domains.find((d) => d.https) ?? domains[0];
   const url = primary ? `${primary.https ? "https" : "http"}://${primary.host}` : null;
@@ -268,7 +274,7 @@ export function PublicUrlBar({
         )}
       </div>
       <div className="shrink-0">
-        <StatusBadge status={status} />
+        <StatusBadge status={status} runtime={runtime} />
       </div>
     </div>
   );
@@ -282,7 +288,7 @@ export function PublicUrlBar({
 export function PrivateNetwork({ host }: { host: string }) {
   return (
     <Field label="Private networking" hint="internal DNS">
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
+      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-2.5">
         <Network className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
         <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
           {host}
@@ -301,33 +307,36 @@ export function PrivateNetwork({ host }: { host: string }) {
 /** Deploy / Start / Stop / Redeploy buttons driven by the service status. */
 export function LifecycleButtons({
   status,
+  runtime,
   pending,
   error,
   run,
 }: {
   status: ServiceStatus;
+  runtime?: ServiceRuntime;
   pending: boolean;
   error: string | null;
   run: (action: Action) => void;
 }) {
+  const action = resolveServiceAction(status, runtime);
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        {status === "idle" ? (
+        {action === "deploy" ? (
           <Btn onClick={() => run("deploy")} disabled={pending} primary>
             <Rocket className="size-3.5" /> Deploy
           </Btn>
-        ) : status === "done" ? (
+        ) : action === "stop" ? (
           <Btn onClick={() => run("stop")} disabled={pending}>
             <Square className="size-3.5" /> Stop
           </Btn>
-        ) : (
+        ) : action === "start" ? (
           <Btn onClick={() => run("start")} disabled={pending}>
             <Play className="size-3.5" /> Start
           </Btn>
-        )}
-        {status !== "idle" && (
-          <Btn onClick={() => run("deploy")} disabled={pending}>
+        ) : null}
+        {action !== "deploy" && (
+          <Btn onClick={() => run("deploy")} disabled={pending || !action}>
             <RefreshCw className="size-3.5" /> Redeploy
           </Btn>
         )}
@@ -358,7 +367,7 @@ export function SaveRow({
   label?: string;
 }) {
   return (
-    <div className="flex items-center justify-end gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
       {error && (
         <span role="alert" className="text-xs text-[var(--color-danger)]">
           {error}
@@ -384,18 +393,20 @@ export function SaveRow({
 
 /** Destroy block with confirmation; `message` names what gets removed. */
 export function DangerZone({
-  name,
+  service,
   message,
-  pending,
-  error,
-  onDestroy,
+  onDeleted,
 }: {
-  name: string;
+  service: Service;
   message: string;
-  pending: boolean;
-  error: string | null;
-  onDestroy: () => void;
+  onDeleted: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const remove = () => {
+    if (service.kind === "application") return appLifecycleAction(service.id, "remove");
+    if (service.kind === "compose") return composeLifecycleAction(service.id, "remove");
+    return lifecycleAction(service.engine, service.id, "remove");
+  };
   return (
     <div className="rounded-xl border border-[var(--color-danger)]/40 bg-[var(--color-danger-soft)] p-4">
       <h3 className="text-sm font-semibold text-[var(--color-danger)]">Danger zone</h3>
@@ -404,18 +415,20 @@ export function DangerZone({
       </p>
       <button
         type="button"
-        onClick={() => {
-          if (confirm(`Destroy "${name}"? This cannot be undone.`)) onDestroy();
-        }}
-        disabled={pending}
-        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] disabled:opacity-50"
+        onClick={() => setOpen(true)}
+        className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-medium text-[var(--color-danger)] [overflow-wrap:anywhere] hover:bg-[var(--color-danger-soft)] disabled:opacity-50"
       >
-        <Trash2 className="size-3.5" /> Destroy {name}
+        <Trash2 className="size-3.5" /> Destroy {service.name}
       </button>
-      {error && (
-        <p role="alert" className="mt-2 text-xs text-[var(--color-danger)]">
-          {error}
-        </p>
+      {open && (
+        <DeleteConfirmDialog
+          name={service.name}
+          resource="service"
+          impact={serviceDeleteImpact(service)}
+          onConfirm={remove}
+          onClose={() => setOpen(false)}
+          onDeleted={onDeleted}
+        />
       )}
     </div>
   );

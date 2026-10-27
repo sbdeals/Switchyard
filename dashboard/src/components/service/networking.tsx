@@ -5,9 +5,12 @@
 import { useState, useTransition } from "react";
 import { Globe, ArrowRight, Plug, Lock, Plus, Loader2 } from "lucide-react";
 import type { Application } from "@/lib/dokploy";
+import { validatePort } from "@/lib/validation";
 import { previewRedirect, validateBasicAuth, validateRedirect } from "@/lib/app-security";
 import { DomainsTab } from "@/components/service/AppTabs";
 import { inputCls, Field, RemoveBtn } from "@/components/service/primitives";
+import { PortConflictWarning, type PortConflictProps } from "@/components/service/PortConflictWarning";
+import { getPortWarnings, isValidPort } from "@/lib/port-conflicts";
 import {
   createRedirectAction,
   updateRedirectAction,
@@ -19,7 +22,7 @@ import {
   deleteSecurityAction,
 } from "@/app/actions";
 
-export function NetworkingTab({ app }: { app: Application }) {
+export function NetworkingTab({ app, services, onSelectService }: PortConflictProps & { app: Application }) {
   return (
     <div className="space-y-8">
       <p className="text-[11px] text-[var(--color-fg-subtle)]">
@@ -31,7 +34,7 @@ export function NetworkingTab({ app }: { app: Application }) {
         <DomainsTab app={app} />
       </section>
 
-      <PortsSection app={app} />
+      <PortsSection app={app} services={services} onSelectService={onSelectService} />
     </div>
   );
 }
@@ -71,10 +74,12 @@ function AddBtn({
   pending,
   disabled,
   onClick,
+  label = "Add",
 }: {
   pending: boolean;
   disabled?: boolean;
   onClick: () => void;
+  label?: string;
 }) {
   return (
     <button
@@ -83,7 +88,7 @@ function AddBtn({
       className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
     >
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-      Add
+      {label}
     </button>
   );
 }
@@ -229,8 +234,8 @@ function RedirectsSection({ app }: { app: Application }) {
           <p className="text-[11px] text-[var(--color-fg-subtle)]">
             Matches the full URL. Use {"${1}"} for capture groups. Editor supports a subset of Traefik regular expressions.
           </p>
-          <div className="flex items-center gap-2">
-            <label className="mr-auto flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="mr-auto flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)] max-lg:min-h-10">
               <input
                 type="checkbox"
                 checked={permanent}
@@ -251,7 +256,7 @@ function RedirectsSection({ app }: { app: Application }) {
   );
 }
 
-function PortsSection({ app }: { app: Application }) {
+function PortsSection({ app, services, onSelectService }: PortConflictProps & { app: Application }) {
   const [published, setPublished] = useState("");
   const [target, setTarget] = useState("");
   const [protocol, setProtocol] = useState<"tcp" | "udp">("tcp");
@@ -259,11 +264,15 @@ function PortsSection({ app }: { app: Application }) {
   const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
+  const warnings = getPortWarnings(services, app.id, [{ port: Number(published), protocol }]);
+  const validPorts = isValidPort(Number(published)) && isValidPort(Number(target));
+
   function add() {
+    const validationError = validatePort(published, "Published port") || validatePort(target, "Target port");
+    setError(validationError);
+    if (validationError) return;
     const p = Number(published);
     const t = Number(target);
-    if (!p || !t) return;
-    setError(null);
     start(async () => {
       // publishMode defaults to "host" (Dokploy's own default) — the common
       // case of exposing a port on the node.
@@ -312,28 +321,30 @@ function PortsSection({ app }: { app: Application }) {
       ) : (
         <Empty>No published ports.</Empty>
       )}
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
+      <div className="grid grid-cols-2 items-end gap-2 sm:flex">
+        <div className="min-w-0 flex-1">
           <Field label="Published">
             <input
               value={published}
-              onChange={(e) => setPublished(e.target.value.replace(/[^0-9]/g, ""))}
+              onChange={(e) => setPublished(e.target.value)}
+              inputMode="numeric"
               placeholder="8080"
               className={inputCls}
             />
           </Field>
         </div>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Field label="Target">
             <input
               value={target}
-              onChange={(e) => setTarget(e.target.value.replace(/[^0-9]/g, ""))}
+              onChange={(e) => setTarget(e.target.value)}
+              inputMode="numeric"
               placeholder="80"
               className={inputCls}
             />
           </Field>
         </div>
-        <div className="w-24">
+        <div className="min-w-0 sm:w-24">
           <Field label="Protocol">
             <select
               value={protocol}
@@ -347,10 +358,15 @@ function PortsSection({ app }: { app: Application }) {
         </div>
         <AddBtn
           pending={pending && removingId === null}
-          disabled={!published || !target}
+          disabled={!validPorts}
           onClick={add}
+          label={warnings.length ? "Save anyway" : "Add"}
         />
       </div>
+      <PortConflictWarning warnings={warnings} onSelectService={onSelectService} />
+      {((published && !isValidPort(Number(published))) || (target && !isValidPort(Number(target)))) && (
+        <p role="alert" className="text-xs text-[var(--color-danger)]">Use ports from 1 to 65535.</p>
+      )}
       {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </section>
   );

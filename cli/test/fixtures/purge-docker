@@ -1,0 +1,72 @@
+#!/usr/bin/env node
+// Fake Docker for purge integration tests and the standalone failure demo.
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+const path = process.env.PURGE_FAKE_STATE;
+const state = JSON.parse(fs.readFileSync(path, "utf8"));
+state.calls.push(args);
+
+function finish(code = 0, stdout = "", stderr = "") {
+  fs.writeFileSync(path, JSON.stringify(state));
+  if (stdout) fs.writeSync(1, stdout + "\n");
+  if (stderr) fs.writeSync(2, stderr + "\n");
+  process.exit(code);
+}
+
+const [kind, action, ...rest] = args;
+if (kind === "version") finish(0, "28.0.0");
+if (kind === "info" || kind === "rm") finish();
+if (kind === "service" && action === "rm") finish();
+if (kind === "service" && action === "ls") {
+  const busy = state.servicePolls > 0;
+  if (busy) state.servicePolls--;
+  finish(0, [...(busy ? ["dokploy"] : []), ...Object.keys(state.serviceAttachments || {})].join("\n"));
+}
+if (kind === "service" && action === "inspect") {
+  if (state.serviceInspectFailure) finish(1, "", "Cannot inspect service attachments");
+  finish(0, (state.serviceAttachments?.[rest[0]] || []).join("\n"));
+}
+if (kind === "ps") {
+  if (args.includes("network=dokploy-network")) {
+    if (state.attachmentFailure) finish(1, "", "Cannot inspect network attachments");
+    finish(0, (state.containerAttachments || []).map(({ name, service = "" }) => `${name}\t${service}`).join("\n"));
+  }
+  const busy = state.containerPolls > 0;
+  if (busy) state.containerPolls--;
+  const nameFilter = args.find((arg) => arg.startsWith("label=com.docker.swarm.service.name="));
+  const matches = !nameFilter || nameFilter.endsWith("=dokploy");
+  const format = args[args.indexOf("--format") + 1] || "";
+  finish(0, busy && matches ? (format.includes("Label") ? "dokploy" : "fake-task") : "");
+}
+
+const resources = state.resources[kind];
+if (resources && action === "ls") {
+  if (state.listFailure === kind) finish(1, "", "Cannot connect to the Docker daemon");
+  finish(0, resources.join("\n"));
+}
+if (resources && action === "inspect") {
+  const name = rest.find((arg) => resources.includes(arg));
+  if (kind === "network" && name) finish(0, "dokploy-network-id");
+  if (name) finish(0, "[{}]");
+  finish(1, "", `Error: No such ${kind}: ${rest[0]}`);
+}
+if (resources && action === "rm") {
+  let code = 0;
+  const errors = [];
+  for (const name of rest.filter((arg) => !arg.startsWith("-"))) {
+    const key = `${kind}/${name}`;
+    state.attempts[key] = (state.attempts[key] || 0) + 1;
+    const failures = state.failures[key] || 0;
+    if (!resources.includes(name)) {
+      code = 1;
+      errors.push(`Error: No such ${kind}: ${name}`);
+    } else if (failures === -1 || state.attempts[key] <= failures) {
+      code = 1;
+      errors.push(`Error response from daemon: ${kind} ${name} is in use`);
+    } else {
+      resources.splice(resources.indexOf(name), 1);
+    }
+  }
+  finish(code, "", errors.join("\n"));
+}
+finish(99, "", `Unexpected fake Docker command: ${args.join(" ")}`);
