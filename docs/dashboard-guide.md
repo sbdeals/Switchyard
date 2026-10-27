@@ -6,19 +6,21 @@ This guide tours the features. To install the stack and connect Switchyard to it
 
 > **Login required — but a login is not TLS.** Switchyard gates every page, action, and log/metric stream behind a per-user Dokploy login (`/login`). A signed-in user still holds full Dokploy admin (create/destroy services, read database passwords, stream logs) and traffic is plain HTTP — keep it on localhost (the default) or put an HTTPS proxy in front before exposing it. See the [security note in getting-started](getting-started.md#set-up-switchyard-both-platforms) and the security model in [architecture.md](architecture.md).
 
-The screenshots come from a live local deployment with two demo services: `redis-mskd`, a Redis database created with one click, and `whoami-snim`, an application deployed from the `traefik/whoami` Docker image.
+The screenshots use two running local demo services: `ogs-web` (`nginx:alpine`) and `ogs-redis` (`redis:7`), deployed as separate Compose stacks in `ogs-guide-r1 / ogs-demo`. Compose works on this test host's bridge network without Swarm. All service drawers show **Running** and **Last deploy: Succeeded**; the guide describes native application and managed-database controls separately where they differ from Compose.
+
+Captured from dashboard revision `608d7cb` on localhost:3009 at 1440×900 with 2× device scale (2880×1800 PNGs). Both containers passed health checks, and the web container could reach Redis over their private network. The throwaway services were deleted after capture.
 
 ## The workspace
 
 Open http://localhost:3001. The header reads **Services** ("Apps and databases across your Dokploy projects") and carries four controls on the right: a **Canvas | Grid** view toggle, **Projects**, **Refresh**, and the purple **New service** button. On a fresh install the workspace shows a "No services yet" placeholder with a New service button; once you have services, the canvas is the default view.
 
-![Canvas view: the whoami-snim application node and the redis-mskd database node under the "My Project / production" label, joined by an inferred edge, with minimap and zoom controls](images/canvas-overview.png)
+![Canvas view centered on the running ogs-web and ogs-redis Compose nodes in ogs-guide-r1 / ogs-demo, joined by an inferred dependency edge, with minimap and zoom controls](images/canvas-overview.png)
 
 ### Canvas view
 
-Each service is a draggable card: an icon and accent color per kind (purple box for applications, engine-colored database icon for databases, teal layers for compose stacks), the service name, a subtitle with its Docker image or kind, and a status dot on the right. Services are grouped by project and environment — the uppercase label ("MY PROJECT / PRODUCTION" above) marks each group's column.
+Each service is a draggable card: an icon and accent color per kind (purple box for applications, engine-colored database icon for databases, teal layers for compose stacks), the service name, a subtitle with its Docker image or kind, and a status dot on the right. Each card also shows its project and environment, such as `ogs-guide-r1 / ogs-demo` above.
 
-The animated dashed line from `whoami-snim` to `redis-mskd` is an inferred connection: the app's environment variables reference the Redis service, so Switchyard draws an arrow from the consumer to its dependency. [How canvas connections work](#how-canvas-connections-work) explains the heuristic.
+The animated dashed line from `ogs-web` to `ogs-redis` is an inferred connection: the web stack's environment variables reference the Redis service, so Switchyard draws an arrow from the consumer to its dependency. [How canvas connections work](#how-canvas-connections-work) explains the heuristic.
 
 - Click a node to open its drawer.
 - Drag nodes to arrange them; positions are remembered in your browser's localStorage (not on the server), so the layout is per-browser.
@@ -28,7 +30,9 @@ The animated dashed line from `whoami-snim` to `redis-mskd` is an inferred conne
 
 Click **Grid** in the header toggle for a flat card list — handy once the canvas gets busy or on narrow windows.
 
-![Grid view: redis-mskd and whoami-snim cards, each with a Running badge and its "My Project / production" scope](images/grid-view.png)
+![Grid view including ogs-redis and ogs-web Compose cards with Running badges and their ogs-guide-r1 / ogs-demo scope, alongside other local demo services](images/grid-view.png)
+
+The two `ogs-*` cards are Running. The shared local test workspace also contains unrelated Idle and Error cards.
 
 Each card shows the same identity, status badge, and project/environment scope; click a card to open the drawer. Services that have never been deployed show a one-click **Deploy** button directly on the card.
 
@@ -36,7 +40,7 @@ Each card shows the same identity, status badge, and project/environment scope; 
 
 Dokploy organizes services under **project → environment** (for example `My Project / production`). Click **Projects** in the header to manage that tree.
 
-![Projects & environments panel: My Project with its production environment, rename and delete icons, a "new environment" input with Add env, and the new-project input](images/projects-view.png)
+![Projects & environments panel showing ogs-guide-r1 with ogs-demo and the default production environment, rename and delete controls, Add env, and the new-project input](images/projects-view.png)
 
 - Create a project with the **new project name** input at the bottom.
 - Add an environment to a project with its inline **new environment** input and **Add env**.
@@ -61,15 +65,15 @@ The page renders from live Dokploy state on every load, and every action (deploy
 
 Click **New service** to open the creation menu. Everything here is one click (or one field) away from a deployed service; all details are editable afterward in the drawer.
 
-![New service menu: Application section with docker image input, git repo input and Compose stack row; Database section listing PostgreSQL, MySQL, MariaDB, MongoDB and Redis with version tags](images/new-service-menu.png)
+![New service menu targeting ogs-guide-r1 / ogs-demo: application inputs, From GitHub, Compose stack, App catalog, and the five managed database engines](images/new-service-menu.png)
 
-The **Application** section offers three ways in: deploy from a Docker image, deploy from a Git repository, or create a Compose stack. The **Database** section lists the five managed engines with the exact image each would deploy: `postgres:18`, `mysql:8.4`, `mariadb:11`, `mongo:8`, `redis:7`.
+The **Application** section offers four ways in: deploy from a Docker image, deploy from a public Git URL, deploy through a GitHub App (including private repositories), or create a Compose stack. The **Database** section lists the five managed engines with the exact image each would deploy: `postgres:18`, `mysql:8.4`, `mariadb:11`, `mongo:8`, `redis:7`.
 
 ### One-click databases
 
 Click an engine row and Switchyard provisions and deploys a database immediately — no form. It auto-generates:
 
-- a friendly name: the engine plus a random suffix (that's where `redis-mskd` came from),
+- a friendly name: the engine plus a random suffix (for example `redis-mskd`),
 - a random 20-character password,
 - the newest curated version of the engine (the tag shown in the menu).
 
@@ -79,23 +83,27 @@ For PostgreSQL, MySQL, and MariaDB the user defaults to `admin` and the database
 
 Type any public image reference into the **docker image** field — `nginx:alpine`, `traefik/whoami`, `ghcr.io/org/app:tag` — and click **Deploy** (or press Enter).
 
-![New service menu with the docker image field filled in with traefik/whoami and the Deploy button enabled](images/deploy-image-filled.png)
+![New service menu targeting ogs-guide-r1 / ogs-demo with nginx:alpine in the docker image field and the Deploy button enabled](images/deploy-image-filled.png)
 
-Switchyard creates an application named after the image plus a random suffix (`traefik/whoami` became `whoami-snim`), points it at the image, and deploys it. The drawer opens on the new service. There are no registry-credential fields in this menu, so the image must be publicly pullable.
+Switchyard creates an application named after the image plus a random suffix (for example `nginx-ab12`), points it at the image, and deploys it. The drawer opens on the new service. There are no registry-credential fields in this menu, so the image must be publicly pullable. The screenshot shows the form before submission; the running demo uses Compose instead.
 
 ### Deploy from a Git repository
 
 Paste a public clone URL (for example `https://github.com/you/my-app.git`) into the **git repo url** field and click **Deploy**. Switchyard creates an application named after the repository, sets it to build from the `main` branch at the repo root with **Nixpacks** (Dokploy's default buildpack — it detects the language and produces an image without a Dockerfile), and starts the first deployment.
 
-No OAuth or deploy keys are involved — the URL is cloned directly, so the repository must be public. Builds take longer than image deploys; the service shows **Deploying** while Nixpacks works, and the [Deploys tab](#deployment-history) records the attempt. Branch and build path are editable in Dokploy itself if you need something other than `main` at `/`.
+The clone-URL field uses a direct public clone without a GitHub App. Builds take longer than image deploys; the service shows **Deploying** while Nixpacks works, and the [Deploys tab](#deployment-history) records the attempt and lets you change the branch.
+
+For **private GitHub repositories**, use **New service → From GitHub**. This requires a GitHub App created and installed in Dokploy with access to the repository. App creation happens in Dokploy's Git-provider settings and requires a public callback URL.
+
+1. Choose an **Installation** (selected automatically if there is only one).
+2. Choose a **Repository** and **Branch**. Private repositories are marked `(private)`; the repository's default branch is preselected when available.
+3. Click **Deploy**. Switchyard creates an application, configures the GitHub source at the repository root, and deploys it. Push auto-deploy is enabled for the selected branch through the App's webhook.
+
+If no GitHub App is connected, the modal shows **Connect GitHub App**, linking to Dokploy's settings. Create and install the App there, then return and click **Refresh**. The public clone-URL field remains available without an App.
 
 ### Compose stacks
 
-Click **Compose stack** and Switchyard immediately creates the service — again, no form. It appears on the canvas as **Idle** (nothing is running yet) and its drawer opens. On the **Compose** tab you'll find the editor seeded with a starter `docker-compose.yml`:
-
-![Compose stack drawer for compose-sgzh in Idle state, showing the Compose tab's YAML editor with the nginx:alpine starter template and the Save and Save & deploy buttons](images/compose-editor.png)
-
-The starter file runs nginx and publishes it on port 8080:
+Click **Compose stack** and Switchyard immediately creates the service — again, no form. It appears on the canvas as **Idle** (nothing is running yet) and its drawer opens. On the **Compose** tab you'll find the editor seeded with a starter `docker-compose.yml`. The starter file runs nginx and publishes it on port 8080:
 
 ```yaml
 services:
@@ -105,7 +113,11 @@ services:
       - 8080:80
 ```
 
-Replace it with your own stack, then click **Save & deploy** to store the file and deploy it in one step (**Save** stores it without deploying). Until you deploy, the stack stays Idle — if you close the drawer without saving, the idle service still exists and can be deployed or destroyed later. Compose stacks have no Variables tab; define environment variables inside the YAML.
+Replace it with your own stack, then click **Save & deploy** to store the file and deploy it in one step (**Save** stores it without deploying). Until you deploy, the stack stays Idle — if you close the drawer without saving, the idle service still exists and can be deployed or destroyed later. Compose stacks have a **Variables** tab for their environment variables; save there and redeploy for changes to take effect.
+
+The running `ogs-web` example below uses a customized file: nginx, a health check, a 128 MB memory limit, a `REDIS_URL` variable, and a shared bridge network. It publishes no host ports.
+
+![ogs-web Compose editor: Running and Last deploy: Succeeded, saved nginx:alpine configuration with REDIS_URL, health check and shared network, plus Save and Save & deploy controls](images/compose-editor.png)
 
 ## Working with a service
 
@@ -115,34 +127,36 @@ The tab row depends on the service kind:
 
 | Kind | Tabs |
 |---|---|
-| Application | Overview · Variables · Domains · Deploys · Metrics · Logs · Settings |
-| Database | Overview · Variables · Metrics · Logs · Settings |
-| Compose stack | Overview · Compose · Logs · Settings |
+| Application | Overview · Variables · Deploy · Build · Networking · Deploys · Schedules · Volumes · Metrics · Logs · Console · Settings |
+| Database (PostgreSQL, MySQL, MariaDB, MongoDB, Redis) | Overview · Variables · Volumes · Metrics · Logs · Console · Backups · Settings |
+| Compose stack | Overview · Variables · Networking · Deploys · Compose · Volumes · Metrics · Logs · Console · Settings |
+
+**Data** also appears immediately after **Overview** for databases whose engine is `postgres` or whose image contains `postgres`, and for compose stacks with an `image:` value containing `postgres` (case-insensitive).
 
 There is no separate "Source" tab — an application's source (Docker image or Git repository) is shown on its Overview tab.
 
 ### Overview and lifecycle
 
-Every Overview starts with the lifecycle buttons for the service's current state (see the [lifecycle reference](#lifecycle-reference)) followed by the service's key facts. For an application:
+Overview shows lifecycle buttons for the service's current state (see the [lifecycle reference](#lifecycle-reference)) and the service's key facts. The web service below runs as a Compose stack:
 
-![whoami-snim application drawer, Overview tab: Stop and Redeploy buttons, Public URL empty state, and Source, Image, Build, and Replicas fields](images/app-overview.png)
+![ogs-web Compose Overview: Running and Last deploy: Succeeded, Public URL empty state pointing at Networking, Stop and Redeploy buttons, Type and App name fields](images/app-overview.png)
 
-- **Public URL** — the first attached domain, as a clickable link; before you attach one it reads "No domain yet — add one in the Domains tab."
+Compose Overview shows **Public URL**, **Type**, and **App name**, with a pointer to the Compose editor. Native application Overview also includes source and build details:
+
+- **Public URL** — an attached domain, as a clickable link; before you attach one it reads "No domain yet — add one under Networking."
 - **Source** — where the app comes from (`docker` for image deploys, the Git provider for repo deploys), with the **Image** or **Repository** next to it.
 - **Build** — Dokploy's build type. It defaults to `nixpacks`, which is what actually builds Git deploys; for image-based apps the field is informational only.
 - **Replicas** — how many task instances run.
 
-A database Overview shows the connection string (next section) plus image, internal port, replicas, database/user names, and resource limits. A compose Overview is minimal — its type and app name and a pointer to the Compose tab.
+A managed database Overview shows the connection string (next section) plus image, internal port, replicas, database/user names, and resource limits. The Redis example here runs in Compose, so it has the same Compose Overview fields as the web stack:
+
+![ogs-redis Compose Overview: Running and Last deploy: Succeeded, Stop and Redeploy controls, Public URL empty state, Type and App name fields](images/db-overview.png)
 
 ### Database connection strings
 
-Open a database's Overview to grab its connection string, ready to paste into another service's variables:
+For a native managed database, open **Overview** to copy its connection string. Compose stacks do not generate this field; use the database's configured credentials and its service name or network alias on a shared Docker network.
 
-![redis-mskd database drawer, Overview tab: Running badge, Stop and Redeploy buttons, internal connection string with copy button, and Image, Internal port, Replicas, Database, User, and Resources fields](images/db-overview.png)
-
-> **About the visible password:** the credential in this and later screenshots is a locally generated throwaway from the demo machine, gone along with it — not a leaked secret. Yours will be different (and worth protecting).
-
-The string is the **internal** address: its host is the service's *app name* (the long generated identifier shown in Settings, `redis-input-open-source-driver-…` here) and its port is the engine's default port. That name resolves only on the Dokploy overlay network, so the string works from other services deployed on the same stack — it will not work from your laptop. To reach a database from outside, set an **External port** in Settings instead, which publishes the engine's port on the host.
+A managed database's string is the **internal** address: its host is the service's *app name* (the generated identifier shown in Settings) and its port is the engine's default port. Once the database is running, that name resolves on the Dokploy overlay network, so the string works from other services deployed on the same stack — it will not work from your laptop. To reach a managed database from outside, set an **External port** in Settings instead, which publishes the engine's port on the host.
 
 The format per engine:
 
@@ -157,32 +171,34 @@ The copy button at the end of the field copies the full string.
 
 ### Environment variables
 
-The **Variables** tab (applications and databases) is a plain-text editor: one `KEY=value` per line, with `#` lines treated as comments. The counter under the editor tallies the real variables, and **Save variables** stays disabled until you change something. As the hint says, redeploy the service for changes to take effect.
+The **Variables** tab (applications, databases, and compose stacks) is a plain-text editor: one `KEY=value` per line, with `#` lines treated as comments. The counter under the editor tallies the real variables, and **Save variables** stays disabled until you change something. As the hint says, redeploy the service for changes to take effect.
 
-![whoami-snim Variables tab: a REDIS_URL entry pointing at the redis-mskd internal connection string, with the 1 variable counter and Save variables button](images/app-variables.png)
+![ogs-web Compose Variables: Running and Last deploy: Succeeded, saved REDIS_URL=redis://ogs-redis:6379, the 1 variable counter, and disabled Save variables button](images/app-variables.png)
 
-Here `whoami-snim` carries one variable, `REDIS_URL`, set to `redis-mskd`'s internal connection string. This is also what draws the canvas edge between the two services — the variable's value contains the Redis service's app name, so Switchyard infers the dependency.
+Here `ogs-web` carries one saved variable, `REDIS_URL=redis://ogs-redis:6379`. The two Compose stacks share a private bridge network where `ogs-redis` is the Redis service's alias. This password-free URL belongs to the isolated throwaway demo; use your database's configured credentials in your own connection string. The reference also draws a canvas edge because its value contains the Redis service's display name. Nginx does not consume Redis itself; this variable demonstrates passing configuration to a container, and connectivity was checked separately.
 
 ### Domains
 
-The **Domains** tab (applications only) attaches public hostnames. Enter the **Host** (for example `app.example.com`), the container **Port** your app listens on (default 80), and click **Add**. Certificates are automatic — domains are created with HTTPS and Let's Encrypt.
+The **Networking** tab (applications and compose stacks) attaches hostnames. Enter the **Host** (for example `app.example.com`), the container **Port** your app listens on (default 80), and click **Add**. For compose stacks, also choose the target **Service** within the stack. Custom domains default to HTTPS and Let's Encrypt; the application form lets you change these options.
 
-![whoami-snim Domains tab: the auto-SSL hint, the "No domains attached." empty state, and the Host, Port and Add form](images/app-domains.png)
+![ogs-web Compose Networking: Running and Last deploy: Succeeded, No domains attached, Service set to ogs-web, Host and Port fields, Generate URL and Add buttons](images/app-domains.png)
 
-Two prerequisites, both outside Switchyard:
+For custom public hostnames:
 
 - **DNS** — point the domain's records at the server, as the tab's hint says.
-- **Traefik** — routing is done by the Dokploy stack's Traefik proxy. The Linux installer (getting-started Path A) runs it automatically; on the Windows path it's an [optional step](getting-started.md#5-traefik-optional), and without it attached domains simply won't route.
+- **Traefik** — routing requires a proxy. The Linux installer (getting-started Path A) runs Dokploy's Traefik automatically; on the manual Windows path it's an [optional step](getting-started.md#5-traefik-optional). CLI/desktop local ingress is described below.
 
-Attached domains appear as clickable rows above the form, and the first one becomes the Public URL on the Overview tab.
+Attached domains appear as clickable rows above the form; Overview uses the first HTTPS domain as the Public URL, falling back to the first domain if none use HTTPS.
 
-**Auto-URL.** On the Linux path you usually don't add anything here: deploying an app mints a public URL automatically (a Dokploy `*.traefik.me` host, or `<app-name>.<server-ip>.sslip.io` — both resolve to the server with no DNS to configure) and it shows up as the Public URL on the Overview tab. It routes to container port `3000` by default; if your app listens on a different port, add a domain here with the right port. Auto-URL is **off on Docker Desktop and in dev mode** — there the Dokploy Traefik proxy isn't managed, so nothing would route, and you add domains by hand as above.
+**Auto-URL.** When `SWITCHYARD_HOST_IP` is set (the CLI detects it on Linux), quick-deploying an app attempts to mint a public URL automatically (a Dokploy `*.traefik.me` host, or `<app-name>.<server-ip>.sslip.io` — both resolve to the server with no DNS to configure) and it shows up as the Public URL on the Overview tab. It routes to container port `3000` by default; if your app listens on a different port, add a domain here with the right port.
+
+Without `SWITCHYARD_HOST_IP` (Docker Desktop and a default manual/dev setup), deploy-time auto-URL is disabled. **Generate URL** in Networking can still attach an HTTP `.localhost` domain on the form's selected port. Routing requires a proxy: CLI/desktop installs support opt-in local ingress (`switchyard local-ingress up`, default HTTP port `8080`; open `http://<generated-host>:8080`). A manually run dashboard needs a separately configured proxy or that same local ingress.
 
 ### Deployment history
 
-The **Deploys** tab (applications only) lists every deployment, newest first. Each row shows a status dot (green done, red error, amber in progress), the deployment title, its timestamp, and the status as text — so after a few redeploys you can see at a glance when the app last shipped cleanly and whether anything failed. A never-deployed app shows "No deployments yet."
+The **Deploys** tab (applications and compose stacks) lists every deployment, newest first. Each row shows a status dot (green done, red error, amber in progress), the deployment title, its timestamp, and the status as text — so after a few redeploys you can see at a glance when the app last shipped cleanly and whether anything failed. A never-deployed app shows "No deployments yet."
 
-The tab also carries the **push-to-deploy** controls for git-sourced apps: the branch, an auto-deploy toggle, watch paths, and the app's copyable Dokploy webhook URL — add it as a push webhook on your Git host and every push to the configured branch redeploys. Rows whose deployment produced a registry image snapshot show a **Roll back** button (Dokploy records these only when the app deploys to a registry with rollbacks enabled).
+The tab also carries the **push-to-deploy** controls for apps created from a public clone URL (`git` source): the branch, an auto-deploy toggle, watch paths, and the app's copyable Dokploy webhook URL — add it as a push webhook on your Git host and every push to the configured branch redeploys. GitHub App deployments use the App's webhook instead. Rows whose deployment produced a registry image snapshot show a **Roll back** button (Dokploy records these only when the app deploys to a registry with rollbacks enabled).
 
 Per-deployment build logs aren't viewable in Switchyard yet (it's on the [dashboard roadmap](../dashboard/README.md#status)). To follow a deploy as it happens, watch the status badge and switch to Logs once the container starts.
 
@@ -190,28 +206,30 @@ Per-deployment build logs aren't viewable in Switchyard yet (it's on the [dashbo
 
 Every kind has a **Logs** tab that streams the service's container output live — no page reloads. It opens with the last 300 lines and then follows:
 
-![redis-mskd Logs tab streaming timestamped Redis startup lines, with the filter box and the green Live indicator](images/db-logs.png)
+![ogs-redis Compose Logs: Running and Last deploy: Succeeded, real timestamped Redis startup lines ending with Ready to accept connections, Filter logs field and green Live indicator](images/db-logs.png)
 
 - The green **Live** dot confirms the stream is connected.
 - Each line is prefixed with its timestamp in your local time.
 - **Filter logs…** narrows the view to lines containing your text (case-insensitive, applied live).
 - The view sticks to the bottom as lines arrive; scroll up to pause following, scroll back down to resume. The buffer is capped at a couple thousand lines, so very chatty services roll off the top.
 
-If the service isn't running you'll get a placeholder line instead of a stream. On Windows, empty Logs and Metrics tabs usually mean the Docker socket isn't configured — see [troubleshooting](troubleshooting.md#logs-and-metrics-tabs-are-empty-on-windows).
+If the service isn't running you'll get a placeholder line instead of a stream. For a dashboard run manually/from source on Windows, check the Docker socket configuration if Logs and Metrics are empty — see [troubleshooting](troubleshooting.md#logs-and-metrics-tabs-are-empty-on-windows). CLI/desktop-managed dashboard containers mount the Docker socket automatically.
 
 ### Live metrics
 
 The **Metrics** tab samples the container's CPU and memory roughly once a second while the tab is open:
 
-![redis-mskd Metrics tab: CPU 0.3% and Memory 4 MB stat cards above live CPU % and Memory area charts](images/db-metrics.png)
+![ogs-redis Compose Metrics: Running and Last deploy: Succeeded, live CPU and memory readings with a 128 MB memory limit, populated CPU and Memory charts, and history off](images/db-metrics.png)
 
-The two cards show the latest sample — CPU percentage, and memory used "of" the container's limit (when no limit is set, Docker reports the host's total, as in the screenshot). Below them, area charts keep the last 60 samples (about a minute); hover for exact values. Sampling starts when you open the tab, so the charts fill from the left. A stopped service shows "No metrics — the service isn't running."
+The two cards show the latest sample — CPU percentage, and memory used "of" the container's limit (128 MB in this example; when no limit is set, Docker reports the host's total). Below them, area charts fill with real samples while the tab is open; hover for exact values. History is off on this test dashboard, and HTTP metrics are unavailable because no Traefik metrics endpoint is configured. A stopped service shows "No metrics — the service isn't running."
 
 ### Settings and the danger zone
 
-The **Settings** tab holds everything editable plus the destructive actions. For a database:
+The **Settings** tab depends on the service kind. A Compose stack shows its app name, creation date, and Danger zone; edit its image, environment, and resource limits in Compose or Variables. Here is the running Redis stack:
 
-![redis-mskd Settings tab: name field, version selector, external port, CPU and memory limits with Save changes, masked password with reveal and copy, app name, created date, and the Danger zone](images/db-settings.png)
+![ogs-redis Compose Settings: Running and Last deploy: Succeeded, App name, Created timestamp, and Danger zone with Destroy ogs-redis](images/db-settings.png)
+
+Native managed databases have additional Settings controls:
 
 - **Name** — rename the service (display name only; the app name is fixed).
 - **Version** — a dropdown of curated tags per engine (PostgreSQL 18/17/16/15, MySQL 8.4/8.0, MariaDB 11/10, MongoDB 8/7/6, Redis 7/6). As the hint warns, changing it redeploys.
@@ -227,7 +245,7 @@ Every Settings tab ends in the red **Danger zone**: a **Destroy** button that re
 
 ## How canvas connections work
 
-Dokploy has no native "connect these services" concept, so Switchyard infers the arrows from environment variables: if service A's variables mention service B's app name (or its display name), an edge is drawn **from A to B** — from the consumer to the thing it depends on. That's why `whoami-snim → redis-mskd` appears in the hero screenshot: whoami's `REDIS_URL` contains the Redis service's app name. Edges animate and take the color of the service they point at.
+Dokploy has no native "connect these services" concept, so Switchyard infers the arrows from environment variables: if service A's variables mention service B's app name (or its display name), an edge is drawn **from A to B** — from the consumer to the thing it depends on. That's why `ogs-web → ogs-redis` appears in the hero screenshot: the web stack's `REDIS_URL` contains the Redis service's display name. Edges animate and take the color of the service they point at.
 
 Practical consequences:
 
@@ -255,5 +273,5 @@ By status: **Idle** shows Deploy; **Running** shows Stop and Redeploy; **Deployi
 - **Canvas layout is per-browser.** Node positions live in your browser's localStorage — another browser or machine sees the default column layout, and clearing site data resets yours.
 - **Edges are a heuristic.** Substring matching over env vars catches the common cases and occasionally invents an arrow; treat the canvas lines as hints, not truth.
 - **Statuses don't auto-refresh.** Click **Refresh** to see a background deployment finish; only Logs and Metrics stream live.
-- **Public sources only.** The New service menu takes public Docker images and public Git URLs; there are no fields for registry credentials or deploy keys.
+- **Source access.** The New service image and clone-URL fields take public sources; **From GitHub** supports private repositories through an installed GitHub App. The quick-deploy fields have no registry-credential or deploy-key inputs.
 - **Not there yet** (per the [dashboard roadmap](../dashboard/README.md#status)): per-deployment build logs and database password rotation. (Backups and dashboard auth shipped — see the Backups tab and `/login`.)
