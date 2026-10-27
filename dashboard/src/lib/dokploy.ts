@@ -44,6 +44,7 @@ import {
 } from "./docker";
 
 export type { RuntimeHealth, ServiceRuntime } from "./docker";
+export { inferEdges, type ServiceEdge } from "./service-references";
 
 const BASE = process.env.DOKPLOY_URL ?? "http://localhost:3000";
 // Origin header for better-auth's CSRF check. Which origins Dokploy trusts
@@ -311,12 +312,6 @@ export interface ComposeService extends ServiceBase {
 
 /** Any deployable service rendered in the dashboard. */
 export type Service = Database | Application | ComposeService;
-
-/** A directed connection between two services, inferred from env references. */
-export interface ServiceEdge {
-  source: string; // service id
-  target: string; // service id
-}
 
 export interface EnvironmentNode {
   environmentId: string;
@@ -847,39 +842,6 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
     })
   );
   return detailed.sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/**
- * Infer connections between services: if service A's env references service B's
- * appName or name (e.g. a host in a connection string), draw A -> B. Dokploy has
- * no native connection concept, so this is the closest signal available.
- * Comment lines are ignored — template envs mention other products in prose
- * (supabase's stock env says "…for S3/MinIO" and drew a phantom minio edge).
- */
-export function inferEdges(services: Service[]): ServiceEdge[] {
-  const edges: ServiceEdge[] = [];
-  const seen = new Set<string>();
-  for (const a of services) {
-    const haystack = (a.env ?? "")
-      .split("\n")
-      .filter((line) => !line.trimStart().startsWith("#"))
-      .join("\n")
-      .toLowerCase();
-    if (!haystack) continue;
-    for (const b of services) {
-      if (a.id === b.id) continue;
-      if (a.projectId !== b.projectId || a.environmentId !== b.environmentId) continue;
-      const needles = [b.appName, b.name].filter(Boolean).map((s) => s.toLowerCase());
-      if (needles.some((n) => n.length > 2 && haystack.includes(n))) {
-        const key = `${a.id}->${b.id}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          edges.push({ source: a.id, target: b.id });
-        }
-      }
-    }
-  }
-  return edges;
 }
 
 /** Replace a database's environment variables (raw "KEY=value" block). */

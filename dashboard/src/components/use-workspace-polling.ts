@@ -2,13 +2,14 @@
 
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ProjectNode, Service, ServiceEdge } from "@/lib/dokploy";
+import type { ProjectNode, Service } from "@/lib/dokploy";
+import type { ServiceReferenceGraph } from "@/lib/service-references";
 import { pollingInterval } from "@/lib/deploy-polling";
 
 interface WorkspaceData {
   services: Service[];
   projects: ProjectNode[];
-  edges: ServiceEdge[];
+  graph: ServiceReferenceGraph;
 }
 
 /** Keep the last successful snapshot mounted, including unsaved drawer state. */
@@ -19,7 +20,7 @@ export function useWorkspacePolling(initial: WorkspaceData, projectId: string | 
   const router = useRouter();
 
   // Manual refreshes and server actions still supply fresh route props.
-  if (initial.services !== source.services || initial.projects !== source.projects || initial.edges !== source.edges) {
+  if (initial.services !== source.services || initial.projects !== source.projects || initial.graph !== source.graph) {
     setSource(initial);
     setSnapshot(initial);
   }
@@ -84,7 +85,7 @@ export function useWorkspacePolling(initial: WorkspaceData, projectId: string | 
       reschedule.current = null;
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [initial.services, initial.projects, initial.edges, router]);
+  }, [initial.services, initial.projects, initial.graph, router]);
 
   // A project switch or deployment transition can change the polling cadence.
   useEffect(() => { reschedule.current?.(); }, [snapshot.services, projectId]);
