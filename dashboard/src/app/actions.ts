@@ -76,6 +76,7 @@ import {
   type ApplicationPatch,
   type HealthCheckSwarm,
   type BuildTypePatch,
+  type DockerRegistryPatch,
   type DomainInput,
   type Engine,
   type DokployTemplate,
@@ -500,12 +501,13 @@ export async function saveAppBuildTypeAction(
 
 /**
  * Point a docker-image application at an image, optionally with private
- * registry credentials. Empty credentials mean a public image.
+ * registry credentials. Empty credentials preserve stored values; clearing
+ * credentials requires the explicit clearCredentials flag.
  */
 export async function setAppDockerSourceAction(
   id: string,
   dockerImage: string,
-  registry?: { username: string; password: string; registryUrl: string },
+  registry?: DockerRegistryPatch,
   redeploy = false
 ): Promise<ActionResult> {
   const secrets: (string | null | undefined)[] = [registry?.username, registry?.password, registry?.registryUrl];
@@ -514,12 +516,20 @@ export async function setAppDockerSourceAction(
     if (!image) throw new Error("Image is required.");
     secrets.push(dockerImage, image);
     const stored = await getApplicationSource(id);
-    secrets.push(stored.dockerImage, stored.registryUrl);
-    const hasCreds = registry && (registry.username || registry.password || registry.registryUrl);
+    secrets.push(stored.dockerImage, stored.registryUrl, stored.username, stored.password);
+    const hasCreds = registry && (
+      registry.clearCredentials || registry.username || registry.password || registry.registryUrl != null
+    );
     await setAppDockerSource(
       id,
       preserveUrlCredentials(image, stored.dockerImage),
-      hasCreds ? { ...registry, registryUrl: preserveUrlCredentials(registry.registryUrl, stored.registryUrl) } : undefined
+      hasCreds ? {
+        ...registry,
+        registryUrl: registry.registryUrl == null
+          ? registry.registryUrl
+          : preserveUrlCredentials(registry.registryUrl, stored.registryUrl),
+      } : undefined,
+      stored
     );
     if (redeploy) await applicationAction(id, "deploy");
   }, "Could not save Docker source.", secrets);

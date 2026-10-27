@@ -234,8 +234,10 @@ export interface Application extends ServiceBase {
   dockerBuildStage: string | null;
   /** Custom start/run command appended to the container's entrypoint. */
   command: string | null;
-  /** Registry host for docker-image apps (credentials are never read back). */
+  /** Registry details for docker-image apps. The stored password stays server-side. */
   registryUrl: string | null;
+  registryUsername: string | null;
+  hasRegistryPassword: boolean;
   domains: AppDomain[];
   redirects: AppRedirect[];
   ports: AppPort[];
@@ -275,6 +277,7 @@ export interface ComposeService extends ServiceBase {
   composeType: string | null;
   /** Safe metadata computed on the server before composeFile is redacted. */
   serviceNames?: string[];
+  publishedPorts?: { port: number; protocol: "tcp" | "udp" }[];
   hasPostgres?: boolean;
   /** Public domains routed to the stack's services (Dokploy `domains`). */
   domains: AppDomain[];
@@ -619,6 +622,8 @@ export async function getApplicationSource(id: string): Promise<{
   gitUrl: string | null;
   dockerImage: string | null;
   registryUrl: string | null;
+  username: string | null;
+  password: string | null;
 }> {
   await requireServiceOwnership("application", id);
   const detail = await request<RawApplicationDetail>(
@@ -628,6 +633,8 @@ export async function getApplicationSource(id: string): Promise<{
     gitUrl: detail.customGitUrl ?? null,
     dockerImage: detail.dockerImage ?? null,
     registryUrl: detail.registryUrl ?? null,
+    username: detail.username ?? null,
+    password: detail.password ?? null,
   };
 }
 
@@ -885,6 +892,8 @@ interface RawApplicationDetail {
   dockerBuildStage?: string | null;
   command?: string | null;
   registryUrl?: string | null;
+  username?: string | null;
+  password?: string | null;
   env?: string | null;
   buildArgs?: string | null;
   buildSecrets?: string | null;
@@ -986,6 +995,8 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
         dockerBuildStage: d.dockerBuildStage ?? null,
         command: d.command ?? null,
         registryUrl: d.registryUrl ?? null,
+        registryUsername: d.username ?? null,
+        hasRegistryPassword: Boolean(d.password),
         env: d.env ?? null,
         createdAt: d.createdAt ?? null,
         cpuLimit: d.cpuLimit ?? null,
@@ -1037,20 +1048,38 @@ export async function createApplication(name: string, environmentId: string): Pr
   return created.applicationId;
 }
 
-/** Point an application at a public/private Docker image. */
+export interface DockerRegistryPatch {
+  /** Empty or omitted credentials preserve their stored values. */
+  username?: string | null;
+  password?: string | null;
+  /** Omit to preserve the registry host; an empty string resets it. */
+  registryUrl?: string | null;
+  /** Explicitly remove the username, password, and registry host. */
+  clearCredentials?: boolean;
+}
+
+/** Point an application at an image, preserving untouched registry credentials. */
 export async function setAppDockerSource(
   applicationId: string,
   dockerImage: string,
-  registry?: { username: string; password: string; registryUrl: string }
+  registry?: DockerRegistryPatch,
+  /** Reuse the server-only snapshot already read and authorized by the action. */
+  stored?: Pick<RawApplicationDetail, "username" | "password" | "registryUrl">
 ): Promise<void> {
+  const clear = registry?.clearCredentials === true;
+  // saveDockerProvider overwrites all three fields. Read the current secrets
+  // server-side so an image-only edit never sends empty credentials.
+  const current = clear ? null : stored ?? await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(applicationId)}`
+  );
   await request("application.saveDockerProvider", {
     method: "POST",
     body: {
       applicationId,
       dockerImage,
-      username: registry?.username ?? null,
-      password: registry?.password ?? null,
-      registryUrl: registry?.registryUrl ?? null,
+      username: clear ? null : (registry?.username || current?.username) ?? null,
+      password: clear ? null : (registry?.password || current?.password) ?? null,
+      registryUrl: clear ? null : registry?.registryUrl ?? current?.registryUrl ?? null,
     },
   });
 }
