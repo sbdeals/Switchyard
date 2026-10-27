@@ -280,7 +280,7 @@ export function FlowCanvas({
         event.preventDefault();
         openAt(canvasCenter(bounds));
       }}
-      className="relative h-[calc(100vh-9rem)] w-full overflow-hidden rounded-2xl border border-[var(--color-border)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+      className="relative h-[calc(100dvh-16rem)] min-h-80 w-full overflow-hidden rounded-2xl border border-[var(--color-border)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)] sm:h-[calc(100dvh-12rem)] lg:h-[calc(100vh-9rem)] max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10"
     >
       <p className="pointer-events-none absolute left-3 top-3 z-10 rounded-lg bg-[var(--color-surface)] px-2 py-1 text-xs text-[var(--color-fg-muted)]">
         Shift-drag or Shift/Ctrl/⌘-click to select services
@@ -335,7 +335,7 @@ export function FlowCanvas({
       >
         <CanvasResizeFit />
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="var(--color-canvas-dots)" bgColor="var(--color-bg)" />
-        <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
+        <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)] max-sm:!bottom-auto max-sm:!top-0 max-lg:[&_button]:!h-10 max-lg:[&_button]:!w-10" />
         <Panel position="top-right">
           <button
             type="button"
@@ -372,7 +372,7 @@ export function FlowCanvas({
               : "transparent"
           }
           maskColor="var(--color-canvas-mask)"
-          className="!bg-[var(--color-bg-elevated)]"
+          className="!bg-[var(--color-bg-elevated)] max-sm:hidden"
         />
       </ReactFlow>
       {menu && (
