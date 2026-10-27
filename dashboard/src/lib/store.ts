@@ -197,11 +197,11 @@ export async function queryLogs(
     // Take the newest `limit` rows in range, then present oldest-first.
     const { rows } = await p.query(
       `SELECT ts, text FROM (
-         SELECT ts, text FROM log_lines
+         SELECT id, ts, text FROM log_lines
           WHERE app_name = $1 AND ts >= $2
-          ORDER BY ts DESC
+          ORDER BY ts DESC, id DESC
           LIMIT $3
-       ) t ORDER BY ts ASC`,
+       ) t ORDER BY ts ASC, id ASC`,
       [appName, sinceMs, limit],
     );
     return rows.map((r) => ({ ts: Number(r.ts), text: String(r.text) }));

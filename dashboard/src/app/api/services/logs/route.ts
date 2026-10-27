@@ -3,6 +3,7 @@ import { unstable_rethrow } from "next/navigation";
 import { followLogs } from "@/lib/docker";
 import { knownAppNames } from "@/lib/dokploy";
 import { sseFromLines, sseOnce } from "@/lib/sse";
+import { queryLogs } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,8 +28,17 @@ export async function GET(request: Request) {
   const reset = "event: reset\ndata: {}\n\n";
   const src = await followLogs(app, 300, allowed);
   if (!src) {
+    let history = "";
+    try {
+      // The collector persists under service.appName, the same allowlisted key.
+      const lines = await queryLogs(app, 0, 300);
+      history = lines.map((line) => `data: ${JSON.stringify({ ...line, stored: true })}\n\n`).join("");
+    } catch (e) {
+      unstable_rethrow(e);
+      // History is optional; preserve the stopped marker if the store fails.
+    }
     const line = JSON.stringify({ ts: Date.now(), text: "— container is not running —" });
-    return sseOnce(`${reset}data: ${line}\n\n`);
+    return sseOnce(`${reset}${history}data: ${line}\n\n`);
   }
 
   return sseFromLines(src, request, (line, continuation) => {
