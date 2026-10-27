@@ -1,3 +1,4 @@
 declare module "js-yaml" {
-  export function load(input: string): unknown;
+  export const DEFAULT_SCHEMA: unknown;
+  export function load(input: string, options?: { schema: unknown }): unknown;
 }
