@@ -16,6 +16,7 @@ import {
 } from "@/app/actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
 import { EnvironmentCompare } from "@/components/EnvironmentCompare";
+import { DuplicateEnvironmentForm } from "@/components/DuplicateEnvironmentForm";
 
 export function ProjectsPanel({
   open,
@@ -33,8 +34,11 @@ export function ProjectsPanel({
   const [newEnv, setNewEnv] = useState<Record<string, string>>({});
   const [compareProjectId, setCompareProjectId] = useState<string | null>(null);
   const comparingProject = projects.find((project) => project.projectId === compareProjectId && project.environments.length >= 2);
+  const [duplicate, setDuplicate] = useState<{ project: ProjectNode; environmentId: string; name: string } | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
 
   const close = () => {
+    if (duplicating) return;
     setCompareProjectId(null);
     onClose();
   };
@@ -75,9 +79,10 @@ export function ProjectsPanel({
             className={`relative flex max-h-[80vh] w-full ${comparingProject ? "max-w-6xl" : "max-w-lg"} flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl`}
           >
             <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
-              <h2 id="projects-panel-title" className="text-sm font-semibold">{comparingProject ? "Compare environments" : "Projects & environments"}</h2>
+              <h2 id="projects-panel-title" className="text-sm font-semibold">{comparingProject ? "Compare environments" : duplicate ? "Duplicate environment" : "Projects & environments"}</h2>
               <button
                 onClick={close}
+                disabled={duplicating}
                 aria-label="Close projects"
                 className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
               >
@@ -98,7 +103,15 @@ export function ProjectsPanel({
             )}
 
             {!comparingProject && <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              {projects.map((p) => (
+              {duplicate ? (
+                <DuplicateEnvironmentForm
+                  project={duplicate.project}
+                  environmentId={duplicate.environmentId}
+                  environmentName={duplicate.name}
+                  onBack={() => setDuplicate(null)}
+                  onBusyChange={setDuplicating}
+                />
+              ) : projects.map((p) => (
                 <div
                   key={p.projectId}
                   className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
@@ -136,6 +149,13 @@ export function ProjectsPanel({
                       <div key={e.environmentId} className="flex items-center gap-2 text-xs">
                         <Layers className="size-3.5 text-[var(--color-fg-subtle)]" />
                         <span className="flex-1 truncate text-[var(--color-fg-muted)]">{e.name}</span>
+                        <button
+                          onClick={() => setDuplicate({ project: p, environmentId: e.environmentId, name: e.name })}
+                          aria-label={`Duplicate ${e.name} environment`}
+                          className="rounded-md px-1.5 py-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)]"
+                        >
+                          Duplicate
+                        </button>
                         <IconBtn title="Rename environment" onClick={() => rename(e.name, (n) => renameEnvironmentAction(e.environmentId, n))}>
                           <Pencil className="size-3" />
                         </IconBtn>
@@ -180,12 +200,12 @@ export function ProjectsPanel({
                   </div>
                 </div>
               ))}
-              {projects.length === 0 && (
+              {!duplicate && projects.length === 0 && (
                 <p className="text-center text-xs text-[var(--color-fg-subtle)]">No projects yet.</p>
               )}
             </div>}
 
-            {!comparingProject && <div className="border-t border-[var(--color-border)] px-5 py-4">
+            {!comparingProject && !duplicate && <div className="border-t border-[var(--color-border)] px-5 py-4">
               {error && <p role="alert" className="mb-2 text-xs text-[var(--color-danger)]">{error}</p>}
               <div className="flex items-center gap-2">
                 <input
