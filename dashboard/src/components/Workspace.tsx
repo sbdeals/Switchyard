@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Activity, Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, ScrollText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
+import { BulkActionDialog } from "@/components/BulkActionDialog";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { ActivityPanel } from "@/components/ActivityPanel";
@@ -21,6 +22,8 @@ import { useWorkspacePolling } from "@/components/use-workspace-polling";
 import type { DeploymentEvent } from "@/lib/deploy-notifications";
 import { DirtyGuardProvider, useGuardedNavigation } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
+import { emptySelection, reconcileSelection, replaceSelection, toggleSelection } from "@/lib/bulk-selection";
+import { BULK_ACTION_LABELS, type BulkAction } from "@/lib/bulk-actions";
 
 type View = "canvas" | "grid" | "logs";
 
@@ -74,6 +77,18 @@ function WorkspaceContent({
     drawer.close();
     setProjectsOpen(true);
   });
+
+  const [bulkSelection, setBulkSelection] = useState(emptySelection);
+  const [bulkRequest, setBulkRequest] = useState<{ action: BulkAction; services: Service[] } | null>(null);
+  const serviceIds = useMemo(() => visibleServices.map((service) => service.id), [visibleServices]);
+  const selection = useMemo(() => reconcileSelection(bulkSelection, serviceIds), [bulkSelection, serviceIds]);
+  if (selection.ids.length !== bulkSelection.ids.length || selection.anchor !== bulkSelection.anchor) {
+    setBulkSelection(selection);
+  }
+  const selectedServices = visibleServices.filter((service) => selection.ids.includes(service.id));
+  const onCanvasSelection = useCallback((ids: string[]) => {
+    setBulkSelection((current) => replaceSelection(current, serviceIds, ids));
+  }, [serviceIds]);
 
   return (
     <MotionConfig reducedMotion="user">
@@ -151,24 +166,55 @@ function WorkspaceContent({
         </div>
       </header>
 
+      {selection.ids.length > 0 && (
+        <div role="region" aria-label="Bulk service actions" className="sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-3 shadow-lg">
+          <span className="mr-auto text-sm font-medium">{selection.ids.length} selected</span>
+          {(Object.keys(BULK_ACTION_LABELS) as BulkAction[]).map((action) => (
+            <button
+              key={action}
+              type="button"
+              disabled={bulkRequest !== null}
+              onClick={() => setBulkRequest({ action, services: selectedServices })}
+              className="rounded-lg border border-[var(--color-border-strong)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
+            >
+              {BULK_ACTION_LABELS[action]}
+            </button>
+          ))}
+          <button type="button" disabled={bulkRequest !== null} onClick={() => setBulkSelection(emptySelection)} className="px-2 py-1.5 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] disabled:opacity-40">
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {view === "logs" ? (
         <ProjectLogs key={currentProject ?? "all"} projects={projects} selectedProjectId={currentProject} />
       ) : visibleServices.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
         <PanelErrorBoundary>
-          <FlowCanvas services={visibleServices} edges={edges.filter((e) => visibleServices.some((s) => s.id === e.source) && visibleServices.some((s) => s.id === e.target))} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} />
+          <FlowCanvas services={visibleServices} edges={edges.filter((e) => visibleServices.some((s) => s.id === e.source) && visibleServices.some((s) => s.id === e.target))} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} />
         </PanelErrorBoundary>
       ) : (
+        <>
+        <p className="mb-3 text-xs text-[var(--color-fg-subtle)]">Select services with the checkboxes. Shift-click to select a range.</p>
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {visibleServices.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => openService(s.id)} />
+              <ServiceCard
+                key={`${s.kind}:${s.id}`}
+                service={s}
+                onOpen={() => openService(s.id)}
+                selected={selection.ids.includes(s.id)}
+                selectionDisabled={bulkRequest !== null}
+                onToggleSelection={(shift) => setBulkSelection((current) => toggleSelection(current, serviceIds, s.id, shift))}
+              />
             ))}
           </AnimatePresence>
         </motion.div>
+        </>
       )}
 
+      {bulkRequest && <BulkActionDialog {...bulkRequest} onClose={() => setBulkRequest(null)} />}
       <ServiceDrawer deploymentId={deployment?.serviceId === drawer.service?.id ? deployment?.deploymentId : undefined} services={services} onSelectService={openService} service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
       {drawer.notFound && (
         <div role="status" className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-4 py-2 text-sm shadow-lg">

@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("react", async (importOriginal) => ({
   ...await importOriginal<typeof import("react")>(),
   useState: mocks.useState,
+  useMemo: <T,>(factory: () => T) => factory(),
+  useCallback: <T,>(callback: T) => callback,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/use-service-deeplink", () => ({ useServiceDeeplink: mocks.useServiceDeeplink }));
@@ -32,6 +34,7 @@ vi.mock("@/components/DeployNotifications", () => ({ DeployNotifications: () => 
 vi.mock("@/components/ActivityPanel", () => ({ ActivityPanel: () => null }));
 vi.mock("@/components/KeyboardShortcuts", () => ({ KeyboardShortcuts: () => null }));
 vi.mock("@/components/ProjectLogs", () => ({ ProjectLogs: () => null }));
+vi.mock("@/components/BulkActionDialog", () => ({ BulkActionDialog: () => null }));
 
 type Element = ReactElement<Record<string, unknown> & { children?: ReactNode }>;
 function elements(node: ReactNode): Element[] {
