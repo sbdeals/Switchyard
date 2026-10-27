@@ -1,7 +1,10 @@
 "use client";
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Copy, Download, Loader2, Search } from "lucide-react";
+import { DEFAULT_LOG_LINE_LIMIT, LOG_LINE_OPTIONS } from "@/lib/log-export";
+import { copyVisibleLogs, downloadServiceLogs } from "@/lib/log-export-client";
+import { Btn } from "./primitives";
 import { AnsiText } from "@/components/service/AnsiText";
 import { parseAnsi, type ParsedAnsi } from "@/lib/ansi";
 
@@ -29,6 +32,10 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
   const nextId = useRef(0);
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState("");
+  const [lineLimit, setLineLimit] = useState(DEFAULT_LOG_LINE_LIMIT);
+  const [downloading, setDownloading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
 
@@ -64,6 +71,35 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
     return query ? lines.filter((l) => l.text.toLowerCase().includes(query)) : lines;
   }, [lines, filter]);
 
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  async function copy() {
+    setError(null);
+    setNotice(null);
+    try {
+      await copyVisibleLogs(shown);
+      setNotice(`Copied ${shown.length} visible log lines`);
+    } catch {
+      setError("Could not copy logs. Check your browser's clipboard permission.");
+    }
+  }
+
+  async function download(format: "log" | "json") {
+    setError(null);
+    setDownloading(true);
+    try {
+      await downloadServiceLogs(appName, lineLimit, format);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not download logs.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="mb-3 flex items-center gap-2">
@@ -86,6 +122,35 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
         </span>
       </div>
 
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Btn onClick={copy} disabled={shown.length === 0}>
+          <Copy className="size-3.5" /> Copy visible
+        </Btn>
+        <select
+          aria-label="Download line limit"
+          value={lineLimit}
+          onChange={(e) => setLineLimit(Number(e.target.value))}
+          className="rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+        >
+          {LOG_LINE_OPTIONS.map((limit) => (
+            <option key={limit} value={limit}>Last {limit / 1000}k lines</option>
+          ))}
+        </select>
+        <Btn onClick={() => download("log")} disabled={downloading}>
+          <Download className="size-3.5" /> Download .log
+        </Btn>
+        <Btn onClick={() => download("json")} disabled={downloading}>
+          <Download className="size-3.5" /> Download .json
+        </Btn>
+        <span className="text-[11px] text-[var(--color-fg-subtle)]">Downloads include unfiltered logs.</span>
+      </div>
+      {notice && (
+        <div role="status" className="mb-3 rounded-lg border border-[var(--color-ok)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-ok)]">
+          {notice}
+        </div>
+      )}
+      {error && <p role="alert" className="mb-3 text-xs text-[var(--color-danger)]">{error}</p>}
+
       <div
         ref={scrollRef}
         tabIndex={0}
@@ -95,7 +160,7 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
-        className="flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-3 font-mono text-[11px] leading-relaxed"
+        className="flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-3 font-mono text-[11px] leading-relaxed"
       >
         {shown.some((l) => l.stored) && (
           <div className="mb-2 border-b border-[var(--color-border)] pb-2 text-[var(--color-fg-subtle)]">

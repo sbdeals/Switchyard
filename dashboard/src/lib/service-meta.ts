@@ -2,8 +2,8 @@ import type { Service, ServiceRuntime, ServiceStatus } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 
 /** Brand accent for applications (databases use their engine accent). */
-export const APP_ACCENT = "#a06bff";
-export const COMPOSE_ACCENT = "#2dd4bf";
+export const APP_ACCENT = "var(--color-brand)";
+export const COMPOSE_ACCENT = "var(--color-teal)";
 
 export function serviceAccent(s: Service): string {
   if (s.kind === "database") return ENGINE_META[s.engine].accent;
