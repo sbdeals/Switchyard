@@ -51,7 +51,7 @@ describe("workspace polling endpoint", () => {
   it("returns the current user's services, projects and inferred edges without caching", async () => {
     const response = await GET();
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ services: redactedServices, projects, edges });
+    expect(await response.json()).toEqual({ services: redactedServices, projects, edges, graph: expect.objectContaining({ edges: expect.any(Array), warnings: expect.any(Object) }) });
     expect(inferEdges).toHaveBeenCalledWith(services);
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
   });
@@ -68,11 +68,11 @@ describe("workspace polling endpoint", () => {
   });
 
   it("reloads the authenticated workspace on each request without sharing users' data", async () => {
-    expect(await (await GET()).json()).toEqual({ services: redactedServices, projects, edges });
+    expect(await (await GET()).json()).toEqual({ services: redactedServices, projects, edges, graph: expect.objectContaining({ edges: expect.any(Array), warnings: expect.any(Object) }) });
     loadWorkspace.mockResolvedValue({ services: [], projects: [] });
     inferEdges.mockReturnValue([]);
     const response = await GET();
-    expect(await response.json()).toEqual({ services: [], projects: [], edges: [] });
+    expect(await response.json()).toEqual({ services: [], projects: [], edges: [], graph: { edges: [], warnings: {} } });
     expect(loadWorkspace).toHaveBeenCalledTimes(2);
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
   });

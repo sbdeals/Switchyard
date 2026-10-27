@@ -10,7 +10,6 @@ import { openSession } from "./session";
 
 const mocks = vi.hoisted(() => ({
   loadWorkspace: vi.fn(),
-  inferEdges: vi.fn(),
   workspace: vi.fn(),
   redirect: new Error("NEXT_REDIRECT"),
 }));
@@ -19,7 +18,6 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 vi.mock("@/lib/dokploy", () => ({
   loadWorkspace: mocks.loadWorkspace,
-  inferEdges: mocks.inferEdges,
 }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: () => ({ value: "test-session" }) }),
@@ -41,7 +39,6 @@ vi.mock("next/navigation", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
-  mocks.inferEdges.mockReturnValue([]);
   mocks.workspace.mockImplementation((props: { services: Service[] }) =>
     createElement("pre", null, JSON.stringify(props)),
   );
@@ -145,7 +142,7 @@ describe("workspace page", () => {
       environmentId: "environment-id",
       environmentName: "test",
       dockerImage: null,
-      env: "TOKEN=ENV_PAGE_SENTINEL",
+      env: "TOKEN=ENV_PAGE_SENTINEL\nURL=postgres://ENV_PAGE_SENTINEL@${{database.HOST}}\nMISSING=${{missing.PASSWORD}}\nCACHE=redis://CACHE_PAGE_SENTINEL@cache-host:6379",
       createdAt: null,
       cpuLimit: null,
       memoryLimit: null,
@@ -155,7 +152,11 @@ describe("workspace page", () => {
       domains: [],
       deployments: [],
     };
-    const services = [compose];
+    const services = [
+      compose,
+      { ...compose, id: "database-id", name: "database", appName: "database-app", env: "HOST=HOST_PAGE_SENTINEL" },
+      { ...compose, id: "cache-id", name: "cache", appName: "cache-host", env: null },
+    ];
     const original = structuredClone(services);
     mocks.loadWorkspace.mockResolvedValueOnce({ services, projects: [] });
 
@@ -166,6 +167,8 @@ describe("workspace page", () => {
     expect(html).not.toContain("test@example.test");
     expect(html).not.toContain("ENV_PAGE_SENTINEL");
     expect(html).not.toContain("COMPOSE_PAGE_SENTINEL");
+    expect(html).not.toContain("HOST_PAGE_SENTINEL");
+    expect(html).not.toContain("CACHE_PAGE_SENTINEL");
     expect(props.services[0]).toMatchObject({
       env: null,
       hasVariables: true,
@@ -173,7 +176,18 @@ describe("workspace page", () => {
       serviceNames: ["db"],
       hasPostgres: true,
     });
-    expect(mocks.inferEdges).toHaveBeenCalledWith(services);
+    // Real graph construction needs the original env; only metadata crosses
+    // the client boundary, including for missing-reference warnings.
+    expect(props.graph).toEqual({
+      edges: [
+        { source: "compose-id", target: "database-id", kind: "reference", variables: ["HOST"] },
+        { source: "compose-id", target: "cache-id", kind: "inferred" },
+      ],
+      warnings: {
+        "compose-id": [{ serviceName: "missing", variable: "PASSWORD", reason: "missing" }],
+      },
+    });
+    expect(props.services.every((service: Service) => service.env === null)).toBe(true);
     expect(services).toEqual(original);
   });
 

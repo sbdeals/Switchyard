@@ -20,7 +20,7 @@ Open http://localhost:3001. The header reads **Services** ("Apps and databases a
 
 Each service is a draggable card: an icon and accent color per kind (purple box for applications, engine-colored database icon for databases, teal layers for compose stacks), the service name, a subtitle with its Docker image or kind, and a status dot on the right. Each card also shows its project and environment, such as `ogs-guide-r1 / ogs-demo` above.
 
-The animated dashed line from `ogs-web` to `ogs-redis` is an inferred connection: the web stack's environment variables reference the Redis service, so Switchyard draws an arrow from the consumer to its dependency. [How canvas connections work](#how-canvas-connections-work) explains the heuristic.
+The dashed line from `ogs-web` to `ogs-redis` in the screenshot is an inferred connection from a connection string. The canvas distinguishes inferred hints with muted dashed arrows from explicit variable references with solid, labeled arrows. [How canvas connections work](#how-canvas-connections-work) explains both types and their hover tooltips.
 
 - Click a node to open its drawer.
 - Drag nodes to arrange them; positions are remembered in your browser's localStorage (not on the server), so the layout is per-browser.
@@ -245,13 +245,18 @@ Every Settings tab ends in the red **Danger zone**: a **Destroy** button that re
 
 ## How canvas connections work
 
-Dokploy has no native "connect these services" concept, so Switchyard infers the arrows from environment variables: if service A's variables mention service B's app name (or its display name), an edge is drawn **from A to B** — from the consumer to the thing it depends on. That's why `ogs-web → ogs-redis` appears in the hero screenshot: the web stack's `REDIS_URL` contains the Redis service's display name. Edges animate and take the color of the service they point at.
+Switchyard shows two types of connections from the consumer to its dependency. A small legend appears whenever the canvas has edges:
+
+- **Reference — solid arrow.** An explicit `${{ServiceName.VAR}}` in saved env values creates an edge in the target's accent color. For example, `DB_HOST=${{cre-db.HOST}}` on `cre-api` draws **cre-api → cre-db**, labeled `HOST`. Multiple variables for the same target share one edge; the hover tooltip says "references" and lists their names.
+- **Inferred — muted dashed arrow.** Existing connection strings still produce hints through case-insensitive substring matches against another service's name or internal app name (longer than two characters). For example, a `DATABASE_URL` containing `postgres-xyz` can connect to that service. Inferred edges have no variable label; their tooltip says "inferred" and identifies the heuristic. Tooltips never display env values.
 
 Practical consequences:
 
-- **To create an edge**, put a real reference in the consumer's Variables — pasting a database's internal connection string is the canonical way.
-- **To remove one**, delete the referencing variable and refresh.
-- **False positives happen.** The match is a plain substring check, so if one service's name happens to appear inside an unrelated variable value — or inside another service's name — you may get an arrow that means nothing. Cosmetic only; it changes no behavior.
+- Explicit names match exactly, including case, within the consumer's **project and environment**. Inferred edges also stay within this scope. Neither edge type draws self loops.
+- A missing or ambiguous explicit target produces a **broken ref** badge on the consumer, never an edge from that token. Hover the badge for details. Explicit targets in other projects or environments do not resolve.
+- An explicit edge wins over an inferred edge for the same consumer/target pair. Removing the explicit reference can reveal the inferred edge if a plain connection-string mention remains. Comments and explicit reference tokens are excluded from inference.
+- **Inferred edges can be false positives.** Substring matching can mistake an incidental name mention for a connection, within the same project and environment. Treat dashed lines as hints.
+- Saving or removing references updates the graph on refresh. `${{…}}` values are **not currently resolved at deployment time**; this visualization does not substitute values, validate target variables, or prove runtime connectivity.
 
 ## Lifecycle reference
 
@@ -271,7 +276,7 @@ By status: **Idle** shows Deploy; **Running** shows Stop and Redeploy; **Deployi
 
 - **No dashboard auth.** Worth repeating: whoever reaches the Switchyard port is a Dokploy admin. Keep it local or gate it ([details](getting-started.md#set-up-switchyard-both-platforms)).
 - **Canvas layout is per-browser.** Node positions live in your browser's localStorage — another browser or machine sees the default column layout, and clearing site data resets yours.
-- **Edges are a heuristic.** Substring matching over env vars catches the common cases and occasionally invents an arrow; treat the canvas lines as hints, not truth.
+- **Edges show references and inferred hints.** Solid labeled arrows describe explicit env references; muted dashed arrows come from substring matches and may be false positives. Neither proves runtime connectivity.
 - **Statuses don't auto-refresh.** Click **Refresh** to see a background deployment finish; only Logs and Metrics stream live.
 - **Source access.** The New service image and clone-URL fields take public sources; **From GitHub** supports private repositories through an installed GitHub App. The quick-deploy fields have no registry-credential or deploy-key inputs.
 - **Not there yet** (per the [dashboard roadmap](../dashboard/README.md#status)): per-deployment build logs and database password rotation. (Backups and dashboard auth shipped — see the Backups tab and `/login`.)

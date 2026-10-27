@@ -4,7 +4,8 @@ import { unstable_rethrow } from "next/navigation";
 import { cookies } from "next/headers";
 import { openSession, SESSION_COOKIE } from "@/lib/session";
 
-import { loadWorkspace, inferEdges } from "@/lib/dokploy";
+import { loadWorkspace } from "@/lib/dokploy";
+import { buildServiceReferenceGraph } from "@/lib/service-references";
 import { redactServiceForClient } from "@/lib/service-redaction";
 import { ensureCollector } from "@/lib/collector";
 import { Workspace } from "@/components/Workspace";
@@ -76,7 +77,7 @@ export default async function Page() {
         <Workspace
           services={result.services.map(redactServiceForClient)}
           projects={projects}
-          edges={inferEdges(result.services)}
+          graph={buildServiceReferenceGraph(result.services)}
           userId={userId}
           notificationScope={notificationScope}
         />
