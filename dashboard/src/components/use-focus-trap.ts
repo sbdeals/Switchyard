@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { focusBoundaryIndex, removeDialog, type DialogEntry } from "@/lib/dialog-focus";
+import { SHORTCUTS } from "@/lib/shortcuts";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -56,8 +57,8 @@ export function useDialogFocus<T extends HTMLElement>(onClose: () => void) {
     initial.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (stack[stack.length - 1] !== entry) return;
-      if (e.key === "Escape") {
+      if (stack[stack.length - 1]?.panel !== panel) return;
+      if (e.key === SHORTCUTS.close.keys[0]) {
         e.preventDefault();
         e.stopImmediatePropagation();
         closeRef.current();

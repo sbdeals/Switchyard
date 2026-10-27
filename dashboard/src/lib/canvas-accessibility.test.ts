@@ -1,4 +1,4 @@
-import { createElement, type KeyboardEvent } from "react";
+import { createElement, type KeyboardEvent, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Node, NodeProps, ReactFlowProps } from "@xyflow/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,6 +26,7 @@ vi.mock("@xyflow/react", () => ({
     "data-testid": "canvas-controls",
     "aria-label": props["aria-label"],
   }),
+  Panel: ({ children }: { children: ReactNode }) => createElement("div", null, children),
   MiniMap: () => null,
   Handle: () => null,
   Position: { Left: "left", Right: "right" },
@@ -103,6 +104,11 @@ describe("service canvas accessibility", () => {
 
   it("names the controls group without naming the roleless internal container", () => {
     expect(html).toContain('role="group" aria-label="Canvas controls"><div data-testid="canvas-controls" aria-label=""');
+  });
+
+  it("keeps the Tidy up action alongside the accessible canvas controls", () => {
+    expect(html).toMatch(/<button[^>]*type="button"[^>]*>.*Tidy up<\/button>/);
+    expect(captured.flow.nodesDraggable).toBe(true);
   });
 
   it("does not add another button or tab stop inside the node", () => {

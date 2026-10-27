@@ -53,6 +53,7 @@ export function QuickDeployMenu({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [image, setImage] = useState("");
+  const [port, setPort] = useState("");
   const [repo, setRepo] = useState("");
   const [, startTransition] = useTransition();
 
@@ -87,6 +88,7 @@ export function QuickDeployMenu({
       if (res.ok) {
         setOpen(false);
         setImage("");
+        setPort("");
         setRepo("");
         onDeployed(res.id);
       } else setError(res.error);
@@ -95,7 +97,7 @@ export function QuickDeployMenu({
 
   const deployDb = (engine: Engine) =>
     run(`db:${engine}`, () => quickDeployDatabaseAction(engine, targetEnv));
-  const deployImage = () => run("app", () => quickDeployImageAction(image, undefined, targetEnv));
+  const deployImage = () => run("app", () => quickDeployImageAction(image, undefined, targetEnv, port));
   const deployRepo = () => run("repo", () => quickDeployRepoAction(repo, undefined, targetEnv));
   const createComposeStack = () => run("compose", () => createComposeAction(undefined, targetEnv));
   const deployTemplate = (id: string) =>
@@ -197,6 +199,20 @@ export function QuickDeployMenu({
                   )}
                 </button>
               </div>
+              <label className="mb-1 flex items-center gap-1.5 px-1 py-1 text-xs text-[var(--color-fg-subtle)]">
+                Port
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  step={1}
+                  value={port}
+                  onChange={(e) => setPort(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && image.trim() && deployImage()}
+                  placeholder="Auto"
+                  className="w-24 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 text-xs text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+                />
+              </label>
               <div className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1">
                 <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
                   <GitBranch className="size-4" />

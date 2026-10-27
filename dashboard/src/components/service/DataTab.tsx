@@ -25,6 +25,7 @@ import type { Service } from "@/lib/dokploy";
 import { inputCls } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
 import { nextTabIndex } from "@/lib/tab-navigation";
+import { SHORTCUTS } from "@/lib/shortcuts";
 
 const PAGE_SIZE = 50;
 
@@ -467,7 +468,7 @@ function SqlView({ app, targetKey }: { app: string; targetKey: string }) {
   }, [app, targetKey, sql, allowWrites, running]);
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    if ((e.metaKey || e.ctrlKey) && e.key === SHORTCUTS.runQuery.keys[0]) {
       e.preventDefault();
       run();
     }
