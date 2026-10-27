@@ -30,7 +30,7 @@ import { newestDeployment } from "@/lib/deployment-commit";
 import { LAST_DEPLOY_LABEL, resolveServiceState, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceLogo } from "@/components/canvas/ServiceNode";
-import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
+import { lifecycleAction, updateDatabaseAction } from "@/lib/client-actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { VariablesTab } from "@/components/service/VariablesTab";

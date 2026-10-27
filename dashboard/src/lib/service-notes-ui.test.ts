@@ -5,7 +5,7 @@ import { ServiceNotes } from "../components/service/ServiceNotes";
 import { ServiceNode } from "../components/canvas/ServiceNode";
 import type { ComposeService } from "./dokploy";
 
-vi.mock("@/app/actions", () => ({ saveServiceNotesAction: vi.fn() }));
+vi.mock("@/lib/client-actions", () => ({ saveServiceNotesAction: vi.fn() }));
 vi.mock("@/components/service/primitives", () => ({ inputCls: "" }));
 vi.mock("@xyflow/react", () => ({
   Handle: () => null,

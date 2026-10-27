@@ -20,7 +20,7 @@ import {
   loadComposeFileAction,
   createComposeDomainAction,
   generateComposeDomainAction,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import {
   inputCls,
   Field,

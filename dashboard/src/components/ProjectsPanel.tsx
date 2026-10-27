@@ -12,7 +12,7 @@ import {
   createEnvironmentAction,
   removeEnvironmentAction,
   type ActionResult,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
 import { ProjectSettings } from "@/components/ProjectSettings";
 import { formatVolumeBytes } from "@/lib/volume-usage";

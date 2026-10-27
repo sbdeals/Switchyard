@@ -3,10 +3,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppBuildTab, AppDeployTab, DeploymentsTab } from "../components/service/AppTabs";
 import { DirtyGuardProvider } from "../components/DirtyGuard";
-import { loadServiceCommandsAction, loadServiceWebhookAction } from "@/app/actions";
+import { loadServiceCommandsAction, loadServiceWebhookAction } from "@/lib/client-actions";
 import type { Application } from "./dokploy";
 
-vi.mock("@/app/actions", () => ({
+vi.mock("@/lib/client-actions", () => ({
   loadServiceCommandsAction: vi.fn(),
   loadServiceWebhookAction: vi.fn(),
   appLifecycleAction: vi.fn(),
@@ -14,6 +14,8 @@ vi.mock("@/app/actions", () => ({
 vi.mock("@/app/deploy-trigger-actions", () => ({}));
 // #129: DeploymentHistory refreshes running deploys through the app router.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 // AppTabs -> AppDeployControls imports the server-only deploy options action.
 vi.mock("@/app/deploy-actions", () => ({ deployOptionsAction: vi.fn() }));
 // AppTabs -> ComposeExportDialog imports the server-only compose export action.

@@ -17,7 +17,7 @@ import {
   githubRepositoriesAction,
   githubBranchesAction,
   quickDeployGithubAction,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
 
 /**

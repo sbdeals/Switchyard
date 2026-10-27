@@ -21,6 +21,7 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 vi.mock("@/app/actions", () => ({}));
+vi.mock("@/lib/client-actions", () => ({}));
 vi.mock("@/app/db-connect-actions", () => ({}));
 vi.mock("@/app/deploy-trigger-actions", () => ({}));
 vi.mock("@/app/deploy-actions", () => ({ deployOptionsAction: vi.fn() }));

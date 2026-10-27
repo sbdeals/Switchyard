@@ -2,7 +2,7 @@ import { createElement, useReducer } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { VariablesTab } from "../components/service/VariablesTab";
-import { loadServiceEnvAction } from "@/app/actions";
+import { loadServiceEnvAction } from "@/lib/client-actions";
 import { DirtyGuardProvider } from "../components/DirtyGuard";
 import type { ComposeService } from "./dokploy";
 import { sharedReference } from "./shared-variables";
@@ -15,7 +15,7 @@ vi.mock("react", async (importOriginal) => {
   return { ...react, useReducer: vi.fn(react.useReducer) };
 });
 
-vi.mock("@/app/actions", () => ({
+vi.mock("@/lib/client-actions", () => ({
   loadServiceEnvAction: vi.fn(),
   saveEnvironmentAction: vi.fn(),
   saveApplicationEnvAction: vi.fn(),

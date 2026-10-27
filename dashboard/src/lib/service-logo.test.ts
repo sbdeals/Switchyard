@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Application, Database } from "./dokploy";
 import { resolveServiceLogo } from "./service-logo";
 
-vi.mock("@/app/actions", () => ({ listTemplatesAction: vi.fn() }));
+vi.mock("@/lib/client-actions", () => ({ listTemplatesAction: vi.fn() }));
 
 function application(overrides: Partial<Application> = {}): Application {
   return {

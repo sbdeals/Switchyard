@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 import type { Service } from "@/lib/dokploy";
-import { listTemplatesAction } from "@/app/actions";
+import { listTemplatesAction } from "@/lib/client-actions";
 
 /** Candidate catalog ids for a service, most specific first. */
 function candidates(service: Service): string[] {

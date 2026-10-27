@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Check, Copy, Eye, EyeOff, Loader2 } from "lucide-react";
 import type { Database } from "@/lib/dokploy";
 import { buildDatabaseConnection, databaseConnectionDetails } from "@/lib/db-connect";
-import { getDatabaseConnectionAction } from "@/app/db-connect-actions";
+import { getDatabaseConnectionAction } from "@/lib/client-actions";
 import { Field, Info, useSavedFlash } from "@/components/service/primitives";
 
 const MASK = "••••••••";

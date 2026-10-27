@@ -54,7 +54,7 @@ import {
   type ScheduleExecution,
   loadServiceWebhookAction,
   loadServiceCommandsAction,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import {
   inputCls,
   Field,

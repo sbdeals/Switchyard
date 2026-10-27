@@ -105,6 +105,8 @@ export function serializeDeeplink(query: string | URLSearchParams, serviceId: st
 /** Only local absolute paths may be used after login. */
 export function safeNextPath(value: unknown): string {
   if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) return "/";
-  if (Array.from(value).some((char) => char === "\\" || char.charCodeAt(0) <= 31 || char.charCodeAt(0) === 127)) return "/";
-  return value;
+  if (Array.from(value).some((char) => char === "\\" || char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127)) return "/";
+  const url = new URL(value, "http://localhost");
+  if (url.pathname.startsWith("//") || url.pathname.replace(/\/+$/, "") === "/login") return "/";
+  return url.pathname + url.search + url.hash;
 }

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { Application, Database } from "@/lib/dokploy";
-import { updateResourcesAction } from "@/app/actions";
+import { updateResourcesAction } from "@/lib/client-actions";
 import { useDirtyGuard } from "@/components/DirtyGuard";
 import {
   parseResources,

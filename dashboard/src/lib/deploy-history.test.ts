@@ -26,7 +26,15 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: lifecycle.refresh }) }));
-vi.mock("@/app/actions", () => ({}));
+vi.mock("@/app/actions", () => new Proxy({} as Record<string, unknown>, {
+  has: (_target, key) => typeof key === "string" && key.endsWith("Action"),
+  get: (target, key) => {
+    if (typeof key !== "string" || !key.endsWith("Action")) return undefined;
+    return (target[key] ??= vi.fn());
+  },
+}));
+vi.mock("@/app/db-connect-actions", () => ({ getDatabaseConnectionAction: vi.fn() }));
+vi.mock("@/app/login/actions", () => ({ logoutAction: vi.fn() }));
 // Main's AppTabs imports the server-only compose export action via ComposeExportDialog.
 vi.mock("@/app/compose-export-actions", () => ({ loadComposeExportAction: vi.fn() }));
 vi.mock("@/app/deploy-actions", () => ({ deployOptionsAction: vi.fn() }));

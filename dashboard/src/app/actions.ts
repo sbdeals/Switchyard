@@ -116,6 +116,7 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { sessionExpiredResult } from "@/lib/session-action-error";
 import {
   getProjectSettings,
   updateProjectSettings,
@@ -139,12 +140,17 @@ import { preserveUrlCredentials } from "@/lib/url-credentials";
 import { redactErrorMessage } from "@/lib/error-redaction";
 import { validateRedirect, validateBasicAuth } from "@/lib/app-security";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
-export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
+type ActionFailure = { ok: false; error: string; code?: "unauthenticated" };
+export type ActionResult = { ok: true } | ActionFailure;
+export type QuickDeployResult = { ok: true; id: string } | ActionFailure;
 /** Result of the "Generate URL" action: the freshly-attached host on success. */
-export type GenerateUrlResult = { ok: true; host: string } | { ok: false; error: string };
+export type GenerateUrlResult = { ok: true; host: string } | ActionFailure;
 
-function fail(e: unknown): { ok: false; error: string } {
+function fail(e: unknown): ActionFailure {
+  // Keep the editor mounted for auth failures while preserving other redirects.
+  const expired = sessionExpiredResult(e);
+  if (expired) return expired;
+  unstable_rethrow(e);
   return { ok: false, error: e instanceof Error ? e.message : String(e) };
 }
 
@@ -155,7 +161,6 @@ async function wrap(fn: () => Promise<unknown>): Promise<ActionResult> {
     revalidatePath("/");
     return { ok: true };
   } catch (e) {
-    unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
   }
 }
@@ -171,6 +176,8 @@ async function wrapSensitive(
     revalidatePath("/");
     return { ok: true };
   } catch (e) {
+    const expired = sessionExpiredResult(e);
+    if (expired) return expired;
     unstable_rethrow(e);
     return { ok: false, error: secrets === null ? error : redactErrorMessage(e, error, secrets) };
   }
@@ -183,7 +190,6 @@ async function wrapId(fn: () => Promise<string>): Promise<QuickDeployResult> {
     revalidatePath("/");
     return { ok: true, id };
   } catch (e) {
-    unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
   }
 }
@@ -212,7 +218,6 @@ async function wrapHost(fn: () => Promise<string>): Promise<GenerateUrlResult> {
     revalidatePath("/");
     return { ok: true, host };
   } catch (e) {
-    unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
   }
 }
@@ -343,6 +348,8 @@ export async function loadServiceEnvAction(
   try {
     return { ok: true, env: await getServiceEnvironment(type, id) };
   } catch (e) {
+    const expired = sessionExpiredResult(e);
+    if (expired) return expired;
     unstable_rethrow(e);
     return { ok: false, error: "Could not load environment variables." };
   }
@@ -354,6 +361,8 @@ export async function loadServiceWebhookAction(
   try {
     return { ok: true, webhookUrl: await getServiceWebhook(id) };
   } catch (e) {
+    const expired = sessionExpiredResult(e);
+    if (expired) return expired;
     unstable_rethrow(e);
     return { ok: false, error: "Could not load webhook URL." };
   }
@@ -365,6 +374,8 @@ export async function loadComposeFileAction(
   try {
     return { ok: true, composeFile: await getServiceComposeFile(id) };
   } catch (e) {
+    const expired = sessionExpiredResult(e);
+    if (expired) return expired;
     unstable_rethrow(e);
     return { ok: false, error: "Could not load compose file." };
   }
@@ -377,6 +388,8 @@ export async function loadServiceCommandsAction(
   try {
     return { ok: true, ...await getServiceCommands(type, id) };
   } catch (e) {
+    const expired = sessionExpiredResult(e);
+    if (expired) return expired;
     unstable_rethrow(e);
     return { ok: false, error: "Could not load service commands." };
   }
@@ -829,6 +842,8 @@ async function wrapSecurity(fn: () => Promise<unknown>, error: string): Promise<
     revalidatePath("/");
     return { ok: true };
   } catch (e) {
+    const expired = sessionExpiredResult(e);
+    if (expired) return expired;
     unstable_rethrow(e);
     return { ok: false, error };
   }

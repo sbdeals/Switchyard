@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, useTransition } from "react";
-import { saveServiceNotesAction } from "@/app/actions";
+import { saveServiceNotesAction } from "@/lib/client-actions";
 import {
   capServiceNotesLength,
   normalizeServiceNotes,

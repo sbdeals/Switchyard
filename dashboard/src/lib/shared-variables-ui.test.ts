@@ -28,7 +28,7 @@ vi.mock("@/components/use-shared-variables", () => ({
   useSharedVariableKeys: mocks.useSharedVariableKeys,
 }));
 vi.mock("@/app/shared-variable-actions", () => ({ saveSharedVariablesAction: mocks.saveSharedVariables }));
-vi.mock("@/app/actions", () => ({
+vi.mock("@/lib/client-actions", () => ({
   loadServiceEnvAction: mocks.loadServiceVariables,
   saveEnvironmentAction: mocks.saveServiceVariables,
   saveApplicationEnvAction: mocks.saveServiceVariables,

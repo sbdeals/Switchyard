@@ -3,13 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { ArrowLeft, Layers, Loader2, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import {
-  getProjectSettingsAction,
-  updateProjectAction,
-  renameEnvironmentAction,
-  removeProjectAction,
-  type ActionResult,
-} from "@/app/actions";
+import { getProjectSettingsAction, type ActionResult } from "@/app/actions";
+import { updateProjectAction, renameEnvironmentAction, removeProjectAction } from "@/lib/client-actions";
 import {
   canRenameEnvironment,
   projectInventoryKey,

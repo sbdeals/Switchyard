@@ -22,6 +22,7 @@ vi.mock("react", async (importOriginal) => ({
   useTransition: () => [false, vi.fn()],
 }));
 vi.mock("@/components/DirtyGuard", () => ({ useDirtyGuard: mocks.useDirtyGuard }));
+vi.mock("@/lib/client-actions", () => ({}));
 vi.mock("@/app/actions", () => ({}));
 vi.mock("@/app/deploy-trigger-actions", () => ({}));
 vi.mock("@/components/use-shared-variables", () => ({

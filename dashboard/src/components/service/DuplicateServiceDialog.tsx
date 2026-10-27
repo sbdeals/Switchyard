@@ -9,7 +9,7 @@ import {
   composeLifecycleAction,
   duplicateServiceAction,
   lifecycleAction,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
 import { inputCls } from "@/components/service/primitives";
 

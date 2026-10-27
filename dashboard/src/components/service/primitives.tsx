@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import type { Action, AppDomain, Service, ServiceRuntime, ServiceStatus } from "@/lib/dokploy";
 import type { ActionResult } from "@/app/actions";
-import { appLifecycleAction, composeLifecycleAction, lifecycleAction } from "@/app/actions";
+import { appLifecycleAction, composeLifecycleAction, lifecycleAction } from "@/lib/client-actions";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { serviceDeleteImpact } from "@/lib/delete-impact";
 import { StatusBadge } from "@/components/StatusBadge";

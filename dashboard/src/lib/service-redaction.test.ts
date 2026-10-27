@@ -11,7 +11,7 @@ import { serviceDeleteImpact } from "./delete-impact";
 vi.mock("server-only", () => ({}));
 vi.mock("./docker", () => ({}));
 vi.mock("./session", () => ({}));
-vi.mock("@/app/actions", () => ({}));
+vi.mock("@/lib/client-actions", () => ({}));
 
 const base: Omit<ServiceBase, "kind"> = {
   id: "service-id",

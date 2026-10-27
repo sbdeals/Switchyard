@@ -20,7 +20,7 @@ import {
   createSecurityAction,
   updateSecurityAction,
   deleteSecurityAction,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 
 export function NetworkingTab({ app, services, onSelectService }: PortConflictProps & { app: Application }) {
   return (

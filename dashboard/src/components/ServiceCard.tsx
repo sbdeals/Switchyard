@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import { Rocket, Play, ChevronRight } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
-import { lifecycleAction, appLifecycleAction, composeLifecycleAction } from "@/app/actions";
+import { lifecycleAction, appLifecycleAction, composeLifecycleAction } from "@/lib/client-actions";
 import { resolveServiceAction, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceLogo } from "@/components/canvas/ServiceNode";

@@ -3,6 +3,8 @@ import { NextRequest } from "next/server";
 import type { ReactElement, ReactNode } from "react";
 
 import { proxy } from "../proxy";
+import { SESSION_EXPIRED_MESSAGE, signInHref } from "./action-call";
+import { GET as expireSession } from "../app/api/session/expired/route";
 import LoginPage from "../app/login/page";
 import { LoginForm } from "../app/login/LoginForm";
 import { loginAction, signupAction } from "../app/login/actions";
@@ -60,7 +62,14 @@ describe("login request gate", () => {
     const response = proxy(request);
     expect(response.status).toBe(401);
     expect(response.headers.get("location")).toBeNull();
-    expect(await response.json()).toEqual({ error: "Unauthorized. Sign in at /login." });
+    expect(response.headers.get("x-middleware-next")).toBeNull();
+    if (request.headers.has("next-action")) {
+      expect(response.headers.get("content-type")).toBe("text/plain");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.text()).toBe(SESSION_EXPIRED_MESSAGE);
+    } else {
+      expect(await response.json()).toEqual({ error: "Unauthorized. Sign in at /login." });
+    }
   });
 
   it("allows login and authenticated page requests through", () => {
@@ -78,7 +87,7 @@ describe("login request gate", () => {
 });
 
 describe("login return path", () => {
-  it.each([deepLink, "//outside.example/path", "https://outside.example/path", "/\\outside.example/path"])(
+  it.each([deepLink, "//outside.example/path", "https://outside.example/path", "//evil.com", "https://evil.com", "/\\outside.example/path"])(
     "validates the next field on both sign-in and sign-up: %s",
     async (nextPath) => {
       const form = new FormData();
@@ -133,4 +142,73 @@ describe("login return path", () => {
       expect(findForm(page)?.props.nextPath).toBe(expected);
     },
   );
+});
+
+
+describe("session recovery redirects", () => {
+  it.each([deepLink, "//evil.com", "https://evil.com"])("clears the stale cookie and validates next: %s", (nextPath) => {
+    const request = new Request(`http://localhost:3067/api/session/expired?next=${encodeURIComponent(nextPath)}`);
+    const response = expireSession(request);
+    const location = new URL(response.headers.get("location")!);
+    expect(location.origin).toBe("http://localhost:3067");
+    expect(location.pathname).toBe("/login");
+    expect(location.searchParams.get("expired")).toBe("1");
+    expect(location.searchParams.get("next")).toBe(nextPath === deepLink ? deepLink : "/");
+    expect(response.cookies.get("switchyard_session")?.value).toBe("");
+    expect(response.headers.get("set-cookie")).toContain("Expires=Thu, 01 Jan 1970");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("reuses the cookie-clearing route for a recovery sign-in, retaining the drawer and fragment", () => {
+    const nextPath = `${deepLink}#editor`;
+    const href = new URL(signInHref(nextPath), "http://localhost:3067");
+    expect(href.pathname).toBe("/api/session/expired");
+    expect(href.searchParams.get("next")).toBe(nextPath);
+    const response = expireSession(new Request(href));
+    const location = new URL(response.headers.get("location")!);
+    expect(location.searchParams.get("next")).toBe(nextPath);
+  });
+
+  it("preserves main's expiry redirect when no return path is supplied", () => {
+    const response = expireSession(new Request("http://localhost:3067/api/session/expired"));
+    expect(response.headers.get("location")).toBe("http://localhost:3067/login?expired=1");
+  });
+});
+
+describe("auth gate cannot be bypassed with headers or public-path prefixes", () => {
+  it.each(["/api", "/api/services", "/api/health/private", "/api/session/expired/private", "/login/private", "/"])(
+    "requires a session for %s even with Bearer and Next-Action headers",
+    async (pathname) => {
+      const request = new NextRequest(`http://localhost:3067${pathname}`, {
+        method: "POST",
+        headers: { authorization: "Bearer test-token", "next-action": "test-action" },
+      });
+      const response = proxy(request);
+      expect(response.status).toBe(401);
+      expect(response.headers.get("x-middleware-next")).toBeNull();
+      expect(response.headers.get("location")).toBeNull();
+      if (pathname === "/api" || pathname.startsWith("/api/")) {
+        expect(await response.json()).toEqual({ error: "Unauthorized. Sign in at /login." });
+      } else {
+        expect(await response.text()).toBe(SESSION_EXPIRED_MESSAGE);
+      }
+    },
+  );
+
+  it("does not treat a Bearer token as a page session", () => {
+    const response = proxy(new NextRequest("http://localhost:3067/", {
+      headers: { authorization: "Bearer test-token" },
+    }));
+    expect(response.status).toBe(307);
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/login");
+    expect(response.headers.get("x-middleware-next")).toBeNull();
+  });
+
+  it("retains main's 401 for a non-POST request carrying Next-Action", () => {
+    const response = proxy(new NextRequest("http://localhost:3067/", {
+      headers: { "next-action": "test-action" },
+    }));
+    expect(response.status).toBe(401);
+    expect(response.headers.get("x-middleware-next")).toBeNull();
+  });
 });

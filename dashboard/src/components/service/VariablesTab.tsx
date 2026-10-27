@@ -7,7 +7,7 @@ import {
   saveEnvironmentAction,
   saveApplicationEnvAction,
   saveComposeEnvAction,
-} from "@/app/actions";
+} from "@/lib/client-actions";
 import { useSharedVariableKeys } from "@/components/use-shared-variables";
 import { sharedReference, sharedReferences, type SharedScope } from "@/lib/shared-variables";
 import { useDirtyGuard } from "@/components/DirtyGuard";

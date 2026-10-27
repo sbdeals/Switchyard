@@ -26,6 +26,7 @@ import { useWorkspacePolling } from "@/components/use-workspace-polling";
 import type { DeploymentEvent } from "@/lib/deploy-notifications";
 import { DirtyGuardProvider, useGuardedNavigation } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
+import { SessionExpiredBanner } from "@/lib/client-actions";
 import {
   SERVICE_FILTERS,
   filterServices,
@@ -166,6 +167,7 @@ function WorkspaceContent({
 
   return (
     <MotionConfig reducedMotion="user">
+    <SessionExpiredBanner />
     <div className="mx-auto max-w-7xl pt-[max(5rem,env(safe-area-inset-top))] pb-[max(6rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:pt-[max(2rem,env(safe-area-inset-top))] sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))]">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
