@@ -70,6 +70,8 @@ import {
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
 import { ImageTagPicker } from "@/components/service/ImageTagPicker";
+import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
+import { DiagnosisCard } from "@/components/service/DiagnosisCard";
 import { ConfigAsCodePanel } from "@/components/service/ConfigAsCodePanel";
 import { useDirtyGuard } from "@/components/DirtyGuard";
 import { hasDirtyFields } from "@/lib/dirty-guard";
@@ -378,11 +380,11 @@ export function DomainsTab({ app }: { app: Application }) {
   );
 }
 
-export function DeploymentsTab({ app }: { app: Application }) {
+export function DeploymentsTab({ app, onNavigate }: { app: Application; onNavigate: (tab: DiagnosisTab) => void }) {
   return (
     <div className="space-y-6">
       {app.sourceType === "git" && <AutoDeployPanel app={app} />}
-      <DeploymentHistory deployments={app.deployments} />
+      <DeploymentHistory deployments={app.deployments} serviceKind="application" onNavigate={onNavigate} />
     </div>
   );
 }
@@ -570,7 +572,11 @@ function AutoDeployPanel({ app }: { app: Application }) {
   );
 }
 
-export function DeploymentHistory({ deployments: history }: { deployments: AppDeployment[] }) {
+export function DeploymentHistory({ deployments: history, serviceKind, onNavigate }: {
+  deployments: AppDeployment[];
+  serviceKind: "application" | "compose";
+  onNavigate: (tab: DiagnosisTab) => void;
+}) {
   const deployments = [...history].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const color = (s: string) =>
     s === "done" ? "var(--color-ok)" : s === "error" ? "var(--color-danger)" : s === "running" ? "var(--color-warn)" : "var(--color-idle)";
@@ -583,20 +589,25 @@ export function DeploymentHistory({ deployments: history }: { deployments: AppDe
         deployments.map((d) => (
           <div
             key={d.deploymentId}
-            className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
+            className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
           >
-            <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
-            {d.rollbackId && <span className="sr-only">{d.status}</span>}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm">{d.title}</div>
-              <div className="text-[11px] text-[var(--color-fg-subtle)]">
-                {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
+            <div className="flex items-center gap-3">
+              <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
+              {d.rollbackId && <span className="sr-only">{d.status}</span>}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm">{d.title}</div>
+                <div className="text-[11px] text-[var(--color-fg-subtle)]">
+                  {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
+                </div>
               </div>
+              {d.rollbackId ? (
+                <RollbackButton rollbackId={d.rollbackId} title={d.title} />
+              ) : (
+                <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
+              )}
             </div>
-            {d.rollbackId ? (
-              <RollbackButton rollbackId={d.rollbackId} title={d.title} />
-            ) : (
-              <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
+            {d.status === "error" && (
+              <DiagnosisCard deploymentId={d.deploymentId} serviceKind={serviceKind} onNavigate={onNavigate} />
             )}
           </div>
         ))
@@ -658,7 +669,8 @@ function RedeployToggle({
  * Build configuration: the build strategy (Nixpacks / Dockerfile / Railpack /
  * …) and Dockerfile options for source-built apps, private registry
  * credentials for docker-image apps, and the custom start command for either.
- * Image changes apply on the next deploy. Source builds offer an optional redeploy.
+ * Build-strategy and image changes only take effect on the next deploy, so each
+ * sub-form offers an optional redeploy.
  */
 export function AppBuildTab({ app }: { app: Application }) {
   const isDocker = app.sourceType === "docker";
@@ -762,21 +774,23 @@ function BuildStrategyForm({ app }: { app: Application }) {
 
 function DockerSourceForm({ app }: { app: Application }) {
   const [image, setImage] = useState(app.dockerImage ?? "");
-  const [registryUrl, setRegistryUrl] = useState(app.registryUrl ?? "");
-  const [username, setUsername] = useState("");
+  const [registryUrl, setRegistryUrl] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [password, setPassword] = useState("");
+  const [clearCredentials, setClearCredentials] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [redeploy, setRedeploy] = useState(false);
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
 
-  // Credentials are never read back from Dokploy, so treat any input here (or an
-  // image/registry change) as a reason to resubmit the whole docker source.
+  // Null drafts mean untouched: the server rereads their current values.
   const dirty =
     image.trim() !== (app.dockerImage ?? "") ||
-    registryUrl.trim() !== (app.registryUrl ?? "") ||
-    username !== "" ||
-    password !== "";
+    (registryUrl !== null && registryUrl.trim() !== (app.registryUrl ?? "")) ||
+    (username !== null && username.trim() !== "" && username.trim() !== (app.registryUsername ?? "")) ||
+    password !== "" ||
+    clearCredentials;
   useDirtyGuard("Build", dirty);
 
   function save() {
@@ -785,11 +799,19 @@ function DockerSourceForm({ app }: { app: Application }) {
       const res = await setAppDockerSourceAction(
         app.id,
         image,
-        { username: username.trim(), password, registryUrl: registryUrl.trim() }
+        {
+          username: username?.trim() || undefined,
+          password: password || undefined,
+          registryUrl: registryUrl?.trim(),
+          clearCredentials,
+        },
+        redeploy
       );
       if (res.ok) {
-        setUsername("");
+        setRegistryUrl(null);
+        setUsername(null);
         setPassword("");
+        setClearCredentials(false);
         flashSaved();
       } else setError(res.error);
     });
@@ -801,12 +823,13 @@ function DockerSourceForm({ app }: { app: Application }) {
       <ImageTagPicker image={image} currentImage={app.dockerImage ?? ""} onChange={setImage} />
       <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
         <p className="text-[11px] text-[var(--color-fg-subtle)]">
-          Private registry credentials (leave blank for public images).
+          Leave username or password blank to keep saved credentials. Clear credentials for public images.
         </p>
         <Field label="Registry URL" hint="optional">
           <input
-            value={registryUrl}
+            value={registryUrl ?? app.registryUrl ?? ""}
             onChange={(e) => setRegistryUrl(e.target.value)}
+            disabled={clearCredentials}
             placeholder="registry.example.com"
             className={inputCls}
           />
@@ -814,8 +837,9 @@ function DockerSourceForm({ app }: { app: Application }) {
         <div className="grid grid-cols-2 gap-3">
           <Field label="Username">
             <input
-              value={username}
+              value={username ?? app.registryUsername ?? ""}
               onChange={(e) => setUsername(e.target.value)}
+              disabled={clearCredentials}
               autoComplete="off"
               className={inputCls}
             />
@@ -826,6 +850,8 @@ function DockerSourceForm({ app }: { app: Application }) {
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder={app.hasRegistryPassword ? "Password saved — leave blank to keep" : ""}
+                disabled={clearCredentials}
                 autoComplete="off"
                 className={inputCls}
               />
@@ -841,8 +867,18 @@ function DockerSourceForm({ app }: { app: Application }) {
             </div>
           </Field>
         </div>
+        <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
+          <input
+            type="checkbox"
+            checked={clearCredentials}
+            onChange={(e) => setClearCredentials(e.target.checked)}
+            className="accent-[var(--color-brand)]"
+          />
+          Clear credentials (including registry URL) on save
+        </label>
       </div>
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <RedeployToggle checked={redeploy} onChange={setRedeploy} />
         <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
       </div>
     </div>

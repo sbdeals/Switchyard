@@ -20,18 +20,26 @@ vi.mock("@/lib/names", () => ({ randomPassword: vi.fn(), randomServiceName: vi.f
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: mocks.unstable_rethrow }));
 
+const stored = {
+  gitUrl: null,
+  dockerImage: "example/app:old",
+  registryUrl: "docker.io",
+  username: "saved-user",
+  password: "saved-password",
+};
+
 describe("setAppDockerSourceAction", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.setAppDockerSource.mockResolvedValue(undefined);
     // Main's action reads the owned source first (ownership + credential preservation).
-    mocks.getApplicationSource.mockResolvedValue({ gitUrl: null, dockerImage: null, registryUrl: null });
+    mocks.getApplicationSource.mockResolvedValue(stored);
   });
 
   it("trims and saves the image, then refreshes the dashboard without deploying", async () => {
     expect(await setAppDockerSourceAction("app-1", "  nginx:alpine \n")).toEqual({ ok: true });
 
-    expect(mocks.setAppDockerSource).toHaveBeenCalledExactlyOnceWith("app-1", "nginx:alpine", undefined);
+    expect(mocks.setAppDockerSource).toHaveBeenCalledExactlyOnceWith("app-1", "nginx:alpine", undefined, stored);
     expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith("/");
     expect(mocks.applicationAction).not.toHaveBeenCalled();
   });
@@ -45,16 +53,16 @@ describe("setAppDockerSourceAction", () => {
 
     expect(await setAppDockerSourceAction("app-1", "example/app:next", registry)).toEqual({ ok: true });
 
-    expect(mocks.setAppDockerSource).toHaveBeenCalledExactlyOnceWith("app-1", "example/app:next", registry);
+    expect(mocks.setAppDockerSource).toHaveBeenCalledExactlyOnceWith("app-1", "example/app:next", registry, stored);
     expect(mocks.applicationAction).not.toHaveBeenCalled();
   });
 
-  it("treats empty registry settings as a public image", async () => {
+  it("passes blank credential drafts with the stored source so credentials are preserved", async () => {
     const registry = { username: "", password: "", registryUrl: "" };
 
     expect(await setAppDockerSourceAction("app-1", "nginx:alpine", registry)).toEqual({ ok: true });
 
-    expect(mocks.setAppDockerSource).toHaveBeenCalledExactlyOnceWith("app-1", "nginx:alpine", undefined);
+    expect(mocks.setAppDockerSource).toHaveBeenCalledExactlyOnceWith("app-1", "nginx:alpine", registry, stored);
     expect(mocks.applicationAction).not.toHaveBeenCalled();
   });
 
@@ -83,13 +91,14 @@ describe("setAppDockerSourceAction", () => {
     expect(mocks.applicationAction).not.toHaveBeenCalled();
   });
 
-  it("does not deploy if an older client still supplies the removed redeploy argument", async () => {
+  it("redeploys after saving when explicitly requested", async () => {
     const result = await Reflect.apply(setAppDockerSourceAction, undefined, [
       "app-1", "nginx:alpine", undefined, true,
     ]);
 
     expect(result).toEqual({ ok: true });
-    expect(mocks.setAppDockerSource).toHaveBeenCalledExactlyOnceWith("app-1", "nginx:alpine", undefined);
-    expect(mocks.applicationAction).not.toHaveBeenCalled();
+    expect(mocks.setAppDockerSource).toHaveBeenCalledExactlyOnceWith("app-1", "nginx:alpine", undefined, stored);
+    expect(mocks.applicationAction).toHaveBeenCalledExactlyOnceWith("app-1", "deploy");
+    expect(mocks.setAppDockerSource.mock.invocationCallOrder[0]).toBeLessThan(mocks.applicationAction.mock.invocationCallOrder[0]);
   });
 });
