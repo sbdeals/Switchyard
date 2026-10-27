@@ -69,6 +69,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { ImageTagPicker } from "@/components/service/ImageTagPicker";
 import { DomainStatus } from "@/components/service/DomainStatus";
 import { ComposeExportButton } from "@/components/service/ComposeExportDialog";
 import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
@@ -825,14 +826,7 @@ function DockerSourceForm({ app }: { app: Application }) {
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-[var(--color-fg)]">Image &amp; registry</h3>
-      <Field label="Image" hint="repo:tag">
-        <input
-          value={image}
-          onChange={(e) => setImage(e.target.value)}
-          placeholder="registry.example.com/app:latest"
-          className={inputCls}
-        />
-      </Field>
+      <ImageTagPicker image={image} currentImage={app.dockerImage ?? ""} onChange={setImage} />
       <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
         <p className="text-[11px] text-[var(--color-fg-subtle)]">
           Leave username or password blank to keep saved credentials. Clear credentials for public images.
