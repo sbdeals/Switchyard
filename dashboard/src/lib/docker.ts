@@ -10,6 +10,7 @@
 import "server-only";
 import Docker from "dockerode";
 import type { Duplex } from "node:stream";
+import { sumContainerSamples, toContainerSample, type ContainerSample } from "./container-stats";
 
 const socketPath = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
 const docker = new Docker({ socketPath });
@@ -273,6 +274,108 @@ export interface Sample {
   memUsed: number; // bytes
   memLimit: number; // bytes
   memPct: number; // percent
+}
+
+export interface ServiceStats {
+  status: "running" | "not-running" | "unavailable";
+  sample: ContainerSample | null;
+  containers: number;
+}
+
+// Leave headroom for authorization timing differences between five-second polls.
+const STATS_TTL_MS = 4_500;
+const STATS_CONCURRENCY = 4;
+const statsCache = new Map<string, { at: number; value: ServiceStats }>();
+const statsInFlight = new Map<string, Promise<ServiceStats>>();
+let activeStatsReads = 0;
+const queuedStatsReads: (() => void)[] = [];
+
+/** Bound both the wait and the socket call, without releasing a still-busy slot. */
+function statsRead<T>(read: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+      const queued = queuedStatsReads.indexOf(run);
+      if (queued !== -1) queuedStatsReads.splice(queued, 1);
+      reject(new DockerTimeoutError("Service metrics read timed out"));
+    }, DOCKER_OP_TIMEOUT_MS);
+    const run = () => {
+      activeStatsReads++;
+      Promise.resolve()
+        .then(() => read(controller.signal))
+        .then(resolve, reject)
+        .finally(() => {
+          clearTimeout(timer);
+          activeStatsReads--;
+          queuedStatsReads.shift()?.();
+        });
+    };
+    if (activeStatsReads < STATS_CONCURRENCY) run();
+    else queuedStatsReads.push(run);
+  });
+}
+
+function belongsToService(container: Docker.ContainerInfo, appName: string): boolean {
+  const project = container.Labels?.["com.docker.compose.project"];
+  const service = container.Labels?.["com.docker.swarm.service.name"];
+  if (project || service) return project === appName || service === appName;
+  // Legacy tasks may lack labels. Require a whole name or exact Swarm task
+  // identity, never a prefix ("app" must not include "app-other").
+  const escaped = appName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const task = new RegExp(`^${escaped}\\.\\d+\\.[a-z0-9]+$`, "i");
+  return (container.Names ?? []).some((name) => {
+    const bare = name.replace(/^\//, "");
+    return bare === appName || task.test(bare);
+  });
+}
+
+/** Read only: GET container list and GET stats?stream=false for owned services. */
+export async function readServiceStats(appName: string, allowed: Set<string>): Promise<ServiceStats> {
+  const unavailable: ServiceStats = { status: "unavailable", sample: null, containers: 0 };
+  // Check before either cache: an authorized caller must never warm access for
+  // another user whose workspace does not contain the service.
+  if (!appName || !allowed.has(appName)) return unavailable;
+  const now = Date.now();
+  for (const [key, entry] of statsCache) {
+    if (now - entry.at >= STATS_TTL_MS) statsCache.delete(key);
+  }
+  const cached = statsCache.get(appName);
+  if (cached) return cached.value;
+  const pending = statsInFlight.get(appName);
+  if (pending) return pending;
+
+  const read = async (): Promise<ServiceStats> => {
+    let containers = 0;
+    try {
+      const listed = await statsRead((abortSignal) =>
+        docker.listContainers({ all: false, abortSignal }),
+      );
+      const running = listed.filter((container) =>
+        container.State === "running" && belongsToService(container, appName),
+      );
+      containers = running.length;
+      if (!containers) return { status: "not-running", sample: null, containers: 0 };
+      const samples = await Promise.all(running.map((container) =>
+        statsRead(async (abortSignal) => {
+          const options = { stream: false as const, abortSignal };
+          const stats = await docker.getContainer(container.Id).stats(options);
+          return toContainerSample(stats);
+        }),
+      ));
+      return { status: "running", sample: sumContainerSamples(samples), containers };
+    } catch {
+      // A missing container or failed read must not masquerade as a partial sum.
+      return { status: "unavailable", sample: null, containers };
+    }
+  };
+  const request = read().then((value) => {
+    if (statsCache.size >= 200) statsCache.delete(statsCache.keys().next().value!);
+    statsCache.set(appName, { at: now, value });
+    return value;
+  }).finally(() => statsInFlight.delete(appName));
+  statsInFlight.set(appName, request);
+  return request;
 }
 
 function toSample(s: Docker.ContainerStats): Sample {
