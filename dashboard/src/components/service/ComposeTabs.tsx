@@ -39,8 +39,8 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   const { pending, error, run } = useComposeLifecycle(compose);
   return (
     <div className="space-y-5">
-      <PublicUrlBar domains={compose.domains} status={compose.status} />
-      <LifecycleButtons status={compose.status} pending={pending} error={error} run={run} />
+      <PublicUrlBar domains={compose.domains} status={compose.status} runtime={compose.runtime} />
+      <LifecycleButtons status={compose.status} runtime={compose.runtime} pending={pending} error={error} run={run} />
       <p className="text-xs text-[var(--color-fg-muted)]">
         A raw <code className="font-mono">docker-compose</code> stack. Edit the file in the Compose
         tab, then deploy.
@@ -284,6 +284,13 @@ export function ComposeSettingsTab({
         label="Created"
         value={compose.createdAt ? new Date(compose.createdAt).toLocaleString() : "—"}
       />
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold">Resources</h3>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          Compose limits and reservations live in <code className="font-mono">deploy.resources</code>
+          {" "}in the compose file. Edit them in the Compose tab.
+        </p>
+      </section>
       <DangerZone
         service={compose}
         message="Destroying removes the stack and all its containers."

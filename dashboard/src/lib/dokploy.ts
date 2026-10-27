@@ -104,7 +104,7 @@ export interface ServiceBase {
   /** Raw env block on the server; redacted to null in workspace page props. */
   env: string | null;
   createdAt: string | null;
-  // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
+  // Dokploy v0.30.10 stores integer strings: CPU nanocpus and memory bytes.
   cpuLimit: string | null;
   memoryLimit: string | null;
   replicas: number | null;
@@ -124,6 +124,8 @@ export interface ServiceBase {
 export interface Database extends ServiceBase {
   kind: "database";
   engine: Engine;
+  cpuReservation: string | null;
+  memoryReservation: string | null;
   databaseName: string | null;
   databaseUser: string | null;
   /** Always null in workspace data; fetched explicitly by the Connect action. */
@@ -761,6 +763,8 @@ interface RawDatabaseDetail {
   env?: string | null;
   cpuLimit?: string | null;
   memoryLimit?: string | null;
+  cpuReservation?: string | null;
+  memoryReservation?: string | null;
   command?: string | null;
   replicas?: number | null;
   mounts?: RawMount[];
@@ -824,6 +828,8 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
         env: d.env ?? null,
         cpuLimit: d.cpuLimit ?? null,
         memoryLimit: d.memoryLimit ?? null,
+        cpuReservation: d.cpuReservation ?? null,
+        memoryReservation: d.memoryReservation ?? null,
         command: d.command ?? null,
         replicas: d.replicas ?? null,
         mounts: mapMountTypes(d.mounts),
