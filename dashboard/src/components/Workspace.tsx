@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, Search } from "lucide-react";
+import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, Search, ScrollText } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
@@ -12,6 +12,7 @@ import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { ProjectLogs } from "@/components/ProjectLogs";
 import { useServiceDeeplink } from "@/components/use-service-deeplink";
 import { DirtyGuardProvider } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
@@ -24,7 +25,7 @@ import {
   type ServiceFilter,
 } from "@/lib/service-filter";
 
-type View = "canvas" | "grid";
+type View = "canvas" | "grid" | "logs";
 
 type WorkspaceProps = {
   services: Service[];
@@ -105,6 +106,9 @@ function WorkspaceContent({
             <ViewToggle active={view === "grid"} onClick={() => setView("grid")}>
               <LayoutGrid className="size-3.5" /> Grid
             </ViewToggle>
+            <ViewToggle active={view === "logs"} onClick={() => setView("logs")}>
+              <ScrollText className="size-3.5" /> Logs
+            </ViewToggle>
           </div>
           <button
             onClick={() => setProjectsOpen(true)}
@@ -163,7 +167,7 @@ function WorkspaceContent({
       </header>
 
       <div className="relative">
-        {services.length > 0 && matches.length === 0 && (
+        {view !== "logs" && services.length > 0 && matches.length === 0 && (
           <div className={cn(
             "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-[var(--color-border-strong)] bg-[var(--color-surface)] p-5",
             view === "canvas" ? "absolute inset-x-4 top-4 z-10" : "mb-4"
@@ -182,11 +186,13 @@ function WorkspaceContent({
           </div>
         )}
 
-        {services.length === 0 ? (
+        {view === "logs" ? (
+          <ProjectLogs projects={projects} />
+        ) : services.length === 0 ? (
           <EmptyState projects={projects} onDeployed={onDeployed} />
         ) : view === "canvas" ? (
           <PanelErrorBoundary>
-            <FlowCanvas services={services} edges={edges} matchingIds={matchingIds} onSelect={(s) => drawer.open(s.id)} />
+            <FlowCanvas services={services} edges={edges} matchingIds={matchingIds} projects={projects} onDeployed={onDeployed} onSelect={(s) => drawer.open(s.id)} />
           </PanelErrorBoundary>
         ) : (
           <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
