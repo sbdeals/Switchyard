@@ -22,6 +22,7 @@ import {
   Server,
   TerminalSquare,
   Table2,
+  Copy,
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
@@ -275,13 +276,14 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, services, onSelectService, tab, sessionKey, deploymentId, onTabChange, onClose }: PortConflictProps & {
+export function ServiceDrawer({ service, services, onSelectService, tab, sessionKey, deploymentId, onTabChange, onClose, onDuplicate }: PortConflictProps & {
   service: Service | null;
   tab: TabId;
   sessionKey: string | null;
   deploymentId?: string | null;
   onTabChange: (tab: TabId) => void;
   onClose: () => void;
+  onDuplicate: (service: Service) => void;
 }) {
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
@@ -329,7 +331,7 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
             className="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl max-lg:[&_a]:min-h-10 max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10 max-lg:[&_input:not([type=checkbox])]:min-h-10 max-lg:[&_select]:min-h-10 sm:w-[var(--drawer-width)] sm:max-w-[90vw] sm:border-l"
           >
             <ResizeHandle width={width} apply={applyWidth} reset={resetWidth} />
-            <Header service={service} onClose={onClose} titleId={titleId} />
+            <Header service={service} onClose={onClose} onDuplicate={() => onDuplicate(service)} titleId={titleId} />
             <nav
               role="tablist"
               aria-label="Service sections"
@@ -466,10 +468,12 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
 function Header({
   service,
   onClose,
+  onDuplicate,
   titleId,
 }: {
   service: Service;
   onClose: () => void;
+  onDuplicate: () => void;
   titleId: string;
 }) {
   const accent = serviceAccent(service);
@@ -504,6 +508,15 @@ function Header({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <CopyLinkButton key={service.id} />
+        <button
+          type="button"
+          onClick={onDuplicate}
+          aria-label="Duplicate service"
+          title="Duplicate service"
+          className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+        >
+          <Copy className="size-4" />
+        </button>
         <button
           type="button"
           onClick={onClose}

@@ -35,7 +35,6 @@ import type {
   Schedule,
 } from "@/lib/dokploy";
 import {
-  appLifecycleAction,
   updateApplicationAction,
   saveAppBuildTypeAction,
   setAppDockerSourceAction,
@@ -59,16 +58,15 @@ import {
   inputCls,
   Field,
   Info,
-  LifecycleButtons,
   SaveRow,
   DangerZone,
   PublicUrlBar,
   PrivateNetwork,
   GenerateUrlBtn,
-  useLifecycle,
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { AppDeployControls } from "@/components/service/AppDeployControls";
 import { validateCron, validatePort } from "@/lib/validation";
 import { ResourceSettings } from "@/components/service/ResourceSettings";
 import { ImageTagPicker } from "@/components/service/ImageTagPicker";
@@ -97,17 +95,12 @@ const BUILD_TYPES = Object.keys(BUILD_TYPE_LABELS) as BuildType[];
 
 const CERT_TYPES: CertificateType[] = ["none", "letsencrypt", "custom"];
 
-const useAppLifecycle = (app: Application) =>
-  useLifecycle((action) => appLifecycleAction(app.id, action));
-
 export function AppOverviewTab({ app }: { app: Application }) {
-  const { pending, error, run } = useAppLifecycle(app);
-
   return (
     <div className="space-y-5">
       <PublicUrlBar domains={app.domains} status={app.status} runtime={app.runtime} />
 
-      <LifecycleButtons status={app.status} runtime={app.runtime} pending={pending} error={error} run={run} />
+      <AppDeployControls app={app} />
 
       <PrivateNetwork host={app.appName} />
 
@@ -613,6 +606,9 @@ export function DeploymentHistory({ deployments: history, serviceKind, onNavigat
               {d.rollbackId && <span className="sr-only">{d.status}</span>}
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm">{d.title}</div>
+                {d.description && d.description !== d.title && (
+                  <p className="whitespace-pre-wrap break-words text-xs text-[var(--color-fg-muted)]">{d.description}</p>
+                )}
                 <div className="text-[11px] text-[var(--color-fg-subtle)]">
                   {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
                 </div>

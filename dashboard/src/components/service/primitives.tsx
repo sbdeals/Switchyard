@@ -311,19 +311,21 @@ export function LifecycleButtons({
   pending,
   error,
   run,
+  deployControl,
 }: {
   status: ServiceStatus;
   runtime?: ServiceRuntime;
   pending: boolean;
   error: string | null;
   run: (action: Action) => void;
+  deployControl?: React.ReactNode;
 }) {
   const action = resolveServiceAction(status, runtime);
   return (
     <>
       <div className="flex flex-wrap gap-2">
         {action === "deploy" ? (
-          <Btn onClick={() => run("deploy")} disabled={pending} primary>
+          deployControl ?? <Btn onClick={() => run("deploy")} disabled={pending} primary>
             <Rocket className="size-3.5" /> Deploy
           </Btn>
         ) : action === "stop" ? (
@@ -336,7 +338,7 @@ export function LifecycleButtons({
           </Btn>
         ) : null}
         {action !== "deploy" && (
-          <Btn onClick={() => run("deploy")} disabled={pending || !action}>
+          deployControl ?? <Btn onClick={() => run("deploy")} disabled={pending || !action}>
             <RefreshCw className="size-3.5" /> Redeploy
           </Btn>
         )}

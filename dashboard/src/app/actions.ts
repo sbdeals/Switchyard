@@ -73,6 +73,7 @@ import {
   createMount,
   updateMount,
   removeMount,
+  request,
   type Action,
   type DatabasePatch,
   type ApplicationPatch,
@@ -117,6 +118,8 @@ import {
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
 import { sessionExpiredResult } from "@/lib/session-action-error";
+import { duplicateService } from "@/lib/service-duplicate-operation";
+import type { DuplicateServiceRef } from "@/lib/service-duplicate";
 import { parseEnvironment, validateCron, validatePort } from "@/lib/validation";
 import { updateResourceSettings } from "@/lib/resource-settings";
 import type { ResourceInputs } from "@/lib/resource-limits";
@@ -180,6 +183,23 @@ async function wrapId(fn: () => Promise<string>): Promise<QuickDeployResult> {
   } catch (e) {
     return fail(e);
   }
+}
+
+export async function duplicateServiceAction(
+  ref: DuplicateServiceRef,
+  name: string,
+  environmentId: string
+): Promise<QuickDeployResult> {
+  return wrapId(() => duplicateService(async (path, init) => {
+    try {
+      return await request(path, init);
+    } catch (error) {
+      unstable_rethrow(error);
+      // Copies include secrets fetched only on the server. Backend errors may
+      // echo any of them, so expose only our own validation/cleanup messages.
+      throw new Error("Could not duplicate the service. Please try again.");
+    }
+  }, ref, name, environmentId, randomUUID()));
 }
 
 /** Like `wrap`, but returns the generated host so the UI can surface it. */
