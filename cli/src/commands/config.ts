@@ -1,5 +1,6 @@
 import {
   CONFIG_KEY_TYPES,
+  SECRET_KEYS,
   coerceConfigValue,
   loadConfig,
   saveConfig,
@@ -19,8 +20,6 @@ export interface ConfigFlags {
   restart?: boolean; // commander --no-restart -> restart:false
   showSecrets?: boolean;
 }
-
-const SECRET_KEYS: ConfigKey[] = ["adminPassword", "sessionSecret"];
 
 function assertKey(key: string): ConfigKey {
   if (!(key in CONFIG_KEY_TYPES)) {
@@ -45,7 +44,7 @@ export async function configCommand(
       for (const k of Object.keys(CONFIG_KEY_TYPES) as ConfigKey[]) {
         const raw = cfg[k];
         const shown =
-          SECRET_KEYS.includes(k) && !flags.showSecrets && raw !== ""
+          SECRET_KEYS.has(k) && !flags.showSecrets && raw !== ""
             ? "********  (use --show-secrets)"
             : String(raw);
         console.log(`${k} = ${shown}`);
@@ -72,7 +71,7 @@ export async function configCommand(
       }
       (cfg as Record<ConfigKey, unknown>)[k] = coerced;
       saveConfig(cfg, path);
-      p.log.success(`${k} = ${SECRET_KEYS.includes(k) && !flags.showSecrets ? "********" : String(coerced)} (saved to ${path})`);
+      p.log.success(`${k} = ${SECRET_KEYS.has(k) && !flags.showSecrets ? "********" : String(coerced)} (saved to ${path})`);
 
       if (k === "dokployPort") {
         p.log.info("Changing the Dokploy port also needs the service re-published — run `switchyard up` to converge.");

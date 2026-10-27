@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import type { Application, Database } from "@/lib/dokploy";
 import { updateResourcesAction } from "@/app/actions";
+import { useDirtyGuard } from "@/components/DirtyGuard";
 import {
   parseResources,
   RESOURCE_PRESETS,
@@ -27,6 +28,7 @@ export function ResourceSettings({ service }: { service: Application | Database 
   const dirty = (Object.keys(input) as (keyof ResourceInputs)[]).some(
     (field) => input[field] !== current[field]
   );
+  useDirtyGuard("Settings", dirty);
 
   function edit(field: keyof ResourceInputs, value: string) {
     setInput((previous) => ({ ...previous, [field]: value }));

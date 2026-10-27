@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { request } from "./dokploy";
 import { updateResourceSettings } from "./resource-settings";
+import { updateResourcesAction } from "@/app/actions";
 import type { ResourceInputs } from "./resource-limits";
 
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/navigation", () => ({ unstable_rethrow: vi.fn() }));
 vi.mock("./dokploy", () => ({
   ENGINES: ["postgres", "mysql", "mariadb", "mongo", "redis"],
   request: vi.fn(),
@@ -88,5 +91,23 @@ describe("resource settings save", () => {
     call.mockRejectedValueOnce(new Error("Update rejected"));
     await expect(updateResourceSettings("application", "owned", small)).rejects.toThrow("Update rejected");
     expect(call).toHaveBeenCalledTimes(2);
+  });
+
+  it("scrubs backend credentials before returning resource action errors to the client", async () => {
+    call.mockResolvedValueOnce([{ environments: [{ applications: [{ applicationId: "owned" }] }] }]);
+    call.mockRejectedValueOnce(new Error("Update failed: https://user:resource-secret@example.com"));
+
+    const result = await updateResourcesAction("application", "owned", small);
+
+    expect(result).toEqual({ ok: false, error: "Update failed: https://example.com" });
+    expect(call).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps useful validation errors in the resource action without updating", async () => {
+    call.mockResolvedValueOnce([{ environments: [{ applications: [{ applicationId: "owned" }] }] }]);
+
+    expect(await updateResourcesAction("application", "owned", { ...small, cpuReservation: "1" }))
+      .toEqual({ ok: false, error: "CPU reservation must be less than or equal to its limit." });
+    expect(call.mock.calls).toEqual([["project.all"]]);
   });
 });
