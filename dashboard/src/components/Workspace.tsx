@@ -12,6 +12,7 @@ import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { ActivityPanel } from "@/components/ActivityPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
+import { DuplicateServiceDialog } from "@/components/service/DuplicateServiceDialog";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { GettingStarted } from "@/components/GettingStarted";
@@ -57,6 +58,7 @@ function WorkspaceContent({
   userId,
 }: WorkspaceProps) {
   const [view, setView] = useState<View>("canvas");
+  const [duplicateSource, setDuplicateSource] = useState<Service | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [deployOpen, setDeployOpen] = useState(false);
@@ -143,10 +145,10 @@ function WorkspaceContent({
 
   return (
     <MotionConfig reducedMotion="user">
-    <div className="mx-auto max-w-7xl px-4 pb-24 pt-20 sm:px-6 sm:pt-8">
+    <div className="mx-auto max-w-7xl pt-[max(5rem,env(safe-area-inset-top))] pb-[max(6rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:pt-[max(2rem,env(safe-area-inset-top))] sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))]">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 max-sm:pr-24">
             <div className="flex size-8 items-center justify-center rounded-lg bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
               <Boxes className="size-4.5" />
             </div>
@@ -156,7 +158,7 @@ function WorkspaceContent({
             Apps and databases across your Dokploy projects.
           </p>
         </div>
-        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+        <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 sm:w-auto max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10">
           <select
             aria-label="Current project"
             value={currentProject ?? ""}
@@ -183,7 +185,7 @@ function WorkspaceContent({
               drawer.open(event.serviceId, "logs");
             })}
           />
-          <div className="flex rounded-lg border border-[var(--color-border-strong)] p-0.5">
+          <div className="flex rounded-lg border border-[var(--color-border-strong)] p-0.5 max-sm:w-full">
             <ViewToggle active={view === "canvas"} onClick={() => setView("canvas")}>
               <Network className="size-3.5" /> Canvas
             </ViewToggle>
@@ -196,21 +198,21 @@ function WorkspaceContent({
           </div>
           <button
             onClick={() => setProjectsOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)] max-lg:min-h-10"
           >
             <FolderGit2 className="size-3.5" /> Projects
           </button>
           <button
             onClick={() => setActivityOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)] max-lg:min-h-10"
           >
             <Activity className="size-3.5" /> Activity
           </button>
           <button
             onClick={() => router.refresh()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)] max-lg:min-h-10"
           >
-            <RefreshCw className="size-3.5" /> Refresh
+            <RefreshCw className="size-3.5" /> <span className="sr-only sm:not-sr-only">Refresh</span>
           </button>
           <KeyboardShortcuts />
           <QuickDeployMenu key={scope.project?.projectId ?? "all"} projects={scope.projects} onDeployed={onDeployed} menuOpen={deployOpen} onMenuOpenChange={setDeployOpen} />
@@ -303,7 +305,7 @@ function WorkspaceContent({
           <EmptyState key={scope.project?.projectId ?? "all"} projects={scope.projects} projectName={scope.project?.name} onDeployed={onDeployed} />
         ) : view === "canvas" ? (
           <PanelErrorBoundary>
-            <FlowCanvas key={scope.project?.projectId ?? "all"} services={visibleServices} allServices={services} edges={scope.edges} matchingIds={matchingIds} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} />
+            <FlowCanvas key={scope.project?.projectId ?? "all"} services={visibleServices} allServices={services} edges={scope.edges} matchingIds={matchingIds} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} onDuplicate={setDuplicateSource} />
           </PanelErrorBoundary>
         ) : (
           <>
@@ -328,7 +330,21 @@ function WorkspaceContent({
 
       <GettingStarted key={userId} projects={projects} services={services} userId={userId} onNavigate={navigateChecklist} />
       {bulkRequest && <BulkActionDialog {...bulkRequest} onClose={() => setBulkRequest(null)} />}
-      <ServiceDrawer deploymentId={deployment?.serviceId === drawer.service?.id ? deployment?.deploymentId : undefined} services={services} onSelectService={openService} service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
+      <ServiceDrawer deploymentId={deployment?.serviceId === drawer.service?.id ? deployment?.deploymentId : undefined} services={services} onSelectService={openService} service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} onDuplicate={setDuplicateSource} />
+      {duplicateSource && (
+        <DuplicateServiceDialog
+          key={`${duplicateSource.kind}:${duplicateSource.id}`}
+          service={duplicateSource}
+          projects={projects}
+          services={services}
+          onClose={() => setDuplicateSource(null)}
+          onCreated={() => router.refresh()}
+          onOpen={(id) => {
+            setDuplicateSource(null);
+            onDeployed(id);
+          }}
+        />
+      )}
       {drawer.notFound && (
         <div role="status" className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-4 py-2 text-sm shadow-lg">
           Service not found
@@ -368,7 +384,7 @@ function ViewToggle({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+        "inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors max-lg:min-h-10 max-sm:flex-1",
         active
           ? "bg-[var(--color-surface-hover)] text-[var(--color-fg)]"
           : "text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"

@@ -1,5 +1,6 @@
 "use client";
 
+import { Copy } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutGrid, Undo2 } from "lucide-react";
 import {
@@ -23,6 +24,7 @@ import { serviceAccent } from "@/lib/service-meta";
 import { serviceFilterOpacity } from "@/lib/service-filter";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
+import { useDialogFocus } from "@/components/use-focus-trap";
 import { pruneCanvasPositions } from "@/lib/canvas-positions";
 import { useTheme } from "@/components/ThemeProvider";
 import { CanvasResizeFit } from "@/components/canvas/CanvasResizeFit";
@@ -64,6 +66,7 @@ export function FlowCanvas({
   edges: serviceEdges,
   matchingIds,
   onSelect,
+  onDuplicate,
   selectedIds,
   onSelectionChange,
   selectionDisabled = false,
@@ -78,10 +81,13 @@ export function FlowCanvas({
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
   selectionDisabled?: boolean;
+  onDuplicate: (service: Service) => void;
   projects: ProjectNode[];
   onDeployed: (id: string) => void;
 }) {
   const { theme } = useTheme();
+  const [menu, setMenu] = useState<{ service: Service; x: number; y: number } | null>(null);
+  const menuRef = useDialogFocus<HTMLDivElement>(() => setMenu(null));
   const canvasRef = useRef<HTMLDivElement>(null);
   const flowRef = useRef<ReactFlowInstance | null>(null);
   const [creation, setCreation] = useState<{ screen: Point; flow: Point } | null>(null);
@@ -277,7 +283,7 @@ export function FlowCanvas({
         event.preventDefault();
         openAt(canvasCenter(bounds));
       }}
-      className="relative h-[calc(100vh-13rem)] min-h-80 w-full overflow-hidden rounded-2xl border border-[var(--color-border)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+      className="relative h-[calc(100dvh-20rem)] min-h-80 w-full overflow-hidden rounded-2xl border border-[var(--color-border)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)] sm:h-[calc(100dvh-16rem)] lg:h-[calc(100vh-13rem)] max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10"
     >
       <p className="pointer-events-none absolute left-3 top-3 z-10 rounded-lg bg-[var(--color-surface)] px-2 py-1 text-xs text-[var(--color-fg-muted)]">
         Shift-drag or Shift/Ctrl/⌘-click to select services
@@ -317,6 +323,15 @@ export function FlowCanvas({
               : updated, positions));
         }}
         onEdgesChange={onEdgesChange}
+        onNodeContextMenu={(event, node) => {
+          event.preventDefault();
+          setMenu({
+            service: (node.data as ServiceNodeData).service,
+            x: Math.min(event.clientX, window.innerWidth - 200),
+            y: Math.min(event.clientY, window.innerHeight - 52),
+          });
+        }}
+        onMoveStart={() => setMenu(null)}
         nodeTypes={nodeTypes}
         elementsSelectable={!selectionDisabled}
         multiSelectionKeyCode={["Shift", "Control", "Meta"]}
@@ -332,7 +347,7 @@ export function FlowCanvas({
       >
         <CanvasResizeFit />
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="var(--color-canvas-dots)" bgColor="var(--color-bg)" />
-        <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
+        <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)] max-sm:!bottom-auto max-sm:!top-0 max-lg:[&_button]:!h-10 max-lg:[&_button]:!w-10" />
         <Panel position="top-right">
           <button
             type="button"
@@ -369,9 +384,37 @@ export function FlowCanvas({
               : "transparent"
           }
           maskColor="var(--color-canvas-mask)"
-          className="!bg-[var(--color-bg-elevated)]"
+          className="!bg-[var(--color-bg-elevated)] max-sm:hidden"
         />
       </ReactFlow>
+      {menu && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setMenu(null)} onContextMenu={(event) => {
+            event.preventDefault();
+            setMenu(null);
+          }} />
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={`${menu.service.name} actions`}
+            style={{ left: menu.x, top: menu.y }}
+            className="fixed z-40 w-48 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-1 shadow-xl"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              data-autofocus
+              onClick={() => {
+                onDuplicate(menu.service);
+                setMenu(null);
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+            >
+              <Copy className="size-3.5" /> Duplicate service
+            </button>
+          </div>
+        </>
+      )}
       {creation && (
         <QuickDeployMenu
           projects={projects}

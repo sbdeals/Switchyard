@@ -24,8 +24,8 @@ export default async function LoginPage({
   const expired = params.expired === "1";
 
   return (
-    <main className="flex min-h-full items-center justify-center px-6 py-16">
-      <div className="fixed right-4 top-4 z-50">
+    <main className="flex min-h-full items-center justify-center px-6 py-16 pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(4rem,env(safe-area-inset-top))] pb-[max(4rem,env(safe-area-inset-bottom))]">
+      <div className="fixed right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-50">
         <ThemeToggle />
       </div>
       <div className="w-full max-w-sm">
