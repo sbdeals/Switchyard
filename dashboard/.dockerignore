@@ -2,6 +2,8 @@ node_modules
 .next
 out
 coverage
+**/*.test.ts
+vitest.config.ts
 .env*
 !.env.example
 *.md
