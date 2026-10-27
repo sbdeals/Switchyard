@@ -3,6 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { getPortWarnings, parseComposePorts } from "@/lib/port-conflicts";
+import { PortConflictWarning, type PortConflictProps } from "@/components/service/PortConflictWarning";
 import { useDirtyGuard } from "@/components/DirtyGuard";
 import { hasDirtyFields } from "@/lib/dirty-guard";
 import { loadClientSecret } from "@/lib/client-secret-loader";
@@ -47,7 +49,7 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   );
 }
 
-export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
+export function ComposeEditorTab({ compose, services, onSelectService }: PortConflictProps & { compose: ComposeService }) {
   const [value, setValue] = useState("");
   const [baseline, setBaseline] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -69,6 +71,7 @@ export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
   const [error, setError] = useState<string | null>(null);
   const dirty = baseline !== null && loadError === null && value !== baseline;
   useDirtyGuard("Compose", dirty);
+  const warnings = getPortWarnings(services, compose.id, parseComposePorts(value));
 
   function save(redeploy: boolean) {
     if (baseline === null || loadError) return;
@@ -99,15 +102,18 @@ export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
         aria-label="docker-compose.yml contents"
         className="min-h-72 flex-1 resize-none rounded-lg border border-[var(--color-border-control)] bg-[var(--color-code-bg)] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
       />
+      <div className="mt-3">
+        <PortConflictWarning warnings={warnings} onSelectService={onSelectService} />
+      </div>
       <div className="mt-3 flex items-center justify-end gap-2">
         <button
           onClick={() => save(false)}
           disabled={pending || !dirty}
           className="rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)] disabled:opacity-40"
         >
-          Save
+          {warnings.length ? "Save anyway" : "Save"}
         </button>
-        <SaveRow saving={pending} saved={saved} error={error} onSave={() => save(true)} label="Save & deploy" />
+        <SaveRow saving={pending} saved={saved} error={error} onSave={() => save(true)} label={warnings.length ? "Save anyway & deploy" : "Save & deploy"} />
       </div>
     </div>
   );
