@@ -6,7 +6,7 @@
  * Dokploy session cookie inside a sealed Switchyard session cookie and use it
  * for every request THAT user makes (`request()` -> `userCookie()`, read from
  * next/headers). The raw Dokploy cookie never reaches the browser. On a Dokploy
- * 401 we bounce the user to /login rather than escalating privilege.
+ * 401 we clear the Switchyard session and send the user back to /login.
  *
  * The env admin credentials (`DOKPLOY_EMAIL`/`DOKPLOY_PASSWORD`) survive for a
  * SINGLE purpose: the system self-probe `ping()` behind /api/health?deep=1,
@@ -369,13 +369,13 @@ async function userCookie(): Promise<string> {
   return session.dokployCookie;
 }
 
-type ReqInit = { method?: "GET" | "POST"; body?: unknown };
+type ReqInit = { method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal };
 
 /**
  * User-serving Dokploy request. Threads the per-user cookie via next/headers so
  * the call signature stays `request(path, init)` for every existing caller. On
- * a Dokploy 401 the user's session has expired -> redirect to /login (we do NOT
- * silently fall back to the admin session).
+ * a Dokploy 401 the user's session has expired -> redirect through the session
+ * clearing route (we do NOT silently fall back to the admin session).
  *
  * Exported so the embedded agent module (`lib/agent/`) can reach Dokploy
  * procedures this file does not yet wrap without duplicating the per-user auth
@@ -427,7 +427,9 @@ async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
         cache: "no-store",
         // Bound the call so an unresponsive Dokploy backend can't hang the caller
         // indefinitely (e.g. the agent's tool loop, which awaits each tool inline).
-        signal: AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
+        signal: init.signal
+          ? AbortSignal.any([init.signal, AbortSignal.timeout(DOKPLOY_TIMEOUT_MS)])
+          : AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
       });
       if (await isInvalidOrigin(attempt)) continue;
       workingOrigin = origin;
@@ -440,7 +442,7 @@ async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
     }
     throw e;
   }
-  if (res.status === 401) redirect("/login");
+  if (res.status === 401) redirect("/api/session/expired");
   if (!res.ok) {
     const body = await res.text();
     // Backup errors are sanitized and summarized by withBackupErrors first;
@@ -760,6 +762,7 @@ export function inferEdges(services: Service[]): ServiceEdge[] {
     if (!haystack) continue;
     for (const b of services) {
       if (a.id === b.id) continue;
+      if (a.projectId !== b.projectId || a.environmentId !== b.environmentId) continue;
       const needles = [b.appName, b.name].filter(Boolean).map((s) => s.toLowerCase());
       if (needles.some((n) => n.length > 2 && haystack.includes(n))) {
         const key = `${a.id}->${b.id}`;
@@ -880,6 +883,9 @@ interface RawApplicationDetail {
   command?: string | null;
   registryUrl?: string | null;
   env?: string | null;
+  buildArgs?: string | null;
+  buildSecrets?: string | null;
+  createEnvFile?: boolean | null;
   createdAt?: string | null;
   cpuLimit?: string | null;
   memoryLimit?: string | null;
@@ -1299,11 +1305,24 @@ export async function saveAppBuildType(id: string, patch: BuildTypePatch): Promi
   await request("application.saveBuildType", { method: "POST", body });
 }
 
-export async function saveApplicationEnvironment(id: string, env: string): Promise<void> {
-  // application.saveEnvironment also accepts build args/secrets; send empty.
+export async function saveApplicationEnvironment(
+  id: string,
+  env: string,
+  settings: { buildArgs?: string; buildSecrets?: string; createEnvFile?: boolean } = {},
+): Promise<void> {
+  const current = await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(id)}`
+  );
+  // saveEnvironment requires all fields, including build settings unrelated to runtime env.
   await request("application.saveEnvironment", {
     method: "POST",
-    body: { applicationId: id, env, buildArgs: "", buildSecrets: "", createEnvFile: false },
+    body: {
+      applicationId: id,
+      env,
+      buildArgs: settings.buildArgs ?? current.buildArgs ?? "",
+      buildSecrets: settings.buildSecrets ?? current.buildSecrets ?? "",
+      createEnvFile: settings.createEnvFile ?? current.createEnvFile ?? false,
+    },
   });
 }
 
@@ -1728,8 +1747,16 @@ export async function deleteSchedule(scheduleId: string): Promise<void> {
 }
 
 /** Trigger a schedule immediately (run-now); the container must be running. */
-export async function runSchedule(scheduleId: string): Promise<void> {
-  await request("schedule.runManually", { method: "POST", body: { scheduleId } });
+/** Runs a schedule now. Dokploy can answer HTTP 200 with `status: "error"`, so return it. */
+export async function runSchedule(scheduleId: string): Promise<{ status?: string } | null> {
+  return request<{ status?: string } | null>("schedule.runManually", { method: "POST", body: { scheduleId } });
+}
+
+/** A schedule's executions (Dokploy records each run as a deployment of type "schedule"). */
+export async function listScheduleExecutions(scheduleId: string): Promise<AppDeployment[]> {
+  return (await request<AppDeployment[] | null>(
+    `deployment.allByType?id=${encodeURIComponent(scheduleId)}&type=schedule`
+  )) ?? [];
 }
 
 // --- mounts (persistent volumes) --------------------------------------------
@@ -2206,7 +2233,7 @@ async function restoreBackupWithLogs(input: RestoreBackupInput): Promise<void> {
     headers: { Accept: "text/event-stream", Origin: workingOrigin, Cookie: await userCookie() },
     cache: "no-store",
   });
-  if (res.status === 401) redirect("/login");
+  if (res.status === 401) redirect("/api/session/expired");
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Dokploy restore failed (${res.status}): ${body}`);
@@ -2297,6 +2324,7 @@ export async function deployTemplate(
       `compose.one?composeId=${encodeURIComponent(created.composeId)}`
     );
     const rewrite = rewriteDataBindsToVolumes(detail.composeFile ?? "");
+    if (rewrite.error) console.warn("[templates]", rewrite.error);
     if (rewrite.rewritten.length > 0) {
       await request("compose.update", {
         method: "POST",

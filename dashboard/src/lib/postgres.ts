@@ -2,15 +2,15 @@
  * Server-only helpers for the dashboard's built-in Postgres data browser
  * (the service drawer's "Data" tab).
  *
- * Everything here runs read-only SQL against a service's own Postgres by
+ * These helpers run SQL against a service's own Postgres by
  * docker-exec'ing `psql` inside the target container (see lib/docker.ts). There
  * is no external Postgres connection and the user is never asked for
  * credentials: we connect over the container's local socket as its own
  * POSTGRES_USER / POSTGRES_DB, which the postgres image trusts by default.
  *
- * The read-only guarantee is enforced HERE, server-side (classifyStatement),
- * independently of the client's `allowWrites` flag — the flag can only *relax*
- * the guard, never bypass validation.
+ * Read-only queries are enforced by PostgreSQL. classifyStatement provides a
+ * fast UX pre-check and prevents multiple statements from changing the session
+ * settings that enforce read-only mode. Writes require `allowWrites`.
  */
 import "server-only";
 import {
@@ -219,10 +219,90 @@ export interface Classification {
   reason?: string;
 }
 
+/** Blank comments and quoted tokens in order, without changing the executed SQL.
+ *  Read-only execution pins standard_conforming_strings=on, matching this scan. */
+function statementForAnalysis(sql: string): string | null {
+  const identifierChar = /[A-Za-z_0-9$\u0080-\uFFFF]/;
+  let analysis = "";
+  let continuedEscapeString = false;
+  for (let i = 0; i < sql.length;) {
+    const ch = sql[i];
+    if (/\s/.test(ch)) {
+      analysis += ch;
+      i++;
+      continue;
+    }
+    if (sql.startsWith("--", i)) {
+      while (i < sql.length && sql[i] !== "\n" && sql[i] !== "\r") i++;
+      analysis += " ";
+      continue;
+    }
+    if (sql.startsWith("/*", i)) {
+      let depth = 1;
+      i += 2;
+      while (i < sql.length && depth > 0) {
+        if (sql.startsWith("/*", i)) {
+          depth++;
+          i += 2;
+        } else if (sql.startsWith("*/", i)) {
+          depth--;
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+      if (depth > 0) return null;
+      analysis += " ";
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      // E strings retain backslash escaping in newline-separated continuation
+      // strings. Keep that mode across whitespace/comments until another token.
+      const escapes: boolean = ch === "'" && (continuedEscapeString ||
+        (/[eE]/.test(sql[i - 1] ?? "") && !identifierChar.test(sql[i - 2] ?? "")));
+      let closed = false;
+      i++;
+      while (i < sql.length) {
+        if (escapes && sql[i] === "\\") {
+          i += 2;
+        } else if (sql[i] === ch) {
+          if (sql[i + 1] === ch) {
+            i += 2;
+          } else {
+            i++;
+            closed = true;
+            break;
+          }
+        } else {
+          i++;
+        }
+      }
+      if (!closed) return null;
+      continuedEscapeString = escapes;
+      analysis += " ";
+      continue;
+    }
+    continuedEscapeString = false;
+    if (ch === "$" && !identifierChar.test(sql[i - 1] ?? "")) {
+      const delimiter = sql.slice(i).match(/^\$(?:[A-Za-z_\u0080-\uFFFF][A-Za-z_0-9\u0080-\uFFFF]*)?\$/)?.[0];
+      if (delimiter) {
+        const end = sql.indexOf(delimiter, i + delimiter.length);
+        if (end < 0) return null;
+        i = end + delimiter.length;
+        analysis += " ";
+        continue;
+      }
+    }
+    analysis += ch;
+    i++;
+  }
+  return analysis.trim();
+}
+
 /**
  * Decide whether `sql` is a read-only statement that may run without the user
- * arming "Allow writes". This is the server-side guard the route enforces
- * regardless of the client's flag.
+ * arming "Allow writes". PostgreSQL enforces read-only execution; this pre-check
+ * gives helpful errors and blocks attempts to change transaction settings.
  *
  * Strategy: analyse a copy with comments and string/dollar-quoted literals
  * blanked out (so a `;` or the word "update" inside a literal never trips the
@@ -231,13 +311,10 @@ export interface Classification {
  * data-modifying keyword anywhere in the (literal-stripped) text.
  */
 export function classifyStatement(sql: string): Classification {
-  // Strip comments and literals for ANALYSIS only (the executed SQL is untouched).
-  const analysis = sql
-    .replace(/\/\*[\s\S]*?\*\//g, " ") // block comments
-    .replace(/--[^\n]*/g, " ") // line comments
-    .replace(/'(?:[^']|'')*'/g, "''") // single-quoted strings
-    .replace(/\$([A-Za-z0-9_]*)\$[\s\S]*?\$\1\$/g, "''") // dollar-quoted strings
-    .trim();
+  const analysis = statementForAnalysis(sql);
+  if (analysis === null) {
+    return { ok: false, leader: "", reason: "Unterminated SQL quote or comment." };
+  }
 
   if (!analysis) return { ok: false, leader: "", reason: "Empty statement." };
 
@@ -317,13 +394,17 @@ export interface RunResult {
   error?: string;
 }
 
-/** Run one already-classified SQL statement against a resolved target. */
-export async function runSql(target: ResolvedTarget, sql: string): Promise<RunResult> {
+/** Run SQL against a resolved target, with database-enforced read-only by default. */
+export async function runSql(
+  target: ResolvedTarget,
+  sql: string,
+  readOnly = true,
+): Promise<RunResult> {
   const started = Date.now();
   const res: PsqlResult | null = await runPsqlCsv(
     { id: target.id, identity: target.identity },
     sql,
-    { nullMarker: NULL_MARKER },
+    { nullMarker: NULL_MARKER, readOnly },
   );
   const ms = Date.now() - started;
   if (!res) return { ok: false, error: "The Postgres container is no longer running." };
@@ -456,8 +537,8 @@ export async function fetchRows(
 
 /**
  * Run free-form SQL from the editor. Read-only by default: the statement is
- * classified server-side and rejected unless it is read-only OR `allowWrites`
- * is explicitly true. The client's flag can only relax the guard.
+ * classified server-side for early feedback and executed in a read-only session
+ * unless `allowWrites` is explicitly true.
  */
 export async function runUserQuery(
   target: ResolvedTarget,
@@ -474,7 +555,7 @@ export async function runUserQuery(
     }
   }
 
-  const res = await runSql(target, trimmed);
+  const res = await runSql(target, trimmed, !allowWrites);
   // A statement with no row set (writes/DDL) comes back as psql command tags in a
   // degenerate one-column grid. Surface those as a status message with an empty
   // grid so the client shows them in the status area, not as a table.
