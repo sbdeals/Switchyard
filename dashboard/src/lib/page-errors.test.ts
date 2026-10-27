@@ -26,7 +26,7 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("@/lib/session", () => ({
   SESSION_COOKIE: "switchyard_session",
-  openSession: () => ({ email: "test@example.test" }),
+  openSession: vi.fn(() => ({ email: "test@example.test" })),
 }));
 vi.mock("@/lib/collector", () => ({ ensureCollector: mocks.ensureCollector }));
 vi.mock("@/components/Workspace", () => ({

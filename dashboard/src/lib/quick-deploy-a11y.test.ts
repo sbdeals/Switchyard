@@ -56,9 +56,9 @@ describe("quick deploy accessibility", () => {
     { loading: false, error: "Catalog unavailable", templates: null, role: "alert", message: "Catalog unavailable" },
     { loading: false, error: null, templates: [], role: "status", message: "No templates available" },
   ])("announces catalog feedback: $message", ({ loading, error, templates, role, message }) => {
-    // Main added the image port field before the repo and catalog state.
+    // Main added the source and image port state before the repo and catalog state.
     // Render the open dialog and catalog without running deployment actions.
-    state.overrides = { 0: true, 7: true, 8: templates, 9: error, 10: loading };
+    state.overrides = { 0: true, 9: true, 10: templates, 11: error, 12: loading };
     const html = renderMenu();
     const controlledIds = [...html.matchAll(/aria-controls="([^"]+)"/g)].map((match) => match[1]);
     expect(controlledIds).toHaveLength(2);
