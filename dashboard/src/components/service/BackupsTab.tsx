@@ -35,6 +35,7 @@ import {
 } from "@/app/actions";
 import { inputCls, Field, useSavedFlash } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { validateS3Endpoint } from "@/lib/backup-errors";
 
 export function BackupsTab({ db }: { db: Database }) {
   if (db.engine === "redis") {
@@ -54,27 +55,40 @@ type BackupEngine = Exclude<Database["engine"], "redis">;
 function BackupsPanel({ db, engine }: { db: Database; engine: BackupEngine }) {
   const [destinations, setDestinations] = useState<S3Destination[]>([]);
   const [backups, setBackups] = useState<DatabaseBackup[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialised, setInitialised] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [, startLoad] = useTransition();
 
-  const refresh = useCallback(async () => {
-    setLoadError(null);
-    const [dRes, bRes] = await Promise.all([
-      listDestinationsAction(),
-      listDatabaseBackupsAction(engine, db.id),
-    ]);
-    if (dRes.ok) setDestinations(dRes.destinations);
-    else setLoadError(dRes.error);
-    if (bRes.ok) setBackups(bRes.backups);
-    else setLoadError((e) => e ?? bRes.error);
-    setLoading(false);
-  }, [engine, db.id]);
+  // The fetch + its state updates run inside startTransition so this stays safe
+  // to call from the mount effect below (react-hooks/set-state-in-effect). The
+  // returned promise resolves when the load settles, so the child sections can
+  // still `await onChange()` after a mutation.
+  const refresh = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        startLoad(async () => {
+          const [dRes, bRes] = await Promise.all([
+            listDestinationsAction(),
+            listDatabaseBackupsAction(engine, db.id),
+          ]);
+          let err: string | null = null;
+          if (dRes.ok) setDestinations(dRes.destinations);
+          else err = dRes.error;
+          if (bRes.ok) setBackups(bRes.backups);
+          else err = err ?? bRes.error;
+          setLoadError(err);
+          setInitialised(true);
+          resolve();
+        });
+      }),
+    [engine, db.id],
+  );
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  if (loading) {
+  if (!initialised) {
     return (
       <div className="flex items-center gap-2 text-xs text-[var(--color-fg-subtle)]">
         <Loader2 className="size-4 animate-spin" /> Loading backups…
@@ -84,7 +98,7 @@ function BackupsPanel({ db, engine }: { db: Database; engine: BackupEngine }) {
 
   return (
     <div className="space-y-6">
-      {loadError && <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>}
+      {loadError && <BackupError message={loadError} />}
 
       <DestinationsSection destinations={destinations} onChange={refresh} />
 
@@ -196,8 +210,10 @@ function DestinationForm({
     name.trim() && endpoint.trim() && region.trim() && bucket.trim() && accessKey.trim() && secretAccessKey.trim();
 
   function test() {
-    setError(null);
+    const endpointError = validateS3Endpoint(endpoint);
+    setError(endpointError);
     setTested(null);
+    if (endpointError) return;
     start(async () => {
       const res = await testDestinationAction(input);
       if (res.ok) setTested("Connection OK");
@@ -205,7 +221,9 @@ function DestinationForm({
     });
   }
   function save() {
-    setError(null);
+    const endpointError = validateS3Endpoint(endpoint);
+    setError(endpointError);
+    if (endpointError) return;
     start(async () => {
       const res = await createDestinationAction(input);
       if (res.ok) await onDone();
@@ -234,6 +252,7 @@ function DestinationForm({
       </div>
       <Field label="Endpoint" hint="S3 API URL">
         <input
+          type="url"
           value={endpoint}
           onChange={(e) => setEndpoint(e.target.value)}
           placeholder="https://s3.amazonaws.com"
@@ -262,8 +281,8 @@ function DestinationForm({
           />
         </Field>
       </div>
+      {error && <BackupError message={error} />}
       <div className="flex items-center justify-end gap-2">
-        {error && <span role="alert" className="mr-auto text-xs text-[var(--color-danger)]">{error}</span>}
         {tested && <span role="status" className="mr-auto text-xs text-[var(--color-ok)]">{tested}</span>}
         <button onClick={onCancel} className="rounded-lg px-3 py-2 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]">
           Cancel
@@ -387,7 +406,7 @@ function ScheduleSection({
       ) : (
         <p className="text-xs text-[var(--color-fg-subtle)]">No backup schedules yet.</p>
       )}
-      {rowError && <p role="alert" className="text-xs text-[var(--color-danger)]">{rowError}</p>}
+      {rowError && <BackupError message={rowError} />}
 
       {destinations.length > 0 ? (
         <NewScheduleForm db={db} engine={engine} destinations={destinations} onChange={onChange} />
@@ -470,13 +489,13 @@ function NewScheduleForm({
       <Field label="Prefix" hint="S3 key prefix">
         <input value={prefix} onChange={(e) => setPrefix(e.target.value)} className={inputCls} />
       </Field>
+      {error && <BackupError message={error} />}
       <div className="flex items-center justify-between">
         <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
           Enabled (run on schedule)
         </label>
         <div className="flex items-center gap-2">
-          {error && <span role="alert" className="text-xs text-[var(--color-danger)]">{error}</span>}
           <button
             onClick={create}
             disabled={pending || !complete}
@@ -593,8 +612,8 @@ function RestoreSection({
           <input value={target} onChange={(e) => setTarget(e.target.value)} className={inputCls} />
         </Field>
 
+        {error && <BackupError message={error} />}
         <div className="flex items-center justify-end gap-2">
-          {error && <span role="alert" className="mr-auto text-xs text-[var(--color-danger)]">{error}</span>}
           {done && <span role="status" className="mr-auto text-xs text-[var(--color-ok)]">Restore finished</span>}
           <button
             onClick={restore}
@@ -611,6 +630,21 @@ function RestoreSection({
 }
 
 // --- shared bits ------------------------------------------------------------
+
+function BackupError({ message }: { message: string }) {
+  const [summary, ...detail] = message.split("\n\n");
+  return (
+    <div role="alert" className="text-xs text-[var(--color-danger)]">
+      <p>{summary}</p>
+      {detail.length > 0 && (
+        <details className="mt-1">
+          <summary className="cursor-pointer">Show details</summary>
+          <pre className="mt-1 whitespace-pre-wrap break-all font-mono">{detail.join("\n\n")}</pre>
+        </details>
+      )}
+    </div>
+  );
+}
 
 function SectionTitle({
   icon,
