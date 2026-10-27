@@ -21,11 +21,16 @@ describe("getServiceTabs", () => {
 
   it("preserves database tabs and inserts Data after Overview for Postgres", () => {
     expect(getServiceTabs(services[2])).toEqual([
-      "overview", "variables", "volumes", "metrics", "logs", "console", "backups", "settings",
+      "overview", "connect", "variables", "volumes", "metrics", "logs", "console", "backups", "settings",
     ]);
     expect(getServiceTabs(services[1])).toEqual([
-      "overview", "data", "variables", "volumes", "metrics", "logs", "console", "backups", "settings",
+      "overview", "data", "connect", "variables", "volumes", "metrics", "logs", "console", "backups", "settings",
     ]);
+  });
+
+  it("uses server-computed hasPostgres when the compose file is redacted", () => {
+    expect(getServiceTabs({ ...services[3], composeFile: null, hasPostgres: true })).toContain("data");
+    expect(getServiceTabs({ ...services[4], composeFile: null, hasPostgres: false })).not.toContain("data");
   });
 
   it("recognizes Postgres database images without changing application tabs", () => {

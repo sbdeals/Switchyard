@@ -1,5 +1,6 @@
 export type TabId =
   | "overview"
+  | "connect"
   | "variables"
   | "data"
   | "deploy"
@@ -21,10 +22,13 @@ type ServiceTarget = {
   engine?: string;
   dockerImage?: string | null;
   composeFile?: string | null;
+  /** Server-computed for client props, where composeFile is redacted. */
+  hasPostgres?: boolean;
 };
 
 const DB_TABS: TabId[] = [
   "overview",
+  "connect",
   "variables",
   "volumes",
   "metrics",
@@ -65,7 +69,8 @@ export function getServiceTabs(service: ServiceTarget): TabId[] {
   const tabs = [...base];
   const postgres = service.kind === "database"
     ? service.engine === "postgres" || /postgres/i.test(service.dockerImage ?? "")
-    : service.kind === "compose" && /^[ \t]*image:[ \t]*["']?[^\n#"']*postgres/im.test(service.composeFile ?? "");
+    : service.kind === "compose" &&
+      (service.hasPostgres ?? /^[ \t]*image:[ \t]*["']?[^\n#"']*postgres/im.test(service.composeFile ?? ""));
   if (postgres) tabs.splice(1, 0, "data");
   return tabs;
 }
