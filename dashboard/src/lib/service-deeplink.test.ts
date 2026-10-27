@@ -487,7 +487,7 @@ describe("dirty drawer navigation", () => {
     expect(hook.render().service).toBeNull();
   });
 
-  it.each(["close", "tab", "service"])("keeps the current form until a dirty %s change is discarded", (change) => {
+  it.each(["close", "tab", "service", "notification"])("keeps the current form until a dirty %s change is discarded", (change) => {
     const hook = mount("/?service=app&tab=variables");
     hook.render();
     hook.markDirty();
@@ -496,6 +496,7 @@ describe("dirty drawer navigation", () => {
       const drawer = hook.render();
       if (change === "close") drawer.close();
       else if (change === "tab") drawer.selectTab("settings");
+      else if (change === "notification") drawer.open("db", "logs");
       else drawer.open("db");
     };
 
@@ -516,8 +517,8 @@ describe("dirty drawer navigation", () => {
     expect(hook.guard.navigate).toHaveBeenCalledTimes(2);
     hook.discard();
     const destination = hook.render();
-    expect(destination.service).toBe(change === "close" ? null : change === "service" ? services[1] : services[0]);
-    expect(destination.tab).toBe(change === "tab" ? "settings" : "overview");
+    expect(destination.service).toBe(change === "close" ? null : (change === "service" || change === "notification") ? services[1] : services[0]);
+    expect(destination.tab).toBe(change === "tab" ? "settings" : change === "notification" ? "logs" : "overview");
     expect(hook.registry.labels()).toEqual([]);
     expect(hook.pending).toBe(false);
   });

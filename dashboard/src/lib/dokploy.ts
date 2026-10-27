@@ -91,6 +91,7 @@ export interface ServiceBase {
   kind: ServiceKind;
   id: string;
   name: string;
+  description: string | null;
   appName: string;
   status: ServiceStatus;
   projectId: string;
@@ -107,6 +108,10 @@ export interface ServiceBase {
   cpuLimit: string | null;
   memoryLimit: string | null;
   replicas: number | null;
+  /** Mount kinds from the detail response; undefined when not returned. */
+  mounts?: { type: MountType }[];
+  /** Safe deletion metadata computed before environment values are redacted. */
+  environmentVariableCount?: number;
   /**
    * Engine truth: what is actually running for this service right now.
    * `status` above is only the last DEPLOY result — after a Docker Desktop VM
@@ -127,6 +132,7 @@ export interface Database extends ServiceBase {
   /** Host-facing address, when known, for this database's server. */
   externalHost?: string | null;
   command: string | null;
+  deployments?: AppDeployment[];
 }
 
 export type AppSource = "github" | "gitlab" | "bitbucket" | "gitea" | "git" | "docker";
@@ -230,7 +236,6 @@ export interface Application extends ServiceBase {
   kind: "application";
   sourceType: AppSource | null;
   buildType: BuildType | null;
-  description: string | null;
   /** Source repo/image reference for display (git URL or owner/repo). */
   repository: string | null;
   // Build configuration (used to prefill the Build settings tab).
@@ -247,7 +252,6 @@ export interface Application extends ServiceBase {
   redirects: AppRedirect[];
   ports: AppPort[];
   security: AppSecurity[];
-  mounts: Mount[];
   deployments: AppDeployment[];
   // Docker Swarm soft resource reservations (Docker-format strings, like the limits).
   cpuReservation: string | null;
@@ -677,6 +681,7 @@ export async function removeEnvironment(environmentId: string): Promise<void> {
 
 interface RawDatabaseDetail {
   name?: string;
+  description?: string | null;
   appName?: string;
   applicationStatus?: DatabaseStatus;
   dockerImage?: string | null;
@@ -692,6 +697,8 @@ interface RawDatabaseDetail {
   memoryLimit?: string | null;
   command?: string | null;
   replicas?: number | null;
+  mounts?: RawMount[];
+  deployments?: RawDeployment[];
 }
 
 async function getDetail(engine: Engine, id: string): Promise<RawDatabaseDetail> {
@@ -738,6 +745,7 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
         ...s,
         kind: "database",
         name: d.name ?? s.id,
+        description: d.description ?? null,
         appName: d.appName ?? "",
         status: d.applicationStatus ?? "idle",
         dockerImage: d.dockerImage ?? null,
@@ -752,6 +760,8 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
         memoryLimit: d.memoryLimit ?? null,
         command: d.command ?? null,
         replicas: d.replicas ?? null,
+        mounts: mapMountTypes(d.mounts),
+        deployments: d.deployments ? mapDeployments(d.deployments) : undefined,
       } satisfies Database;
     })
   );
@@ -980,6 +990,13 @@ function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment
   }));
 }
 
+/** Exact build/deploy log, authorized by Dokploy with the current user's session. */
+export async function readDeploymentLogs(deploymentId: string): Promise<string> {
+  return request<string>(
+    `deployment.readLogs?deploymentId=${encodeURIComponent(deploymentId)}&tail=10000`
+  );
+}
+
 /** List every application in the tree, enriched with detail. */
 async function listApplications(tree: RawProject[]): Promise<Application[]> {
   const refs = collectIds(tree, (env) => (env.applications ?? []).map((a) => a.applicationId));
@@ -1035,8 +1052,8 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
           securityId: s.securityId,
           username: s.username ?? "",
         })),
-        mounts: mapMounts(d.mounts),
         deployments: mapDeployments(d.deployments),
+        mounts: mapMountTypes(d.mounts),
         autoDeploy: d.autoDeploy ?? false,
         branch: d.branch ?? d.customGitBranch ?? null,
         buildPath: d.customGitBuildPath ?? null,
@@ -1843,6 +1860,11 @@ interface RawMount {
   content?: string | null;
 }
 
+/** Deletion summaries need mount counts, never file contents or host paths. */
+function mapMountTypes(mounts: RawMount[] | undefined): { type: MountType }[] | undefined {
+  return mounts?.map((mount) => ({ type: mount.type ?? "volume" }));
+}
+
 /** Check the current user's project tree before reading or mutating mounts. */
 async function assertMountService(
   serviceType: MountServiceType,
@@ -1927,6 +1949,7 @@ export async function removeMount(mountId: string): Promise<void> {
 
 interface RawComposeDetail {
   name?: string;
+  description?: string | null;
   appName?: string;
   composeStatus?: ServiceStatus;
   composeType?: string | null;
@@ -1935,6 +1958,7 @@ interface RawComposeDetail {
   createdAt?: string | null;
   domains?: RawDomain[];
   deployments?: RawDeployment[];
+  mounts?: RawMount[];
 }
 
 export const STARTER_COMPOSE = `services:
@@ -1957,6 +1981,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         kind: "compose",
         id,
         name: d.name ?? id,
+        description: d.description ?? null,
         appName: d.appName ?? "",
         status: d.composeStatus ?? "idle",
         dockerImage: null,
@@ -1969,6 +1994,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         composeType: d.composeType ?? null,
         domains: mapDomains(d.domains),
         deployments: mapDeployments(d.deployments),
+        mounts: mapMountTypes(d.mounts),
       } satisfies ComposeService;
     })
   );
@@ -2417,6 +2443,25 @@ export async function deployTemplate(
 }
 
 // --- unified service listing ------------------------------------------------
+
+type ServiceNotesTarget =
+  | Pick<Application | ComposeService, "kind" | "id">
+  | Pick<Database, "kind" | "id" | "engine">;
+
+/**
+ * Dokploy v0.30.10 accepts description on application.update, compose.update,
+ * and every database engine's update schema. This metadata needs no redeploy.
+ */
+export async function updateServiceNotes(
+  service: ServiceNotesTarget,
+  description: string
+): Promise<void> {
+  const type = service.kind === "database" ? service.engine : service.kind;
+  await request(`${type}.update`, {
+    method: "POST",
+    body: { [`${type}Id`]: service.id, description },
+  });
+}
 
 /**
  * Everything the workspace page needs, from a single `project.all` fetch:

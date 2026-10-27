@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Suspense } from "react";
 import { unstable_rethrow } from "next/navigation";
 import { cookies } from "next/headers";
+import { openSession, SESSION_COOKIE } from "@/lib/session";
 
 import { loadWorkspace, inferEdges } from "@/lib/dokploy";
 import { redactServiceForClient } from "@/lib/service-redaction";
@@ -12,7 +13,6 @@ import { DokployUnavailable } from "@/components/DokployUnavailable";
 import { ErrorPanel } from "@/components/ErrorPanel";
 import { redactErrorMessage } from "@/lib/error-redaction";
 import { classifyWorkspaceError } from "@/lib/workspace-error";
-import { openSession, SESSION_COOKIE } from "@/lib/session";
 
 // Always fetch fresh state from Dokploy.
 export const dynamic = "force-dynamic";
@@ -61,6 +61,7 @@ export default async function Page() {
   const userId = session
     ? createHash("sha256").update(session.email.trim().toLowerCase()).digest("hex")
     : null;
+  const notificationScope = createHash("sha256").update(session?.email ?? "").digest("hex");
 
   return (
     <>
@@ -71,6 +72,7 @@ export default async function Page() {
           projects={result.projects}
           edges={inferEdges(result.services)}
           userId={userId}
+          notificationScope={notificationScope}
         />
       </Suspense>
     </>
