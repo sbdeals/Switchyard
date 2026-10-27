@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import {
   buildDuplicatePlan,
   duplicateServiceNameError,
@@ -96,12 +97,14 @@ export async function duplicateService(
     }
     return id;
   } catch (error) {
+    unstable_rethrow(error);
     // Only the record made by this invocation is eligible for cleanup.
     try {
       await api(`${type}.${ref.kind === "database" ? "remove" : "delete"}`, {
         method: "POST", body: { ...identity, ...(type === "compose" ? { deleteVolumes: false } : {}) },
       });
-    } catch {
+    } catch (cleanupError) {
+      unstable_rethrow(cleanupError);
       throw new Error(`Duplication failed and cleanup failed. Remove the incomplete service "${name.trim()}" (${id}) before retrying.`);
     }
     throw error;
