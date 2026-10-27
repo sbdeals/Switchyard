@@ -1363,15 +1363,53 @@ export async function createComposeDomain(
 }
 
 // Redirects / ports / security: routing config that applies on next deploy.
-// Payload shapes verified against Dokploy v0.29.x (redirects/port/security
-// routers). All three arrays ride along on `application.one`.
+// Redirect/security payloads verified against Dokploy v0.30.10.
+// All three arrays ride along on `application.one`.
+
+/** Check the current user's project tree before accessing HTTP configuration. */
+export async function assertApplicationAccess(
+  applicationId: string,
+  child?: { kind: "redirects" | "security"; id: string }
+): Promise<void> {
+  if (typeof applicationId !== "string" || !applicationId.trim()) {
+    throw new Error("Application is required.");
+  }
+  const tree = await rawTree();
+  const allowed = tree.some((project) =>
+    (project.environments ?? []).some((env) =>
+      (env.applications ?? []).some((app) => app.applicationId === applicationId)
+    )
+  );
+  if (!allowed) throw new Error("Application not found in your projects.");
+  if (child) {
+    if (typeof child.id !== "string" || !child.id.trim()) {
+      throw new Error("HTTP setting is required.");
+    }
+    const app = await request<RawApplicationDetail>(
+      `application.one?applicationId=${encodeURIComponent(applicationId)}`
+    );
+    const found = child.kind === "redirects"
+      ? app.redirects?.some((row) => row.redirectId === child.id)
+      : app.security?.some((row) => row.securityId === child.id);
+    if (!found) throw new Error("HTTP setting not found in this application.");
+  }
+}
 
 /** Add a proxy path-rewrite redirect to an application. */
 export async function createRedirect(
   applicationId: string,
   input: { regex: string; replacement: string; permanent: boolean }
 ): Promise<void> {
-  await request("redirects.create", { method: "POST", body: { applicationId, ...input } });
+  const { regex, replacement, permanent } = input;
+  await request("redirects.create", { method: "POST", body: { applicationId, regex, replacement, permanent } });
+}
+
+export async function updateRedirect(
+  redirectId: string,
+  input: { regex: string; replacement: string; permanent: boolean }
+): Promise<void> {
+  const { regex, replacement, permanent } = input;
+  await request("redirects.update", { method: "POST", body: { redirectId, regex, replacement, permanent } });
 }
 
 export async function deleteRedirect(redirectId: string): Promise<void> {
@@ -1400,7 +1438,16 @@ export async function createSecurity(
   applicationId: string,
   input: { username: string; password: string }
 ): Promise<void> {
-  await request("security.create", { method: "POST", body: { applicationId, ...input } });
+  const { username, password } = input;
+  await request("security.create", { method: "POST", body: { applicationId, username, password } });
+}
+
+export async function updateSecurity(
+  securityId: string,
+  input: { username: string; password: string }
+): Promise<void> {
+  const { username, password } = input;
+  await request("security.update", { method: "POST", body: { securityId, username, password } });
 }
 
 export async function deleteSecurity(securityId: string): Promise<void> {

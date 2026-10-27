@@ -46,11 +46,14 @@ import {
   updateDomain,
   deleteDomain,
   createRedirect,
+  updateRedirect,
   deleteRedirect,
   createPort,
   deletePort,
   createSecurity,
+  updateSecurity,
   deleteSecurity,
+  assertApplicationAccess,
   createCompose,
   composeAction,
   updateComposeFile,
@@ -109,6 +112,7 @@ import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
 import { preserveUrlCredentials } from "@/lib/url-credentials";
 import { redactErrorMessage } from "@/lib/error-redaction";
+import { validateRedirect, validateBasicAuth } from "@/lib/app-security";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -587,7 +591,7 @@ export async function generateComposeDomainAction(
   });
 }
 
-// Networking config (applies on next deploy) — verified Dokploy v0.29.x shapes.
+// HTTP settings (applies on next deploy) — Dokploy v0.30.10 shapes.
 
 export async function createRedirectAction(
   applicationId: string,
@@ -595,17 +599,38 @@ export async function createRedirectAction(
   replacement: string,
   permanent: boolean
 ): Promise<ActionResult> {
-  return wrap(() =>
-    createRedirect(applicationId, {
+  const error = validateRedirect(regex, replacement, permanent);
+  if (error) return { ok: false, error };
+  return wrap(async () => {
+    await assertApplicationAccess(applicationId);
+    await createRedirect(applicationId, {
       regex: regex.trim(),
       replacement: replacement.trim(),
       permanent,
-    })
-  );
+    });
+  });
 }
 
-export async function deleteRedirectAction(redirectId: string): Promise<ActionResult> {
-  return wrap(() => deleteRedirect(redirectId));
+export async function updateRedirectAction(
+  applicationId: string,
+  redirectId: string,
+  regex: string,
+  replacement: string,
+  permanent: boolean
+): Promise<ActionResult> {
+  const error = validateRedirect(regex, replacement, permanent);
+  if (error) return { ok: false, error };
+  return wrap(async () => {
+    await assertApplicationAccess(applicationId, { kind: "redirects", id: redirectId });
+    await updateRedirect(redirectId, { regex: regex.trim(), replacement: replacement.trim(), permanent });
+  });
+}
+
+export async function deleteRedirectAction(applicationId: string, redirectId: string): Promise<ActionResult> {
+  return wrap(async () => {
+    await assertApplicationAccess(applicationId, { kind: "redirects", id: redirectId });
+    await deleteRedirect(redirectId);
+  });
 }
 
 export async function createPortAction(
@@ -627,11 +652,45 @@ export async function createSecurityAction(
   username: string,
   password: string
 ): Promise<ActionResult> {
-  return wrap(() => createSecurity(applicationId, { username: username.trim(), password }));
+  const error = validateBasicAuth(username, password);
+  if (error) return { ok: false, error };
+  return wrapSecurity(async () => {
+    await assertApplicationAccess(applicationId);
+    await createSecurity(applicationId, { username: username.trim(), password });
+  }, "Could not save basic-auth user.");
 }
 
-export async function deleteSecurityAction(securityId: string): Promise<ActionResult> {
-  return wrap(() => deleteSecurity(securityId));
+export async function updateSecurityAction(
+  applicationId: string,
+  securityId: string,
+  username: string,
+  password: string
+): Promise<ActionResult> {
+  const error = validateBasicAuth(username, password);
+  if (error) return { ok: false, error };
+  return wrapSecurity(async () => {
+    await assertApplicationAccess(applicationId, { kind: "security", id: securityId });
+    await updateSecurity(securityId, { username: username.trim(), password });
+  }, "Could not save basic-auth user.");
+}
+
+export async function deleteSecurityAction(applicationId: string, securityId: string): Promise<ActionResult> {
+  return wrapSecurity(async () => {
+    await assertApplicationAccess(applicationId, { kind: "security", id: securityId });
+    await deleteSecurity(securityId);
+  }, "Could not remove basic-auth user.");
+}
+
+/** Dokploy responses/errors can contain stored passwords; never echo them. */
+async function wrapSecurity(fn: () => Promise<unknown>, error: string): Promise<ActionResult> {
+  try {
+    await fn();
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error };
+  }
 }
 
 // --- push-to-deploy + rollback ----------------------------------------------
