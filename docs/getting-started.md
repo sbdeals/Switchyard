@@ -79,7 +79,13 @@ installs — is in [cli.md](cli.md).
 | `dokploy-postgres` | `postgres:16`     | Swarm service   | internal only            |
 | `dokploy-redis`    | `redis:7`         | Swarm service   | internal only            |
 | `dokploy-traefik`  | `traefik:v3.6.7`  | plain container | **80/443** (reverse proxy) |
+| `switchyard-metrics` | `postgres:16`   | Swarm service   | internal only            |
 | Switchyard         | `ghcr.io/sbdeals/switchyard` (fast path) or Next.js dev server (manual) | container / node process | **3001** |
+
+`switchyard-metrics` is the dashboard's persisted metrics store, deployed by
+the CLI fast path (turn it off with `switchyard config set store false`). On
+Docker Desktop, `dokploy-traefik` is skipped by default: `skipTraefik`
+defaults to `true` there (see [cli.md](cli.md)).
 
 Everything Dokploy-side attaches to the `dokploy-network` overlay network.
 Credentials live in two Swarm secrets, `dokploy_postgres_password` and
@@ -207,16 +213,21 @@ path, but it has not yet been verified end-to-end there.
 > needed here and default Swarm networking works. Verified on Windows; assumed
 > (not yet verified) on macOS.
 
-> **Durability:** the Desktop VM's root filesystem — including Dokploy's
-> `/etc/dokploy` tree (its Traefik config and every compose stack's working
-> dir) — is rebuilt when the VM is recreated by a Docker Desktop update,
-> "Reset to factory defaults", or some restarts. Containers, images, and
-> **named volumes survive**; anything a stack binds under `/etc/dokploy` does
-> not. `switchyard up` (and the desktop app on launch) detects stacks a reset
-> broke and redeploys them from Dokploy's database, and templates deployed
-> from the Switchyard dashboard put database data in named volumes for exactly
-> this reason. If you deploy compose stacks by hand, prefer named volumes over
-> host binds for data.
+> **Durability:** named volumes survive container recreation,
+> Switchyard/Dokploy upgrades, and Docker Desktop restarts. VM disk recreation
+> preserves them only if Docker keeps the volume data. If the VM's
+> `/etc/dokploy` tree is lost but Dokploy's database and volumes survive,
+> `switchyard up` (and the desktop app on launch) can redeploy affected stacks.
+> Dashboard templates use named volumes for recognized database data binds;
+> if you deploy compose stacks by hand, prefer named volumes over host binds
+> for data.
+>
+> **Named-volume persistence is not a backup.** Docker Desktop's "Reset to
+> factory defaults", "Clean / Purge data", and uninstalling Docker Desktop
+> delete containers, images, and volumes; Switchyard cannot restore deleted
+> data. Back up first using
+> [Docker's backup/restore guide](https://docs.docker.com/desktop/settings-and-maintenance/backup-and-restore/)
+> and [Dokploy database backups](https://docs.dokploy.com/docs/core/databases/backups).
 
 Clone the repo first (Switchyard runs from it later):
 

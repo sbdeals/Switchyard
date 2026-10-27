@@ -1,9 +1,16 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { STORE_SERVICE, STORE_VOLUME } from "../core/config.js";
+import { downControlPlane } from "../core/control-plane.js";
 import { docker, dockerInherit, dockerOk } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { ensureLocalIngress, removeLocalIngress } from "../core/local-ingress.js";
+import { inspectPurgeResources } from "../core/purge.js";
 import { serviceExists, waitServicesConverged } from "../core/swarm.js";
-import { randomSecret, sleep } from "../core/util.js";
+import { removeSwitchyardDataVolume } from "../core/switchyard-data.js";
+import { randomSecret } from "../core/util.js";
 import type { PlatformModule } from "./types.js";
 
 /**
@@ -132,17 +139,26 @@ async function createServices(dokployPort: number, log: (m: string) => void): Pr
 async function ensureMetricsStore(storePassword: string, log: (m: string) => void): Promise<void> {
   if (await serviceExists(STORE_SERVICE)) return;
   log(`Creating service ${STORE_SERVICE} (metrics store) ...`);
-  const code = await dockerInherit([
-    "service", "create", "--detach", "--name", STORE_SERVICE,
-    "--constraint", "node.role==manager",
-    "--network", "dokploy-network",
-    "--env", "POSTGRES_USER=switchyard",
-    "--env", "POSTGRES_DB=switchyard",
-    "--env", `POSTGRES_PASSWORD=${storePassword}`,
-    "--mount", `type=volume,source=${STORE_VOLUME},target=/var/lib/postgresql/data`,
-    "postgres:16",
-  ]);
-  if (code !== 0) throw new UserError(`Creating ${STORE_SERVICE} failed.`);
+  const dir = await mkdtemp(join(tmpdir(), "switchyard-store-"));
+  try {
+    const envFile = join(dir, "env");
+    // Docker reads name-only env-file entries from its client environment.
+    // Keeping the value out of the line-based file also preserves newlines.
+    await writeFile(envFile, "POSTGRES_PASSWORD\n", { mode: 0o600, flag: "wx" });
+    const code = await dockerInherit([
+      "service", "create", "--detach", "--name", STORE_SERVICE,
+      "--constraint", "node.role==manager",
+      "--network", "dokploy-network",
+      "--env", "POSTGRES_USER=switchyard",
+      "--env", "POSTGRES_DB=switchyard",
+      "--env-file", envFile,
+      "--mount", `type=volume,source=${STORE_VOLUME},target=/var/lib/postgresql/data`,
+      "postgres:16",
+    ], { env: { ...process.env, POSTGRES_PASSWORD: storePassword } });
+    if (code !== 0) throw new UserError(`Creating ${STORE_SERVICE} failed.`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 export const dockerDesktopPlatform: PlatformModule = {
@@ -205,48 +221,12 @@ export const dockerDesktopPlatform: PlatformModule = {
   },
 
   async downDokploy(opts, log) {
-    for (const svc of SERVICES) {
-      log(`Removing service ${svc} ...`);
-      await docker(["service", "rm", svc]); // tolerate absence
-    }
-    log(`Removing service ${STORE_SERVICE} (metrics store) ...`);
-    await docker(["service", "rm", STORE_SERVICE]); // tolerate absence
-    await docker(["rm", "-f", "dokploy-traefik"]);
+    await downControlPlane(opts.purge, log);
     if (opts.purge) {
-      log("Purging network, secrets, and volumes ...");
-      // `service rm` returns before the task containers are gone; removing
-      // the network/volumes too early fails with "in use". Wait for the
-      // stack's containers to drain (bounded), then retry the removals.
-      const deadline = Date.now() + 60_000;
-      for (;;) {
-        const ps = await docker([
-          "ps",
-          "--all",
-          "--filter",
-          "label=com.docker.swarm.service.name",
-          "--format",
-          "{{.Label \"com.docker.swarm.service.name\"}}",
-        ]);
-        const draining = [...SERVICES, STORE_SERVICE];
-        const busy = ps.stdout.split(/\r?\n/).some((n) => draining.includes(n.trim()));
-        if (!busy || Date.now() > deadline) break;
-        await sleep(2000);
-      }
-      const removals: string[][] = [
-        ["network", "rm", "dokploy-network"],
-        ...SECRETS.map((s) => ["secret", "rm", s]),
-        ...["dokploy", "dokploy-postgres", "dokploy-redis", STORE_VOLUME].map((v) => ["volume", "rm", v]),
-      ];
-      for (const args of removals) {
-        let res = await docker(args);
-        for (let i = 0; i < 10 && res.code !== 0 && /in use|has active endpoints/i.test(res.stderr); i++) {
-          await sleep(2000);
-          res = await docker(args);
-        }
-        if (res.code !== 0 && !/not found|no such/i.test(res.stderr)) {
-          log(`  warning: ${args.join(" ")} failed: ${res.stderr.trim().split("\n")[0]}`);
-        }
-      }
+      // Verify the purge actually removed control-plane data (C-P1-2).
+      const result = await inspectPurgeResources();
+      if (result.error) throw new UserError(result.error);
     }
+    await removeSwitchyardDataVolume(opts.purge, log);
   },
 };

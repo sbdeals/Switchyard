@@ -1,11 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { validatePort } from "@/lib/validation";
+import { DomainStatus } from "@/components/service/DomainStatus";
+import { validateComposeFile } from "@/lib/compose-validation";
+import { getPortWarnings, parseComposePorts } from "@/lib/port-conflicts";
+import { PortConflictWarning, type PortConflictProps } from "@/components/service/PortConflictWarning";
+import { useDirtyGuard } from "@/components/DirtyGuard";
+import { hasDirtyFields } from "@/lib/dirty-guard";
+import { loadClientSecret } from "@/lib/client-secret-loader";
 import {
   composeLifecycleAction,
   saveComposeFileAction,
+  loadComposeFileAction,
   createComposeDomainAction,
   generateComposeDomainAction,
 } from "@/app/actions";
@@ -29,8 +38,8 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   const { pending, error, run } = useComposeLifecycle(compose);
   return (
     <div className="space-y-5">
-      <PublicUrlBar domains={compose.domains} status={compose.status} />
-      <LifecycleButtons status={compose.status} pending={pending} error={error} run={run} />
+      <PublicUrlBar domains={compose.domains} status={compose.status} runtime={compose.runtime} />
+      <LifecycleButtons status={compose.status} runtime={compose.runtime} pending={pending} error={error} run={run} />
       <p className="text-xs text-[var(--color-fg-muted)]">
         A raw <code className="font-mono">docker-compose</code> stack. Edit the file in the Compose
         tab, then deploy.
@@ -43,20 +52,53 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   );
 }
 
-export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
-  const [value, setValue] = useState(compose.composeFile ?? "");
+export function ComposeEditorTab({ compose, services, onSelectService }: PortConflictProps & { compose: ComposeService }) {
+  const [value, setValue] = useState("");
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => loadClientSecret(
+    () => loadComposeFileAction(compose.id),
+    (res) => {
+      if (res.ok) {
+        setValue(res.composeFile);
+        setBaseline(res.composeFile);
+      } else {
+        setLoadError("Could not load compose file.");
+      }
+    },
+    () => setLoadError("Could not load compose file."),
+  ), [compose.id]);
   const [pending, start] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
-  const dirty = value !== (compose.composeFile ?? "");
+  const dirty = baseline !== null && loadError === null && value !== baseline;
+  useDirtyGuard("Compose", dirty);
+  const warnings = getPortWarnings(services, compose.id, parseComposePorts(value));
 
   function save(redeploy: boolean) {
+    if (baseline === null || loadError) return;
     setError(null);
+    const issue = validateComposeFile(value, redeploy);
+    if (redeploy && issue) {
+      setError(issue);
+      return;
+    }
     start(async () => {
       const res = await saveComposeFileAction(compose.id, value, redeploy);
-      if (res.ok) flashSaved();
-      else setError(res.error);
+      if (res.ok) {
+        setBaseline(value);
+        if (issue) setError(`Saved as draft. ${issue} Fix the YAML before deploying.`);
+        else flashSaved();
+      } else setError(res.error);
     });
+  }
+
+  if (loadError) {
+    return <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>;
+  }
+  if (baseline === null) {
+    return <p role="status" className="text-xs text-[var(--color-fg-muted)]">Loading compose file…</p>;
   }
 
   return (
@@ -67,87 +109,74 @@ export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
         onChange={(e) => setValue(e.target.value)}
         spellCheck={false}
         aria-label="docker-compose.yml contents"
-        className="min-h-72 flex-1 resize-none rounded-lg border border-[var(--color-border-control)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+        className="min-h-72 flex-1 resize-none rounded-lg border border-[var(--color-border-control)] bg-[var(--color-code-bg)] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
       />
+      <div className="mt-3">
+        <PortConflictWarning warnings={warnings} onSelectService={onSelectService} />
+      </div>
       <div className="mt-3 flex items-center justify-end gap-2">
         <button
           onClick={() => save(false)}
           disabled={pending || !dirty}
           className="rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)] disabled:opacity-40"
         >
-          Save
+          {warnings.length ? "Save anyway" : "Save"}
         </button>
-        <SaveRow saving={pending} saved={saved} error={error} onSave={() => save(true)} label="Save & deploy" />
+        <SaveRow saving={pending} saved={saved && !error} error={error} onSave={() => save(true)} label={warnings.length ? "Save anyway & deploy" : "Save & deploy"} />
       </div>
     </div>
   );
 }
 
-/**
- * Best-effort extraction of the top-level service names from a compose file,
- * used to suggest domain targets. No YAML dependency: read the keys directly
- * under `services:` at the first child indent level. Free-text entry still
- * works (via the datalist) when parsing misses an entry.
- */
-function composeServiceNames(file: string | null): string[] {
-  if (!file) return [];
-  const lines = file.split("\n");
-  const start = lines.findIndex((l) => /^services:\s*(#.*)?$/.test(l));
-  if (start === -1) return [];
-  const names: string[] = [];
-  let childIndent: number | null = null;
-  for (let i = start + 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim() || line.trim().startsWith("#")) continue;
-    const indent = line.match(/^(\s*)/)![1].length;
-    if (indent === 0) break; // dedented back to a top-level key — block ended
-    if (childIndent === null) childIndent = indent;
-    if (indent !== childIndent) continue; // deeper (a service's own keys)
-    const m = line.match(/^\s+([A-Za-z0-9._-]+):\s*(#.*)?$/);
-    if (m) names.push(m[1]);
-  }
-  return names;
-}
-
 export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
-  const services = composeServiceNames(compose.composeFile);
+  const services = compose.serviceNames ?? [];
   const [serviceName, setServiceName] = useState(services[0] ?? "");
   const [host, setHost] = useState("");
   const [port, setPort] = useState("80");
+  const [defaults, setDefaults] = useState({ serviceName, port });
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
+  useDirtyGuard("Domains", hasDirtyFields({ host, serviceName, port }, { host: "", ...defaults }));
 
   function add() {
     if (!host.trim() || !serviceName.trim()) return;
-    setError(null);
+    const validationError = validatePort(port);
+    setError(validationError);
     setGenerated(null);
+    if (validationError) return;
     start(async () => {
       const res = await createComposeDomainAction(
         compose.id,
         serviceName,
         host,
-        Number(port) || 80
+        Number(port)
       );
-      if (res.ok) setHost("");
-      else setError(res.error);
+      if (res.ok) {
+        setHost("");
+        setDefaults({ serviceName, port });
+      } else setError(res.error);
     });
   }
 
   // Attach a random routable host to the selected service, on the current port.
   function generate() {
     if (!serviceName.trim()) return;
-    setError(null);
+    const validationError = validatePort(port);
+    setError(validationError);
     setGenerated(null);
+    if (validationError) return;
     start(async () => {
       const res = await generateComposeDomainAction(
         compose.id,
         serviceName,
         serviceName,
-        Number(port) || 80
+        Number(port)
       );
-      if (res.ok) setGenerated(res.host);
-      else setError(res.error);
+      if (res.ok) {
+        setGenerated(res.host);
+        setDefaults({ serviceName, port });
+      } else setError(res.error);
     });
   }
 
@@ -161,29 +190,34 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
       {compose.domains.length > 0 ? (
         <div className="space-y-2">
           {compose.domains.map((d) => (
-            <a
+            <div
               key={d.domainId}
-              href={`${d.https ? "https" : "http"}://${d.host}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm hover:bg-[var(--color-surface-hover)]"
+              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
             >
-              <Globe className="size-3.5 text-[var(--color-brand)]" />
-              <span className="flex-1 truncate">{d.host}</span>
-              {d.serviceName && (
-                <span className="text-xs text-[var(--color-fg-subtle)]">→ {d.serviceName}</span>
-              )}
-              {d.port && <span className="text-xs text-[var(--color-fg-subtle)]">:{d.port}</span>}
-              <ExternalLink className="size-3 text-[var(--color-fg-subtle)]" />
-            </a>
+              <a
+                href={`${d.https ? "https" : "http"}://${d.host}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-[var(--color-surface-hover)]"
+              >
+                <Globe className="size-3.5 shrink-0 text-[var(--color-brand)]" />
+                <span className="min-w-0 flex-1 truncate">{d.host}</span>
+                {d.serviceName && (
+                  <span className="max-w-24 truncate text-xs text-[var(--color-fg-subtle)]" title={d.serviceName}>→ {d.serviceName}</span>
+                )}
+                {d.port && <span className="text-xs text-[var(--color-fg-subtle)]">:{d.port}</span>}
+                <ExternalLink className="size-3 shrink-0 text-[var(--color-fg-subtle)]" />
+              </a>
+              <DomainStatus serviceType="compose" serviceId={compose.id} domainId={d.domainId} host={d.host} https={d.https} path={d.path} />
+            </div>
           ))}
         </div>
       ) : (
         <p className="text-xs text-[var(--color-fg-subtle)]">No domains attached.</p>
       )}
 
-      <div className="flex items-end gap-2">
-        <div className="w-32">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-0 w-32">
           <Field label="Service" hint="in this stack">
             <input
               value={serviceName}
@@ -199,7 +233,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
             </datalist>
           </Field>
         </div>
-        <div className="flex-1">
+        <div className="min-w-40 flex-1">
           <Field label="Host">
             <input
               value={host}
@@ -213,7 +247,8 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
           <Field label="Port">
             <input
               value={port}
-              onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ""))}
+              onChange={(e) => setPort(e.target.value)}
+              inputMode="numeric"
               className={inputCls}
             />
           </Field>
@@ -229,7 +264,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
         </button>
       </div>
       {generated && (
-        <p role="status" className="text-xs text-[var(--color-ok)]">
+        <p role="status" className="break-words text-xs text-[var(--color-ok)]">
           Attached {generated} → {serviceName} — it appears in the list above.
         </p>
       )}
@@ -245,7 +280,6 @@ export function ComposeSettingsTab({
   compose: ComposeService;
   onClose: () => void;
 }) {
-  const { pending, error, run } = useComposeLifecycle(compose);
   return (
     <div className="space-y-5">
       <Info label="App name" value={compose.appName} mono />
@@ -253,12 +287,17 @@ export function ComposeSettingsTab({
         label="Created"
         value={compose.createdAt ? new Date(compose.createdAt).toLocaleString() : "—"}
       />
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold">Resources</h3>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          Compose limits and reservations live in <code className="font-mono">deploy.resources</code>
+          {" "}in the compose file. Edit them in the Compose tab.
+        </p>
+      </section>
       <DangerZone
-        name={compose.name}
+        service={compose}
         message="Destroying removes the stack and all its containers."
-        pending={pending}
-        error={error}
-        onDestroy={() => run("remove", onClose)}
+        onDeleted={onClose}
       />
     </div>
   );

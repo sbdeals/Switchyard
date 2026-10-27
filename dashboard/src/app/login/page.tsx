@@ -1,21 +1,33 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { safeNextPath } from "@/lib/deeplink";
 import { SESSION_COOKIE, openSession } from "@/lib/session";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { LoginForm } from "./LoginForm";
 
 // Reads the session cookie, so it must render per request.
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[]; expired?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const nextPath = safeNextPath(params.next);
   // Already signed in? Skip the form.
   const store = await cookies();
   if (openSession(store.get(SESSION_COOKIE)?.value)) {
-    redirect("/");
+    redirect(nextPath);
   }
+  const expired = params.expired === "1";
 
   return (
-    <main className="flex min-h-full items-center justify-center px-6 py-16">
+    <main className="flex min-h-full items-center justify-center px-6 py-16 pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(4rem,env(safe-area-inset-top))] pb-[max(4rem,env(safe-area-inset-bottom))]">
+      <div className="fixed right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-50">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="mb-3 flex size-11 items-center justify-center rounded-xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
@@ -30,10 +42,10 @@ export default async function LoginPage() {
           </div>
           <h1 className="text-xl font-semibold tracking-tight">Sign in to Switchyard</h1>
           <p className="mt-1.5 text-sm text-[var(--color-fg-muted)]">
-            Use your Dokploy account.
+            {expired ? "Your session expired. Sign in again." : "Use your Dokploy account."}
           </p>
         </div>
-        <LoginForm />
+        <LoginForm nextPath={nextPath} />
       </div>
     </main>
   );

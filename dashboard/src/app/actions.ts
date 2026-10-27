@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
+import { randomUUID } from "node:crypto";
 import {
   createDatabase,
   databaseAction,
@@ -13,6 +14,14 @@ import {
   removeEnvironment,
   listProjects,
   loadWorkspace,
+  updateServiceNotes,
+  getServiceEnvironment,
+  getServiceWebhook,
+  getServiceComposeFile,
+  getServiceCommands,
+  getApplicationSource,
+  getServiceDockerImage,
+  requireServiceOwnership,
   saveEnvironment,
   updateDatabase,
   reloadDatabase,
@@ -40,11 +49,14 @@ import {
   updateDomain,
   deleteDomain,
   createRedirect,
+  updateRedirect,
   deleteRedirect,
   createPort,
   deletePort,
   createSecurity,
+  updateSecurity,
   deleteSecurity,
+  assertApplicationAccess,
   createCompose,
   composeAction,
   updateComposeFile,
@@ -56,17 +68,22 @@ import {
   updateSchedule,
   deleteSchedule,
   runSchedule,
+  listScheduleExecutions,
+  listMounts,
   createMount,
   updateMount,
   removeMount,
   type Action,
   type DatabasePatch,
   type ApplicationPatch,
+  type HealthCheckSwarm,
   type BuildTypePatch,
+  type DockerRegistryPatch,
   type DomainInput,
   type Engine,
   type DokployTemplate,
   type Schedule,
+  type AppDeployment,
   type CreateScheduleInput,
   type UpdateScheduleInput,
   type Mount,
@@ -101,6 +118,16 @@ import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
 import { readServiceVolumes } from "@/lib/volume-usage.server";
 import type { VolumeUsage } from "@/lib/volume-usage";
+import { parseEnvironment, validateCron, validatePort } from "@/lib/validation";
+import { updateResourceSettings } from "@/lib/resource-settings";
+import type { ResourceInputs } from "@/lib/resource-limits";
+import { normalizeServiceNotes } from "@/lib/service-notes";
+import { validateComposeFile } from "@/lib/compose-validation";
+import { parseAppPort } from "@/lib/app-port";
+import { validateMount } from "@/lib/mounts";
+import { preserveUrlCredentials } from "@/lib/url-credentials";
+import { redactErrorMessage } from "@/lib/error-redaction";
+import { validateRedirect, validateBasicAuth } from "@/lib/app-security";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -120,6 +147,22 @@ async function wrap(fn: () => Promise<unknown>): Promise<ActionResult> {
   } catch (e) {
     unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
+  }
+}
+
+/** Backend errors for secret-bearing settings must not echo submitted values. */
+async function wrapSensitive(
+  fn: () => Promise<unknown>,
+  error: string,
+  secrets: readonly (string | null | undefined)[] | null = [],
+): Promise<ActionResult> {
+  try {
+    await fn();
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: secrets === null ? error : redactErrorMessage(e, error, secrets) };
   }
 }
 
@@ -159,6 +202,24 @@ async function resolveTargetEnv(environmentId?: string): Promise<string> {
   return after[0].environmentId;
 }
 
+/** Resolve ownership and the service type from the current user's workspace. */
+export async function saveServiceNotesAction(id: string, notes: string): Promise<ActionResult> {
+  try {
+    if (typeof id !== "string" || !id.trim() || typeof notes !== "string") {
+      throw new Error("Invalid service notes.");
+    }
+    const { services } = await loadWorkspace();
+    const service = services.find((candidate) => candidate.id === id);
+    if (!service) throw new Error("Service unavailable.");
+    await updateServiceNotes(service, normalizeServiceNotes(notes));
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not save service notes. Please try again." };
+  }
+}
+
 // --- databases ----------------------------------------------------------------
 
 /**
@@ -188,7 +249,10 @@ export async function lifecycleAction(
   id: string,
   action: Action
 ): Promise<ActionResult> {
-  return wrap(() => databaseAction(engine, id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership(engine, id);
+    await databaseAction(engine, id, action);
+  });
 }
 
 /**
@@ -201,15 +265,25 @@ export async function updateDatabaseAction(
   appName: string,
   patch: DatabasePatch
 ): Promise<ActionResult> {
-  return wrap(async () => {
-    await updateDatabase(engine, id, patch);
+  const secrets = [patch.dockerImage];
+  return wrapSensitive(async () => {
+    const savedPatch = { ...patch };
+    if (typeof savedPatch.dockerImage === "string") {
+      savedPatch.dockerImage = preserveUrlCredentials(
+        savedPatch.dockerImage, await getServiceDockerImage(engine, id)
+      );
+      secrets.push(savedPatch.dockerImage);
+    } else {
+      await requireServiceOwnership(engine, id);
+    }
+    await updateDatabase(engine, id, savedPatch);
     const needsReload =
       patch.dockerImage !== undefined ||
       patch.cpuLimit !== undefined ||
       patch.memoryLimit !== undefined ||
       patch.externalPort !== undefined;
     if (needsReload) await reloadDatabase(engine, id, appName);
-  });
+  }, "Could not save database settings.", secrets);
 }
 
 export async function saveEnvironmentAction(
@@ -217,7 +291,68 @@ export async function saveEnvironmentAction(
   id: string,
   env: string
 ): Promise<ActionResult> {
+  const { error } = parseEnvironment(env);
+  if (error) return { ok: false, error };
   return wrap(() => saveEnvironment(engine, id, env));
+}
+
+/** Persist resource settings without deploying or reloading a container. */
+export async function updateResourcesAction(
+  kind: "application" | Engine,
+  id: string,
+  input: ResourceInputs
+): Promise<ActionResult> {
+  return wrapSensitive(
+    () => updateResourceSettings(kind, id, input),
+    "Could not save resource settings.",
+  );
+}
+
+/** Environment values are fetched only by the open Variables tab. */
+export async function loadServiceEnvAction(
+  type: MountServiceType,
+  id: string
+): Promise<{ ok: true; env: string } | { ok: false; error: string }> {
+  try {
+    return { ok: true, env: await getServiceEnvironment(type, id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load environment variables." };
+  }
+}
+
+export async function loadServiceWebhookAction(
+  id: string
+): Promise<{ ok: true; webhookUrl: string | null } | { ok: false; error: string }> {
+  try {
+    return { ok: true, webhookUrl: await getServiceWebhook(id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load webhook URL." };
+  }
+}
+
+export async function loadComposeFileAction(
+  id: string
+): Promise<{ ok: true; composeFile: string } | { ok: false; error: string }> {
+  try {
+    return { ok: true, composeFile: await getServiceComposeFile(id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load compose file." };
+  }
+}
+
+export async function loadServiceCommandsAction(
+  type: MountServiceType,
+  id: string
+): Promise<{ ok: true; command: string | null; healthCheckSwarm: HealthCheckSwarm | null } | { ok: false; error: string }> {
+  try {
+    return { ok: true, ...await getServiceCommands(type, id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load service commands." };
+  }
 }
 
 // --- projects & environments ------------------------------------------------
@@ -229,7 +364,12 @@ export async function renameProjectAction(id: string, name: string): Promise<Act
   return wrap(() => renameProject(id, name));
 }
 export async function removeProjectAction(id: string): Promise<ActionResult> {
-  return wrap(() => removeProject(id));
+  return wrap(async () => {
+    if (!(await listProjects()).some((project) => project.projectId === id)) {
+      throw new Error("Project not found in this workspace.");
+    }
+    await removeProject(id);
+  });
 }
 export async function createEnvironmentAction(
   projectId: string,
@@ -241,7 +381,14 @@ export async function renameEnvironmentAction(id: string, name: string): Promise
   return wrap(() => renameEnvironment(id, name));
 }
 export async function removeEnvironmentAction(id: string): Promise<ActionResult> {
-  return wrap(() => removeEnvironment(id));
+  return wrap(async () => {
+    if (!(await listProjects()).some((project) =>
+      project.environments.some((environment) => environment.environmentId === id)
+    )) {
+      throw new Error("Environment not found in this workspace.");
+    }
+    await removeEnvironment(id);
+  });
 }
 
 // --- applications -----------------------------------------------------------
@@ -250,11 +397,13 @@ export async function removeEnvironmentAction(id: string): Promise<ActionResult>
 export async function quickDeployImageAction(
   image: string,
   name?: string,
-  environmentId?: string
+  environmentId?: string,
+  port?: string
 ): Promise<QuickDeployResult> {
   return wrapId(async () => {
     const trimmed = image.trim();
     if (!trimmed) throw new Error("Image is required.");
+    const explicitPort = parseAppPort(port);
     // Derive a friendly name from the image (e.g. "nginx:alpine" -> "nginx").
     const derived = trimmed.split("/").pop()!.split(":")[0];
     const id = await createApplication(
@@ -263,7 +412,7 @@ export async function quickDeployImageAction(
     );
     await setAppDockerSource(id, trimmed);
     await applicationAction(id, "deploy");
-    await mintAutoDomain(id);
+    await mintAutoDomain(id, explicitPort);
     return id;
   });
 }
@@ -295,9 +444,9 @@ export async function quickDeployRepoAction(
  * Linux/Traefik path — see `ensureAutoDomain`). Never fails the deploy over
  * domain creation; the user can always add one in the Domains tab.
  */
-async function mintAutoDomain(applicationId: string): Promise<void> {
+async function mintAutoDomain(applicationId: string, port?: number): Promise<void> {
   try {
-    await ensureAutoDomain(applicationId);
+    await ensureAutoDomain(applicationId, port);
   } catch {
     /* leave the app domain-less rather than failing the deploy */
   }
@@ -372,7 +521,10 @@ export async function quickDeployGithubAction(input: {
 }
 
 export async function appLifecycleAction(id: string, action: Action): Promise<ActionResult> {
-  return wrap(() => applicationAction(id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership("application", id);
+    await applicationAction(id, action);
+  });
 }
 
 export async function updateApplicationAction(
@@ -380,13 +532,19 @@ export async function updateApplicationAction(
   patch: ApplicationPatch,
   redeploy = false
 ): Promise<ActionResult> {
-  return wrap(async () => {
+  // Free-text errors can echo fragments of an inline secret, so these edits
+  // retain the generic fallback. Scalar settings keep their validation errors.
+  const hasFreeText = Boolean(patch.command || patch.healthCheckSwarm?.Test?.length || patch.description);
+  return wrapSensitive(async () => {
+    await requireServiceOwnership("application", id);
     await updateApplication(id, patch);
     if (redeploy) await applicationAction(id, "deploy");
-  });
+  }, "Could not save application settings.", hasFreeText ? null : []);
 }
 
 export async function saveApplicationEnvAction(id: string, env: string): Promise<ActionResult> {
+  const { error } = parseEnvironment(env);
+  if (error) return { ok: false, error };
   return wrap(() => saveApplicationEnvironment(id, env));
 }
 
@@ -404,27 +562,46 @@ export async function saveAppBuildTypeAction(
 
 /**
  * Point a docker-image application at an image, optionally with private
- * registry credentials. Empty credentials mean a public image.
+ * registry credentials. Empty credentials preserve stored values; clearing
+ * credentials requires the explicit clearCredentials flag.
  */
 export async function setAppDockerSourceAction(
   id: string,
   dockerImage: string,
-  registry?: { username: string; password: string; registryUrl: string },
+  registry?: DockerRegistryPatch,
   redeploy = false
 ): Promise<ActionResult> {
-  return wrap(async () => {
+  const secrets: (string | null | undefined)[] = [registry?.username, registry?.password, registry?.registryUrl];
+  return wrapSensitive(async () => {
     const image = dockerImage.trim();
     if (!image) throw new Error("Image is required.");
-    const hasCreds = registry && (registry.username || registry.password || registry.registryUrl);
-    await setAppDockerSource(id, image, hasCreds ? registry : undefined);
+    secrets.push(dockerImage, image);
+    const stored = await getApplicationSource(id);
+    secrets.push(stored.dockerImage, stored.registryUrl, stored.username, stored.password);
+    const hasCreds = registry && (
+      registry.clearCredentials || registry.username || registry.password || registry.registryUrl != null
+    );
+    await setAppDockerSource(
+      id,
+      preserveUrlCredentials(image, stored.dockerImage),
+      hasCreds ? {
+        ...registry,
+        registryUrl: registry.registryUrl == null
+          ? registry.registryUrl
+          : preserveUrlCredentials(registry.registryUrl, stored.registryUrl),
+      } : undefined,
+      stored
+    );
     if (redeploy) await applicationAction(id, "deploy");
-  });
+  }, "Could not save Docker source.", secrets);
 }
 
 export async function createDomainAction(
   applicationId: string,
   input: DomainInput
 ): Promise<ActionResult> {
+  const error = validatePort(input?.port, "Container port");
+  if (error) return { ok: false, error };
   return wrap(() => createDomain(applicationId, { ...input, host: input.host.trim() }));
 }
 
@@ -432,6 +609,8 @@ export async function updateDomainAction(
   domainId: string,
   input: DomainInput
 ): Promise<ActionResult> {
+  const error = validatePort(input?.port, "Container port");
+  if (error) return { ok: false, error };
   return wrap(() => updateDomain(domainId, { ...input, host: input.host.trim() }));
 }
 
@@ -450,6 +629,8 @@ export async function generateDomainAction(
   serviceName: string,
   port: number
 ): Promise<GenerateUrlResult> {
+  const error = validatePort(port, "Container port");
+  if (error) return { ok: false, error };
   return wrapHost(async () => {
     const g = await generateHostFor(serviceName);
     await createDomain(applicationId, {
@@ -470,6 +651,8 @@ export async function createComposeDomainAction(
   host: string,
   port: number
 ): Promise<ActionResult> {
+  const error = validatePort(port);
+  if (error) return { ok: false, error };
   return wrap(() => createComposeDomain(composeId, serviceName.trim(), host.trim(), port));
 }
 
@@ -484,6 +667,8 @@ export async function generateComposeDomainAction(
   labelName: string,
   port: number
 ): Promise<GenerateUrlResult> {
+  const error = validatePort(port);
+  if (error) return { ok: false, error };
   return wrapHost(async () => {
     const g = await generateHostFor(labelName || serviceName);
     await createComposeDomain(composeId, serviceName.trim(), g.host, port, {
@@ -494,7 +679,7 @@ export async function generateComposeDomainAction(
   });
 }
 
-// Networking config (applies on next deploy) — verified Dokploy v0.29.x shapes.
+// HTTP settings (applies on next deploy) — Dokploy v0.30.10 shapes.
 
 export async function createRedirectAction(
   applicationId: string,
@@ -502,17 +687,38 @@ export async function createRedirectAction(
   replacement: string,
   permanent: boolean
 ): Promise<ActionResult> {
-  return wrap(() =>
-    createRedirect(applicationId, {
+  const error = validateRedirect(regex, replacement, permanent);
+  if (error) return { ok: false, error };
+  return wrap(async () => {
+    await assertApplicationAccess(applicationId);
+    await createRedirect(applicationId, {
       regex: regex.trim(),
       replacement: replacement.trim(),
       permanent,
-    })
-  );
+    });
+  });
 }
 
-export async function deleteRedirectAction(redirectId: string): Promise<ActionResult> {
-  return wrap(() => deleteRedirect(redirectId));
+export async function updateRedirectAction(
+  applicationId: string,
+  redirectId: string,
+  regex: string,
+  replacement: string,
+  permanent: boolean
+): Promise<ActionResult> {
+  const error = validateRedirect(regex, replacement, permanent);
+  if (error) return { ok: false, error };
+  return wrap(async () => {
+    await assertApplicationAccess(applicationId, { kind: "redirects", id: redirectId });
+    await updateRedirect(redirectId, { regex: regex.trim(), replacement: replacement.trim(), permanent });
+  });
+}
+
+export async function deleteRedirectAction(applicationId: string, redirectId: string): Promise<ActionResult> {
+  return wrap(async () => {
+    await assertApplicationAccess(applicationId, { kind: "redirects", id: redirectId });
+    await deleteRedirect(redirectId);
+  });
 }
 
 export async function createPortAction(
@@ -522,6 +728,8 @@ export async function createPortAction(
   protocol: "tcp" | "udp",
   publishMode: "host" | "ingress"
 ): Promise<ActionResult> {
+  const error = validatePort(publishedPort, "Published port") || validatePort(targetPort, "Target port");
+  if (error) return { ok: false, error };
   return wrap(() => createPort(applicationId, { publishedPort, targetPort, protocol, publishMode }));
 }
 
@@ -534,11 +742,45 @@ export async function createSecurityAction(
   username: string,
   password: string
 ): Promise<ActionResult> {
-  return wrap(() => createSecurity(applicationId, { username: username.trim(), password }));
+  const error = validateBasicAuth(username, password);
+  if (error) return { ok: false, error };
+  return wrapSecurity(async () => {
+    await assertApplicationAccess(applicationId);
+    await createSecurity(applicationId, { username: username.trim(), password });
+  }, "Could not save basic-auth user.");
 }
 
-export async function deleteSecurityAction(securityId: string): Promise<ActionResult> {
-  return wrap(() => deleteSecurity(securityId));
+export async function updateSecurityAction(
+  applicationId: string,
+  securityId: string,
+  username: string,
+  password: string
+): Promise<ActionResult> {
+  const error = validateBasicAuth(username, password);
+  if (error) return { ok: false, error };
+  return wrapSecurity(async () => {
+    await assertApplicationAccess(applicationId, { kind: "security", id: securityId });
+    await updateSecurity(securityId, { username: username.trim(), password });
+  }, "Could not save basic-auth user.");
+}
+
+export async function deleteSecurityAction(applicationId: string, securityId: string): Promise<ActionResult> {
+  return wrapSecurity(async () => {
+    await assertApplicationAccess(applicationId, { kind: "security", id: securityId });
+    await deleteSecurity(securityId);
+  }, "Could not remove basic-auth user.");
+}
+
+/** Dokploy responses/errors can contain stored passwords; never echo them. */
+async function wrapSecurity(fn: () => Promise<unknown>, error: string): Promise<ActionResult> {
+  try {
+    await fn();
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error };
+  }
 }
 
 // --- push-to-deploy + rollback ----------------------------------------------
@@ -562,18 +804,21 @@ export async function updateGitDeployAction(
     autoDeploy: boolean;
   }
 ): Promise<ActionResult> {
-  return wrap(async () => {
+  const secrets = [config.gitUrl];
+  return wrapSensitive(async () => {
+    const stored = await getApplicationSource(applicationId);
+    secrets.push(stored.gitUrl);
     if (config.gitUrl) {
       await setAppGitSource(
         applicationId,
-        config.gitUrl,
+        preserveUrlCredentials(config.gitUrl, stored.gitUrl),
         config.branch?.trim() || "main",
         config.buildPath?.trim() || "/",
         (config.watchPaths ?? []).map((p) => p.trim()).filter(Boolean)
       );
     }
     await setAppAutoDeploy(applicationId, config.autoDeploy);
-  });
+  }, "Could not save Git deploy settings.", secrets);
 }
 
 /**
@@ -601,22 +846,69 @@ export async function listSchedulesAction(applicationId: string): Promise<Schedu
 }
 
 export async function createScheduleAction(input: CreateScheduleInput): Promise<ActionResult> {
-  return wrap(() => createSchedule(input));
+  const error = validateCron(input?.cronExpression);
+  if (error) return { ok: false, error };
+  return wrap(() => createSchedule({ ...input, cronExpression: input.cronExpression.trim() }));
 }
 
 export async function updateScheduleAction(
   scheduleId: string,
   input: UpdateScheduleInput
 ): Promise<ActionResult> {
-  return wrap(() => updateSchedule(scheduleId, input));
+  const error = validateCron(input?.cronExpression);
+  if (error) return { ok: false, error };
+  return wrap(() => updateSchedule(scheduleId, { ...input, cronExpression: input.cronExpression.trim() }));
 }
 
 export async function deleteScheduleAction(scheduleId: string): Promise<ActionResult> {
   return wrap(() => deleteSchedule(scheduleId));
 }
 
-export async function runScheduleAction(scheduleId: string): Promise<ActionResult> {
-  return wrap(() => runSchedule(scheduleId));
+export type ScheduleExecution = Pick<AppDeployment, "deploymentId" | "status" | "createdAt">;
+export type ScheduleExecutionsResult =
+  | { ok: true; executions: ScheduleExecution[] }
+  | { ok: false; error: string };
+
+export async function listScheduleExecutionsAction(scheduleId: string): Promise<ScheduleExecutionsResult> {
+  try {
+    const executions = await listScheduleExecutions(scheduleId);
+    return {
+      ok: true,
+      executions: executions.map(({ deploymentId, status, createdAt }) => ({
+        deploymentId, status, createdAt,
+      })),
+    };
+  } catch (e) {
+    unstable_rethrow(e);
+    return fail(e);
+  }
+}
+
+export type RunScheduleResult = { ok: true; message: string } | { ok: false; error: string };
+
+function scheduleRunResult(status: string | undefined): RunScheduleResult {
+  if (status === "error") {
+    return {
+      ok: false,
+      error: "Schedule failed. Make sure the service is running and check the command and shell. See execution history below.",
+    };
+  }
+  return {
+    ok: true,
+    message: status === "done" ? "Completed — see history below." : "Started — see history below.",
+  };
+}
+
+export async function runScheduleAction(scheduleId: string): Promise<RunScheduleResult> {
+  try {
+    // Dokploy can return HTTP 200 with status "error"; surface it.
+    const result = await runSchedule(scheduleId);
+    revalidatePath("/");
+    return scheduleRunResult(result?.status);
+  } catch (e) {
+    unstable_rethrow(e);
+    return fail(e);
+  }
 }
 
 // --- compose ----------------------------------------------------------------
@@ -632,7 +924,10 @@ export async function createComposeAction(
 }
 
 export async function composeLifecycleAction(id: string, action: Action): Promise<ActionResult> {
-  return wrap(() => composeAction(id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership("compose", id);
+    await composeAction(id, action);
+  });
 }
 
 export async function saveComposeFileAction(
@@ -640,13 +935,19 @@ export async function saveComposeFileAction(
   composeFile: string,
   redeploy = false
 ): Promise<ActionResult> {
-  return wrap(async () => {
+  if (redeploy) {
+    const error = validateComposeFile(composeFile, true);
+    if (error) return { ok: false, error };
+  }
+  return wrapSensitive(async () => {
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");
-  });
+  }, "Could not save compose file.", null);
 }
 
 export async function saveComposeEnvAction(id: string, env: string): Promise<ActionResult> {
+  const { error } = parseEnvironment(env);
+  if (error) return { ok: false, error };
   return wrap(() => saveComposeEnvironment(id, env));
 }
 
@@ -688,7 +989,12 @@ export async function createDestinationAction(
 }
 
 export async function removeDestinationAction(destinationId: string): Promise<ActionResult> {
-  return wrap(() => removeDestination(destinationId));
+  return wrap(async () => {
+    if (!(await listDestinations()).some((destination) => destination.destinationId === destinationId)) {
+      throw new Error("Destination not found in this workspace.");
+    }
+    await removeDestination(destinationId);
+  });
 }
 
 export async function listDatabaseBackupsAction(
@@ -792,21 +1098,79 @@ export async function listMountsAction(
     return { ok: true, ...(await readServiceVolumes(service)) };
   } catch (e) {
     unstable_rethrow(e);
-    return fail(e);
+    return { ok: false, error: "Could not load mounts." };
   }
 }
 
 export async function createMountAction(input: CreateMountInput): Promise<ActionResult> {
-  return wrap(() => createMount(input));
+  try {
+    const mounts = await listMounts(input.serviceType, input.serviceId);
+    // Dokploy writes filePath beneath its managed files directory. Never accept
+    // a client-supplied source path, or reuse a filename belonging to another mount.
+    const mount = {
+      type: input.type,
+      mountPath: input.mountPath,
+      ...(input.type === "volume" ? { volumeName: input.volumeName } : {
+        filePath: `${randomUUID()}.conf`,
+        content: input.content,
+      }),
+    };
+    const error = validateMount(mount, mounts);
+    if (error) return { ok: false, error };
+    await createMount({ serviceType: input.serviceType, serviceId: input.serviceId, ...mount });
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not add mount." };
+  }
 }
 
 export async function updateMountAction(
+  serviceType: MountServiceType,
+  serviceId: string,
   mountId: string,
   patch: MountPatch
 ): Promise<ActionResult> {
-  return wrap(() => updateMount(mountId, patch));
+  try {
+    const mounts = await listMounts(serviceType, serviceId);
+    const existing = mounts.find((mount) => mount.mountId === mountId);
+    if (!existing || existing.type === "bind" || (patch.type && patch.type !== existing.type)) {
+      return { ok: false, error: "Could not update mount." };
+    }
+    const mount = {
+      type: existing.type,
+      mountPath: patch.mountPath ?? existing.mountPath,
+      ...(existing.type === "volume" ? { volumeName: patch.volumeName ?? existing.volumeName ?? "" } : {
+        filePath: existing.filePath ?? "",
+        content: patch.content ?? existing.content ?? "",
+      }),
+    };
+    const error = validateMount(mount, mounts, mountId);
+    if (error) return { ok: false, error };
+    await updateMount(mountId, mount);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not update mount." };
+  }
 }
 
-export async function removeMountAction(mountId: string): Promise<ActionResult> {
-  return wrap(() => removeMount(mountId));
+export async function removeMountAction(
+  serviceType: MountServiceType,
+  serviceId: string,
+  mountId: string
+): Promise<ActionResult> {
+  try {
+    const mounts = await listMounts(serviceType, serviceId);
+    const mount = mounts.find((mount) => mount.mountId === mountId);
+    if (!mount || mount.type === "bind") return { ok: false, error: "Could not remove mount." };
+    await removeMount(mountId);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not remove mount." };
+  }
 }

@@ -1,17 +1,23 @@
 import type { SwitchyardConfig } from "./config.js";
-import { metricsStoreUrl } from "./config.js";
+import { metricsStoreUrl, validateConfigPorts } from "./config.js";
+import { agentKeyMigrationPath, migrateAgentKey, type AgentKeyContainer } from "./agent-key-migration.js";
 import { docker, dockerInherit, dockerOk } from "./docker.js";
 import { UserError } from "./errors.js";
+import { DATA_VOLUME_NAME } from "./switchyard-data.js";
 import { sha256, sleep } from "./util.js";
 
 export const CONTAINER_NAME = "switchyard";
 export const NETWORK_NAME = "dokploy-network";
 const HASH_LABEL = "switchyard.config-hash";
+export const MIGRATION_INSPECT_FORMAT =
+  '{"Running":{{json .State.Running}},"Mounts":{{json .Mounts}},"Config":{"Env":{{json .Config.Env}},"User":{{json .Config.User}},"WorkingDir":{{json .Config.WorkingDir}}}}';
 
 export interface ContainerPlan {
   image: string;
   bindHost: string;
   runArgs: string[];
+  /** Secret values inherited by Docker's name-only -e flags. */
+  runEnv: Record<string, string>;
   /** Fingerprint of everything that affects the running container. */
   hash: string;
 }
@@ -42,17 +48,25 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
     // Empty when disabled → the dashboard runs persistence-off. Part of `env`,
     // so it is folded into the config-hash and keeps `up` idempotent.
     SWITCHYARD_STORE_URL: metricsStoreUrl(cfg),
+    // Explicit for container launches; local development keeps its home-dir default.
+    SWITCHYARD_AGENT_KEY_FILE: "/app/data/agent-key.json",
   };
   // Host IP for auto-URL on app deploys. Only set on Linux (Traefik managed);
   // its presence is the dashboard's signal that auto-URL is safe. Added only
   // when non-empty so an unset value leaves the hash (and Docker Desktop
   // containers) unchanged; a changed IP recreates the container.
   if (cfg.hostIp) env.SWITCHYARD_HOST_IP = cfg.hostIp;
+  const runEnv: Record<string, string> = {
+    DOKPLOY_PASSWORD: cfg.adminPassword,
+    SWITCHYARD_SESSION_SECRET: cfg.sessionSecret,
+    SWITCHYARD_STORE_URL: metricsStoreUrl(cfg),
+  };
   const spec = {
     image,
     network: NETWORK_NAME,
     publish: `${bindHost}:${cfg.dashboardPort}:3001`,
     socket: "/var/run/docker.sock:/var/run/docker.sock",
+    data: `${DATA_VOLUME_NAME}:/app/data`,
     env,
     restart: "unless-stopped",
   };
@@ -70,14 +84,16 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
     spec.publish,
     "-v",
     spec.socket,
-    ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+    "-v",
+    spec.data,
+    ...Object.entries(env).flatMap(([k, v]) => ["-e", k in runEnv ? k : `${k}=${v}`]),
     "-l",
     "switchyard.managed=true",
     "-l",
     `${HASH_LABEL}=${hash}`,
     image,
   ];
-  return { image, bindHost, runArgs, hash };
+  return { image, bindHost, runArgs, runEnv, hash };
 }
 
 export type EnsureResult = "unchanged" | "created" | "recreated";
@@ -87,6 +103,7 @@ export async function ensureSwitchyard(
   cliVersion: string,
   log: (msg: string) => void,
 ): Promise<EnsureResult> {
+  validateConfigPorts(cfg);
   const plan = renderContainer(cfg, cliVersion);
 
   if (!(await dockerOk(["network", "inspect", NETWORK_NAME]))) {
@@ -123,8 +140,45 @@ export async function ensureSwitchyard(
     }
   }
 
-  if (exists) await docker(["rm", "-f", CONTAINER_NAME]);
-  const res = await docker(plan.runArgs);
+  if (exists) {
+    const inspected = await docker([
+      "inspect", CONTAINER_NAME, "--format",
+      MIGRATION_INSPECT_FORMAT,
+    ]);
+    if (inspected.code !== 0) {
+      throw new UserError("Could not inspect Switchyard storage; the existing container has not been removed.");
+    }
+    let source: string | null;
+    let wasRunning: boolean;
+    try {
+      const details = JSON.parse(inspected.stdout) as AgentKeyContainer & { Running: boolean };
+      source = agentKeyMigrationPath(details);
+      wasRunning = details.Running;
+    } catch {
+      throw new UserError("Could not determine the existing agent settings path; the container has not been removed. Back up its settings before retrying.");
+    }
+    if (source !== null) {
+      // Quiesce writes (including OAuth refresh) before taking the snapshot.
+      // Stop even if inspect said stopped: a restarting container may come up.
+      if ((await docker(["stop", CONTAINER_NAME])).code !== 0) {
+        throw new UserError("Could not stop Switchyard for settings migration; the container has not been removed.");
+      }
+      try {
+        await migrateAgentKey(CONTAINER_NAME, source, plan.image, log);
+      } catch (error) {
+        if (wasRunning && (await docker(["start", CONTAINER_NAME])).code !== 0) {
+          log("Warning: could not restart the preserved Switchyard container. Run `docker start switchyard` after fixing Docker.");
+        }
+        throw error;
+      }
+    }
+    const removed = await docker(["rm", "-f", CONTAINER_NAME]);
+    if (removed.code !== 0) {
+      if (source !== null && wasRunning) await docker(["start", CONTAINER_NAME]);
+      throw new UserError("Could not remove the existing Switchyard container; replacement aborted. Check `docker ps -a` before retrying.");
+    }
+  }
+  const res = await docker(plan.runArgs, { env: { ...process.env, ...plan.runEnv } });
   if (res.code !== 0) {
     throw new UserError(`docker run for ${CONTAINER_NAME} failed:\n${res.stderr.trim()}`);
   }

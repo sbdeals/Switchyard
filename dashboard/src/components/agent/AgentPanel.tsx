@@ -286,7 +286,7 @@ export function AgentPanel() {
         <button
           ref={openBtnRef}
           onClick={toggle}
-          className="fixed right-0 top-1/2 z-[60] flex -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-xl border border-r-0 border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-3 text-[var(--color-fg-muted)] shadow-[0_10px_30px_-12px_#000] hover:text-[var(--color-fg)]"
+          className="fixed right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-xl border border-r-0 border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-3 text-[var(--color-fg-muted)] shadow-[0_10px_30px_-12px_var(--color-shadow)] hover:text-[var(--color-fg)] max-lg:min-w-10"
           aria-label="Open agent"
         >
           <Sparkles className="size-4 text-[var(--color-brand)]" />
@@ -305,9 +305,9 @@ export function AgentPanel() {
             animate={{ x: 0 }}
             exit={{ x: 400 }}
             transition={{ type: "spring", stiffness: 380, damping: 38 }}
-            className="fixed right-0 top-0 z-[60] flex h-full w-[380px] max-w-[92vw] flex-col border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]"
+            className="fixed right-0 top-0 z-[60] flex h-dvh w-full flex-col overflow-y-auto border-l border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] sm:w-[380px] sm:max-w-[92vw] max-sm:pl-[env(safe-area-inset-left)] max-sm:pr-[env(safe-area-inset-right)] max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10 max-lg:[&_input]:min-h-10 max-lg:[&_select]:min-h-10"
           >
-            <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
+            <header className="flex shrink-0 items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
               <div className="flex items-center gap-2">
                 <div className="flex size-7 items-center justify-center rounded-lg bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
                   <Sparkles className="size-4" />
@@ -317,7 +317,7 @@ export function AgentPanel() {
                   <div className="text-[11px] text-[var(--color-fg-subtle)]">Deployment copilot</div>
                 </div>
               </div>
-              <button onClick={toggle} className="rounded-md p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)]" aria-label="Close agent">
+              <button onClick={toggle} className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)]" aria-label="Close agent">
                 <X className="size-4" />
               </button>
             </header>
@@ -336,7 +336,7 @@ export function AgentPanel() {
                     const el = e.currentTarget;
                     stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
                   }}
-                  className="flex-1 space-y-4 overflow-y-auto px-4 py-4"
+                  className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 [overflow-wrap:anywhere]"
                 >
                   {messages.length === 0 && <EmptyChat />}
                   {messages.map((m, i) => (
@@ -344,7 +344,7 @@ export function AgentPanel() {
                   ))}
                 </div>
 
-                <div className="border-t border-[var(--color-border)] p-3">
+                <div className="shrink-0 border-t border-[var(--color-border)] p-3">
                   <div className="flex items-end gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 focus-within:border-[var(--color-brand)]">
                     <textarea
                       value={input}
@@ -358,12 +358,12 @@ export function AgentPanel() {
                       rows={1}
                       aria-label="Message the copilot"
                       placeholder="Ask to deploy, configure, inspect…"
-                      className="max-h-32 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-[var(--color-fg-subtle)]"
+                      className="max-h-32 min-w-0 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-[var(--color-fg-subtle)] max-lg:min-h-10"
                     />
                     <button
                       onClick={send}
                       disabled={streaming || !input.trim()}
-                      className="rounded-lg bg-[var(--color-brand-strong)] p-1.5 text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-50"
+                      className="flex shrink-0 items-center justify-center rounded-lg bg-[var(--color-brand-strong)] p-1.5 text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-50"
                       aria-label="Send"
                     >
                       {streaming ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
@@ -553,7 +553,7 @@ function ConnectionBar({ config, onChanged }: { config: AgentConfig | null; onCh
   };
 
   return (
-    <div className="space-y-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
+    <div className="shrink-0 space-y-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
       <Field icon={<Server className="size-3.5" />} label="Provider">
         <select
           value={providerValue}

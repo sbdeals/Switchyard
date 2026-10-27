@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import {
   Globe,
   ExternalLink,
@@ -17,6 +17,8 @@ import {
   Power,
   Clock,
   X,
+  Copy,
+  Check,
 } from "lucide-react";
 import type {
   Application,
@@ -33,7 +35,6 @@ import type {
   Schedule,
 } from "@/lib/dokploy";
 import {
-  appLifecycleAction,
   updateApplicationAction,
   saveAppBuildTypeAction,
   setAppDockerSourceAction,
@@ -48,22 +49,35 @@ import {
   updateScheduleAction,
   deleteScheduleAction,
   runScheduleAction,
+  listScheduleExecutionsAction,
+  type ScheduleExecution,
+  loadServiceWebhookAction,
+  loadServiceCommandsAction,
 } from "@/app/actions";
 import {
   inputCls,
   Field,
   Info,
-  CopyButton,
-  LifecycleButtons,
   SaveRow,
   DangerZone,
   PublicUrlBar,
   PrivateNetwork,
   GenerateUrlBtn,
-  useLifecycle,
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { AppDeployControls } from "@/components/service/AppDeployControls";
+import { validateCron, validatePort } from "@/lib/validation";
+import { ResourceSettings } from "@/components/service/ResourceSettings";
+import { ImageTagPicker } from "@/components/service/ImageTagPicker";
+import { DomainStatus } from "@/components/service/DomainStatus";
+import { ComposeExportButton } from "@/components/service/ComposeExportDialog";
+import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
+import { DiagnosisCard } from "@/components/service/DiagnosisCard";
+import { ConfigAsCodePanel } from "@/components/service/ConfigAsCodePanel";
+import { useDirtyGuard } from "@/components/DirtyGuard";
+import { hasDirtyFields } from "@/lib/dirty-guard";
+import { loadClientSecret } from "@/lib/client-secret-loader";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -81,17 +95,12 @@ const BUILD_TYPES = Object.keys(BUILD_TYPE_LABELS) as BuildType[];
 
 const CERT_TYPES: CertificateType[] = ["none", "letsencrypt", "custom"];
 
-const useAppLifecycle = (app: Application) =>
-  useLifecycle((action) => appLifecycleAction(app.id, action));
-
 export function AppOverviewTab({ app }: { app: Application }) {
-  const { pending, error, run } = useAppLifecycle(app);
-
   return (
     <div className="space-y-5">
-      <PublicUrlBar domains={app.domains} status={app.status} />
+      <PublicUrlBar domains={app.domains} status={app.status} runtime={app.runtime} />
 
-      <LifecycleButtons status={app.status} pending={pending} error={error} run={run} />
+      <AppDeployControls app={app} />
 
       <PrivateNetwork host={app.appName} />
 
@@ -111,22 +120,25 @@ export function AppOverviewTab({ app }: { app: Application }) {
         <Info label="Build" value={app.buildType ?? "—"} />
         <Info label="Replicas" value={String(app.replicas ?? 1)} />
       </div>
+      <ComposeExportButton key={app.id} id={app.id} name={app.name} />
     </div>
   );
 }
+
+type DomainDraft = Omit<DomainInput, "port"> & { port: string };
 
 /** Shared host/port/https/cert-type editor used by the add form and edit rows. */
 function DomainFields({
   value,
   onChange,
 }: {
-  value: DomainInput;
-  onChange: (patch: Partial<DomainInput>) => void;
+  value: DomainDraft;
+  onChange: (patch: Partial<DomainDraft>) => void;
 }) {
   return (
     <div className="space-y-3">
       <div className="flex items-end gap-2">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Field label="Host">
             <input
               value={value.host}
@@ -136,18 +148,19 @@ function DomainFields({
             />
           </Field>
         </div>
-        <div className="w-24">
+        <div className="w-24 shrink-0">
           <Field label="Container port">
             <input
-              value={String(value.port)}
-              onChange={(e) => onChange({ port: Number(e.target.value.replace(/[^0-9]/g, "")) || 0 })}
+              value={value.port}
+              onChange={(e) => onChange({ port: e.target.value })}
+              inputMode="numeric"
               className={inputCls}
             />
           </Field>
         </div>
       </div>
       <div className="flex items-end gap-2">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Field label="Certificate">
             <select
               value={value.certificateType}
@@ -162,7 +175,7 @@ function DomainFields({
             </select>
           </Field>
         </div>
-        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs text-[var(--color-fg-muted)]">
+        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs text-[var(--color-fg-muted)] max-lg:min-h-10">
           <input
             type="checkbox"
             checked={value.https}
@@ -175,10 +188,10 @@ function DomainFields({
   );
 }
 
-function toInput(d: AppDomain): DomainInput {
+function toInput(d: AppDomain): DomainDraft {
   return {
     host: d.host,
-    port: d.port ?? 80,
+    port: String(d.port ?? 80),
     https: d.https,
     certificateType: d.certificateType,
     path: d.path ?? "/",
@@ -186,17 +199,20 @@ function toInput(d: AppDomain): DomainInput {
 }
 
 /** One attached domain: display row that expands into an inline editor. */
-function DomainRow({ d }: { d: AppDomain }) {
+function DomainRow({ d, appId }: { d: AppDomain; appId: string }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<DomainInput>(() => toInput(d));
+  const [draft, setDraft] = useState<DomainDraft>(() => toInput(d));
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  useDirtyGuard("Domains", editing && hasDirtyFields(draft, toInput(d)));
 
   function save() {
     if (!draft.host.trim()) return;
-    setError(null);
+    const validationError = validatePort(draft.port, "Container port");
+    setError(validationError);
+    if (validationError) return;
     start(async () => {
-      const res = await updateDomainAction(d.domainId, draft);
+      const res = await updateDomainAction(d.domainId, { ...draft, port: Number(draft.port) });
       if (res.ok) setEditing(false);
       else setError(res.error);
     });
@@ -242,68 +258,74 @@ function DomainRow({ d }: { d: AppDomain }) {
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm">
-      <Globe className="size-3.5 shrink-0 text-[var(--color-brand)]" />
-      <a
-        href={`${d.https ? "https" : "http"}://${d.host}`}
-        target="_blank"
-        rel="noreferrer"
-        className="flex min-w-0 flex-1 items-center gap-1.5 truncate hover:underline"
-      >
-        <span className="truncate">{d.host}</span>
-        {d.port && <span className="text-xs text-[var(--color-fg-subtle)]">:{d.port}</span>}
-        <ExternalLink className="size-3 shrink-0 text-[var(--color-fg-subtle)]" />
-      </a>
-      <span className="shrink-0 rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)]">
-        {d.certificateType === "letsencrypt" ? "LE" : d.https ? "HTTPS" : "HTTP"}
-      </span>
-      <button
-        onClick={() => {
-          setDraft(toInput(d));
-          setEditing(true);
-        }}
-        disabled={pending}
-        className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
-        title="Edit domain"
-        aria-label="Edit domain"
-        aria-expanded={editing}
-      >
-        <Pencil className="size-3.5" />
-      </button>
-      <button
-        onClick={remove}
-        disabled={pending}
-        className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
-        title="Remove domain"
-        aria-label="Remove domain"
-      >
-        {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-      </button>
-      {error && <span role="alert" className="text-xs text-[var(--color-danger)]">{error}</span>}
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div className="flex items-center gap-2 px-3 py-2 text-sm">
+        <Globe className="size-3.5 shrink-0 text-[var(--color-brand)]" />
+        <a
+          href={`${d.https ? "https" : "http"}://${d.host}`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex min-w-0 flex-1 items-center gap-1.5 truncate hover:underline"
+        >
+          <span className="truncate">{d.host}</span>
+          {d.port && <span className="text-xs text-[var(--color-fg-subtle)]">:{d.port}</span>}
+          <ExternalLink className="size-3 shrink-0 text-[var(--color-fg-subtle)]" />
+        </a>
+        <span className="shrink-0 rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)]">
+          {d.certificateType === "letsencrypt" ? "LE" : d.https ? "HTTPS" : "HTTP"}
+        </span>
+        <button
+          onClick={() => {
+            setDraft(toInput(d));
+            setEditing(true);
+          }}
+          disabled={pending}
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+          title="Edit domain"
+          aria-label="Edit domain"
+          aria-expanded={editing}
+        >
+          <Pencil className="size-3.5" />
+        </button>
+        <button
+          onClick={remove}
+          disabled={pending}
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
+          title="Remove domain"
+          aria-label="Remove domain"
+        >
+          {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+        </button>
+        {error && <span role="alert" className="text-xs text-[var(--color-danger)]">{error}</span>}
+      </div>
+      <DomainStatus serviceType="application" serviceId={appId} domainId={d.domainId} host={d.host} https={d.https} path={d.path} />
     </div>
   );
 }
 
-const NEW_DOMAIN: DomainInput = {
+const NEW_DOMAIN: DomainDraft = {
   host: "",
-  port: 80,
+  port: "80",
   https: true,
   certificateType: "letsencrypt",
   path: "/",
 };
 
 export function DomainsTab({ app }: { app: Application }) {
-  const [draft, setDraft] = useState<DomainInput>(NEW_DOMAIN);
+  const [draft, setDraft] = useState<DomainDraft>(NEW_DOMAIN);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
+  useDirtyGuard("Domains", hasDirtyFields(draft, NEW_DOMAIN));
 
   function add() {
     if (!draft.host.trim()) return;
-    setError(null);
+    const validationError = validatePort(draft.port, "Container port");
+    setError(validationError);
     setGenerated(null);
+    if (validationError) return;
     start(async () => {
-      const res = await createDomainAction(app.id, draft);
+      const res = await createDomainAction(app.id, { ...draft, port: Number(draft.port) });
       if (res.ok) setDraft(NEW_DOMAIN);
       else setError(res.error);
     });
@@ -311,10 +333,12 @@ export function DomainsTab({ app }: { app: Application }) {
 
   // Attach a random routable host with no typing, on the form's current port.
   function generate() {
-    setError(null);
+    const validationError = validatePort(draft.port, "Container port");
+    setError(validationError);
     setGenerated(null);
+    if (validationError) return;
     start(async () => {
-      const res = await generateDomainAction(app.id, app.appName, draft.port);
+      const res = await generateDomainAction(app.id, app.appName, Number(draft.port));
       if (res.ok) setGenerated(res.host);
       else setError(res.error);
     });
@@ -331,7 +355,7 @@ export function DomainsTab({ app }: { app: Application }) {
       {app.domains.length > 0 ? (
         <div className="space-y-2">
           {app.domains.map((d) => (
-            <DomainRow key={d.domainId} d={d} />
+            <DomainRow key={d.domainId} d={d} appId={app.id} />
           ))}
         </div>
       ) : (
@@ -366,11 +390,87 @@ export function DomainsTab({ app }: { app: Application }) {
   );
 }
 
-export function DeploymentsTab({ app }: { app: Application }) {
+export function DeploymentsTab({ app, onNavigate }: { app: Application; onNavigate: (tab: DiagnosisTab) => void }) {
   return (
     <div className="space-y-6">
       {app.sourceType === "git" && <AutoDeployPanel app={app} />}
-      <DeploymentHistory deployments={app.deployments} />
+      <DeploymentHistory deployments={app.deployments} serviceKind="application" onNavigate={onNavigate} />
+    </div>
+  );
+}
+
+function WebhookUrl({ app }: { app: Application }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const live = useRef(false);
+
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; };
+  }, []);
+
+  async function load(copy: boolean) {
+    setPending(true);
+    setError(null);
+    setCopied(false);
+    try {
+      const res = await loadServiceWebhookAction(app.id);
+      if (!live.current) return;
+      if (!res.ok || !res.webhookUrl) {
+        setError("Could not load deploy webhook.");
+        return;
+      }
+      if (copy) {
+        await navigator.clipboard.writeText(res.webhookUrl);
+        if (live.current) setCopied(true);
+      } else {
+        setUrl(res.webhookUrl);
+      }
+    } catch {
+      if (live.current) setError(copy ? "Could not copy deploy webhook." : "Could not load deploy webhook.");
+    } finally {
+      if (live.current) setPending(false);
+    }
+  }
+
+  if (!app.hasWebhook) {
+    return (
+      <p className="text-xs text-[var(--color-fg-subtle)]">
+        No webhook token yet — deploy the app once to generate one.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-2.5">
+        <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
+          {url ?? "••••••••••••••••"}
+        </code>
+        <button
+          type="button"
+          onClick={() => url ? setUrl(null) : void load(false)}
+          disabled={pending}
+          aria-label={url ? "Hide deploy webhook" : "Reveal deploy webhook"}
+          className="inline-flex items-center gap-1 text-xs text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+        >
+          {pending ? <Loader2 className="size-3.5 animate-spin" /> : url ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+          {url ? "Hide" : "Reveal"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void load(true)}
+          disabled={pending}
+          aria-label="Copy deploy webhook"
+          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+        >
+          {copied ? <Check className="size-3.5 text-[var(--color-ok)]" /> : <Copy className="size-3.5" />}
+          <span aria-live="polite" className="sr-only">{copied ? "Copied" : ""}</span>
+        </button>
+      </div>
+      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );
 }
@@ -392,6 +492,7 @@ function AutoDeployPanel({ app }: { app: Application }) {
     branch !== (app.branch ?? "main") ||
     autoDeploy !== app.autoDeploy ||
     watchList.join("\n") !== app.watchPaths.join("\n");
+  useDirtyGuard("Deployments", dirty);
 
   function save() {
     setError(null);
@@ -416,18 +517,7 @@ function AutoDeployPanel({ app }: { app: Application }) {
       </div>
 
       <Field label="Deploy webhook URL" hint="add to your Git host">
-        {app.webhookUrl ? (
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
-            <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
-              {app.webhookUrl}
-            </code>
-            <CopyButton text={app.webhookUrl} />
-          </div>
-        ) : (
-          <p className="text-xs text-[var(--color-fg-subtle)]">
-            No webhook token yet — deploy the app once to generate one.
-          </p>
-        )}
+        <WebhookUrl key={app.id} app={app} />
       </Field>
       <p className="text-[11px] leading-relaxed text-[var(--color-fg-subtle)]">
         Add this as a push webhook in your Git host (GitHub: Settings → Webhooks,
@@ -492,7 +582,11 @@ function AutoDeployPanel({ app }: { app: Application }) {
   );
 }
 
-export function DeploymentHistory({ deployments: history }: { deployments: AppDeployment[] }) {
+export function DeploymentHistory({ deployments: history, serviceKind, onNavigate }: {
+  deployments: AppDeployment[];
+  serviceKind: "application" | "compose";
+  onNavigate: (tab: DiagnosisTab) => void;
+}) {
   const deployments = [...history].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const color = (s: string) =>
     s === "done" ? "var(--color-ok)" : s === "error" ? "var(--color-danger)" : s === "running" ? "var(--color-warn)" : "var(--color-idle)";
@@ -505,20 +599,28 @@ export function DeploymentHistory({ deployments: history }: { deployments: AppDe
         deployments.map((d) => (
           <div
             key={d.deploymentId}
-            className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
+            className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5"
           >
-            <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
-            {d.rollbackId && <span className="sr-only">{d.status}</span>}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm">{d.title}</div>
-              <div className="text-[11px] text-[var(--color-fg-subtle)]">
-                {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
+            <div className="flex items-center gap-3">
+              <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
+              {d.rollbackId && <span className="sr-only">{d.status}</span>}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm">{d.title}</div>
+                {d.description && d.description !== d.title && (
+                  <p className="whitespace-pre-wrap break-words text-xs text-[var(--color-fg-muted)]">{d.description}</p>
+                )}
+                <div className="text-[11px] text-[var(--color-fg-subtle)]">
+                  {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
+                </div>
               </div>
+              {d.rollbackId ? (
+                <RollbackButton rollbackId={d.rollbackId} title={d.title} />
+              ) : (
+                <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
+              )}
             </div>
-            {d.rollbackId ? (
-              <RollbackButton rollbackId={d.rollbackId} title={d.title} />
-            ) : (
-              <span className="text-xs capitalize text-[var(--color-fg-muted)]">{d.status}</span>
+            {d.status === "error" && (
+              <DiagnosisCard deploymentId={d.deploymentId} serviceKind={serviceKind} onNavigate={onNavigate} />
             )}
           </div>
         ))
@@ -564,7 +666,7 @@ function RedeployToggle({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
+    <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)] max-lg:min-h-10">
       <input
         type="checkbox"
         checked={checked}
@@ -588,7 +690,8 @@ export function AppBuildTab({ app }: { app: Application }) {
   return (
     <div className="space-y-6">
       {isDocker ? <DockerSourceForm app={app} /> : <BuildStrategyForm app={app} />}
-      <StartCommandForm app={app} />
+      <AppCommandEditor key={app.id} app={app} />
+      {!isDocker && <ConfigAsCodePanel key={app.id} app={app} />}
     </div>
   );
 }
@@ -609,6 +712,7 @@ function BuildStrategyForm({ app }: { app: Application }) {
       (dockerfile !== (app.dockerfile ?? "Dockerfile") ||
         contextPath !== (app.dockerContextPath ?? "") ||
         buildStage !== (app.dockerBuildStage ?? "")));
+  useDirtyGuard("Build", dirty);
 
   function save() {
     setError(null);
@@ -673,7 +777,7 @@ function BuildStrategyForm({ app }: { app: Application }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <RedeployToggle checked={redeploy} onChange={setRedeploy} />
         <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
       </div>
@@ -683,22 +787,24 @@ function BuildStrategyForm({ app }: { app: Application }) {
 
 function DockerSourceForm({ app }: { app: Application }) {
   const [image, setImage] = useState(app.dockerImage ?? "");
-  const [registryUrl, setRegistryUrl] = useState(app.registryUrl ?? "");
-  const [username, setUsername] = useState("");
+  const [registryUrl, setRegistryUrl] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [password, setPassword] = useState("");
+  const [clearCredentials, setClearCredentials] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [redeploy, setRedeploy] = useState(false);
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
 
-  // Credentials are never read back from Dokploy, so treat any input here (or an
-  // image/registry change) as a reason to resubmit the whole docker source.
+  // Null drafts mean untouched: the server rereads their current values.
   const dirty =
     image.trim() !== (app.dockerImage ?? "") ||
-    registryUrl.trim() !== (app.registryUrl ?? "") ||
-    username !== "" ||
-    password !== "";
+    (registryUrl !== null && registryUrl.trim() !== (app.registryUrl ?? "")) ||
+    (username !== null && username.trim() !== "" && username.trim() !== (app.registryUsername ?? "")) ||
+    password !== "" ||
+    clearCredentials;
+  useDirtyGuard("Build", dirty);
 
   function save() {
     setError(null);
@@ -706,12 +812,19 @@ function DockerSourceForm({ app }: { app: Application }) {
       const res = await setAppDockerSourceAction(
         app.id,
         image,
-        { username: username.trim(), password, registryUrl: registryUrl.trim() },
+        {
+          username: username?.trim() || undefined,
+          password: password || undefined,
+          registryUrl: registryUrl?.trim(),
+          clearCredentials,
+        },
         redeploy
       );
       if (res.ok) {
-        setUsername("");
+        setRegistryUrl(null);
+        setUsername(null);
         setPassword("");
+        setClearCredentials(false);
         flashSaved();
       } else setError(res.error);
     });
@@ -720,22 +833,16 @@ function DockerSourceForm({ app }: { app: Application }) {
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-[var(--color-fg)]">Image &amp; registry</h3>
-      <Field label="Image" hint="repo:tag">
-        <input
-          value={image}
-          onChange={(e) => setImage(e.target.value)}
-          placeholder="registry.example.com/app:latest"
-          className={inputCls}
-        />
-      </Field>
+      <ImageTagPicker image={image} currentImage={app.dockerImage ?? ""} onChange={setImage} />
       <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
         <p className="text-[11px] text-[var(--color-fg-subtle)]">
-          Private registry credentials (leave blank for public images).
+          Leave username or password blank to keep saved credentials. Clear credentials for public images.
         </p>
         <Field label="Registry URL" hint="optional">
           <input
-            value={registryUrl}
+            value={registryUrl ?? app.registryUrl ?? ""}
             onChange={(e) => setRegistryUrl(e.target.value)}
+            disabled={clearCredentials}
             placeholder="registry.example.com"
             className={inputCls}
           />
@@ -743,8 +850,9 @@ function DockerSourceForm({ app }: { app: Application }) {
         <div className="grid grid-cols-2 gap-3">
           <Field label="Username">
             <input
-              value={username}
+              value={username ?? app.registryUsername ?? ""}
               onChange={(e) => setUsername(e.target.value)}
+              disabled={clearCredentials}
               autoComplete="off"
               className={inputCls}
             />
@@ -755,23 +863,34 @@ function DockerSourceForm({ app }: { app: Application }) {
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder={app.hasRegistryPassword ? "Password saved — leave blank to keep" : ""}
+                disabled={clearCredentials}
                 autoComplete="off"
-                className={inputCls}
+                className={`${inputCls} max-lg:pr-12`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((s) => !s)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 aria-pressed={showPassword}
-                className="absolute inset-y-0 right-2 flex items-center text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+                className="absolute inset-y-0 right-2 flex items-center justify-center text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
               >
                 {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
               </button>
             </div>
           </Field>
         </div>
+        <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
+          <input
+            type="checkbox"
+            checked={clearCredentials}
+            onChange={(e) => setClearCredentials(e.target.checked)}
+            className="accent-[var(--color-brand)]"
+          />
+          Clear credentials (including registry URL) on save
+        </label>
       </div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <RedeployToggle checked={redeploy} onChange={setRedeploy} />
         <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
       </div>
@@ -779,7 +898,36 @@ function DockerSourceForm({ app }: { app: Application }) {
   );
 }
 
-function StartCommandForm({ app }: { app: Application }) {
+function AppCommandEditor({ app, healthcheck = false }: { app: Application; healthcheck?: boolean }) {
+  const [commands, setCommands] = useState<Pick<Application, "command" | "healthCheckSwarm"> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => loadClientSecret(
+    () => loadServiceCommandsAction("application", app.id),
+    (res) => {
+      if (res.ok) setCommands({ command: res.command, healthCheckSwarm: res.healthCheckSwarm });
+      else setError("Could not load service commands.");
+    },
+    () => setError("Could not load service commands."),
+  ), [app.id]);
+
+  if (error) return <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>;
+  if (!commands) {
+    return (
+      <div role="status" aria-label="Loading service commands" className="flex items-center gap-2 text-xs text-[var(--color-fg-subtle)]">
+        <Loader2 className="size-4 animate-spin" /> Loading service commands…
+      </div>
+    );
+  }
+  const loadedApp = { ...app, ...commands };
+  return healthcheck ? (
+    <HealthCheckForm app={loadedApp} onSaved={(healthCheckSwarm) => setCommands({ ...commands, healthCheckSwarm })} />
+  ) : (
+    <StartCommandForm app={loadedApp} onSaved={(command) => setCommands({ ...commands, command })} />
+  );
+}
+
+function StartCommandForm({ app, onSaved }: { app: Application; onSaved: (command: string | null) => void }) {
   const [command, setCommand] = useState(app.command ?? "");
   const [redeploy, setRedeploy] = useState(false);
   const [saving, startSave] = useTransition();
@@ -787,6 +935,7 @@ function StartCommandForm({ app }: { app: Application }) {
   const [error, setError] = useState<string | null>(null);
 
   const dirty = command !== (app.command ?? "");
+  useDirtyGuard("Build", dirty);
 
   function save() {
     setError(null);
@@ -796,7 +945,10 @@ function StartCommandForm({ app }: { app: Application }) {
         { command: command.trim() || null },
         redeploy
       );
-      if (res.ok) flashSaved();
+      if (res.ok) {
+        onSaved(command.trim() || null);
+        flashSaved();
+      }
       else setError(res.error);
     });
   }
@@ -812,7 +964,7 @@ function StartCommandForm({ app }: { app: Application }) {
           className={`${inputCls} font-mono`}
         />
       </Field>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <RedeployToggle checked={redeploy} onChange={setRedeploy} />
         <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
       </div>
@@ -863,11 +1015,14 @@ function useDeploySave(app: Application) {
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
-  const save = (patch: ApplicationPatch) => {
+  const save = (patch: ApplicationPatch, onSaved?: () => void) => {
     setError(null);
     startSave(async () => {
       const res = await updateApplicationAction(app.id, patch, redeploy);
-      if (res.ok) flashSaved();
+      if (res.ok) {
+        onSaved?.();
+        flashSaved();
+      }
       else setError(res.error);
     });
   };
@@ -879,6 +1034,7 @@ function ReplicasForm({ app }: { app: Application }) {
   const [replicas, setReplicas] = useState(current);
   const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
   const dirty = replicas !== "" && replicas !== current;
+  useDirtyGuard("Deploy", dirty);
 
   return (
     <DeploySection
@@ -920,6 +1076,7 @@ function RestartPolicyForm({ app }: { app: Application }) {
   const [maxAttempts, setMaxAttempts] = useState(curMax);
   const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
   const dirty = condition !== curCond || maxAttempts !== curMax;
+  useDirtyGuard("Deploy", dirty);
 
   function onSave() {
     // Merge over any existing policy so Delay/Window set via Dokploy's advanced
@@ -974,7 +1131,7 @@ function RestartPolicyForm({ app }: { app: Application }) {
   );
 }
 
-function HealthCheckForm({ app }: { app: Application }) {
+function HealthCheckForm({ app, onSaved }: { app: Application; onSaved: (healthCheck: HealthCheckSwarm | null) => void }) {
   const hc = app.healthCheckSwarm;
   const curCmd = decodeTest(hc?.Test);
   const curInterval = nsToSec(hc?.Interval);
@@ -993,6 +1150,7 @@ function HealthCheckForm({ app }: { app: Application }) {
     timeoutSec !== curTimeout ||
     startSec !== curStart ||
     retries !== curRetries;
+  useDirtyGuard("Deploy", dirty);
 
   const decimal = (v: string) => v.replace(/[^0-9.]/g, "");
 
@@ -1004,7 +1162,8 @@ function HealthCheckForm({ app }: { app: Application }) {
     if (timeoutSec !== "") next.Timeout = secToNs(timeoutSec);
     if (startSec !== "") next.StartPeriod = secToNs(startSec);
     if (retries !== "") next.Retries = Number(retries);
-    save({ healthCheckSwarm: Object.keys(next).length > 0 ? next : null });
+    const healthCheckSwarm = Object.keys(next).length > 0 ? next : null;
+    save({ healthCheckSwarm }, () => onSaved(healthCheckSwarm));
   }
 
   return (
@@ -1083,44 +1242,24 @@ export function AppDeployTab({ app }: { app: Application }) {
       </p>
       <ReplicasForm app={app} />
       <RestartPolicyForm app={app} />
-      <HealthCheckForm app={app} />
+      <AppCommandEditor key={app.id} app={app} healthcheck />
     </div>
   );
 }
 
 export function AppSettingsTab({ app, onClose }: { app: Application; onClose: () => void }) {
-  const { pending: lifePending, error: lifeError, run } = useAppLifecycle(app);
   const [name, setName] = useState(app.name);
-  const [cpu, setCpu] = useState(app.cpuLimit ?? "");
-  const [mem, setMem] = useState(app.memoryLimit ?? "");
-  const [cpuRes, setCpuRes] = useState(app.cpuReservation ?? "");
-  const [memRes, setMemRes] = useState(app.memoryReservation ?? "");
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const resourcesDirty =
-    cpu !== (app.cpuLimit ?? "") ||
-    mem !== (app.memoryLimit ?? "") ||
-    cpuRes !== (app.cpuReservation ?? "") ||
-    memRes !== (app.memoryReservation ?? "");
-  const dirty = name !== app.name || resourcesDirty;
+  const dirty = name !== app.name;
+  useDirtyGuard("Settings", dirty);
 
   function save() {
     setSaveError(null);
     startSave(async () => {
-      const res = await updateApplicationAction(
-        app.id,
-        {
-          name: name.trim(),
-          cpuLimit: cpu || null,
-          memoryLimit: mem || null,
-          cpuReservation: cpuRes || null,
-          memoryReservation: memRes || null,
-        },
-        // Resource changes only bind on redeploy.
-        resourcesDirty
-      );
+      const res = await updateApplicationAction(app.id, { name: name.trim() });
       if (res.ok) flashSaved();
       else setSaveError(res.error);
     });
@@ -1132,31 +1271,17 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
         <Field label="Name">
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="CPU limit" hint='e.g. "0.5"'>
-            <input value={cpu} onChange={(e) => setCpu(e.target.value)} placeholder="unlimited" className={inputCls} />
-          </Field>
-          <Field label="Memory limit" hint='e.g. "256m"'>
-            <input value={mem} onChange={(e) => setMem(e.target.value)} placeholder="unlimited" className={inputCls} />
-          </Field>
-          <Field label="CPU reservation" hint="soft floor">
-            <input value={cpuRes} onChange={(e) => setCpuRes(e.target.value)} placeholder="none" className={inputCls} />
-          </Field>
-          <Field label="Memory reservation" hint="soft floor">
-            <input value={memRes} onChange={(e) => setMemRes(e.target.value)} placeholder="none" className={inputCls} />
-          </Field>
-        </div>
         <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
       </div>
+
+      <ResourceSettings key={app.id} service={app} />
 
       <Info label="App name" value={app.appName} mono />
 
       <DangerZone
-        name={app.name}
+        service={app}
         message="Destroying removes the application and its container."
-        pending={lifePending}
-        error={lifeError}
-        onDestroy={() => run("remove", onClose)}
+        onDeleted={onClose}
       />
     </div>
   );
@@ -1164,10 +1289,15 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
 
 // --- schedules --------------------------------------------------------------
 
+function scheduleRunDisabledReason(runtime: Application["runtime"]): string | null {
+  return runtime && (runtime.total === 0 || runtime.running === 0) ? "Start the service first" : null;
+}
+
 export function SchedulesTab({ app }: { app: Application }) {
   const [schedules, setSchedules] = useState<Schedule[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, startLoad] = useTransition();
+  const runDisabledReason = scheduleRunDisabledReason(app.runtime);
 
   const reload = useCallback(() => {
     startLoad(async () => {
@@ -1202,7 +1332,9 @@ export function SchedulesTab({ app }: { app: Application }) {
         ) : schedules.length === 0 ? (
           <p className="text-xs text-[var(--color-fg-subtle)]">No schedules yet.</p>
         ) : (
-          schedules.map((s) => <ScheduleRow key={s.scheduleId} schedule={s} onChanged={reload} />)
+          schedules.map((s) => (
+            <ScheduleRow key={s.scheduleId} schedule={s} onChanged={reload} runDisabledReason={runDisabledReason} />
+          ))
         )}
       </div>
       {loading && schedules !== null && (
@@ -1229,11 +1361,13 @@ function CreateScheduleForm({
   const [shell, setShell] = useState<"bash" | "sh">("bash");
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const cronErrorId = useId();
+  const cronError = cron.trim() ? validateCron(cron) : null;
 
   const valid = name.trim() && cron.trim() && command.trim();
 
   function create() {
-    if (!valid) return;
+    if (!valid || cronError) return;
     setError(null);
     start(async () => {
       const res = await createScheduleAction({
@@ -1269,13 +1403,16 @@ function CreateScheduleForm({
             className={inputCls}
           />
         </Field>
-        <Field label="Cron expression" hint="min hour dom mon dow">
+        <Field label="Cron expression" hint="[sec] min hour dom mon dow">
           <input
             value={cron}
             onChange={(e) => setCron(e.target.value)}
             placeholder={CRON_PLACEHOLDER}
+            aria-invalid={Boolean(cronError)}
+            aria-describedby={cronError ? cronErrorId : undefined}
             className={cn(inputCls, "font-mono")}
           />
+          {cronError && <p id={cronErrorId} role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{cronError}</p>}
         </Field>
       </div>
       <Field label="Command">
@@ -1313,16 +1450,73 @@ function CreateScheduleForm({
   );
 }
 
-function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: () => void }) {
+function ScheduleExecutionHistory({ scheduleId, refreshKey }: { scheduleId: string; refreshKey: number }) {
+  const [executions, setExecutions] = useState<ScheduleExecution[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, start] = useTransition();
+
+  const reload = useCallback(() => {
+    start(async () => {
+      try {
+        const res = await listScheduleExecutionsAction(scheduleId);
+        if (res.ok) {
+          setExecutions([...res.executions].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+          setError(null);
+        } else {
+          setError(res.error);
+        }
+      } catch {
+        setError("Could not load execution history. Refresh to try again.");
+      }
+    });
+  }, [scheduleId]);
+
+  useEffect(() => reload(), [reload, refreshKey]);
+
+  return (
+    <div className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3">
+      <div className="flex items-center justify-between gap-2 text-xs text-[var(--color-fg-muted)]">
+        <p>Execution history (newest first)</p>
+        <button onClick={reload} disabled={loading} className="hover:text-[var(--color-fg)] disabled:opacity-40">
+          {loading ? "Refreshing…" : "Refresh history"}
+        </button>
+      </div>
+      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
+      {!error && executions?.length === 0 && (
+        <p className="text-xs text-[var(--color-fg-subtle)]">No executions yet.</p>
+      )}
+      {executions?.map((execution) => (
+        <div key={execution.deploymentId} className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-[var(--color-fg-subtle)]">
+            {execution.createdAt ? new Date(execution.createdAt).toLocaleString() : "—"}
+          </span>
+          <span className={cn("capitalize", execution.status === "error" ? "text-[var(--color-danger)]" : "text-[var(--color-fg-muted)]")}>
+            {execution.status}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ScheduleRow({ schedule, onChanged, runDisabledReason }: {
+  schedule: Schedule;
+  onChanged: () => void;
+  runDisabledReason: string | null;
+}) {
   const [editing, setEditing] = useState(false);
   const [busy, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [runMessage, setRunMessage] = useState<string | null>(null);
+  const [historyRefresh, setHistoryRefresh] = useState<number | null>(null);
 
   // Draft fields, initialized from the schedule; reset when the row collapses.
   const [name, setName] = useState(schedule.name);
   const [cron, setCron] = useState(schedule.cronExpression);
   const [command, setCommand] = useState(schedule.command);
   const [shell, setShell] = useState(schedule.shellType);
+  const cronErrorId = useId();
+  const cronError = validateCron(cron);
 
   function openEdit() {
     setName(schedule.name);
@@ -1330,18 +1524,26 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
     setCommand(schedule.command);
     setShell(schedule.shellType);
     setError(null);
+    setRunMessage(null);
     setEditing(true);
   }
 
   // update reuses Dokploy's create schema, so every field is resent each time.
   function runUpdate(patch: { enabled?: boolean }, after?: () => void) {
+    const toggling = patch.enabled !== undefined;
+    const cronExpression = toggling ? schedule.cronExpression : cron.trim();
+    if (validateCron(cronExpression)) {
+      if (toggling) openEdit();
+      return;
+    }
     setError(null);
+    setRunMessage(null);
     start(async () => {
       const res = await updateScheduleAction(schedule.scheduleId, {
-        name: name.trim() || schedule.name,
-        cronExpression: cron.trim() || schedule.cronExpression,
-        command: command.trim() || schedule.command,
-        shellType: shell,
+        name: toggling ? schedule.name : name.trim(),
+        cronExpression,
+        command: toggling ? schedule.command : command.trim(),
+        shellType: toggling ? schedule.shellType : shell,
         enabled: patch.enabled ?? schedule.enabled,
       });
       if (res.ok) after?.();
@@ -1351,10 +1553,28 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
 
   function act(fn: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     setError(null);
+    setRunMessage(null);
     start(async () => {
       const res = await fn();
       if (res.ok) onChanged();
       else setError(res.error);
+    });
+  }
+
+  function runNow() {
+    if (busy || runDisabledReason) return;
+    setError(null);
+    setRunMessage(null);
+    start(async () => {
+      try {
+        const res = await runScheduleAction(schedule.scheduleId);
+        if (res.ok) setRunMessage(res.message);
+        else setError(res.error);
+      } catch {
+        setError("Could not confirm the run. Check execution history before retrying.");
+      }
+      // Failed commands also produce deployments; refresh after every attempt.
+      setHistoryRefresh((v) => (v ?? 0) + 1);
     });
   }
 
@@ -1382,9 +1602,11 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
           </code>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <IconBtn title="Run now" onClick={() => act(() => runScheduleAction(schedule.scheduleId))} disabled={busy}>
-            <Play className="size-3.5" />
-          </IconBtn>
+          <span title={runDisabledReason ?? undefined}>
+            <IconBtn title={runDisabledReason ?? "Run now"} onClick={runNow} disabled={busy || !!runDisabledReason}>
+              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+            </IconBtn>
+          </span>
           <IconBtn
             title={schedule.enabled ? "Disable" : "Enable"}
             onClick={() => runUpdate({ enabled: !schedule.enabled }, onChanged)}
@@ -1418,8 +1640,11 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
               <input
                 value={cron}
                 onChange={(e) => setCron(e.target.value)}
+                aria-invalid={Boolean(cronError)}
+                aria-describedby={cronError ? cronErrorId : undefined}
                 className={cn(inputCls, "font-mono")}
               />
+              {cronError && <p id={cronErrorId} role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{cronError}</p>}
             </Field>
           </div>
           <Field label="Command">
@@ -1457,6 +1682,14 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
       )}
 
       {error && <p role="alert" className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
+      {runMessage && <p role="status" className="mt-2 text-xs text-[var(--color-ok)]">{runMessage}</p>}
+      {historyRefresh === null ? (
+        <button onClick={() => setHistoryRefresh(0)} className="mt-2 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]">
+          View execution history
+        </button>
+      ) : (
+        <ScheduleExecutionHistory scheduleId={schedule.scheduleId} refreshKey={historyRefresh} />
+      )}
     </div>
   );
 }
@@ -1481,7 +1714,7 @@ function IconBtn({
       aria-expanded={ariaExpanded}
       onClick={onClick}
       disabled={disabled}
-      className="rounded-md p-1.5 text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)] disabled:opacity-40"
+      className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)] disabled:opacity-40"
     >
       {children}
     </button>

@@ -19,14 +19,20 @@ source of truth for HOW the stack is provisioned.
    adoption/auto-bump, generated admin credentials, `ensureDokploy`,
    `ensureSwitchyard`, deep health check. Progress streams into the status
    view; failures become friendly error cards (including the stale-volume trap,
-   which offers "keep data" (`--force`) vs "fresh start" (purge)).
+   which offers "keep data" (`--force`) vs a confirmed control-plane reset).
 4. **Auto-login**: mints the dashboard's `switchyard_session` cookie itself
    (it knows the admin credentials and the session secret from config.json)
    and injects it into Electron's cookie jar — the window opens straight into
    the workspace. Mirror of `dashboard/src/lib/session.ts`; keep in sync.
-5. **Tray**: open dashboard/Dokploy, start/stop/restart the stack, reset
-   everything (purge + reinstall), start-at-login toggle, update check, quit
+5. **Tray**: open dashboard/Dokploy, start/stop/restart the control plane, reset
+   control-plane data (purge + reinstall), start-at-login toggle, update check, quit
    (the stack keeps running — containers are `restart unless-stopped`).
+
+Stop keeps deployed workloads running and preserves all volumes; ingress
+stops, so app URLs may be unavailable. Reset deletes Dokploy metadata and
+control-plane data, leaving workloads and their volumes orphaned. Remove
+workloads through Dokploy before resetting for a clean install. Automatic
+ownership-aware workload/orphan cleanup remains a follow-up.
 
 Auto-update: `electron-updater` against GitHub Releases (`latest.yml` is
 published by the release workflow). Windows works unsigned; macOS auto-update
@@ -167,3 +173,40 @@ The next `vX.Y.Z` tag after adding either set produces a signed
 `Switchyard-Setup-<version>.exe`. (Later, once every user is on a signed
 build, `win.verifyUpdateCodeSignature`/`publisherName` can be enabled so
 auto-updates verify the signature too.)
+
+### winget distribution (free, sidesteps SmartScreen without signing)
+
+SmartScreen's "Windows protected your PC" dialog is triggered by the
+mark-of-the-web that browsers stamp on downloaded files. Installers fetched
+by `winget install sbdeals.Switchyard` never pass through a browser, so the
+dialog simply doesn't appear — signed or not. This doesn't replace signing
+(README download buttons still warn until a certificate exists); it adds a
+warning-free install path that costs nothing.
+
+The release workflow's `winget` job keeps the manifest current: on every
+`vX.Y.Z` tag it submits a version-bump PR to
+[microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) via
+`wingetcreate`, then their automated validation + a moderator merge it
+(typically within a day or two). Like the signing legs it's opt-in: without
+the secret below the job logs a skip and stays green.
+
+One-time setup:
+
+1. **Bootstrap the package** (the auto-bump job can only *update* an existing
+   package). With any published release live, run on a Windows machine:
+
+   ```
+   winget install wingetcreate
+   wingetcreate new https://github.com/sbdeals/Switchyard/releases/download/vX.Y.Z/Switchyard-Setup-X.Y.Z.exe
+   ```
+
+   Use the version-numbered installer URL, **not** the stable
+   `…/latest/download/Switchyard-Setup-Windows.exe` alias — winget manifests
+   pin an exact URL + SHA-256 per version, and the alias's contents change
+   every release. Suggested answers: package identifier `sbdeals.Switchyard`,
+   moniker `switchyard`, license `MIT`, installer type is auto-detected
+   (NSIS). Let `wingetcreate` submit the PR, then wait for winget-pkgs to
+   merge it.
+2. **Add the repo secret** `WINGET_TOKEN`: a classic GitHub PAT with the
+   `public_repo` scope (it only needs to fork winget-pkgs and open PRs
+   there). Every later release tag then bumps the manifest automatically.

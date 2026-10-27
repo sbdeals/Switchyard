@@ -1,14 +1,18 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Database as DatabaseIcon, Box, Layers } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
+import { hasSelectionModifier } from "@/lib/bulk-selection";
 import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
+import { serviceNotesSubtitle } from "@/lib/service-notes";
+import { SHORTCUTS } from "@/lib/shortcuts";
+import { resolveServiceIcon } from "@/lib/service-icon";
+import { ServiceIcon } from "@/components/ServiceIcon";
 
 export interface ServiceNodeData extends Record<string, unknown> {
   service: Service;
-  /** Catalog logo URL for the app (Railway-style), or null for the generic icon. */
+  /** Exact catalog logo match, or null to use the local badge. */
   logo: string | null;
   onSelect: (service: Service) => void;
 }
@@ -17,23 +21,29 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
   const { service, logo, onSelect } = data;
   const accent = serviceAccent(service);
   const status = resolveServiceDisplay(service.status, service.runtime);
+  const notesSubtitle = serviceNotesSubtitle(service.description);
 
+  // React Flow's nokey class lets Shift-click select a node; Shift-drag on the
+  // surrounding canvas still starts the selection rectangle.
   return (
     <div
       role="button"
       tabIndex={0}
+      aria-pressed={selected}
       aria-label={`${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""} — open details`}
-      onClick={() => onSelect(service)}
+      onClick={(e) => {
+        if (!hasSelectionModifier(e)) onSelect(service);
+      }}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (SHORTCUTS.openService.keys.some((key) => key === e.key)) {
           e.preventDefault();
-          onSelect(service);
+          if (!hasSelectionModifier(e)) onSelect(service);
         }
       }}
-      className="w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+      className="nokey w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
       style={{
         borderColor: selected ? accent : "var(--color-border-strong)",
-        boxShadow: selected ? `0 0 0 1px ${accent}, 0 8px 30px -12px ${accent}80` : undefined,
+        boxShadow: selected ? `0 0 0 1px ${accent}, 0 8px 30px -12px color-mix(in srgb, ${accent} 50%, transparent)` : undefined,
       }}
     >
       <Handle type="target" position={Position.Left} style={{ background: accent, border: "none" }} />
@@ -43,8 +53,11 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
         <ServiceLogo service={service} logo={logo} accent={accent} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{service.name}</div>
-          <div className="truncate text-[11px] text-[var(--color-fg-muted)]">
-            {serviceSubtitle(service)}
+          <div
+            title={notesSubtitle ? service.description ?? undefined : undefined}
+            className="truncate text-[11px] text-[var(--color-fg-muted)]"
+          >
+            {notesSubtitle || serviceSubtitle(service)}
           </div>
           <div className="truncate text-[10px] text-[var(--color-fg-subtle)]">
             {service.projectName} / {service.environmentName}
@@ -72,42 +85,29 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
   );
 }
 
-/**
- * The app's catalog logo, falling back to the kind icon when there is no match
- * or the CDN asset is missing (it soft-404s to HTML, which <img> treats as a
- * broken image — onError swaps the icon back in).
- */
+/** Shared catalog-first service identity, with local SVG and generic fallbacks. */
 export function ServiceLogo({
   service,
   logo,
   accent,
   size = "size-9",
+  rounded = "rounded-lg",
 }: {
   service: Service;
   logo: string | null;
   accent: string;
   size?: string;
+  rounded?: string;
 }) {
-  const [failed, setFailed] = useState(false);
-  const Icon =
-    service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
   return (
-    <div
-      className={`flex ${size} shrink-0 items-center justify-center overflow-hidden rounded-lg`}
-      style={{ backgroundColor: `${accent}1a`, color: accent }}
-    >
-      {logo && !failed ? (
-        // eslint-disable-next-line @next/next/no-img-element -- remote catalog logos from arbitrary hosts
-        <img
-          src={logo}
-          alt=""
-          className="size-[70%] object-contain"
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        <Icon className="size-[50%]" />
-      )}
-    </div>
+    <ServiceIcon
+      icon={resolveServiceIcon(service)}
+      logo={logo}
+      logoLabel={service.name}
+      accent={accent}
+      size={size}
+      rounded={rounded}
+    />
   );
 }
 
