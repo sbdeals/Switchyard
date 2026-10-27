@@ -436,7 +436,7 @@ async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
     res = attempt!;
   } catch (e) {
     if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
-      throw new Error(`Dokploy ${path} timed out after ${DOKPLOY_TIMEOUT_MS}ms.`);
+      throw new Error(`Dokploy ${path} timed out after ${DOKPLOY_TIMEOUT_MS}ms.`, { cause: e });
     }
     throw e;
   }
@@ -446,7 +446,9 @@ async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
     // Backup errors are sanitized and summarized by withBackupErrors first;
     // truncating here could expose a partial secret or discard rclone's cause.
     const detail = /^(destination|backup)\./.test(path) ? body : body.slice(0, 300);
-    throw new Error(`Dokploy ${path} failed (${res.status}): ${detail}`);
+    throw Object.assign(new Error(`Dokploy ${path} failed (${res.status}): ${detail}`), {
+      status: res.status,
+    });
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : null) as T;
