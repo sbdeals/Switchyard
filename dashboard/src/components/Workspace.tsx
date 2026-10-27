@@ -10,44 +10,48 @@ import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
+import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { useServiceDeeplink } from "@/components/use-service-deeplink";
+import { DirtyGuardProvider, useGuardedNavigation } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
 
 type View = "canvas" | "grid";
 
-export function Workspace({
-  services,
-  projects,
-  edges,
-}: {
+type WorkspaceProps = {
   services: Service[];
   projects: ProjectNode[];
   edges: ServiceEdge[];
-}) {
+};
+
+export function Workspace(props: WorkspaceProps) {
+  return <DirtyGuardProvider><WorkspaceContent {...props} /></DirtyGuardProvider>;
+}
+
+function WorkspaceContent({
+  services,
+  projects,
+  edges,
+}: WorkspaceProps) {
   const [view, setView] = useState<View>("canvas");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const router = useRouter();
+  const drawer = useServiceDeeplink(services);
+  const { onDeployed } = drawer;
+  const { navigate: guard } = useGuardedNavigation();
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  // Re-resolve the selected service from fresh props so the drawer updates.
-  const selected = services.find((s) => s.id === selectedId) ?? null;
+  // Remember the last viewed project, including services opened by deep link,
+  // after the guarded drawer closes to show project deletion confirmation.
+  const activeProjectId = drawer.service?.projectId ?? null;
+  if (activeProjectId !== null && activeProjectId !== selectedProjectId) {
+    setSelectedProjectId(activeProjectId);
+  }
 
-  const selectService = (service: Service) => {
-    setSelectedId(service.id);
-    setSelectedProjectId(service.projectId);
-  };
-
-  const closeService = () => {
-    if (selected) setSelectedProjectId(selected.projectId);
-    setSelectedId(null);
-  };
-
-  // Open the new service's drawer and pull fresh state in.
-  const onDeployed = (id: string) => {
-    setSelectedId(id);
-    router.refresh();
-  };
+  const openProjects = () => guard(() => {
+    drawer.close();
+    setProjectsOpen(true);
+  });
 
   return (
     <MotionConfig reducedMotion="user">
@@ -74,7 +78,7 @@ export function Workspace({
             </ViewToggle>
           </div>
           <button
-            onClick={() => { closeService(); setProjectsOpen(true); }}
+            onClick={openProjects}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
           >
             <FolderGit2 className="size-3.5" /> Projects
@@ -92,19 +96,26 @@ export function Workspace({
       {services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={selectService} />
+        <PanelErrorBoundary>
+          <FlowCanvas services={services} edges={edges} onSelect={(s) => drawer.open(s.id)} />
+        </PanelErrorBoundary>
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {services.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => selectService(s)} />
+              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => drawer.open(s.id)} />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
 
-      <ServiceDrawer service={selected} onClose={closeService} />
-      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} selectedProjectId={selected?.projectId ?? selectedProjectId} />
+      <ServiceDrawer service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
+      {drawer.notFound && (
+        <div role="status" className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-4 py-2 text-sm shadow-lg">
+          Service not found
+        </div>
+      )}
+      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} selectedProjectId={activeProjectId ?? selectedProjectId} />
       <AgentPanel />
     </div>
     </MotionConfig>
