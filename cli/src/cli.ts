@@ -3,6 +3,7 @@ import { Command } from "commander";
 
 import { claudeCommand } from "./commands/claude.js";
 import { configCommand } from "./commands/config.js";
+import { createDeployCommand } from "./commands/deploy.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { downCommand } from "./commands/down.js";
 import { localIngressCommand } from "./commands/local-ingress.js";
@@ -43,6 +44,8 @@ program
   .action(upCommand);
 
 program.command("status").description("Show stack status, container health, and URLs").action(statusCommand);
+
+program.addCommand(createDeployCommand());
 
 program
   .command("down")
