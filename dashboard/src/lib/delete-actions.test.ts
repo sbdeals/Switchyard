@@ -33,6 +33,18 @@ const revalidatePath = vi.hoisted(() => vi.fn());
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 vi.mock("@/lib/dokploy", () => api);
+// Project deletion moved to the settings dialog's confirmed flow (#110); mirror
+// its caller-scoped project.all ownership check against the mocked workspace.
+vi.mock("@/lib/project-settings-server", () => ({
+  getProjectSettings: vi.fn(),
+  updateProjectSettings: vi.fn(),
+  updateProjectEnvironment: vi.fn(),
+  deleteProjectSettings: async (id: string) => {
+    const projects: { projectId: string }[] = await api.listProjects();
+    if (!projects.some((project) => project.projectId === id)) throw new Error("Project not found or access denied.");
+    await api.removeProject(id);
+  },
+}));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: vi.fn() }));
 
@@ -57,7 +69,8 @@ beforeEach(() => {
 
 const deleteCases = [
   {
-    name: "project", id: "project-owned", remove: removeProjectAction,
+    name: "project", id: "project-owned",
+    remove: (id: string) => removeProjectAction(id, "My project", id, true, "inventory"),
     mutation: api.removeProject, lookup: api.listProjects,
     args: ["project-owned"],
   },

@@ -8,6 +8,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: vi.fn() }));
+vi.mock("@/lib/project-settings-server", () => ({}));
 vi.mock("@/lib/dokploy", () => ({
   loadWorkspace: vi.fn(),
   updateServiceNotes: vi.fn(),
