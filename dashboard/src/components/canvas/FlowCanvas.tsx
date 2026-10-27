@@ -1,5 +1,6 @@
 "use client";
 
+import { Copy } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutGrid, Undo2 } from "lucide-react";
 import {
@@ -23,6 +24,7 @@ import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/ser
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
 import { SHORTCUTS } from "@/lib/shortcuts";
+import { useDialogFocus } from "@/components/use-focus-trap";
 import { pruneCanvasPositions } from "@/lib/canvas-positions";
 import { useTheme } from "@/components/ThemeProvider";
 import { hasSelectionModifier } from "@/lib/bulk-selection";
@@ -64,6 +66,7 @@ export function FlowCanvas({
   allServices = services,
   edges: serviceEdges,
   onSelect,
+  onDuplicate,
   selectedIds,
   onSelectionChange,
   selectionDisabled = false,
@@ -77,10 +80,13 @@ export function FlowCanvas({
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
   selectionDisabled?: boolean;
+  onDuplicate: (service: Service) => void;
   projects: ProjectNode[];
   onDeployed: (id: string) => void;
 }) {
   const { theme } = useTheme();
+  const [menu, setMenu] = useState<{ service: Service; x: number; y: number } | null>(null);
+  const menuRef = useDialogFocus<HTMLDivElement>(() => setMenu(null));
   const canvasRef = useRef<HTMLDivElement>(null);
   const flowRef = useRef<ReactFlowInstance | null>(null);
   const [creation, setCreation] = useState<{ screen: Point; flow: Point } | null>(null);
@@ -328,6 +334,15 @@ export function FlowCanvas({
         ariaLabelConfig={{
           "node.a11yDescription.keyboardDisabled": "Press Enter or Space to open service details. Use arrow keys to move a selected service; Escape clears selection.",
         }}
+        onNodeContextMenu={(event, node) => {
+          event.preventDefault();
+          setMenu({
+            service: (node.data as ServiceNodeData).service,
+            x: Math.min(event.clientX, window.innerWidth - 200),
+            y: Math.min(event.clientY, window.innerHeight - 52),
+          });
+        }}
+        onMoveStart={() => setMenu(null)}
         nodeTypes={nodeTypes}
         elementsSelectable={!selectionDisabled}
         multiSelectionKeyCode={["Shift", "Control", "Meta"]}
@@ -385,6 +400,34 @@ export function FlowCanvas({
           className="!bg-[var(--color-bg-elevated)] max-sm:hidden"
         />
       </ReactFlow>
+      {menu && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setMenu(null)} onContextMenu={(event) => {
+            event.preventDefault();
+            setMenu(null);
+          }} />
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={`${menu.service.name} actions`}
+            style={{ left: menu.x, top: menu.y }}
+            className="fixed z-40 w-48 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-1 shadow-xl"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              data-autofocus
+              onClick={() => {
+                onDuplicate(menu.service);
+                setMenu(null);
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+            >
+              <Copy className="size-3.5" /> Duplicate service
+            </button>
+          </div>
+        </>
+      )}
       {creation && (
         <QuickDeployMenu
           projects={projects}

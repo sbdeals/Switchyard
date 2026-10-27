@@ -12,6 +12,7 @@ import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { ActivityPanel } from "@/components/ActivityPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
+import { DuplicateServiceDialog } from "@/components/service/DuplicateServiceDialog";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { GettingStarted } from "@/components/GettingStarted";
@@ -49,6 +50,7 @@ function WorkspaceContent({
   userId,
 }: WorkspaceProps) {
   const [view, setView] = useState<View>("canvas");
+  const [duplicateSource, setDuplicateSource] = useState<Service | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [deployOpen, setDeployOpen] = useState(false);
@@ -200,7 +202,7 @@ function WorkspaceContent({
         <EmptyState key={scope.project?.projectId ?? "all"} projects={scope.projects} projectName={scope.project?.name} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
         <PanelErrorBoundary>
-          <FlowCanvas key={scope.project?.projectId ?? "all"} services={visibleServices} allServices={services} edges={scope.edges} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} />
+          <FlowCanvas key={scope.project?.projectId ?? "all"} services={visibleServices} allServices={services} edges={scope.edges} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} onDuplicate={setDuplicateSource} />
         </PanelErrorBoundary>
       ) : (
         <>
@@ -224,7 +226,21 @@ function WorkspaceContent({
 
       <GettingStarted key={userId} projects={projects} services={services} userId={userId} onNavigate={navigateChecklist} />
       {bulkRequest && <BulkActionDialog {...bulkRequest} onClose={() => setBulkRequest(null)} />}
-      <ServiceDrawer deploymentId={deployment?.serviceId === drawer.service?.id ? deployment?.deploymentId : undefined} services={services} onSelectService={openService} service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
+      <ServiceDrawer deploymentId={deployment?.serviceId === drawer.service?.id ? deployment?.deploymentId : undefined} services={services} onSelectService={openService} service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} onDuplicate={setDuplicateSource} />
+      {duplicateSource && (
+        <DuplicateServiceDialog
+          key={`${duplicateSource.kind}:${duplicateSource.id}`}
+          service={duplicateSource}
+          projects={projects}
+          services={services}
+          onClose={() => setDuplicateSource(null)}
+          onCreated={() => router.refresh()}
+          onOpen={(id) => {
+            setDuplicateSource(null);
+            onDeployed(id);
+          }}
+        />
+      )}
       {drawer.notFound && (
         <div role="status" className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-4 py-2 text-sm shadow-lg">
           Service not found
