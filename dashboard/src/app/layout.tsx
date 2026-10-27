@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { POPSTATE_GUARD_SCRIPT } from "@/lib/popstate-guard";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -18,6 +19,9 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script id="switchyard-popstate-guard" dangerouslySetInnerHTML={{ __html: POPSTATE_GUARD_SCRIPT }} />
+      </head>
       <body className="min-h-full font-sans">{children}</body>
     </html>
   );
