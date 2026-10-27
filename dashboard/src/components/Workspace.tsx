@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Activity, Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, ScrollText } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Activity, Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, Search, ScrollText } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
 import { BulkActionDialog } from "@/components/BulkActionDialog";
@@ -25,6 +25,14 @@ import { useWorkspacePolling } from "@/components/use-workspace-polling";
 import type { DeploymentEvent } from "@/lib/deploy-notifications";
 import { DirtyGuardProvider, useGuardedNavigation } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
+import {
+  SERVICE_FILTERS,
+  filterServices,
+  readServiceFilter,
+  serviceFilterShortcut,
+  serviceFilterUrl,
+  type ServiceFilter,
+} from "@/lib/service-filter";
 import { emptySelection, reconcileSelection, replaceSelection, toggleSelection } from "@/lib/bulk-selection";
 import { BULK_ACTION_LABELS, type BulkAction } from "@/lib/bulk-actions";
 
@@ -72,6 +80,41 @@ function WorkspaceContent({
   const { onDeployed } = drawer;
   const scope = useMemo(() => getWorkspaceScope(projects, services, edges, currentProject), [projects, services, edges, currentProject]);
   const visibleServices = scope.services;
+  const searchParams = useSearchParams();
+  const params = searchParams.toString();
+  const [previousParams, setPreviousParams] = useState(params);
+  const [filter, setFilter] = useState(() => readServiceFilter(searchParams));
+  // Keep typing synchronous (including the caret), while accepting URL changes
+  // from reloads and browser navigation. History updates use a React transition.
+  if (params !== previousParams) {
+    setPreviousParams(params);
+    setFilter(readServiceFilter(searchParams));
+  }
+  const searchRef = useRef<HTMLInputElement>(null);
+  const { matches, counts } = filterServices(visibleServices, filter);
+  const matchingIds = new Set(matches.map((service) => service.id));
+  const updateFilter = useCallback((next: ServiceFilter) => {
+    setFilter(next);
+    window.history.replaceState(null, "", serviceFilterUrl(window.location.href, next));
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const action = serviceFilterShortcut(event, {
+        editable: !!target?.closest("input, textarea, select, [role='textbox']") || !!target?.isContentEditable,
+        overlayOpen: !!document.querySelector("[role='dialog'], [aria-modal='true'], [role='menu'], [role='combobox'][aria-expanded='true']"),
+        searchFocused: target === searchRef.current,
+      });
+      if (!action) return;
+      event.preventDefault();
+      if (action === "focus") searchRef.current?.focus();
+      else updateFilter({ ...readServiceFilter(new URLSearchParams(window.location.search)), q: "" });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [updateFilter]);
+
 
   // Deploy progress for the checklist comes from useWorkspacePolling above.
 
@@ -174,6 +217,46 @@ function WorkspaceContent({
           <KeyboardShortcuts />
           <QuickDeployMenu key={scope.project?.projectId ?? "all"} projects={scope.projects} onDeployed={onDeployed} menuOpen={deployOpen} onMenuOpenChange={setDeployOpen} />
         </div>
+        <div className="flex w-full flex-wrap items-center gap-3">
+          <div className="relative w-full sm:w-72">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-2.5 size-4 text-[var(--color-fg-subtle)]" />
+            <input
+              ref={searchRef}
+              type="search"
+              aria-label="Search services"
+              aria-describedby="service-search-hint"
+              aria-keyshortcuts="/ Escape"
+              placeholder="Search services…"
+              value={filter.q}
+              onChange={(event) => updateFilter({ ...filter, q: event.target.value })}
+              className="w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] py-2 pl-9 pr-3 text-sm outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
+            />
+          </div>
+          <span id="service-search-hint" className="text-xs text-[var(--color-fg-subtle)]">
+            / to search · Esc to clear
+          </span>
+          <div role="group" aria-label="Filter services by status" className="flex flex-wrap gap-1.5">
+            {SERVICE_FILTERS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={filter.status === value}
+                onClick={() => updateFilter({ ...filter, status: value })}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  filter.status === value
+                    ? "border-[var(--color-brand)] bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                    : "border-[var(--color-border-strong)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+                )}
+              >
+                {label} <span className="tabular-nums">{counts[value]}</span>
+              </button>
+            ))}
+          </div>
+          <span role="status" className="text-xs text-[var(--color-fg-muted)]">
+            {matches.length} of {visibleServices.length} services
+          </span>
+        </div>
       </header>
 
       {selection.ids.length > 0 && (
@@ -196,33 +279,54 @@ function WorkspaceContent({
         </div>
       )}
 
-      {view === "logs" ? (
-        <ProjectLogs key={currentProject ?? "all"} projects={projects} selectedProjectId={currentProject} />
-      ) : scope.services.length === 0 ? (
-        <EmptyState key={scope.project?.projectId ?? "all"} projects={scope.projects} projectName={scope.project?.name} onDeployed={onDeployed} />
-      ) : view === "canvas" ? (
-        <PanelErrorBoundary>
-          <FlowCanvas key={scope.project?.projectId ?? "all"} services={visibleServices} allServices={services} edges={scope.edges} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} onDuplicate={setDuplicateSource} />
-        </PanelErrorBoundary>
-      ) : (
-        <>
-        <p className="mb-3 text-xs text-[var(--color-fg-subtle)]">Select services with the checkboxes. Shift-click to select a range.</p>
-        <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <AnimatePresence mode="popLayout">
-            {visibleServices.map((s) => (
-              <ServiceCard
-                key={`${s.kind}:${s.id}`}
-                service={s}
-                onOpen={() => openService(s.id)}
-                selected={selection.ids.includes(s.id)}
-                selectionDisabled={bulkRequest !== null}
-                onToggleSelection={(shift) => setBulkSelection((current) => toggleSelection(current, serviceIds, s.id, shift))}
-              />
-            ))}
-          </AnimatePresence>
-        </motion.div>
-        </>
-      )}
+      <div className="relative">
+        {view !== "logs" && visibleServices.length > 0 && matches.length === 0 && (
+          <div className={cn(
+            "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-[var(--color-border-strong)] bg-[var(--color-surface)] p-5",
+            view === "canvas" ? "absolute inset-x-4 top-4 z-10" : "mb-4"
+          )}>
+            <div>
+              <h2 className="text-sm font-medium">No services match your filters</h2>
+              <p className="mt-1 text-xs text-[var(--color-fg-muted)]">Try another search or status.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateFilter({ q: "", status: "all" })}
+              className="rounded-lg bg-[var(--color-brand-soft)] px-3 py-2 text-xs font-medium text-[var(--color-brand)] hover:bg-[var(--color-surface-hover)]"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+
+        {view === "logs" ? (
+          <ProjectLogs key={currentProject ?? "all"} projects={projects} selectedProjectId={currentProject} />
+        ) : scope.services.length === 0 ? (
+          <EmptyState key={scope.project?.projectId ?? "all"} projects={scope.projects} projectName={scope.project?.name} onDeployed={onDeployed} />
+        ) : view === "canvas" ? (
+          <PanelErrorBoundary>
+            <FlowCanvas key={scope.project?.projectId ?? "all"} services={visibleServices} allServices={services} edges={scope.edges} matchingIds={matchingIds} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} onDuplicate={setDuplicateSource} />
+          </PanelErrorBoundary>
+        ) : (
+          <>
+          {matches.length > 0 && <p className="mb-3 text-xs text-[var(--color-fg-subtle)]">Select services with the checkboxes. Shift-click to select a range.</p>}
+          <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <AnimatePresence mode="popLayout">
+              {matches.map((s) => (
+                <ServiceCard
+                  key={`${s.kind}:${s.id}`}
+                  service={s}
+                  onOpen={() => openService(s.id)}
+                  selected={selection.ids.includes(s.id)}
+                  selectionDisabled={bulkRequest !== null}
+                  onToggleSelection={(shift) => setBulkSelection((current) => toggleSelection(current, matches.map((match) => match.id), s.id, shift))}
+                />
+              ))}
+            </AnimatePresence>
+          </motion.div>
+          </>
+        )}
+      </div>
 
       <GettingStarted key={userId} projects={projects} services={services} userId={userId} onNavigate={navigateChecklist} />
       {bulkRequest && <BulkActionDialog {...bulkRequest} onClose={() => setBulkRequest(null)} />}
