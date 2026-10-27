@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { safeNextPath } from "@/lib/deeplink";
 import { SESSION_COOKIE, openSession } from "@/lib/session";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { LoginForm } from "./LoginForm";
 
 // Reads the session cookie, so it must render per request.
@@ -24,6 +25,9 @@ export default async function LoginPage({
 
   return (
     <main className="flex min-h-full items-center justify-center px-6 py-16">
+      <div className="fixed right-4 top-4 z-50">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="mb-3 flex size-11 items-center justify-center rounded-xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
