@@ -37,6 +37,7 @@ import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { CopyLinkButton } from "@/components/service/CopyLinkButton";
 import { ConnectTab } from "@/components/service/ConnectTab";
 import {
   AppOverviewTab,
@@ -65,24 +66,8 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { getServiceTabs, type TabId } from "@/lib/deeplink";
 
-type TabId =
-  | "overview"
-  | "connect"
-  | "variables"
-  | "data"
-  | "deploy"
-  | "build"
-  | "domains"
-  | "deployments"
-  | "schedules"
-  | "editor"
-  | "volumes"
-  | "metrics"
-  | "logs"
-  | "console"
-  | "backups"
-  | "settings";
 const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
   connect: { label: "Connect", icon: <Plug className="size-4" /> },
@@ -101,65 +86,6 @@ const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   backups: { label: "Backups", icon: <Archive className="size-4" /> },
   settings: { label: "Settings", icon: <Settings2 className="size-4" /> },
 };
-const DB_TABS: TabId[] = [
-  "overview",
-  "connect",
-  "variables",
-  "volumes",
-  "metrics",
-  "logs",
-  "console",
-  "backups",
-  "settings",
-];
-const APP_TABS: TabId[] = [
-  "overview",
-  "variables",
-  "deploy",
-  "build",
-  "domains",
-  "deployments",
-  "schedules",
-  "volumes",
-  "metrics",
-  "logs",
-  "console",
-  "settings",
-];
-const COMPOSE_TABS: TabId[] = [
-  "overview",
-  "variables",
-  "domains",
-  "deployments",
-  "editor",
-  "volumes",
-  "metrics",
-  "logs",
-  "console",
-  "settings",
-];
-
-/**
- * Whether to show the Postgres "Data" tab for a service. Covers the two data
- * models the tab supports: a Dokploy-managed Postgres database, and a compose
- * stack that declares a postgres-imaged service. Both signals are static (no
- * runtime container query) so the tab list can render synchronously; the tab
- * itself resolves the actual running container(s) server-side.
- */
-function isPostgresService(s: Service): boolean {
-  if (s.kind === "database") return s.engine === "postgres" || /postgres/i.test(s.dockerImage ?? "");
-  if (s.kind === "compose") return s.hasPostgres ?? false;
-  return false;
-}
-
-/** Insert the Data tab right after Overview. */
-function withDataTab(base: TabId[]): TabId[] {
-  const out = [...base];
-  const i = out.indexOf("overview");
-  out.splice(i + 1, 0, "data");
-  return out;
-}
-
 /**
  * Resizable-drawer width, persisted per browser.
  *
@@ -339,25 +265,16 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, onClose }: { service: Service | null; onClose: () => void }) {
-  const [tab, setTab] = useState<TabId>("overview");
+export function ServiceDrawer({ service, tab, onTabChange, onClose }: {
+  service: Service | null;
+  tab: TabId;
+  onTabChange: (tab: TabId) => void;
+  onClose: () => void;
+}) {
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
-  // Reset to Overview when a different service is opened (adjust state during
-  // render — the React-recommended alternative to a resetting effect).
-  const [shownId, setShownId] = useState<string | null>(null);
-  if (service && service.id !== shownId) {
-    setShownId(service.id);
-    setTab("overview");
-  }
-  const baseTabs =
-    service?.kind === "application"
-      ? APP_TABS
-      : service?.kind === "compose"
-        ? COMPOSE_TABS
-        : DB_TABS;
-  const tabs = service && isPostgresService(service) ? withDataTab(baseTabs) : baseTabs;
+  const tabs = service ? getServiceTabs(service) : [];
 
   return (
     <AnimatePresence>
@@ -399,7 +316,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 else if (e.key === "End") next = tabs.length - 1;
                 if (next === null) return;
                 e.preventDefault();
-                setTab(tabs[next]);
+                onTabChange(tabs[next]);
                 const el = e.currentTarget.querySelector<HTMLElement>(
                   `#drawer-tab-${tabs[next]}`
                 );
@@ -416,7 +333,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                   aria-selected={tab === id}
                   aria-controls="drawer-tabpanel"
                   tabIndex={tab === id ? 0 : -1}
-                  onClick={() => setTab(id)}
+                  onClick={() => onTabChange(id)}
                   className={cn(
                     "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
                     tab === id
@@ -431,6 +348,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
             </nav>
 
             <div
+              key={service.id}
               id="drawer-tabpanel"
               role="tabpanel"
               aria-labelledby={`drawer-tab-${tab}`}
@@ -527,14 +445,17 @@ function Header({
           </div>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close service details"
-        className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
-      >
-        <X className="size-4" />
-      </button>
+      <div className="flex shrink-0 items-center gap-2">
+        <CopyLinkButton key={service.id} />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close service details"
+          className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
     </div>
   );
 }
