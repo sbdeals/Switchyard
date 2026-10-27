@@ -10,6 +10,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/dokploy", () => ({ loadWorkspace, inferEdges: () => [] }));
 vi.mock("@/lib/collector", () => ({ ensureCollector: () => {} }));
+vi.mock("@/lib/volume-usage.server", () => ({ readProjectVolumeUsage: async () => ({}) }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: () => ({ value: "test-session" }) }),
 }));
