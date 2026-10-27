@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import {
   Database as VolumeIcon,
   FolderTree,
@@ -20,8 +20,9 @@ import {
   type MountsResult,
 } from "@/app/actions";
 import { inputCls, Field } from "@/components/service/primitives";
+import { parseComposeVolumes, type ComposeVolume } from "@/lib/compose-volumes";
 import { cn } from "@/lib/utils";
-import { validateMount } from "@/lib/validation";
+import { MAX_FILE_CONTENT_BYTES, validateMount } from "@/lib/mounts";
 
 const TYPE_META: Record<MountType, { label: string; icon: React.ReactNode }> = {
   volume: { label: "Volume", icon: <VolumeIcon className="size-3.5" /> },
@@ -39,10 +40,16 @@ function mountSource(m: Mount): string {
 export function VolumesTab({ service }: { service: Service }) {
   const serviceType: MountServiceType =
     service.kind === "database" ? service.engine : service.kind;
+  const composeFile = service.kind === "compose" ? service.composeFile : undefined;
+  const declared = useMemo(
+    () => composeFile === undefined ? { volumes: [], error: null } : parseComposeVolumes(composeFile),
+    [composeFile]
+  );
   const [mounts, setMounts] = useState<Mount[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const [pending, start] = useTransition();
 
   const applyResult = useCallback((res: MountsResult) => {
     if (res.ok) {
@@ -73,11 +80,19 @@ export function VolumesTab({ service }: { service: Service }) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-[var(--color-fg-muted)]">
-        Persistent storage for this service. Redeploy the service for mount changes to take
-        effect.
+        Applies on next deploy. Add persistent volumes or files for this service.
       </p>
 
       {loadError && <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>}
+      {declared.error && <p role="alert" className="text-xs text-[var(--color-danger)]">{declared.error}</p>}
+
+      {declared.volumes.length > 0 && (
+        <div className="space-y-2">
+          {declared.volumes.map((volume, i) => (
+            <ComposeVolumeRow key={`${volume.serviceName}:${volume.target}:${i}`} volume={volume} />
+          ))}
+        </div>
+      )}
 
       {mounts === null && !loadError ? (
         <div className="flex items-center justify-center gap-2 py-6 text-xs text-[var(--color-fg-subtle)]">
@@ -91,10 +106,13 @@ export function VolumesTab({ service }: { service: Service }) {
                 key={m.mountId}
                 serviceType={serviceType}
                 serviceId={service.id}
+                mounts={mounts}
                 existing={m}
-                onDone={() => {
+                pending={pending}
+                start={start}
+                onDone={async () => {
                   setEditing(null);
-                  reload();
+                  await reload();
                 }}
                 onCancel={() => setEditing(null)}
               />
@@ -102,6 +120,10 @@ export function VolumesTab({ service }: { service: Service }) {
               <MountRow
                 key={m.mountId}
                 mount={m}
+                serviceType={serviceType}
+                serviceId={service.id}
+                pending={pending}
+                start={start}
                 onEdit={() => {
                   setAdding(false);
                   setEditing(m.mountId);
@@ -112,7 +134,7 @@ export function VolumesTab({ service }: { service: Service }) {
           )}
         </div>
       ) : (
-        mounts && (
+        mounts && !loadError && !declared.error && declared.volumes.length === 0 && (
           <p className="text-xs text-[var(--color-fg-subtle)]">No mounts attached.</p>
         )
       )}
@@ -121,19 +143,23 @@ export function VolumesTab({ service }: { service: Service }) {
         <MountForm
           serviceType={serviceType}
           serviceId={service.id}
-          onDone={() => {
+          mounts={mounts ?? []}
+          pending={pending}
+          start={start}
+          onDone={async () => {
             setAdding(false);
-            reload();
+            await reload();
           }}
           onCancel={() => setAdding(false)}
         />
       ) : (
         <button
+          disabled={pending || mounts === null || Boolean(loadError)}
           onClick={() => {
             setEditing(null);
             setAdding(true);
           }}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)] disabled:opacity-40"
         >
           <Plus className="size-4" /> Add mount
         </button>
@@ -142,25 +168,61 @@ export function VolumesTab({ service }: { service: Service }) {
   );
 }
 
+function ComposeVolumeRow({ volume }: { volume: ComposeVolume }) {
+  const label = volume.type === "volume"
+    ? volume.source ? "Persistent named volume" : "Anonymous volume"
+    : volume.type === "bind" ? "Bind mount"
+      : volume.type === "tmpfs" ? "Temporary (tmpfs)" : "Compose mount";
+  const source = volume.source ?? (volume.type === "volume" ? "Anonymous volume" : "—");
+
+  return (
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <span className="flex items-center gap-1 rounded-md bg-[var(--color-bg-elevated)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-fg-muted)]">
+          {volume.type === "bind" ? <FolderTree className="size-3.5" /> : <VolumeIcon className="size-3.5" />}
+          {label}
+        </span>
+        <span className="min-w-0 flex-1 truncate font-mono text-xs" title={volume.target}>
+          {volume.target}
+        </span>
+      </div>
+      <div className="mt-1 truncate font-mono text-[11px] text-[var(--color-fg-subtle)]" title={source}>
+        {source}
+      </div>
+      <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
+        Declared in compose · {volume.serviceName}
+      </p>
+    </div>
+  );
+}
+
 function MountRow({
   mount,
+  serviceType,
+  serviceId,
+  pending,
+  start,
   onEdit,
   onDeleted,
 }: {
   mount: Mount;
+  serviceType: MountServiceType;
+  serviceId: string;
+  pending: boolean;
+  start: React.TransitionStartFunction;
   onEdit: () => void;
-  onDeleted: () => void;
+  onDeleted: () => Promise<void>;
 }) {
-  const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const meta = TYPE_META[mount.type];
 
   function remove() {
-    if (!confirm(`Remove mount at "${mount.mountPath}"?`)) return;
+    const fileNotice = mount.type === "file" ? " The managed source file is deleted immediately." : "";
+    if (!confirm(`Remove mount at "${mount.mountPath}"? Data in named volumes is NOT deleted.${fileNotice} Applies on next deploy.`)) return;
     setError(null);
     start(async () => {
-      const res = await removeMountAction(mount.mountId);
-      if (res.ok) onDeleted();
+      const res = await removeMountAction(serviceType, serviceId, mount.mountId);
+      if (res.ok) await onDeleted();
       else setError(res.error);
     });
   }
@@ -175,22 +237,28 @@ function MountRow({
         <span className="min-w-0 flex-1 truncate font-mono text-xs" title={mount.mountPath}>
           {mount.mountPath || "—"}
         </span>
-        <button
-          onClick={onEdit}
-          disabled={pending}
-          aria-label={`Edit mount ${mount.mountPath}`}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
-        >
-          <Pencil className="size-3.5" />
-        </button>
-        <button
-          onClick={remove}
-          disabled={pending}
-          aria-label={`Remove mount ${mount.mountPath}`}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
-        >
-          {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-        </button>
+        {mount.type === "bind" ? (
+          <span className="text-[10px] text-[var(--color-fg-subtle)]">Read-only</span>
+        ) : (
+          <>
+            <button
+              onClick={onEdit}
+              disabled={pending}
+              aria-label={`Edit mount ${mount.mountPath}`}
+              className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+            <button
+              onClick={remove}
+              disabled={pending}
+              aria-label={`Remove mount ${mount.mountPath}`}
+              className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
+            >
+              {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+            </button>
+          </>
+        )}
       </div>
       <div className="mt-1 truncate font-mono text-[11px] text-[var(--color-fg-subtle)]" title={mountSource(mount)}>
         {mountSource(mount)}
@@ -203,60 +271,56 @@ function MountRow({
 function MountForm({
   serviceType,
   serviceId,
+  mounts,
   existing,
+  pending,
+  start,
   onDone,
   onCancel,
 }: {
   serviceType: MountServiceType;
   serviceId: string;
+  mounts: Mount[];
   existing?: Mount;
-  onDone: () => void;
+  pending: boolean;
+  start: React.TransitionStartFunction;
+  onDone: () => Promise<void>;
   onCancel: () => void;
 }) {
-  const [type, setType] = useState<MountType>(existing?.type ?? "volume");
+  const [type, setType] = useState<"volume" | "file">(existing?.type === "file" ? "file" : "volume");
   const [mountPath, setMountPath] = useState(existing?.mountPath ?? "");
   const [volumeName, setVolumeName] = useState(existing?.volumeName ?? "");
-  const [hostPath, setHostPath] = useState(existing?.hostPath ?? "");
-  const [filePath, setFilePath] = useState(existing?.filePath ?? "");
   const [content, setContent] = useState(existing?.content ?? "");
-  const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const primaryOk =
-    type === "volume"
-      ? volumeName.trim()
-      : type === "bind"
-        ? hostPath.trim()
-        : filePath.trim();
-  const valid = Boolean(mountPath.trim() && primaryOk);
-
   function submit() {
-    if (!valid) return;
     setError(null);
     const patch = {
       type,
       mountPath: mountPath.trim(),
       volumeName: type === "volume" ? volumeName.trim() : undefined,
-      hostPath: type === "bind" ? hostPath.trim() : undefined,
-      filePath: type === "file" ? filePath.trim() : undefined,
       content: type === "file" ? content : undefined,
     };
-    const validationError = validateMount(patch);
+    const validationError = validateMount(
+      { ...patch, filePath: type === "file" ? existing?.filePath ?? "config" : undefined },
+      mounts,
+      existing?.mountId
+    );
     if (validationError) {
       setError(validationError);
       return;
     }
     start(async () => {
       const res = existing
-        ? await updateMountAction(existing.mountId, patch)
+        ? await updateMountAction(serviceType, serviceId, existing.mountId, patch)
         : await createMountAction({ serviceType, serviceId, ...patch });
-      if (res.ok) onDone();
+      if (res.ok) await onDone();
       else setError(res.error);
     });
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-3">
+    <fieldset disabled={pending} className="space-y-3 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-[var(--color-fg-muted)]">
           {existing ? "Edit mount" : "New mount"}
@@ -270,15 +334,16 @@ function MountForm({
         </button>
       </div>
 
-      <div role="radiogroup" aria-label="Mount type" className="grid grid-cols-3 gap-1.5">
-        {(Object.keys(TYPE_META) as MountType[]).map((t) => (
+      <div role="radiogroup" aria-label="Mount type" className="grid grid-cols-2 gap-1.5">
+        {(["volume", "file"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setType(t)}
+            disabled={Boolean(existing)}
             role="radio"
             aria-checked={type === t}
             className={cn(
-              "flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
+              "flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-60",
               type === t
                 ? "border-[var(--color-brand)] text-[var(--color-fg)]"
                 : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
@@ -301,38 +366,21 @@ function MountForm({
           />
         </Field>
       )}
-      {type === "bind" && (
-        <Field label="Host path">
-          <input
-            value={hostPath}
-            onChange={(e) => setHostPath(e.target.value)}
-            placeholder="/var/lib/my-data"
-            autoFocus
-            className={inputCls}
+      {type === "file" && (
+        <Field label="Content" hint={`up to ${MAX_FILE_CONTENT_BYTES / 1024} KiB (UTF-8)`}>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            spellCheck={false}
+            placeholder={"NODE_ENV=production\nPORT=3000\n"}
+            className="min-h-28 w-full resize-none rounded-lg border border-[var(--color-border-control)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
           />
         </Field>
       )}
-      {type === "file" && (
-        <>
-          <Field label="File name">
-            <input
-              value={filePath}
-              onChange={(e) => setFilePath(e.target.value)}
-              placeholder="config.json"
-              autoFocus
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Content">
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              spellCheck={false}
-              placeholder={"NODE_ENV=production\nPORT=3000\n"}
-              className="min-h-28 w-full resize-none rounded-lg border border-[var(--color-border-control)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
-            />
-          </Field>
-        </>
+      {existing?.type === "file" && (
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          File content updates may be visible to a running app immediately.
+        </p>
       )}
 
       <Field label="Mount path" hint="path in the container">
@@ -349,13 +397,13 @@ function MountForm({
       <div className="flex justify-end">
         <button
           onClick={submit}
-          disabled={pending || !valid}
+          disabled={pending}
           className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
         >
           {pending && <Loader2 className="size-4 animate-spin" />}
           {existing ? "Save mount" : "Add mount"}
         </button>
       </div>
-    </div>
+    </fieldset>
   );
 }

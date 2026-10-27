@@ -2,66 +2,66 @@
   {
     "file": "canvas-overview.png",
     "title": "Canvas view",
-    "shows": "Hero shot of the workspace canvas: the whoami-snim application node (traefik/whoami) and the redis-mskd database node (redis:7), both Running, connected by an animated edge inferred from the app's REDIS_URL env var. Includes the 'My Project / production' group label, minimap, zoom controls, and the header actions (Canvas/Grid toggle, Projects, Refresh, New service)."
+    "shows": "Canvas centered on ogs-web (nginx:alpine) and ogs-redis (redis:7), both running as bridge-managed Compose stacks in ogs-guide-r1 / ogs-demo. An animated edge is inferred from the web stack's saved REDIS_URL. Includes the minimap, zoom controls, and Canvas/Grid, Projects, Refresh, and New service header actions. Only the two throwaway nodes were repositioned through the canvas controls."
   },
   {
     "file": "new-service-menu.png",
     "title": "New service menu",
-    "shows": "The open 'New service' dropdown. APPLICATION section: docker-image quick deploy input, git-repo (Nixpacks build) input, and Compose stack row. DATABASE section: PostgreSQL, MySQL, MariaDB, MongoDB, and Redis rows with their image:version tags (postgres:18, mysql:8.4, mariadb:11, mongo:8, redis:7)."
+    "shows": "The open New service menu targeting ogs-guide-r1 / ogs-demo, over the running Compose examples. Application inputs, From GitHub, Compose stack, App catalog, and PostgreSQL, MySQL, MariaDB, MongoDB, and Redis engine rows with version tags."
   },
   {
     "file": "deploy-image-filled.png",
     "title": "Deploy from a Docker image",
-    "shows": "The New service menu with the docker-image input filled with 'traefik/whoami' and the Deploy button enabled, captured just before deploying."
+    "shows": "The New service menu targeting ogs-guide-r1 / ogs-demo, with nginx:alpine entered in the docker-image input and Deploy enabled. The form was not submitted; the running ogs-web example was deployed through Compose."
   },
   {
     "file": "db-overview.png",
-    "title": "Database drawer — Overview",
-    "shows": "redis-mskd drawer, Overview tab: Running status badge, internal connection string with copy button, and Image (redis:7), Internal port (6379), Replicas, Database, User, and Resources fields. Stop/Redeploy lifecycle buttons."
+    "title": "Redis Compose drawer — Overview",
+    "shows": "ogs-redis Compose Overview: Running, Last deploy: Succeeded, Public URL empty state, Stop/Redeploy controls, Type (docker-compose), and App name. Redis runs from redis:7 with a passing health check. This is a Compose drawer; native managed-database connection and configuration fields are described separately in the guide."
   },
   {
     "file": "db-logs.png",
-    "title": "Database drawer — Logs",
-    "shows": "redis-mskd Logs tab streaming real Redis startup log lines over SSE, with timestamps, the log filter box, and the green 'Live' indicator."
+    "title": "Redis Compose drawer — Logs",
+    "shows": "ogs-redis Compose Logs: Running and Last deploy: Succeeded, real timestamped Redis startup output ending with Ready to accept connections, Filter logs input, and green Live indicator."
   },
   {
     "file": "db-metrics.png",
-    "title": "Database drawer — Metrics",
-    "shows": "redis-mskd Metrics tab: live CPU (0.3%) and Memory (4 MB) stat cards plus CPU % and Memory area charts populated with ~13s of real per-second docker stats samples."
+    "title": "Redis Compose drawer — Metrics",
+    "shows": "ogs-redis Compose Metrics: Running and Last deploy: Succeeded, live CPU (0.2%) and Memory (12 MB of 128 MB) cards, and CPU/Memory charts populated with real Docker samples. Live is selected; history is off. The HTTP section has empty cards because the local dashboard has no Traefik metrics endpoint."
   },
   {
     "file": "db-settings.png",
-    "title": "Database drawer — Settings",
-    "shows": "redis-mskd Settings tab: rename field, version selector (redis:7, 'changing redeploys'), external port, CPU/memory limits with Save changes, masked password with reveal/copy, app name, created date, and the Danger zone."
+    "title": "Redis Compose drawer — Settings",
+    "shows": "ogs-redis Compose Settings: Running and Last deploy: Succeeded, App name, Created timestamp, and Danger zone with Destroy ogs-redis. Compose configuration is edited in Compose/Variables; this screen does not show native managed-database version, password, or resource controls."
   },
   {
     "file": "app-overview.png",
-    "title": "Application drawer — Overview",
-    "shows": "whoami-snim drawer, Overview tab: Running badge, 'Docker image · My Project / production' subtitle, Public URL empty state pointing at the Domains tab, and Source (docker), Image (traefik/whoami), Build (nixpacks), Replicas fields."
+    "title": "Web Compose drawer — Overview",
+    "shows": "ogs-web Compose Overview: Running and Last deploy: Succeeded, Public URL empty state pointing at Networking, Stop/Redeploy controls, Type (docker-compose), and App name. The web container runs nginx:alpine with a passing HTTP health check."
   },
   {
     "file": "app-variables.png",
-    "title": "Application drawer — Variables",
-    "shows": "whoami-snim Variables tab with the REDIS_URL entry set to the redis-mskd internal connection string ('1 variable' counter, Save variables button). This env reference is what draws the canvas edge between the two services."
+    "title": "Web Compose drawer — Variables",
+    "shows": "ogs-web Compose Variables: Running and Last deploy: Succeeded, saved REDIS_URL=redis://ogs-redis:6379, the 1 variable counter, and disabled Save variables button. The two stacks share a private bridge network, and Redis connectivity was checked from the web container. Nginx itself does not use Redis."
   },
   {
     "file": "app-domains.png",
-    "title": "Application drawer — Domains",
-    "shows": "whoami-snim Domains tab empty state: 'No domains attached.', the auto-SSL (Let's Encrypt) hint, and the add-domain form (Host, Port, Add). No domain was actually attached."
+    "title": "Web Compose drawer — Networking",
+    "shows": "ogs-web Compose Networking: Running and Last deploy: Succeeded, No domains attached, DNS/auto-SSL hint, Service set to ogs-web, Host and Port (80) fields, Generate URL and Add buttons. No domain or host port was attached."
   },
   {
     "file": "compose-editor.png",
     "title": "Compose stack editor",
-    "shows": "The drawer opened by New service > Compose stack (compose-sgzh, Idle): the Compose tab's docker-compose.yml editor seeded with the starter template (nginx:alpine on port 8080), with Save and Save & deploy buttons. Closed without saving or deploying."
+    "shows": "ogs-web Compose editor: Running and Last deploy: Succeeded, saved nginx:alpine YAML with a 128 MB memory limit, REDIS_URL interpolation, an HTTP health check, and the private ogs-r1-network bridge shared with Redis. Save is disabled and Save & deploy is available. No host ports are published."
   },
   {
     "file": "grid-view.png",
     "title": "Grid view",
-    "shows": "The Grid view toggle active, showing both service cards — redis-mskd (redis:7) and whoami-snim (traefik/whoami) — each with a Running badge and its 'My Project / production' scope."
+    "shows": "Grid view including ogs-redis and ogs-web Compose cards, each with a Running badge and ogs-guide-r1 / ogs-demo scope, alongside other existing local demo services."
   },
   {
     "file": "projects-view.png",
     "title": "Projects & environments",
-    "shows": "The Projects panel: 'My Project' with its 'production' environment, rename/delete controls, an inline 'new environment' input with Add env, and the new-project input with create button."
+    "shows": "Projects & environments panel showing ogs-guide-r1 with the ogs-demo environment and Dokploy's default production environment, rename/delete controls, inline new-environment input with Add env, and the new-project input. Other local demo projects remain visible."
   }
 ]

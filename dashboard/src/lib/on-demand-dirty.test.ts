@@ -48,7 +48,7 @@ describe.each(["Variables", "Compose"] as const)("%s on-demand dirty baseline", 
         .mockReturnValueOnce([state.value, vi.fn()])
         .mockReturnValueOnce([state.baseline, vi.fn()])
         .mockReturnValueOnce([state.loadError, vi.fn()]);
-      ComposeEditorTab({ compose: service });
+      ComposeEditorTab({ compose: service, services: [service], onSelectService: vi.fn() });
     }
 
     expect(mocks.useDirtyGuard).toHaveBeenCalledExactlyOnceWith(tab, dirty);

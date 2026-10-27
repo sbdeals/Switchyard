@@ -9,6 +9,8 @@ import { validatePort } from "@/lib/validation";
 import { previewRedirect, validateBasicAuth, validateRedirect } from "@/lib/app-security";
 import { DomainsTab } from "@/components/service/AppTabs";
 import { inputCls, Field, RemoveBtn } from "@/components/service/primitives";
+import { PortConflictWarning, type PortConflictProps } from "@/components/service/PortConflictWarning";
+import { getPortWarnings, isValidPort } from "@/lib/port-conflicts";
 import {
   createRedirectAction,
   updateRedirectAction,
@@ -20,7 +22,7 @@ import {
   deleteSecurityAction,
 } from "@/app/actions";
 
-export function NetworkingTab({ app }: { app: Application }) {
+export function NetworkingTab({ app, services, onSelectService }: PortConflictProps & { app: Application }) {
   return (
     <div className="space-y-8">
       <p className="text-[11px] text-[var(--color-fg-subtle)]">
@@ -32,7 +34,7 @@ export function NetworkingTab({ app }: { app: Application }) {
         <DomainsTab app={app} />
       </section>
 
-      <PortsSection app={app} />
+      <PortsSection app={app} services={services} onSelectService={onSelectService} />
     </div>
   );
 }
@@ -72,10 +74,12 @@ function AddBtn({
   pending,
   disabled,
   onClick,
+  label = "Add",
 }: {
   pending: boolean;
   disabled?: boolean;
   onClick: () => void;
+  label?: string;
 }) {
   return (
     <button
@@ -84,7 +88,7 @@ function AddBtn({
       className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
     >
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-      Add
+      {label}
     </button>
   );
 }
@@ -252,13 +256,16 @@ function RedirectsSection({ app }: { app: Application }) {
   );
 }
 
-function PortsSection({ app }: { app: Application }) {
+function PortsSection({ app, services, onSelectService }: PortConflictProps & { app: Application }) {
   const [published, setPublished] = useState("");
   const [target, setTarget] = useState("");
   const [protocol, setProtocol] = useState<"tcp" | "udp">("tcp");
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+
+  const warnings = getPortWarnings(services, app.id, [{ port: Number(published), protocol }]);
+  const validPorts = isValidPort(Number(published)) && isValidPort(Number(target));
 
   function add() {
     const validationError = validatePort(published, "Published port") || validatePort(target, "Target port");
@@ -351,10 +358,15 @@ function PortsSection({ app }: { app: Application }) {
         </div>
         <AddBtn
           pending={pending && removingId === null}
-          disabled={!published || !target}
+          disabled={!validPorts}
           onClick={add}
+          label={warnings.length ? "Save anyway" : "Add"}
         />
       </div>
+      <PortConflictWarning warnings={warnings} onSelectService={onSelectService} />
+      {((published && !isValidPort(Number(published))) || (target && !isValidPort(Number(target)))) && (
+        <p role="alert" className="text-xs text-[var(--color-danger)]">Use ports from 1 to 65535.</p>
+      )}
       {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </section>
   );
