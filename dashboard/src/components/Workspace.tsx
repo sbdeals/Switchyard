@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
+import type { ServiceReferenceGraph } from "@/lib/service-references";
 import { Activity, Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, Search, ScrollText } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
+import type { Service, ProjectNode} from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
 import { BulkActionDialog } from "@/components/BulkActionDialog";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
@@ -42,7 +43,7 @@ type View = "canvas" | "grid" | "logs";
 type WorkspaceProps = {
   services: Service[];
   projects: ProjectNode[];
-  edges: ServiceEdge[];
+  graph: ServiceReferenceGraph;
   userId: string | null;
   notificationScope: string;
 };
@@ -54,7 +55,7 @@ export function Workspace(props: WorkspaceProps) {
 function WorkspaceContent({
   services: initialServices,
   projects: initialProjects,
-  edges: initialEdges,
+  graph: initialGraph,
   notificationScope,
   userId,
 }: WorkspaceProps) {
@@ -66,10 +67,10 @@ function WorkspaceContent({
   const [deployment, setDeployment] = useState<DeploymentEvent | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
   const router = useRouter();
-  const { services, projects, edges } = useWorkspacePolling({
+  const { services, projects, graph } = useWorkspacePolling({
     services: initialServices,
     projects: initialProjects,
-    edges: initialEdges,
+    graph: initialGraph,
   }, projectId);
   const currentProject = projects.some((p) => p.projectId === projectId) ? projectId : null;
   const drawer = useServiceDeeplink(services);
@@ -79,8 +80,14 @@ function WorkspaceContent({
     drawer.open(id);
   }, drawer.service?.id === id && drawer.tab === "overview");
   const { onDeployed } = drawer;
-  const scope = useMemo(() => getWorkspaceScope(projects, services, edges, currentProject), [projects, services, edges, currentProject]);
+  const scope = useMemo(() => getWorkspaceScope(projects, services, graph.edges, currentProject), [projects, services, graph.edges, currentProject]);
   const visibleServices = scope.services;
+  const visibleGraph = useMemo<ServiceReferenceGraph>(() => {
+    if (!scope.project) return graph;
+    const visibleIds = new Set(visibleServices.map((s) => s.id));
+    return { edges: graph.edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target)), warnings: graph.warnings };
+  }, [graph, scope.project, visibleServices]);
+
   const searchParams = useSearchParams();
   const params = searchParams.toString();
   const [previousParams, setPreviousParams] = useState(params);
@@ -307,7 +314,7 @@ function WorkspaceContent({
           <EmptyState key={scope.project?.projectId ?? "all"} projects={scope.projects} projectName={scope.project?.name} onDeployed={onDeployed} />
         ) : view === "canvas" ? (
           <PanelErrorBoundary>
-            <FlowCanvas key={scope.project?.projectId ?? "all"} services={visibleServices} allServices={services} edges={scope.edges} matchingIds={matchingIds} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} onDuplicate={setDuplicateSource} />
+            <FlowCanvas key={scope.project?.projectId ?? "all"} services={visibleServices} allServices={services} graph={visibleGraph} matchingIds={matchingIds} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} onDuplicate={setDuplicateSource} />
           </PanelErrorBoundary>
         ) : (
           <>

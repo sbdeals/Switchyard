@@ -46,9 +46,9 @@ describe("workspace polling authentication through loadWorkspace", () => {
     mocks.openSession.mockReturnValue({ dokployCookie: "first-user-session" });
     mocks.fetch.mockImplementation(async () => Response.json([]));
 
-    expect(await (await GET()).json()).toEqual({ services: [], projects: [], edges: [] });
+    expect(await (await GET()).json()).toEqual({ services: [], projects: [], edges: [], graph: { edges: [], warnings: {} } });
     mocks.openSession.mockReturnValue({ dokployCookie: "second-user-session" });
-    expect(await (await GET()).json()).toEqual({ services: [], projects: [], edges: [] });
+    expect(await (await GET()).json()).toEqual({ services: [], projects: [], edges: [], graph: { edges: [], warnings: {} } });
 
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
     expect(mocks.fetch.mock.calls[0][1].headers.Cookie).toBe("first-user-session");

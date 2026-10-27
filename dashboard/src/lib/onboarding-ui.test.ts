@@ -124,7 +124,7 @@ describe("onboarding deployment entry points", () => {
   });
 
   it("replaces an empty workspace canvas with onboarding actions, then restores the canvas when populated", () => {
-    const props = { projects: [project], edges: [], userId: "hashed-user" };
+    const props = { projects: [project], graph: { edges: [], warnings: {} }, userId: "hashed-user" };
     const empty = renderToStaticMarkup(createElement(Workspace, { ...props, services: [] }));
     expect(empty).toContain("Bring your first project to life");
     expect(empty).toContain("Deploy a Docker image");
