@@ -1,9 +1,10 @@
-import { loadConfig, saveConfig } from "../core/config.js";
+import { loadConfig, saveConfig, STORE_VOLUME } from "../core/config.js";
 import { CONTROL_PLANE_RESET_NOTICE, CONTROL_PLANE_STOP_NOTICE } from "../core/control-plane.js";
 import { docker, probeDocker } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { LOCAL_INGRESS_CONTAINER } from "../core/local-ingress.js";
 import { askConfirm, p, pc } from "../core/prompts.js";
+import { inspectPurgeResources } from "../core/purge.js";
 import { CONTAINER_NAME } from "../core/switchyard-container.js";
 import { platformFor } from "../platform/index.js";
 import { CLI_VERSION } from "../version.js";
@@ -41,18 +42,34 @@ export async function downCommand(flags: DownFlags): Promise<void> {
   }
 
   const platform = platformFor(cfg.platform);
-  await platform.downDokploy({ purge: !!flags.purge }, (m) => p.log.step(m));
+  let failure: string | undefined;
+  try {
+    await platform.downDokploy({ purge: !!flags.purge }, (m) => p.log.step(m));
+  } catch (e) {
+    if (!flags.purge) throw e;
+    failure = e instanceof Error ? e.message : String(e);
+  }
 
   if (flags.purge) {
-    // The admin account died with the postgres volume; stale creds would
-    // send the next `up` down the wrong path.
-    cfg.adminEmail = "";
-    cfg.adminPassword = "";
-    // The metrics-store volume is gone too; drop its password so the next `up`
-    // regenerates one that matches a fresh store.
-    cfg.storePassword = "";
+    // Even a failed purge can remove some data. Clear only credentials whose
+    // volumes are confirmed gone; keep the rest for recovery or a retry.
+    const result = await inspectPurgeResources();
+    const adminRemoved = ["dokploy", "dokploy-postgres"].every((v) => result.removedVolumes.includes(v));
+    const storeRemoved = result.removedVolumes.includes(STORE_VOLUME);
+    if (adminRemoved) {
+      cfg.adminEmail = "";
+      cfg.adminPassword = "";
+    }
+    if (storeRemoved) cfg.storePassword = "";
     saveConfig(cfg, path);
-    p.log.info("Cleared the stored admin credentials (the account was deleted with the data).");
+    if (adminRemoved) p.log.info("Cleared the stored admin credentials (the account was deleted with the data).");
+    if (storeRemoved) p.log.info("Cleared the stored metrics password (the metrics data was removed).");
+    if (!adminRemoved || !storeRemoved) {
+      p.log.info("Kept stored credentials for volumes still present or whose removal could not be verified.");
+    }
+    if (result.error || failure) {
+      throw new UserError(result.error ?? `Purge incomplete: ${failure}\nRetry \`switchyard down --purge --yes\` after resolving the Docker errors.`);
+    }
   }
 
   p.outro(flags.purge

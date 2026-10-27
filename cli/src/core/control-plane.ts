@@ -2,6 +2,7 @@ import { STORE_SERVICE, STORE_VOLUME } from "./config.js";
 import { docker, type RunResult } from "./docker.js";
 import { UserError } from "./errors.js";
 import { LOCAL_INGRESS_CONTAINER } from "./local-ingress.js";
+import { networkHasWorkloads } from "./network-workloads.js";
 import { CONTAINER_NAME, NETWORK_NAME } from "./switchyard-container.js";
 import { sleep } from "./util.js";
 
@@ -70,18 +71,22 @@ export async function downControlPlane(
   }
   const plan = planControlPlaneDown(inventory, purge);
   log(purge ? CONTROL_PLANE_RESET_NOTICE : CONTROL_PLANE_STOP_NOTICE);
-  const services = plan.filter((item) => item.kind === "service").map((item) => item.name);
+  const services = RESOURCES.filter((item) => item.kind === "service").map((item) => item.name);
   let drained = false;
+  const failures: string[] = [];
   for (const { kind, name } of plan) {
     if (kind !== "container" && kind !== "service" && !drained) {
       // Swarm service removal returns before its task containers disappear.
       for (let attempt = 0; ; attempt++) {
+        const remainingServices = await runDocker(["service", "ls", "--format", "{{.Name}}"]);
         const ps = await runDocker([
           "ps", "--all", "--filter", "label=com.docker.swarm.service.name",
           "--format", '{{.Label "com.docker.swarm.service.name"}}',
         ]);
-        if (ps.code !== 0) throw new UserError(`Checking control-plane tasks failed: ${ps.stderr.trim()}`);
-        if (!ps.stdout.split(/\r?\n/).some((line) => services.includes(line.trim()))) break;
+        if (remainingServices.code !== 0 || ps.code !== 0) {
+          throw new UserError(`Checking control-plane tasks failed: ${remainingServices.stderr.trim()} ${ps.stderr.trim()}`);
+        }
+        if (!`${remainingServices.stdout}\n${ps.stdout}`.split(/\r?\n/).some((line) => services.includes(line.trim()))) break;
         if (attempt === 30) throw new UserError("Control-plane tasks did not stop; data volumes were kept. Retry the reset.");
         await wait(2000);
       }
@@ -90,17 +95,26 @@ export async function downControlPlane(
     log(`Removing control-plane ${kind} ${name} ...`);
     const args = kind === "container" ? ["rm", "-f", name] : [kind, "rm", name];
     let res = await runDocker(args);
-    // Workloads still use this shared network on a control-plane-only reset.
-    if (kind === "network" && res.code !== 0 && /in use|has active endpoints/i.test(res.stderr)) {
-      log(`Keeping ${name}: it still has attached workloads.`);
-      continue;
-    }
-    for (let i = 0; i < 10 && res.code !== 0 && /in use/i.test(res.stderr); i++) {
+    for (let i = 0; i < 10 && res.code !== 0 && /in use|has active endpoints/i.test(res.stderr); i++) {
       await wait(2000);
       res = await runDocker(args);
     }
+    if (kind === "network" && res.code !== 0 && /in use|has active endpoints/i.test(res.stderr)) {
+      try {
+        if (await networkHasWorkloads(runDocker)) {
+          log(`Keeping ${name}: it still has attached workloads.`);
+          continue;
+        }
+      } catch (error) {
+        log(String(error)); // Unknown attachments cannot excuse a survivor.
+      }
+    }
     if (res.code !== 0 && !/not found|no such/i.test(res.stderr)) {
-      throw new UserError(`Removing control-plane ${kind} ${name} failed: ${res.stderr.trim()}`);
+      const message = `Removing control-plane ${kind} ${name} failed: ${res.stderr.trim()}`;
+      // Failed process removal must not delete metadata out from under it.
+      if (kind === "container" || kind === "service") throw new UserError(message);
+      failures.push(message);
     }
   }
+  if (failures.length) throw new UserError(failures.join("\n"));
 }

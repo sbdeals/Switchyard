@@ -67,7 +67,15 @@ function fakeDocker(inventory = [...controlPlane, ...workloads], intercept = () 
     const overridden = intercept(args, calls);
     if (overridden) return overridden;
     const ok = (stdout = "") => ({ code: 0, stdout, stderr: "" });
-    if (args[0] === "ps" && args.includes("--filter")) return ok();
+    if (args[0] === "network" && args[1] === "inspect") return ok("dokploy-network-id");
+    if (args[0] === "service" && args[1] === "inspect") return ok();
+    if (args[0] === "ps" && args.includes("--filter")) {
+      if (args.includes("network=dokploy-network")) {
+        return ok(remaining.filter((item) => item.kind === "container" && item.networks?.includes("dokploy-network"))
+          .map((item) => `${item.name}\t${item.labels?.["com.docker.swarm.service.name"] || ""}`).join("\n"));
+      }
+      return ok();
+    }
     if (args[0] === "ps" || args[1] === "ls") {
       const kind = args[0] === "ps" ? "container" : args[0];
       return ok(remaining.filter((item) => item.kind === kind).map((item) => item.name).join("\n"));
@@ -161,4 +169,36 @@ test("a task-drain timeout preserves control-plane data", async () => {
     : undefined);
   await assert.rejects(downControlPlane(true, quiet, fake.run, noWait), /tasks did not stop/);
   assert.ok(removals(fake.calls).every((args) => args[0] !== "volume" && args[0] !== "secret"));
+});
+
+test("reset retries active endpoints without assuming that workloads exist", async () => {
+  let attempts = 0;
+  const fake = fakeDocker(controlPlane, (args) => args[0] === "network" && args[1] === "rm" && ++attempts < 10
+    ? { code: 1, stdout: "", stderr: "network has active endpoints" }
+    : undefined);
+  await downControlPlane(true, quiet, fake.run, noWait);
+  assert.equal(attempts, 10);
+  assert.deepEqual(fake.remaining, []);
+});
+
+test("reset finishes independent removals before reporting all data survivors", async () => {
+  const fake = fakeDocker(controlPlane, (args) => args[1] === "rm" && ["dokploy-network", "dokploy"].includes(args.at(-1)) && args[0] !== "service"
+    ? { code: 1, stdout: "", stderr: "resource is in use" }
+    : undefined);
+  await assert.rejects(downControlPlane(true, quiet, fake.run, noWait), /network dokploy-network[\s\S]*volume dokploy/);
+  assert.deepEqual(fake.remaining, [
+    { kind: "network", name: "dokploy-network" },
+    { kind: "volume", name: "dokploy" },
+  ]);
+});
+
+test("reset waits for leftover tasks even when their service is already absent", async () => {
+  let polls = 0;
+  const fake = fakeDocker(controlPlane.filter(({ kind }) => kind !== "service"), (args) => args[0] === "ps" && args.includes("--filter")
+    ? { code: 0, stdout: ++polls === 1 ? "dokploy" : "", stderr: "" }
+    : undefined);
+  let waits = 0;
+  await downControlPlane(true, quiet, fake.run, async () => { waits++; });
+  assert.equal(waits, 1);
+  assert.deepEqual(fake.remaining, []);
 });
