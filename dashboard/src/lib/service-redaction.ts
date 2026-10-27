@@ -1,4 +1,5 @@
 import type { Service } from "./dokploy";
+import { parseComposePorts } from "./port-conflicts";
 import { stripUrlCredentials } from "./url-credentials";
 import { variableCount } from "./delete-impact";
 
@@ -37,6 +38,7 @@ export function redactServiceForClient(service: Service): Service {
     return {
       ...base,
       composeFile: null,
+      publishedPorts: parseComposePorts(base.composeFile),
       serviceNames: composeServiceNames(base.composeFile),
       hasPostgres: /^[ \t]*image:[ \t]*["']?[^\n#"']*postgres/im.test(base.composeFile ?? ""),
     };

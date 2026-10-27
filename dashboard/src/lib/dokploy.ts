@@ -23,12 +23,14 @@ import { redirect, unstable_rethrow } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
+import { resolveAppPort } from "./app-port";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
 import { formatBackupError, validateS3Endpoint } from "./backup-errors";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
   listRuntimeStates,
+  readImageExposedPorts,
   type ServiceRuntime,
 } from "./docker";
 
@@ -162,6 +164,9 @@ export interface AppDeployment {
   status: string;
   title: string;
   createdAt: string;
+  description: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
   /**
    * Non-null when this deployment produced a restorable image snapshot
    * (Dokploy only records these when the app deploys to a registry). Feeds
@@ -279,6 +284,7 @@ export interface ComposeService extends ServiceBase {
   composeType: string | null;
   /** Safe metadata computed on the server before composeFile is redacted. */
   serviceNames?: string[];
+  publishedPorts?: { port: number; protocol: "tcp" | "udp" }[];
   hasPostgres?: boolean;
   /** Public domains routed to the stack's services (Dokploy `domains`). */
   domains: AppDomain[];
@@ -947,6 +953,9 @@ interface RawDeployment {
   status?: string;
   title?: string;
   createdAt?: string;
+  description?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
   rollbackId?: string | null;
 }
 
@@ -968,8 +977,11 @@ function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment
   return (deployments ?? []).map((dp) => ({
     deploymentId: dp.deploymentId,
     status: dp.status ?? "idle",
-    title: dp.title ?? "Deployment",
+    title: dp.title ?? dp.description ?? "Deployment",
     createdAt: dp.createdAt ?? "",
+    description: dp.description ?? null,
+    startedAt: dp.startedAt ?? null,
+    finishedAt: dp.finishedAt ?? null,
     rollbackId: dp.rollbackId ?? null,
   }));
 }
@@ -1561,9 +1573,6 @@ export async function deleteSecurity(securityId: string): Promise<void> {
 // mode it is unset, so auto-URL is a no-op and a deploy simply leaves the app
 // without a domain.
 
-/** Container port auto-domains route to (Nixpacks/Node apps default here). */
-const AUTO_DOMAIN_PORT = 3000;
-
 /** True for hosts we mint automatically (traefik.me / sslip.io wildcards). */
 export function isAutoDomainHost(host: string): boolean {
   return /\.traefik\.me$|\.sslip\.io$/i.test(host.trim());
@@ -1605,11 +1614,12 @@ async function generateTraefikMeHost(appName: string): Promise<string | null> {
 async function createDomainRecord(
   applicationId: string,
   host: string,
+  port: number,
   certificateType: "none" | "letsencrypt"
 ): Promise<void> {
   await request("domain.create", {
     method: "POST",
-    body: { applicationId, host, port: AUTO_DOMAIN_PORT, https: true, certificateType },
+    body: { applicationId, host, port, https: true, certificateType },
   });
 }
 
@@ -1619,7 +1629,7 @@ async function createDomainRecord(
  * dev). Idempotent: if the app already carries an auto-domain the existing host
  * is returned without creating a second one.
  */
-export async function ensureAutoDomain(applicationId: string): Promise<string | null> {
+export async function ensureAutoDomain(applicationId: string, explicitPort?: number): Promise<string | null> {
   const hostIp = process.env.SWITCHYARD_HOST_IP?.trim();
   if (!hostIp) return null; // Docker Desktop / dev: Traefik unmanaged, no-op.
 
@@ -1633,13 +1643,22 @@ export async function ensureAutoDomain(applicationId: string): Promise<string | 
   const existing = (detail.domains ?? []).find((d) => isAutoDomainHost(d.host));
   if (existing) return existing.host;
 
+  // Deploys are queued: inspect only if the image has already been pulled locally.
+  const port = resolveAppPort({
+    port: explicitPort,
+    image: detail.dockerImage,
+    env: detail.env,
+    exposedPorts: explicitPort === undefined && detail.dockerImage
+      ? await readImageExposedPorts(detail.dockerImage)
+      : [],
+  });
   const generated = await generateTraefikMeHost(appName);
   if (generated) {
-    await createDomainRecord(applicationId, generated, "none");
+    await createDomainRecord(applicationId, generated, port, "none");
     return generated;
   }
   const host = `${appName}.${hostIp}.sslip.io`;
-  await createDomainRecord(applicationId, host, "letsencrypt");
+  await createDomainRecord(applicationId, host, port, "letsencrypt");
   return host;
 }
 
