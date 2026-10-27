@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
+import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, ScrollText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
@@ -13,11 +13,12 @@ import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
+import { ProjectLogs } from "@/components/ProjectLogs";
 import { useServiceDeeplink } from "@/components/use-service-deeplink";
 import { DirtyGuardProvider } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
 
-type View = "canvas" | "grid";
+type View = "canvas" | "grid" | "logs";
 
 type WorkspaceProps = {
   services: Service[];
@@ -63,6 +64,9 @@ function WorkspaceContent({
             <ViewToggle active={view === "grid"} onClick={() => setView("grid")}>
               <LayoutGrid className="size-3.5" /> Grid
             </ViewToggle>
+            <ViewToggle active={view === "logs"} onClick={() => setView("logs")}>
+              <ScrollText className="size-3.5" /> Logs
+            </ViewToggle>
           </div>
           <button
             onClick={() => setProjectsOpen(true)}
@@ -81,11 +85,13 @@ function WorkspaceContent({
         </div>
       </header>
 
-      {services.length === 0 ? (
+      {view === "logs" ? (
+        <ProjectLogs projects={projects} />
+      ) : services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
         <PanelErrorBoundary>
-          <FlowCanvas services={services} edges={edges} onSelect={(s) => drawer.open(s.id)} />
+          <FlowCanvas services={services} edges={edges} projects={projects} onDeployed={onDeployed} onSelect={(s) => drawer.open(s.id)} />
         </PanelErrorBoundary>
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
