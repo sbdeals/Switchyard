@@ -117,6 +117,8 @@ import {
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
 import { parseEnvironment, validateCron, validatePort } from "@/lib/validation";
+import { updateResourceSettings } from "@/lib/resource-settings";
+import type { ResourceInputs } from "@/lib/resource-limits";
 import { normalizeServiceNotes } from "@/lib/service-notes";
 import { validateComposeFile } from "@/lib/compose-validation";
 import { parseAppPort } from "@/lib/app-port";
@@ -290,6 +292,18 @@ export async function saveEnvironmentAction(
   const { error } = parseEnvironment(env);
   if (error) return { ok: false, error };
   return wrap(() => saveEnvironment(engine, id, env));
+}
+
+/** Persist resource settings without deploying or reloading a container. */
+export async function updateResourcesAction(
+  kind: "application" | Engine,
+  id: string,
+  input: ResourceInputs
+): Promise<ActionResult> {
+  return wrapSensitive(
+    () => updateResourceSettings(kind, id, input),
+    "Could not save resource settings.",
+  );
 }
 
 /** Environment values are fetched only by the open Variables tab. */
