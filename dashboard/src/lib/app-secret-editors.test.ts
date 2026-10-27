@@ -9,9 +9,12 @@ import type { Application } from "./dokploy";
 vi.mock("@/app/actions", () => ({
   loadServiceCommandsAction: vi.fn(),
   loadServiceWebhookAction: vi.fn(),
+  appLifecycleAction: vi.fn(),
 }));
 // #129: DeploymentHistory refreshes running deploys through the app router.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+// AppTabs -> AppDeployControls imports the server-only deploy options action.
+vi.mock("@/app/deploy-actions", () => ({ deployOptionsAction: vi.fn() }));
 // AppTabs -> ComposeExportDialog imports the server-only compose export action.
 vi.mock("@/app/compose-export-actions", () => ({ loadComposeExportAction: vi.fn() }));
 
