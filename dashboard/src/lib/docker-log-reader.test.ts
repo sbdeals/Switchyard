@@ -17,7 +17,7 @@ import { readRecentLogs } from "./docker";
 
 beforeEach(() => {
   vi.resetAllMocks();
-  docker.listContainers.mockResolvedValue([{ Id: "test-id", Names: ["/logs-download-test-app-1"] }]);
+  docker.listContainers.mockResolvedValue([{ Id: "test-id", Names: ["/logs-download-test.1.abc"], Labels: { "com.docker.swarm.service.name": "logs-download-test" } }]);
   docker.getContainer.mockReturnValue({ logs: docker.logs });
 });
 
