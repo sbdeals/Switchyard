@@ -4,7 +4,8 @@
  * Our BFF runs on the host with access to the Docker socket (the same one
  * Dokploy uses), so we read container logs and stats straight from the Docker
  * API instead of reverse-engineering Dokploy's WebSocket transport. A Dokploy
- * service's `appName` is the prefix of its Swarm task container name.
+ * service's `appName` identifies its Swarm service, stack namespace, or compose
+ * project label.
  */
 import "server-only";
 import Docker from "dockerode";
@@ -174,6 +175,31 @@ export function demuxDockerFrames(buf: Buffer): string {
   return Buffer.concat(parts).toString("utf8");
 }
 
+/** Match exact ownership labels, falling back to legacy names only if unlabeled. */
+export function matchServiceContainers(
+  containers: Docker.ContainerInfo[],
+  appName: string,
+): Docker.ContainerInfo[] {
+  if (!appName) return [];
+  const ownershipLabels = [
+    "com.docker.swarm.service.name",
+    "com.docker.stack.namespace",
+    "com.docker.compose.project",
+  ];
+  const owned = containers.filter((c) =>
+    ownershipLabels.some((label) => c.Labels?.[label] === appName),
+  );
+  if (owned.length > 0) return owned;
+
+  const escapedName = appName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const taskName = new RegExp(`^/?${escapedName}\\.\\d+\\.`);
+  return containers.filter((c) =>
+    ownershipLabels.every((label) => c.Labels?.[label] === undefined) &&
+    c.Labels?.["com.docker.compose.service"] === undefined &&
+    c.Names.some((name) => name.replace(/^\//, "") === appName || taskName.test(name)),
+  );
+}
+
 /**
  * Resolve a Dokploy appName to its running container id (most recent).
  *
@@ -189,16 +215,11 @@ export async function findContainerId(
   if (!appName) return null;
   if (allowed && !allowed.has(appName)) return null;
   const containers = await withTimeout(
-    docker.listContainers({ all: false, filters: { name: [appName] } }),
+    docker.listContainers({ all: false }),
     DOCKER_OP_TIMEOUT_MS,
     `Listing containers for ${appName}`,
   );
-  if (containers.length === 0) return null;
-  // Prefer an exact task match; otherwise the first running one.
-  const match =
-    containers.find((c) => c.Names.some((n) => n.replace(/^\//, "").startsWith(appName))) ??
-    containers[0];
-  return match.Id;
+  return matchServiceContainers(containers, appName)[0]?.Id ?? null;
 }
 
 export interface LogLine {
@@ -231,6 +252,7 @@ export async function followLogs(
   const out = new PassThrough();
   container.modem.demuxStream(raw, out, out);
   raw.on("end", () => out.end());
+  raw.on("close", () => out.end());
   raw.on("error", (e: Error) => out.destroy(e));
 
   return {
@@ -496,11 +518,11 @@ export interface PgContainer {
  * List the running Postgres containers that belong to a Dokploy service
  * `appName`. This covers BOTH data models the Data tab supports:
  *   - a Dokploy-managed Postgres database (its single Swarm task container,
- *     name-prefixed by the appName, image `postgres:*`), and
+ *     service-name label equal to appName, image `postgres:*`), and
  *   - Postgres containers inside a compose stack (the stack's containers share
- *     the compose-project name prefix; we keep the ones whose image is postgres).
- * The Docker `name` filter is a substring match, so we re-check the prefix to
- * avoid a coincidental match, then keep only postgres-imaged containers.
+ *     compose-project or stack-namespace label equal to appName; we keep only
+ *     postgres-imaged containers).
+ * Unlabeled legacy containers must have an exact name or Swarm task name match.
  *
  * Callers MUST have already validated `appName` against the user's known
  * Dokploy services (see knownAppNames) — this helper trusts its input, exactly
@@ -509,12 +531,11 @@ export interface PgContainer {
 export async function listPgContainers(appName: string): Promise<PgContainer[]> {
   if (!appName) return [];
   const containers = await withTimeout(
-    docker.listContainers({ all: false, filters: { name: [appName] } }),
+    docker.listContainers({ all: false }),
     DOCKER_OP_TIMEOUT_MS,
     `Listing postgres containers for ${appName}`,
   );
-  return containers
-    .filter((c) => c.Names.some((n) => n.replace(/^\//, "").startsWith(appName)))
+  return matchServiceContainers(containers, appName)
     .filter((c) => /postgres/i.test(c.Image))
     .map((c) => {
       const name = (c.Names[0] ?? "").replace(/^\//, "");
@@ -561,17 +582,20 @@ export interface PsqlResult {
 /**
  * Run one psql invocation inside a Postgres container and capture its output.
  *
- * The SQL is delivered over the exec's **stdin**, never interpolated into argv
- * or a shell — `Cmd` is a fixed `psql` argument vector, so no query text can be
- * reinterpreted as arguments or shell metacharacters. psql runs in `--csv` mode
+ * Read-only SQL is passed as one `--command` argument, prefixed with a SQL
+ * comment so psql always sends it to the server, never interpreting meta-commands.
+ * PGOPTIONS makes transactions read-only without adding command tags to the CSV;
+ * standard_conforming_strings matches the classifier's literal handling. `-X`
+ * prevents psqlrc from overriding these settings. Write mode keeps using stdin.
+ * Neither path uses a shell. psql runs in `--csv` mode
  * with `ON_ERROR_STOP=1` (so a SQL error exits non-zero) and a distinctive null
  * marker so the parser can tell SQL NULL from an empty string. `-w` prevents a
  * password prompt from silently consuming the SQL on stdin; PGPASSWORD (from the
  * container's own env) covers password-auth images.
  *
- * We DON'T half-close stdin to signal end-of-input: over a Windows named pipe
- * (Docker Desktop) the FIN races the data flush, so psql can see an empty stdin
- * and exit 0 with no output. Instead we terminate the input with `\n;\n\q\n`:
+ * In write mode we DON'T half-close stdin to signal end-of-input: over a Windows
+ * named pipe (Docker Desktop) the FIN races the data flush, so psql can see an
+ * empty stdin and exit 0 with no output. Instead we end input with `\n;\n\q\n`:
  * the `;` completes the trailing statement (so a missing final semicolon still
  * runs) and psql's `\q` makes it exit cleanly. An unterminated string/comment
  * therefore never reaches `\q`; that case is caught by the timeout below, which
@@ -582,15 +606,15 @@ export interface PsqlResult {
 export async function runPsqlCsv(
   target: { id: string; identity: PgIdentity },
   sql: string,
-  opts: { timeoutMs?: number; maxBytes?: number; nullMarker: string },
+  opts: { timeoutMs?: number; maxBytes?: number; nullMarker: string; readOnly?: boolean },
 ): Promise<PsqlResult | null> {
-  const { timeoutMs = 20_000, maxBytes = 5_000_000, nullMarker } = opts;
+  const { timeoutMs = 20_000, maxBytes = 5_000_000, nullMarker, readOnly = true } = opts;
   const container = docker.getContainer(target.id);
   const { user, db, password } = target.identity;
 
   const exec = await withTimeout(
     container.exec({
-      // Fixed argv. The SQL is NOT here — it is written to stdin below.
+      // SQL in read-only mode is a single argument, never shell-interpolated.
       Cmd: [
         "psql",
         "-U",
@@ -603,8 +627,14 @@ export async function runPsqlCsv(
         "ON_ERROR_STOP=1",
         "-P",
         `null=${nullMarker}`,
+        ...(readOnly ? ["-X", "--command", `/* Read-only query */\n${sql}`] : []),
       ],
-      Env: password ? [`PGPASSWORD=${password}`] : [],
+      Env: [
+        ...(password ? [`PGPASSWORD=${password}`] : []),
+        ...(readOnly
+          ? ["PGOPTIONS=-c default_transaction_read_only=on -c standard_conforming_strings=on"]
+          : []),
+      ],
       AttachStdin: true,
       AttachStdout: true,
       AttachStderr: true,
@@ -640,10 +670,9 @@ export async function runPsqlCsv(
   collect(outS, (t) => (stdout += t));
   collect(errS, (t) => (stderr += t));
 
-  // Send the SQL followed by a terminator + `\q` (see the doc comment for why we
-  // don't half-close). psql runs the statement(s), then quits and closes the
-  // exec stream, which resolves the wait below.
-  stream.write(Buffer.from(`${sql}\n;\n\\q\n`, "utf8"));
+  // Write mode uses a terminator + `\q` rather than half-closing stdin (see above).
+  // Read-only mode exits after --command, without interpreting any input as psql.
+  if (!readOnly) stream.write(Buffer.from(`${sql}\n;\n\\q\n`, "utf8"));
 
   await new Promise<void>((resolve) => {
     let done = false;
