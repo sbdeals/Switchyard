@@ -276,6 +276,34 @@ describe("service drawer navigation", () => {
     expect(hook.registry.labels()).toEqual([]);
   });
 
+  it("opens Activity's Deploys destination in history and restores it on Forward", () => {
+    const hook = mount("/?project=one#canvas");
+    hook.render().open("app", "deployments");
+    expect(hook.render()).toMatchObject({ service: services[0], tab: "deployments" });
+    expect(hook.history.pushState).toHaveBeenCalledExactlyOnceWith(
+      null, "", "/?project=one&service=app&tab=deployments#canvas",
+    );
+    hook.back();
+    expect(hook.render().service).toBeNull();
+    hook.forward();
+    expect(hook.render()).toMatchObject({ service: services[0], tab: "deployments" });
+  });
+
+  it("guards Activity navigation until unsaved changes are discarded", () => {
+    const hook = mount("/?service=app&tab=variables");
+    hook.render();
+    hook.markDirty();
+    hook.render().open("app", "deployments");
+    expect(hook.pending).toBe(true);
+    expect(hook.render()).toMatchObject({ service: services[0], tab: "variables" });
+    hook.keep();
+    expect(hook.registry.labels()).toEqual(["Variables"]);
+    hook.render().open("app", "deployments");
+    hook.discard();
+    expect(hook.render()).toMatchObject({ service: services[0], tab: "deployments" });
+    expect(hook.registry.labels()).toEqual([]);
+  });
+
   it("pushes opening/closing and replaces tabs while preserving unrelated params and hash", () => {
     const hook = mount("/workspace?project=one&filter=a&filter=b#canvas");
     expect(hook.render().service).toBeNull();

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Plus,
@@ -28,6 +29,7 @@ import {
 } from "@/app/actions";
 import { GithubDeployModal } from "@/components/GithubDeployModal";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { anchoredMenuPosition, type Point } from "@/lib/canvas-layout";
 
 /**
  * One-click provisioning: pick a database engine (auto name/password/version) or
@@ -37,17 +39,21 @@ import { useDialogFocus } from "@/components/use-focus-trap";
 export function QuickDeployMenu({
   projects,
   onDeployed,
+  anchor,
+  onClose,
   variant = "menu",
   menuOpen,
   onMenuOpenChange,
 }: {
   projects: ProjectNode[];
   onDeployed: (id: string) => void;
+  anchor?: Point;
+  onClose?: () => void;
   variant?: "menu" | "cards";
   menuOpen?: boolean;
   onMenuOpenChange?: (open: boolean) => void;
 }) {
-  const [localOpen, setLocalOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(!!anchor);
   const open = menuOpen ?? localOpen;
   function setOpen(next: boolean) {
     setLocalOpen(next);
@@ -59,6 +65,7 @@ export function QuickDeployMenu({
   const [error, setError] = useState<string | null>(null);
   const [image, setImage] = useState("");
   const [name, setName] = useState("");
+  const [port, setPort] = useState("");
   const [repo, setRepo] = useState("");
   const [, startTransition] = useTransition();
 
@@ -81,6 +88,11 @@ export function QuickDeployMenu({
   const missingEnvironment = projects.length > 0 && envOptions.length === 0;
   const environmentError = "Add an environment in Projects before deploying a service.";
 
+  function close() {
+    setOpen(false);
+    onClose?.();
+  }
+
   function run(key: string, fn: () => Promise<{ ok: true; id: string } | { ok: false; error: string }>) {
     if (missingEnvironment) {
       setError(environmentError);
@@ -95,6 +107,7 @@ export function QuickDeployMenu({
         setOpen(false);
         setImage("");
         setName("");
+        setPort("");
         setRepo("");
         onDeployed(res.id);
       } else setError(res.error);
@@ -103,7 +116,7 @@ export function QuickDeployMenu({
 
   const deployDb = (engine: Engine) =>
     run(`db:${engine}`, () => quickDeployDatabaseAction(engine, targetEnv));
-  const deployImage = () => run("app", () => quickDeployImageAction(image, name.trim() || undefined, targetEnv));
+  const deployImage = () => run("app", () => quickDeployImageAction(image, name.trim() || undefined, targetEnv, port));
   const deployRepo = () => run("repo", () => quickDeployRepoAction(repo, undefined, targetEnv));
   const createComposeStack = () => run("compose", () => createComposeAction(undefined, targetEnv));
   const deployTemplate = (id: string) =>
@@ -142,7 +155,7 @@ export function QuickDeployMenu({
         ? "Deploy a Docker image"
         : "Add a database";
 
-  return (
+  const content = (
     <div className="relative">
       {cards ? (
         <div className="grid gap-3 sm:grid-cols-3">
@@ -170,7 +183,7 @@ export function QuickDeployMenu({
             </button>
           ))}
         </div>
-      ) : <button
+      ) : !anchor && <button
         onClick={() => setOpen(!open)}
         aria-haspopup="true"
         aria-expanded={open}
@@ -182,9 +195,10 @@ export function QuickDeployMenu({
       <AnimatePresence>
         {open && (
           <>
-            <div className={`fixed inset-0 z-40 ${cards ? "bg-black/50" : ""}`} onClick={() => setOpen(false)} />
+            <div className={`fixed inset-0 z-40 ${cards ? "bg-black/50" : ""}`} onClick={close} />
             <FocusTrapPanel
-              onClose={() => setOpen(false)}
+              onClose={close}
+              anchor={anchor}
               role="dialog"
               aria-label={title}
               aria-modal={cards ? true : undefined}
@@ -194,7 +208,7 @@ export function QuickDeployMenu({
               transition={{ duration: 0.12 }}
               className={cards
                 ? "fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-5 shadow-2xl"
-                : "absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl"}
+                : `${anchor ? "fixed max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto" : "absolute right-0 mt-2 overflow-hidden"} z-50 w-80 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl`}
             >
               {cards && (
                 <div className="mb-4 flex items-center justify-between gap-3">
@@ -269,6 +283,20 @@ export function QuickDeployMenu({
                   )}
                 </button>
               </div>
+              <label className="mb-1 flex items-center gap-1.5 px-1 py-1 text-xs text-[var(--color-fg-subtle)]">
+                Port
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  step={1}
+                  value={port}
+                  onChange={(e) => setPort(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && image.trim() && busy === null && deployImage()}
+                  placeholder="Auto"
+                  className="w-24 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 text-xs text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+                />
+              </label>
               </>}
               {(!cards || source === "repo") && <>
               <div className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1">
@@ -449,12 +477,16 @@ export function QuickDeployMenu({
 
       <GithubDeployModal
         open={githubOpen && !missingEnvironment}
-        onClose={() => setGithubOpen(false)}
+        onClose={() => {
+          setGithubOpen(false);
+          onClose?.();
+        }}
         environmentId={targetEnv}
         onDeployed={onDeployed}
       />
     </div>
   );
+  return anchor ? createPortal(content, document.body) : content;
 }
 
 /**
@@ -464,9 +496,37 @@ export function QuickDeployMenu({
  */
 function FocusTrapPanel({
   onClose,
+  anchor,
   ...props
-}: { onClose: () => void } & React.ComponentProps<typeof motion.div>) {
-  const ref = useDialogFocus<HTMLDivElement>(onClose);
+}: { onClose: () => void; anchor?: Point } & React.ComponentProps<typeof motion.div>) {
+  const focusRef = useDialogFocus<HTMLDivElement>(onClose);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    focusRef(node);
+    panelRef.current = node;
+  }, [focusRef]);
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!anchor || !panel) return;
+    // Measure again when the catalog expands or the viewport changes.
+    const position = () => {
+      const point = anchoredMenuPosition(anchor,
+        { width: window.innerWidth, height: window.innerHeight },
+        { width: panel.offsetWidth, height: panel.offsetHeight });
+      panel.style.left = `${point.x}px`;
+      panel.style.top = `${point.y}px`;
+    };
+    position();
+    const observer = new ResizeObserver(position);
+    observer.observe(panel);
+    window.addEventListener("resize", position);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", position);
+    };
+  }, [anchor]);
+
   return <motion.div {...props} ref={ref} />;
 }
 

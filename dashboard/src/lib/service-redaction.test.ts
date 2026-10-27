@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ENGINES, inferEdges, type Application, type ComposeService, type Service, type ServiceBase } from "./dokploy";
 import { redactServiceForClient } from "./service-redaction";
+import { getPortWarnings } from "./port-conflicts";
 import { ComposeDomainsTab, ComposeEditorTab } from "../components/service/ComposeTabs";
 import { DirtyGuardProvider } from "../components/DirtyGuard";
 
@@ -186,10 +187,31 @@ describe("redactServiceForClient", () => {
     expect(redacted.serviceNames).toEqual(composeFile?.includes("web:") ? ["web"] : []);
   });
 
+  it("retains cross-service port warnings without sending Compose YAML or env to the client", () => {
+    const compose: ComposeService = {
+      ...services[1] as ComposeService,
+      composeFile: 'services:\n  web:\n    image: nginx\n    environment:\n      TOKEN: compose-secret-sentinel\n    ports:\n      - "3072:80"\n      - "3073:53/udp"\n',
+    };
+    const redacted = redactServiceForClient(compose) as ComposeService;
+
+    expect(redacted.publishedPorts).toEqual([
+      { port: 3072, protocol: "tcp" },
+      { port: 3073, protocol: "udp" },
+    ]);
+    expect(redacted.composeFile).toBeNull();
+    expect(JSON.stringify(redacted)).not.toMatch(/compose-secret-sentinel|env-redaction-sentinel/);
+    expect(getPortWarnings([redacted], "another-service", [{ port: 3072, protocol: "tcp" }])).toEqual([
+      { port: 3072, protocol: "tcp", reserved: false, conflicts: [{ serviceId: compose.id, serviceName: compose.name }] },
+    ]);
+    expect(getPortWarnings([redacted], "another-service", [{ port: 3072, protocol: "udp" }])).toEqual([]);
+    expect(getPortWarnings([redacted], compose.id, [{ port: 3072, protocol: "tcp" }])).toEqual([]);
+    expect(compose.composeFile).toContain("compose-secret-sentinel");
+  });
+
   it("keeps the compose editor unavailable until its lazy fetch completes", () => {
     const compose = { ...services[1] as ComposeService, composeFile: "TOKEN=compose-prop-sentinel" };
     const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null,
-      createElement(ComposeEditorTab, { compose }),
+      createElement(ComposeEditorTab, { compose, services: [compose], onSelectService: vi.fn() }),
     ));
 
     expect(html).toContain("Loading compose file");

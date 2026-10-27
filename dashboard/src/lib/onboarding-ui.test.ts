@@ -87,6 +87,7 @@ describe("onboarding deployment entry points", () => {
     const open = renderToStaticMarkup(createElement(QuickDeployMenu, { ...props, menuOpen: true }));
     expect(open).toContain('role="dialog"');
     expect(open).toContain('aria-label="Docker image"');
+    expect(open).toContain('type="number" min="1" max="65535"');
     expect(open).toContain('aria-label="Git repository URL"');
     expect(open).toContain("PostgreSQL");
     expect(open).toContain("App catalog");
@@ -100,6 +101,7 @@ describe("onboarding deployment entry points", () => {
     expect(html).toContain('aria-label="Close deployment dialog"');
     expect(html).toContain("Service name (optional)");
     expect(html).toContain('aria-label="Docker image"');
+    expect(html).toContain('type="number" min="1" max="65535"');
     expect(html).not.toContain('aria-label="Git repository URL"');
     expect(html).not.toContain("PostgreSQL");
     expect(html).not.toContain("App catalog");
@@ -122,6 +124,9 @@ describe("onboarding deployment entry points", () => {
     expect(empty).toContain("Bring your first project to life");
     expect(empty).toContain("Deploy a Docker image");
     expect(empty).not.toContain("Service canvas");
+    expect(empty).toContain("Logs</button>");
+    expect(empty).toContain("Activity</button>");
+    expect(empty).toContain('aria-label="Keyboard shortcuts"');
     const populated = renderToStaticMarkup(createElement(Workspace, { ...props, services: [service] }));
     expect(populated).toContain("Service canvas");
     expect(populated).not.toContain("Bring your first project to life");

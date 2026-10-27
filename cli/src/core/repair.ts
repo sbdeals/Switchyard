@@ -3,12 +3,12 @@ import { docker } from "./docker.js";
 import { apiRequest, signInCookie } from "./dokploy-api.js";
 
 /**
- * Self-heal compose stacks after a Docker Desktop VM reset.
+ * Self-heal compose stacks after loss of Docker Desktop VM config.
  *
  * Docker Desktop keeps /etc/dokploy inside its Linux VM, and the VM's root
- * filesystem does not survive VM recreation (updates, restarts on some
- * setups, "Reset to factory defaults"). Dokploy regenerates its own Traefik
- * config on boot, but previously-deployed compose stacks are left broken:
+ * filesystem can be rebuilt while Docker preserves its volume data. With
+ * its database intact, Dokploy regenerates its own Traefik config on boot,
+ * but previously-deployed compose stacks are left broken:
  * their working dirs (/etc/dokploy/compose/<app>) are gone, docker auto-creates
  * the missing bind sources as directories the moment a container starts, and
  * `compose up` then reuses those wedged containers ("not a directory" mount
@@ -18,8 +18,11 @@ import { apiRequest, signInCookie } from "./dokploy-api.js";
  * that has no RUNNING container — or that has containers stuck in "created"
  * (compose up wedged mid-creation) — is broken. Remove its leftover containers
  * (never its volumes) and ask Dokploy to redeploy; Dokploy rewrites the
- * working dir and template mount files from its database, so the stack comes
- * back exactly as configured. No-op when everything is running.
+ * working dir and template mount files from its surviving database. This
+ * cannot restore deleted data: "Reset to factory defaults", "Clean / Purge
+ * data", and uninstalling Docker Desktop delete containers, images, and
+ * volumes. Named-volume persistence is not a backup. No-op when everything
+ * is running.
  */
 
 export interface RepairResult {
