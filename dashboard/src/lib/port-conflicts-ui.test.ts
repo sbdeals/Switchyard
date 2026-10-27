@@ -21,6 +21,8 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 vi.mock("@/app/actions", () => ({}));
+vi.mock("@/app/db-connect-actions", () => ({}));
+vi.mock("@/components/DirtyGuard", () => ({ useDirtyGuard: vi.fn(), DirtyGuardScope: ({ children }: { children: ReactNode }) => children }));
 vi.mock("@/components/use-focus-trap", () => ({ useDialogFocus: () => vi.fn() }));
 vi.mock("@/components/service/primitives", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/components/service/primitives")>(),
@@ -72,15 +74,15 @@ function databaseEditor(externalPort: number | null, proposed: string) {
     engine: "redis", dockerImage: "redis:7", externalPort, cpuLimit: null,
     memoryLimit: null, databasePassword: null, createdAt: null,
   } as Database;
-  draft("settings", 650, db.id);
-  const settings = component(ServiceDrawer({ service: db, services: [db, owner], onSelectService, onClose: vi.fn() }), "SettingsTab");
+  draft(650);
+  const settings = component(ServiceDrawer({ service: db, services: [db, owner], onSelectService, tab: "settings", sessionKey: db.id, onTabChange: vi.fn(), onClose: vi.fn() }), "SettingsTab");
   draft(db.name, "7", proposed);
   return renderToStaticMarkup(shallow(settings));
 }
 
 function composeEditor(port: number) {
-  const compose = { kind: "compose", id: "compose", composeFile: "services: {}" } as ComposeService;
-  draft(`services:\n  web:\n    ports:\n      - "${port}:80"\n`);
+  const compose = { kind: "compose", id: "compose", composeFile: null } as ComposeService;
+  draft(`services:\n  web:\n    ports:\n      - "${port}:80"\n`, "services: {}", null);
   return renderToStaticMarkup(createElement(ComposeEditorTab, { compose, services, onSelectService }));
 }
 

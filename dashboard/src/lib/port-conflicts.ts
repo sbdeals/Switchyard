@@ -18,7 +18,7 @@ export function collectPublishedPorts(services: readonly Service[]): (PublishedP
       ? service.ports.map((p) => ({ port: p.publishedPort, protocol: p.protocol }))
       : service.kind === "database"
         ? service.externalPort === null ? [] : [{ port: service.externalPort, protocol: "tcp" }]
-        : parseComposePorts(service.composeFile);
+        : service.publishedPorts ?? parseComposePorts(service.composeFile);
     return ports.filter((p) => isValidPort(p.port) && (p.protocol === "tcp" || p.protocol === "udp"))
       .map((p) => ({ ...p, serviceId: service.id, serviceName: service.name }));
   });
