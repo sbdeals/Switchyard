@@ -242,10 +242,13 @@ dashboard container gets its credentials without hand-edited env files).
 | `localIngressHttpPort` | `8080` | Host HTTP port for the demo proxy |
 | `localIngressHttpsPort` | `8443` | Host HTTPS port for the demo proxy |
 | `adminName` / `adminEmail` / `adminPassword` | — | The Dokploy admin the dashboard signs in with |
+| `sessionSecret` | `""` (generated at install) | CSPRNG secret that signs the dashboard's session cookie |
 | `image` | `ghcr.io/sbdeals/switchyard` | Dashboard image repo |
 | `imageTag` | `""` (= CLI version) | Pin a dashboard image tag |
 | `dokployUrlInContainer` | `http://dokploy:3000` | How the container reaches Dokploy (service DNS) |
 | `hostIp` | `""` (auto-detected on Linux) | Host public/advertise IP handed to the dashboard as `SWITCHYARD_HOST_IP` so app deploys mint an auto-URL (traefik.me / sslip.io) with no DNS. `""` disables auto-URL (Docker Desktop / dev). Override with `config set hostIp <ip>` |
+| `store` | `true` | Provision the `switchyard-metrics` Postgres so dashboard metrics persist; `false` turns the store off |
+| `storePassword` | `""` (generated once) | CSPRNG password for the `switchyard-metrics` Postgres |
 
 Change a setting and apply it in one step — `set` recreates the container
 when the value affects it:
@@ -258,8 +261,10 @@ switchyard config set imageTag latest                # track latest instead of t
 
 Editing the JSON by hand is fine too — run `switchyard up` afterwards to
 converge (it recreates the container only when the rendered spec's hash
-changed). `switchyard config list` redacts secrets unless you pass
-`--show-secrets`.
+changed). `switchyard config list` and `set` confirmations redact
+`adminPassword`, `sessionSecret`, and `storePassword` unless you pass
+`--show-secrets`. `switchyard config get <key>` always returns the raw value,
+including secrets, without requiring `--show-secrets`.
 
 If service DNS doesn't work in your setup, point the container at the host
 instead:

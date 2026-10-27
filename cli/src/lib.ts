@@ -1,5 +1,5 @@
 /**
- * Pure, side-effect-light helpers re-exported for the node:test suite
+ * Helpers re-exported for the node:test suite
  * (tests import from dist/lib.js so they run against the built artifact).
  */
 export { connectDeployClient, createDeployCommand, deployDirectory } from "./commands/deploy.js";
@@ -38,6 +38,8 @@ export {
   type ContainerRow,
   type RepairResult,
 } from "./core/repair.js";
-export { renderContainer } from "./core/switchyard-container.js";
+export { ensureSwitchyard, renderContainer } from "./core/switchyard-container.js";
 export { generatePassword, isValidEmail, parsePort, randomSecret, sha256 } from "./core/util.js";
+export { dockerDesktopPlatform } from "./platform/docker-desktop.js";
+export { linuxPlatform, runScript } from "./platform/linux.js";
 export { CLI_VERSION } from "./version.js";
