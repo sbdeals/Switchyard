@@ -11,6 +11,8 @@ vi.mock("@/lib/client-actions", () => ({
   loadServiceWebhookAction: vi.fn(),
   appLifecycleAction: vi.fn(),
 }));
+// #129: DeploymentHistory refreshes running deploys through the app router.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 // AppTabs -> AppDeployControls imports the server-only deploy options action.
 vi.mock("@/app/deploy-actions", () => ({ deployOptionsAction: vi.fn() }));
 // AppTabs -> ComposeExportDialog imports the server-only compose export action.
