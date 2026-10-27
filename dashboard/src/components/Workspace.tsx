@@ -113,7 +113,7 @@ function WorkspaceContent({
             Apps and databases across your Dokploy projects.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <select
             aria-label="Current project"
             value={currentProject ?? ""}
@@ -288,13 +288,13 @@ function EmptyState({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="rounded-2xl border border-dashed border-[var(--color-border-strong)] px-5 py-10 text-center sm:px-10 sm:py-14"
+      className="min-w-0 rounded-2xl border border-dashed border-[var(--color-border-strong)] px-5 py-10 text-center sm:px-10 sm:py-14"
     >
       <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
         <Boxes className="size-7" />
       </div>
       <h2 className="mt-4 text-lg font-semibold">{projectName ? `${projectName} is ready for its first service` : "Bring your first project to life"}</h2>
-      <p className="mx-auto mb-7 mt-2 max-w-md text-sm text-[var(--color-fg-muted)]">
+      <p className="mx-auto mb-7 mt-2 w-full max-w-md text-sm text-[var(--color-fg-muted)]">
         Start with your code, a container image, or a database. We&apos;ll help you get it running.
       </p>
       <QuickDeployMenu variant="cards" projects={projects} onDeployed={onDeployed} />

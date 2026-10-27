@@ -103,9 +103,9 @@ export function AppOverviewTab({ app }: { app: Application }) {
 
   return (
     <div className="space-y-5">
-      <PublicUrlBar domains={app.domains} status={app.status} />
+      <PublicUrlBar domains={app.domains} status={app.status} runtime={app.runtime} />
 
-      <LifecycleButtons status={app.status} pending={pending} error={error} run={run} />
+      <LifecycleButtons status={app.status} runtime={app.runtime} pending={pending} error={error} run={run} />
 
       <PrivateNetwork host={app.appName} />
 
