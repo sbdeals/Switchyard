@@ -3,6 +3,7 @@ import { setAppDockerSourceAction } from "../app/actions";
 
 const mocks = vi.hoisted(() => ({
   setAppDockerSource: vi.fn(),
+  getApplicationSource: vi.fn(),
   applicationAction: vi.fn(),
   revalidatePath: vi.fn(),
   unstable_rethrow: vi.fn(),
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/dokploy", () => ({
   setAppDockerSource: mocks.setAppDockerSource,
+  getApplicationSource: mocks.getApplicationSource,
   applicationAction: mocks.applicationAction,
 }));
 vi.mock("@/lib/engines", () => ({ ENGINE_META: {} }));
@@ -22,6 +24,8 @@ describe("setAppDockerSourceAction", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.setAppDockerSource.mockResolvedValue(undefined);
+    // Main's action reads the owned source first (ownership + credential preservation).
+    mocks.getApplicationSource.mockResolvedValue({ gitUrl: null, dockerImage: null, registryUrl: null });
   });
 
   it("trims and saves the image, then refreshes the dashboard without deploying", async () => {
