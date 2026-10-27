@@ -35,7 +35,6 @@ import type {
   Schedule,
 } from "@/lib/dokploy";
 import {
-  appLifecycleAction,
   updateApplicationAction,
   saveAppBuildTypeAction,
   setAppDockerSourceAction,
@@ -59,17 +58,16 @@ import {
   inputCls,
   Field,
   Info,
-  LifecycleButtons,
   SaveRow,
   DangerZone,
   PublicUrlBar,
   PrivateNetwork,
   GenerateUrlBtn,
-  useLifecycle,
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
 import { DeploymentCommitInfo } from "@/components/service/DeploymentCommitInfo";
+import { AppDeployControls } from "@/components/service/AppDeployControls";
 import { validateCron, validatePort } from "@/lib/validation";
 import { ResourceSettings } from "@/components/service/ResourceSettings";
 import { ImageTagPicker } from "@/components/service/ImageTagPicker";
@@ -98,17 +96,12 @@ const BUILD_TYPES = Object.keys(BUILD_TYPE_LABELS) as BuildType[];
 
 const CERT_TYPES: CertificateType[] = ["none", "letsencrypt", "custom"];
 
-const useAppLifecycle = (app: Application) =>
-  useLifecycle((action) => appLifecycleAction(app.id, action));
-
 export function AppOverviewTab({ app }: { app: Application }) {
-  const { pending, error, run } = useAppLifecycle(app);
-
   return (
     <div className="space-y-5">
       <PublicUrlBar domains={app.domains} status={app.status} runtime={app.runtime} />
 
-      <LifecycleButtons status={app.status} runtime={app.runtime} pending={pending} error={error} run={run} />
+      <AppDeployControls app={app} />
 
       <PrivateNetwork host={app.appName} />
 
@@ -146,7 +139,7 @@ function DomainFields({
   return (
     <div className="space-y-3">
       <div className="flex items-end gap-2">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Field label="Host">
             <input
               value={value.host}
@@ -156,7 +149,7 @@ function DomainFields({
             />
           </Field>
         </div>
-        <div className="w-24">
+        <div className="w-24 shrink-0">
           <Field label="Container port">
             <input
               value={value.port}
@@ -168,7 +161,7 @@ function DomainFields({
         </div>
       </div>
       <div className="flex items-end gap-2">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Field label="Certificate">
             <select
               value={value.certificateType}
@@ -183,7 +176,7 @@ function DomainFields({
             </select>
           </Field>
         </div>
-        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs text-[var(--color-fg-muted)]">
+        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs text-[var(--color-fg-muted)] max-lg:min-h-10">
           <input
             type="checkbox"
             checked={value.https}
@@ -288,7 +281,7 @@ function DomainRow({ d, appId }: { d: AppDomain; appId: string }) {
             setEditing(true);
           }}
           disabled={pending}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
           title="Edit domain"
           aria-label="Edit domain"
           aria-expanded={editing}
@@ -298,7 +291,7 @@ function DomainRow({ d, appId }: { d: AppDomain; appId: string }) {
         <button
           onClick={remove}
           disabled={pending}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
           title="Remove domain"
           aria-label="Remove domain"
         >
@@ -615,6 +608,9 @@ export function DeploymentHistory({ deployments: history, serviceKind, onNavigat
               <div className="min-w-0 flex-1">
                 {!d.commit?.subject && <div className="truncate text-sm">{d.title}</div>}
                 <DeploymentCommitInfo commit={d.commit} />
+                {d.description && d.description !== d.title && (
+                  <p className="whitespace-pre-wrap break-words text-xs text-[var(--color-fg-muted)]">{d.description}</p>
+                )}
                 <div className="text-[11px] text-[var(--color-fg-subtle)]">
                   {d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"}
                 </div>
@@ -672,7 +668,7 @@ function RedeployToggle({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
+    <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)] max-lg:min-h-10">
       <input
         type="checkbox"
         checked={checked}
@@ -783,7 +779,7 @@ function BuildStrategyForm({ app }: { app: Application }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <RedeployToggle checked={redeploy} onChange={setRedeploy} />
         <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
       </div>
@@ -872,14 +868,14 @@ function DockerSourceForm({ app }: { app: Application }) {
                 placeholder={app.hasRegistryPassword ? "Password saved — leave blank to keep" : ""}
                 disabled={clearCredentials}
                 autoComplete="off"
-                className={inputCls}
+                className={`${inputCls} max-lg:pr-12`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((s) => !s)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 aria-pressed={showPassword}
-                className="absolute inset-y-0 right-2 flex items-center text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+                className="absolute inset-y-0 right-2 flex items-center justify-center text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
               >
                 {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
               </button>
@@ -896,7 +892,7 @@ function DockerSourceForm({ app }: { app: Application }) {
           Clear credentials (including registry URL) on save
         </label>
       </div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <RedeployToggle checked={redeploy} onChange={setRedeploy} />
         <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
       </div>
@@ -970,7 +966,7 @@ function StartCommandForm({ app, onSaved }: { app: Application; onSaved: (comman
           className={`${inputCls} font-mono`}
         />
       </Field>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <RedeployToggle checked={redeploy} onChange={setRedeploy} />
         <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
       </div>
@@ -1720,7 +1716,7 @@ function IconBtn({
       aria-expanded={ariaExpanded}
       onClick={onClick}
       disabled={disabled}
-      className="rounded-md p-1.5 text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)] disabled:opacity-40"
+      className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-[var(--color-fg-subtle)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)] disabled:opacity-40"
     >
       {children}
     </button>
