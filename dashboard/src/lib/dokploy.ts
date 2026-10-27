@@ -1744,8 +1744,16 @@ export async function deleteSchedule(scheduleId: string): Promise<void> {
 }
 
 /** Trigger a schedule immediately (run-now); the container must be running. */
-export async function runSchedule(scheduleId: string): Promise<void> {
-  await request("schedule.runManually", { method: "POST", body: { scheduleId } });
+/** Runs a schedule now. Dokploy can answer HTTP 200 with `status: "error"`, so return it. */
+export async function runSchedule(scheduleId: string): Promise<{ status?: string } | null> {
+  return request<{ status?: string } | null>("schedule.runManually", { method: "POST", body: { scheduleId } });
+}
+
+/** A schedule's executions (Dokploy records each run as a deployment of type "schedule"). */
+export async function listScheduleExecutions(scheduleId: string): Promise<AppDeployment[]> {
+  return (await request<AppDeployment[] | null>(
+    `deployment.allByType?id=${encodeURIComponent(scheduleId)}&type=schedule`
+  )) ?? [];
 }
 
 // --- mounts (persistent volumes) --------------------------------------------
