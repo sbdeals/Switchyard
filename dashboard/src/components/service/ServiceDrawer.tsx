@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
+import { newestDeployment } from "@/lib/deployment-commit";
 import { LAST_DEPLOY_LABEL, resolveServiceState, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceLogo } from "@/components/canvas/ServiceNode";
@@ -40,6 +41,7 @@ import { LogsTab } from "@/components/service/LogsTab";
 import { DeploymentLogs } from "@/components/service/DeploymentLogs";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { DeploymentCommitInfo } from "@/components/service/DeploymentCommitInfo";
 import { ServiceNotes } from "@/components/service/ServiceNotes";
 import { ImageUpdatePanel } from "@/components/service/ImageUpdatePanel";
 import { CopyLinkButton } from "@/components/service/CopyLinkButton";
@@ -478,6 +480,7 @@ function Header({
 }) {
   const accent = serviceAccent(service);
   const logos = useTemplateLogos();
+  const latest = service.kind === "database" ? null : newestDeployment(service.deployments);
   return (
     <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--color-border)] p-4 pt-[max(1rem,env(safe-area-inset-top))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
       <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -503,6 +506,7 @@ function Header({
               ? "Stopped"
               : `Last deploy: ${LAST_DEPLOY_LABEL[service.status] ?? service.status}`}
           </div>
+          <DeploymentCommitInfo commit={latest?.commit ?? null} />
           <ServiceNotes key={service.id} id={service.id} description={service.description} />
         </div>
       </div>
