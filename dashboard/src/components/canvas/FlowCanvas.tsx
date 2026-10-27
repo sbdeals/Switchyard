@@ -17,17 +17,26 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { Service, ServiceEdge } from "@/lib/dokploy";
+import type { ProjectNode, Service, ServiceEdge } from "@/lib/dokploy";
 import { serviceAccent } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
-import { canvasAutoLayout, type Positions } from "@/lib/canvas-auto-layout";
+import { canvasAutoLayout } from "@/lib/canvas-auto-layout";
 import {
   createCanvasLayoutActions,
   loadPositions,
   positionsForCanvasSync,
   savePositions,
 } from "@/lib/canvas-layout-actions";
+import { QuickDeployMenu } from "@/components/QuickDeployMenu";
+import {
+  canvasCenter,
+  isCanvasCreateShortcut,
+  placeService,
+  screenToFlowPosition,
+  type Point,
+  type Positions,
+} from "@/lib/canvas-layout";
 
 const COL_W = 300;
 const ROW_H = 104;
@@ -47,17 +56,35 @@ export function FlowCanvas({
   services,
   edges: serviceEdges,
   onSelect,
+  projects,
+  onDeployed,
 }: {
   services: Service[];
   edges: ServiceEdge[];
   onSelect: (service: Service) => void;
+  projects: ProjectNode[];
+  onDeployed: (id: string) => void;
 }) {
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const flowRef = useRef<ReactFlowInstance | null>(null);
+  const [creation, setCreation] = useState<{ screen: Point; flow: Point } | null>(null);
+  // Keep a just-created position through refreshes, even if storage is disabled.
+  const [createdPositions, setCreatedPositions] = useState<Positions>({});
+
+  function openAt(screen: Point) {
+    const bounds = canvasRef.current?.querySelector(".react-flow")?.getBoundingClientRect();
+    const flow = flowRef.current;
+    if (!bounds || !flow) return;
+    canvasRef.current?.focus();
+    setCreation({ screen, flow: screenToFlowPosition(screen, bounds, flow.getViewport()) });
+  }
+
   // Catalog logos for Railway-style node icons (null while the catalog loads).
   const logos = useTemplateLogos();
 
   const buildNodes = useCallback(
     (overrides?: Positions): Node[] => {
-      const saved = overrides ?? {};
+      const saved = { ...loadPositions(), ...createdPositions, ...(overrides ?? {}) };
       // Group by project / environment for a tidy default layout. The group
       // name renders inside each card (nodes are draggable — a label pinned to
       // the background would stay behind when its services move).
@@ -95,7 +122,7 @@ export function FlowCanvas({
       }
       return nodes;
     },
-    [services, onSelect, logos]
+    [services, onSelect, logos, createdPositions]
   );
 
   const buildEdges = useCallback(
@@ -117,9 +144,10 @@ export function FlowCanvas({
     [serviceEdges, services]
   );
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(buildNodes());
+  // Saved positions are browser-only. Build nodes in the effect below so server
+  // grid positions cannot hydrate over the user's persisted layout.
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges());
-  const flow = useRef<ReactFlowInstance | null>(null);
   const layoutActions = useRef<ReturnType<typeof createCanvasLayoutActions> | null>(null);
   const positionsLoaded = useRef(false);
   const [canUndo, setCanUndo] = useState(false);
@@ -128,7 +156,7 @@ export function FlowCanvas({
   useEffect(() => {
     const actions = createCanvasLayoutActions({
       getPositions: () => Object.fromEntries(
-        (flow.current?.getNodes() ?? []).map((node) => [node.id, node.position])
+        (flowRef.current?.getNodes() ?? []).map((node) => [node.id, node.position])
       ),
       setPositions: (positions) => setNodes((current) => current.map((node) => (
         positions[node.id] ? { ...node, position: positions[node.id] } : node
@@ -136,7 +164,7 @@ export function FlowCanvas({
       onUndoAvailable: setCanUndo,
       onAnimating: setAnimating,
       onSettled: () => {
-        void flow.current?.fitView({
+        void flowRef.current?.fitView({
           padding: 0.3,
           maxZoom: 1,
           duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 200,
@@ -148,7 +176,7 @@ export function FlowCanvas({
   }, [setNodes]);
 
   const tidyUp = () => {
-    const current = flow.current?.getNodes();
+    const current = flowRef.current?.getNodes();
     if (!current?.length) return;
     const positions = canvasAutoLayout(current.map((node) => {
       const { service } = node.data as ServiceNodeData;
@@ -208,17 +236,40 @@ export function FlowCanvas({
 
   return (
     <div
+      ref={canvasRef}
       role="region"
       aria-label="Service canvas"
-      className="h-[calc(100vh-9rem)] w-full overflow-hidden rounded-2xl border border-[var(--color-border)]"
+      title="Double-click or right-click empty canvas to create a service. Press N to create at the center."
+      aria-keyshortcuts="N"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (!isCanvasCreateShortcut(event, event.target === event.currentTarget)) return;
+        const bounds = canvasRef.current?.querySelector(".react-flow")?.getBoundingClientRect();
+        if (!bounds) return;
+        event.preventDefault();
+        openAt(canvasCenter(bounds));
+      }}
+      className="h-[calc(100vh-9rem)] w-full overflow-hidden rounded-2xl border border-[var(--color-border)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
     >
       <ReactFlow
+        onInit={(flow) => { flowRef.current = flow; }}
+        onPaneClick={() => canvasRef.current?.focus()}
+        onDoubleClick={(event) => {
+          if (!(event.target instanceof Element) || !event.target.classList.contains("react-flow__pane")) return;
+          event.preventDefault();
+          openAt({ x: event.clientX, y: event.clientY });
+        }}
+        onPaneContextMenu={(event) => {
+          if (!(event.target instanceof Element) || !event.target.classList.contains("react-flow__pane")) return;
+          event.preventDefault();
+          openAt({ x: event.clientX, y: event.clientY });
+        }}
+        zoomOnDoubleClick={false}
         nodes={nodes}
         edges={edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
-        onInit={(instance) => { flow.current = instance; }}
         nodesDraggable={!animating}
         colorMode="dark"
         fitView
@@ -268,6 +319,20 @@ export function FlowCanvas({
           className="!bg-[var(--color-bg-elevated)]"
         />
       </ReactFlow>
+      {creation && (
+        <QuickDeployMenu
+          projects={projects}
+          anchor={creation.screen}
+          onClose={() => setCreation((current) => current === creation ? null : current)}
+          onDeployed={(id) => {
+            setCreatedPositions((positions) => placeService(positions, id, creation.flow));
+            savePositions(placeService(loadPositions(), id, creation.flow));
+            setNodes((curr) => curr.map((node) => node.id === id ? { ...node, position: creation.flow } : node));
+            setCreation((current) => current === creation ? null : current);
+            onDeployed(id);
+          }}
+        />
+      )}
     </div>
   );
 }

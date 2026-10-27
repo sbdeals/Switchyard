@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  CANVAS_POSITIONS_KEY,
   createCanvasLayoutActions,
   loadPositions,
   positionsForCanvasSync,
+  savePositions,
 } from "./canvas-layout-actions";
-import type { Positions } from "./canvas-auto-layout";
+import { CANVAS_POSITIONS_KEY, placeService, type Positions } from "./canvas-layout";
 
 describe("canvas layout actions", () => {
   let stored: Map<string, string>;
@@ -101,6 +101,33 @@ describe("canvas layout actions", () => {
     expect(stored.get(CANVAS_POSITIONS_KEY)).toBe(JSON.stringify(saved));
     expect(storage.setItem).not.toHaveBeenCalled();
     expect(storage.removeItem).not.toHaveBeenCalled();
+  });
+
+  it("shares storage with quick-deploy placement and restores it after Tidy and Undo", () => {
+    const placed = placeService({}, "a", { x: 123, y: -45 });
+    savePositions(placed);
+    expect(loadPositions()).toEqual(placed);
+    actions.tidy(target);
+    advanceFrame(350);
+    expect(loadPositions()).toEqual(target);
+    actions.undo();
+    advanceFrame(700);
+    expect(loadPositions()).toEqual(placed);
+  });
+
+  it.each(["null", "[]", "false", "12", '\"text\"'])(
+    "rejects invalid saved layout shapes: %s",
+    (raw) => {
+      stored.set(CANVAS_POSITIONS_KEY, raw);
+      expect(loadPositions()).toEqual({});
+    },
+  );
+
+  it("discards invalid points when loading positions for a canvas refresh", () => {
+    stored.set(CANVAS_POSITIONS_KEY, JSON.stringify({
+      valid: { x: 1, y: 2 }, invalid: { x: "1", y: 2 }, missing: { x: 1 },
+    }));
+    expect(positionsForCanvasSync([], false)).toEqual({ valid: { x: 1, y: 2 } });
   });
 
   it("persists the destination immediately and animates without intermediate storage writes", () => {

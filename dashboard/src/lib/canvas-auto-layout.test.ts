@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { canvasAutoLayout, type LayoutNode, type Positions } from "./canvas-auto-layout";
+import { canvasAutoLayout, type LayoutNode } from "./canvas-auto-layout";
+
+import type { Positions } from "./canvas-layout";
 
 const service = (id: string, extra: Partial<LayoutNode> = {}): LayoutNode => ({
   id,

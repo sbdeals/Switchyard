@@ -1,3 +1,5 @@
+import type { Positions } from "./canvas-layout";
+
 export type LayoutNode = {
   id: string;
   name: string;
@@ -5,8 +7,6 @@ export type LayoutNode = {
   width?: number;
   height?: number;
 };
-
-export type Positions = Record<string, { x: number; y: number }>;
 
 const COLUMN_GAP = 80;
 const ROW_GAP = 40;

@@ -1,13 +1,11 @@
-import type { Positions } from "./canvas-auto-layout";
-
-export const CANVAS_POSITIONS_KEY = "switchyard:positions:v2";
+import { CANVAS_POSITIONS_KEY, parsePositions, type Positions } from "./canvas-layout";
 const ANIMATION_MS = 350;
 const UNDO_MS = 10_000;
 
 export function loadPositions(): Positions {
   if (typeof window === "undefined") return {};
   try {
-    return JSON.parse(localStorage.getItem(CANVAS_POSITIONS_KEY) ?? "{}");
+    return parsePositions(localStorage.getItem(CANVAS_POSITIONS_KEY));
   } catch {
     return {};
   }
