@@ -15,18 +15,14 @@ import {
   YAxis,
 } from "recharts";
 import { Cpu, MemoryStick, Loader2 } from "lucide-react";
+import type { ContainerSample as Sample } from "@/lib/container-stats";
+import {
+  appendLiveSample,
+  LIVE_METRICS_WINDOW_MS,
+  startVisiblePolling,
+  type ServiceMetrics,
+} from "@/lib/service-metrics-client";
 
-interface Sample {
-  ts: number;
-  cpu: number;
-  memUsed: number;
-  memLimit: number;
-  memPct: number;
-}
-
-/** Live keeps a short dense buffer; history ranges query the durable store. */
-const MAX_LIVE = 1000;
-const LIVE_SEED_MS = 15 * 60_000;
 const RANGES = [
   { id: "live", label: "Live", ms: 0 },
   { id: "15m", label: "15m", ms: 15 * 60_000 },
@@ -35,8 +31,6 @@ const RANGES = [
   { id: "24h", label: "24h", ms: 24 * 60 * 60_000 },
 ] as const;
 type RangeId = (typeof RANGES)[number]["id"];
-
-const fmtMB = (b: number) => `${Math.round(b / 1024 / 1024)} MB`;
 
 async function fetchHistory(
   appName: string,
@@ -55,8 +49,6 @@ async function fetchHistory(
 export function MetricsTab({ appName, active }: { appName: string; active: boolean }) {
   const [data, setData] = useState<Sample[]>([]);
   const [idle, setIdle] = useState(false);
-  // The live stats stream couldn't be attached (Docker error) — distinct from
-  // idle (container simply not running).
   const [unavailable, setUnavailable] = useState(false);
   const [range, setRange] = useState<RangeId>("live");
   // null = unknown (still probing); false = no durable store configured.
@@ -79,39 +71,41 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
 
   useEffect(() => {
     if (!active || !appName) return;
-    const ac = new AbortController();
-    let es: EventSource | null = null;
-
-    const window = range === "live" ? LIVE_SEED_MS : RANGES.find((r) => r.id === range)!.ms;
-
-    // Seed from the durable store (history survives tab close), then, in Live
-    // mode, append the live SSE on top.
-    fetchHistory(appName, window, ac.signal)
-      .then(({ enabled, samples }) => {
+    const window = range === "live" ? LIVE_METRICS_WINDOW_MS : RANGES.find((r) => r.id === range)!.ms;
+    return startVisiblePolling({
+      load: (signal) => fetchHistory(appName, window, signal),
+      onValue: ({ enabled, samples }) => {
         setStoreOn(enabled);
-        setData(samples);
-      })
-      .catch(() => setStoreOn(false));
+        if (range !== "live") setData(samples);
+      },
+      onError: () => setStoreOn(false),
+      visibility: document,
+      intervalMs: null,
+    });
+  }, [appName, active, range]);
 
-    if (range === "live") {
-      es = new EventSource(`/api/services/metrics?app=${encodeURIComponent(appName)}`);
-      es.addEventListener("idle", () => setIdle(true));
-      es.addEventListener("unavailable", () => setUnavailable(true));
-      es.onmessage = (e) => {
-        try {
-          const s = JSON.parse(e.data) as Sample;
-          if (!s || typeof s.cpu !== "number") return;
-          setData((prev) => [...prev, s].slice(-MAX_LIVE));
-        } catch {
-          /* ignore */
-        }
-      };
-    }
-
-    return () => {
-      ac.abort();
-      es?.close();
-    };
+  useEffect(() => {
+    if (!active || !appName || range !== "live") return;
+    return startVisiblePolling({
+      load: async (signal) => {
+        const res = await fetch(`/api/services/metrics?app=${encodeURIComponent(appName)}`, {
+          signal,
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error("Metrics unavailable");
+        return (await res.json()) as ServiceMetrics;
+      },
+      onValue: ({ status, sample }) => {
+        setIdle(status === "not-running");
+        setUnavailable(status === "unavailable");
+        if (status === "running" && sample) setData((prev) => appendLiveSample(prev, sample));
+      },
+      onError: () => {
+        setIdle(false);
+        setUnavailable(true);
+      },
+      visibility: document,
+    });
   }, [appName, active, range]);
 
   const last = data[data.length - 1];
@@ -155,20 +149,26 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
             <Stat
               icon={<Cpu className="size-4" />}
               label="CPU"
-              value={last ? `${last.cpu.toFixed(1)}%` : "—"}
+              value={last?.cpu != null ? `${last.cpu.toFixed(1)}%` : "—"}
               accent="#a06bff"
             />
             <Stat
               icon={<MemoryStick className="size-4" />}
               label="Memory"
-              value={last ? fmtMB(last.memUsed) : "—"}
-              sub={last && last.memLimit ? `of ${fmtMB(last.memLimit)}` : undefined}
+              value={last?.memUsed != null ? fmtBytes(last.memUsed) : "—"}
+              sub={last && last.memLimit ? `of ${fmtBytes(last.memLimit)}` : undefined}
               accent="#3ecf8e"
             />
           </div>
 
           <Chart title="CPU %" data={data} dataKey="cpu" color="#a06bff" unit="%" />
-          <Chart title="Memory" data={data} dataKey="memUsed" color="#3ecf8e" formatter={fmtMB} />
+          <Chart title="Memory" data={data} dataKey="memUsed" color="#3ecf8e" formatter={fmtBytes} />
+          {range === "live" && (
+            <p className="text-xs text-[var(--color-fg-subtle)]">
+              Last 5 minutes · sampled every 5s while this tab is visible.
+              {last && (last.cpu === null || last.memUsed === null) && " Some measurements are unavailable."}
+            </p>
+          )}
         </>
       )}
 
@@ -176,11 +176,11 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
       <div aria-live="polite" className="empty:hidden">
         {idle && range === "live" ? (
           <div className="flex h-40 items-center justify-center text-sm text-[var(--color-fg-subtle)]">
-            No metrics — the service isn&apos;t running.
+            Service not running. Checking again every 5s.
           </div>
         ) : unavailable && range === "live" ? (
           <div className="flex h-40 items-center justify-center text-sm text-[var(--color-fg-subtle)]">
-            Metrics unavailable — couldn&apos;t read container stats from Docker.
+            Metrics unavailable. Retrying every 5s.
           </div>
         ) : (
           <>
@@ -344,27 +344,26 @@ function HttpSection({ appName, active }: { appName: string; active: boolean }) 
 
   useEffect(() => {
     if (!active || !appName) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
+    return startVisiblePolling({
+      load: async (signal) => {
         const res = await fetch(
           `/api/services/http-metrics?app=${encodeURIComponent(appName)}&range=${rangeMin}`,
-          { cache: "no-store" },
+          { signal, cache: "no-store" },
         );
-        const json = (await res.json()) as { available: boolean; points: HttpPoint[] };
-        if (!cancelled) setState(json);
-      } catch {
-        if (!cancelled) setState({ available: false, points: [] });
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
-    const id = setInterval(load, 20_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
+        if (!res.ok) throw new Error("HTTP metrics unavailable");
+        return (await res.json()) as { available: boolean; points: HttpPoint[] };
+      },
+      onValue: (value) => {
+        setState(value);
+        setLoading(false);
+      },
+      onError: () => {
+        setState({ available: false, points: [] });
+        setLoading(false);
+      },
+      visibility: document,
+      intervalMs: 20_000,
+    });
   }, [appName, active, rangeMin]);
 
   const points = state?.points ?? [];
