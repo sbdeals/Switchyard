@@ -88,8 +88,8 @@ function readyView() {
 }
 
 function stoppedView() {
-  return `<h2>The stack is stopped</h2>
-    <p>Your data is safe in Docker volumes. Start it again whenever you're ready.</p>
+  return `<h2>The control plane is stopped</h2>
+    <p>Deployed apps, Compose stacks, and databases were left running. Their volumes are kept, but URLs may be unavailable while ingress is stopped. Start the control plane to manage them again.</p>
     <div class="actions"><button class="btn primary" data-action="start" type="button">Start Switchyard</button></div>`;
 }
 
