@@ -8,11 +8,12 @@ import { parseAnsi, type ParsedAnsi } from "@/lib/ansi";
 interface Line extends ParsedAnsi {
   id: number;
   ts: number;
+  stored?: boolean;
 }
 
 const LogLine = memo(function LogLine({ line }: { line: Line }) {
   return (
-    <div className="flex gap-3 whitespace-pre-wrap break-all">
+    <div className={`flex gap-3 whitespace-pre-wrap break-all ${line.stored ? "opacity-70" : ""}`}>
       <span className="shrink-0 select-none text-[var(--color-fg-subtle)]">
         {new Date(line.ts).toLocaleTimeString()}
       </span>
@@ -38,8 +39,8 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
     es.addEventListener("reset", () => setLines([]));
     es.onmessage = (e) => {
       try {
-        const raw = JSON.parse(e.data) as { ts: number; text: string };
-        const line = { ...parseAnsi(raw.text), ts: raw.ts, id: nextId.current++ };
+        const raw = JSON.parse(e.data) as { ts: number; text: string; stored?: boolean };
+        const line: Line = { ...parseAnsi(raw.text), ts: raw.ts, id: nextId.current++, ...(raw.stored ? { stored: true } : {}) };
         setLines((prev) => {
           const next = prev.length > 2000 ? prev.slice(-1500) : prev;
           return [...next, line];
@@ -96,6 +97,11 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
         }}
         className="flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-3 font-mono text-[11px] leading-relaxed"
       >
+        {shown.some((l) => l.stored) && (
+          <div className="mb-2 border-b border-[var(--color-border)] pb-2 text-[var(--color-fg-subtle)]">
+            from history
+          </div>
+        )}
         {lines.length === 0 ? (
           <div className="flex h-full items-center justify-center gap-2 text-[var(--color-fg-subtle)]">
             <Loader2 className="size-4 animate-spin" /> waiting for logs…
