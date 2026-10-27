@@ -201,10 +201,10 @@ describe("server actions", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
   });
 
-  it("returns ownership errors without revalidating", async () => {
+  it("returns a safe error without revalidating", async () => {
     respond([]);
     await expect(updateDeployTriggersAction("compose", "compose-1", input)).resolves.toEqual({
-      ok: false, error: "Service not found in your projects.",
+      ok: false, error: "Could not save deploy triggers.",
     });
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
@@ -212,6 +212,17 @@ describe("server actions", () => {
   it("lets expired-session redirects propagate", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
     await expect(updateDeployTriggersAction("compose", "compose-1", input)).rejects.toBe(mocks.redirectError);
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it.each(["read", "write"])("hides backend secrets on a failed %s", async (stage) => {
+    respond(tree);
+    if (stage === "write") respond({ sourceType: "git" });
+    fetchMock.mockResolvedValueOnce(new Response("SENTINEL_private_backend_detail", { status: 500 }));
+
+    await expect(updateDeployTriggersAction("application", "app-1", input)).resolves.toEqual({
+      ok: false, error: "Could not save deploy triggers.",
+    });
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 

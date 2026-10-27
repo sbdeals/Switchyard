@@ -22,7 +22,7 @@ export async function updateDeployTriggersAction(
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e);
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, error: "Could not save deploy triggers." };
   }
 }
 

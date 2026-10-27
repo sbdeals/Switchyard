@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useDirtyGuard } from "@/components/DirtyGuard";
 import type { Application, ComposeService } from "@/lib/dokploy";
 import {
   previewDeployTriggersAction,
@@ -32,7 +33,8 @@ export function DeployTriggerSettings({ service }: { service: Application | Comp
   } catch (e) {
     validationError = e instanceof Error ? e.message : "Invalid watch paths.";
   }
-  const dirty = autoDeploy !== initialAutoDeploy || normalizedPaths.join("\n") !== service.watchPaths.join("\n");
+  const dirty = autoDeploy !== initialAutoDeploy || !!validationError || normalizedPaths.join("\n") !== service.watchPaths.join("\n");
+  useDirtyGuard("Deploy triggers", dirty);
 
   useEffect(() => {
     let cancelled = false;
