@@ -21,6 +21,7 @@ import "@xyflow/react/dist/style.css";
 import { applySelectionChanges } from "@/lib/bulk-selection";
 import type { ProjectNode, Service, ServiceEdge } from "@/lib/dokploy";
 import { serviceAccent } from "@/lib/service-meta";
+import { serviceFilterOpacity } from "@/lib/service-filter";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
 import { useDialogFocus } from "@/components/use-focus-trap";
@@ -63,6 +64,7 @@ export function FlowCanvas({
   services,
   allServices = services,
   edges: serviceEdges,
+  matchingIds,
   onSelect,
   onDuplicate,
   selectedIds,
@@ -74,6 +76,7 @@ export function FlowCanvas({
   services: Service[];
   allServices?: Service[];
   edges: ServiceEdge[];
+  matchingIds: ReadonlySet<string>;
   onSelect: (service: Service) => void;
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
@@ -280,12 +283,12 @@ export function FlowCanvas({
         event.preventDefault();
         openAt(canvasCenter(bounds));
       }}
-      className="relative h-[calc(100dvh-16rem)] min-h-80 w-full overflow-hidden rounded-2xl border border-[var(--color-border)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)] sm:h-[calc(100dvh-12rem)] lg:h-[calc(100vh-9rem)] max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10"
+      className="relative h-[calc(100dvh-20rem)] min-h-80 w-full overflow-hidden rounded-2xl border border-[var(--color-border)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)] sm:h-[calc(100dvh-16rem)] lg:h-[calc(100vh-13rem)] max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10"
     >
       <p className="pointer-events-none absolute left-3 top-3 z-10 rounded-lg bg-[var(--color-surface)] px-2 py-1 text-xs text-[var(--color-fg-muted)]">
         Shift-drag or Shift/Ctrl/⌘-click to select services
       </p>
-      <ReactFlow
+      <ReactFlow<Node, Edge>
         onInit={(flow) => { flowRef.current = flow; }}
         onPaneClick={() => canvasRef.current?.focus()}
         onDoubleClick={(event) => {
@@ -299,8 +302,17 @@ export function FlowCanvas({
           openAt({ x: event.clientX, y: event.clientY });
         }}
         zoomOnDoubleClick={false}
-        nodes={nodes}
-        edges={edges}
+        nodes={nodes.map((node) => ({
+          ...node,
+          style: { ...node.style, opacity: serviceFilterOpacity(matchingIds.has(node.id)) },
+        }))}
+        edges={edges.map((edge) => ({
+          ...edge,
+          style: {
+            ...edge.style,
+            opacity: serviceFilterOpacity(matchingIds.has(edge.source), matchingIds.has(edge.target)),
+          },
+        }))}
         onNodesChange={handleNodesChange}
         onNodeDragStop={(_, _node, draggedNodes) => {
           // A later drag supersedes a quick-deploy placement, including when
