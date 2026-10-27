@@ -1,8 +1,21 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import {
+  closeSync,
+  existsSync,
+  fchmodSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { UserError } from "./errors.js";
+import { parsePort } from "./util.js";
 
 export type Platform = "linux" | "docker-desktop";
 
@@ -126,9 +139,11 @@ export type ConfigKey = keyof typeof CONFIG_KEY_TYPES;
 export function coerceConfigValue(key: ConfigKey, raw: string): number | boolean | string {
   const kind = CONFIG_KEY_TYPES[key];
   if (kind === "number") {
-    const n = Number(raw);
-    if (!Number.isInteger(n)) throw new UserError(`${key} must be an integer, got: ${raw}`);
-    return n;
+    try {
+      return parsePort(raw);
+    } catch {
+      throw new UserError(`${key} must be an integer between 1 and 65535, got: ${raw}`);
+    }
   }
   if (kind === "boolean") {
     if (raw === "true" || raw === "1") return true;
@@ -136,6 +151,18 @@ export function coerceConfigValue(key: ConfigKey, raw: string): number | boolean
     throw new UserError(`${key} must be true or false, got: ${raw}`);
   }
   return raw;
+}
+
+/** Check persisted ports and in-memory configs before any Docker operations. */
+export function validateConfigPorts(config: SwitchyardConfig): void {
+  for (const key of Object.keys(CONFIG_KEY_TYPES) as ConfigKey[]) {
+    if (CONFIG_KEY_TYPES[key] !== "number") continue;
+    const value = config[key];
+    if (typeof value !== "number") {
+      throw new UserError(`${key} must be an integer between 1 and 65535.`);
+    }
+    coerceConfigValue(key, String(value));
+  }
 }
 
 /**
@@ -179,15 +206,42 @@ export function loadConfig(): LoadedConfig {
         `Fix it or delete it and re-run \`switchyard up\`.`,
     );
   }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new UserError(`Config file ${path} must contain a JSON object.`);
+  }
   // Overlay onto defaults so configs written by older CLIs gain new keys.
   const config = { ...defaultConfig(), ...(parsed as Partial<SwitchyardConfig>), schemaVersion: 1 as const };
+  try {
+    validateConfigPorts(config);
+  } catch (e) {
+    throw new UserError(`Invalid config file ${path}: ${e instanceof Error ? e.message : e}`);
+  }
   return { config, path, existed: true };
 }
 
 export function saveConfig(config: SwitchyardConfig, path = configPath()): void {
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(config, null, 2) + "\n", "utf8");
+    const dir = dirname(path);
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const tempPath = join(dir, `.${basename(path)}.${randomUUID()}.tmp`);
+    const fd = openSync(tempPath, "wx", 0o600);
+    try {
+      try {
+        try {
+          fchmodSync(fd, 0o600);
+        } catch (e) {
+          // Windows uses ACLs; POSIX mode enforcement remains best-effort there.
+          if (process.platform !== "win32") throw e;
+        }
+        writeFileSync(fd, JSON.stringify(config, null, 2) + "\n", "utf8");
+        fsyncSync(fd);
+      } finally {
+        closeSync(fd);
+      }
+      renameSync(tempPath, path);
+    } finally {
+      rmSync(tempPath, { force: true });
+    }
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code ?? "error";
     throw new UserError(
@@ -196,10 +250,5 @@ export function saveConfig(config: SwitchyardConfig, path = configPath()): void 
           ? "Writing /etc/switchyard needs root — re-run with sudo."
           : "Check the directory permissions, or point SWITCHYARD_CONFIG at a writable path."),
     );
-  }
-  try {
-    chmodSync(path, 0o600); // contains the admin password; no-op on Windows
-  } catch {
-    /* Windows ACLs don't map to POSIX modes */
   }
 }
