@@ -70,6 +70,7 @@ import {
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
 import { ResourceSettings } from "@/components/service/ResourceSettings";
+import { ComposeExportButton } from "@/components/service/ComposeExportDialog";
 import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
 import { DiagnosisCard } from "@/components/service/DiagnosisCard";
 import { ConfigAsCodePanel } from "@/components/service/ConfigAsCodePanel";
@@ -123,6 +124,7 @@ export function AppOverviewTab({ app }: { app: Application }) {
         <Info label="Build" value={app.buildType ?? "—"} />
         <Info label="Replicas" value={String(app.replicas ?? 1)} />
       </div>
+      <ComposeExportButton key={app.id} id={app.id} name={app.name} />
     </div>
   );
 }
@@ -1242,7 +1244,6 @@ export function AppDeployTab({ app }: { app: Application }) {
 }
 
 export function AppSettingsTab({ app, onClose }: { app: Application; onClose: () => void }) {
-  const { pending: lifePending, error: lifeError, run } = useAppLifecycle(app);
   const [name, setName] = useState(app.name);
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
@@ -1274,11 +1275,9 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
       <Info label="App name" value={app.appName} mono />
 
       <DangerZone
-        name={app.name}
+        service={app}
         message="Destroying removes the application and its container."
-        pending={lifePending}
-        error={lifeError}
-        onDestroy={() => run("remove", onClose)}
+        onDeleted={onClose}
       />
     </div>
   );

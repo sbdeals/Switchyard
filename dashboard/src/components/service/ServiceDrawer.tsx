@@ -36,8 +36,10 @@ import { BackupsTab } from "@/components/service/BackupsTab";
 import { VolumesTab } from "@/components/service/VolumesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
+import { DeploymentLogs } from "@/components/service/DeploymentLogs";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { ServiceNotes } from "@/components/service/ServiceNotes";
 import { ImageUpdatePanel } from "@/components/service/ImageUpdatePanel";
 import { CopyLinkButton } from "@/components/service/CopyLinkButton";
 import { ConnectTab } from "@/components/service/ConnectTab";
@@ -273,10 +275,11 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, services, onSelectService, tab, sessionKey, onTabChange, onClose }: PortConflictProps & {
+export function ServiceDrawer({ service, services, onSelectService, tab, sessionKey, deploymentId, onTabChange, onClose }: PortConflictProps & {
   service: Service | null;
   tab: TabId;
   sessionKey: string | null;
+  deploymentId?: string | null;
   onTabChange: (tab: TabId) => void;
   onClose: () => void;
 }) {
@@ -284,6 +287,13 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
   const tabs = service ? getServiceTabs(service) : [];
+  const [showDeploymentLogs, setShowDeploymentLogs] = useState(Boolean(deploymentId));
+  const target = service ? JSON.stringify([service.id, deploymentId, sessionKey]) : null;
+  const [shownTarget, setShownTarget] = useState(target);
+  if (target !== shownTarget) {
+    setShownTarget(target);
+    setShowDeploymentLogs(Boolean(deploymentId));
+  }
   const latestDeployment = service && service.kind !== "database"
     ? [...service.deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     : undefined;
@@ -423,7 +433,14 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
               )}
               {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
-              {tab === "logs" && <LogsTab key={service.appName} appName={service.appName} active />}
+              {tab === "logs" && (deploymentId && showDeploymentLogs ? (
+                <DeploymentLogs
+                  key={deploymentId}
+                  service={service}
+                  deploymentId={deploymentId}
+                  onRuntimeLogs={() => setShowDeploymentLogs(false)}
+                />
+              ) : <LogsTab key={service.appName} appName={service.appName} active />)}
               {tab === "console" && <ConsoleTab key={service.appName} appName={service.appName} />}
               {tab === "backups" && service.kind === "database" && <BackupsTab db={service} />}
               {tab === "settings" &&
@@ -459,7 +476,7 @@ function Header({
   const logos = useTemplateLogos();
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
         <ServiceLogo
           service={service}
           logo={resolveServiceLogo(service, logos)}
@@ -467,7 +484,7 @@ function Header({
           size="size-11"
           rounded="rounded-xl"
         />
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h2 id={titleId} className="font-semibold">
               {service.name}
@@ -480,6 +497,7 @@ function Header({
           <div className="text-[11px] text-[var(--color-fg-subtle)]">
             Last deploy: {LAST_DEPLOY_LABEL[service.status] ?? service.status}
           </div>
+          <ServiceNotes key={service.id} id={service.id} description={service.description} />
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -529,7 +547,6 @@ function OverviewTab({ db }: { db: Database }) {
 }
 
 function SettingsTab({ db, services, onSelectService, onClose }: PortConflictProps & { db: Database; onClose: () => void }) {
-  const { pending: lifePending, error: lifeError, run } = useDbLifecycle(db);
   const meta = ENGINE_META[db.engine];
   const currentVersion = db.dockerImage?.split(":")[1] ?? meta.versions[0];
 
@@ -600,11 +617,9 @@ function SettingsTab({ db, services, onSelectService, onClose }: PortConflictPro
       <Info label="Created" value={db.createdAt ? new Date(db.createdAt).toLocaleString() : "—"} />
 
       <DangerZone
-        name={db.name}
+        service={db}
         message="Destroying removes the service and its container."
-        pending={lifePending}
-        error={lifeError}
-        onDestroy={() => run("remove", onClose)}
+        onDeleted={onClose}
       />
     </div>
   );
