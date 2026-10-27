@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2 } from "lucide-react";
+import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, ScrollText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
@@ -13,13 +13,14 @@ import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { ProjectLogs } from "@/components/ProjectLogs";
 import { useServiceDeeplink } from "@/components/use-service-deeplink";
 import { DirtyGuardProvider } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
 import { emptySelection, reconcileSelection, replaceSelection, toggleSelection } from "@/lib/bulk-selection";
 import { BULK_ACTION_LABELS, type BulkAction } from "@/lib/bulk-actions";
 
-type View = "canvas" | "grid";
+type View = "canvas" | "grid" | "logs";
 
 type WorkspaceProps = {
   services: Service[];
@@ -76,6 +77,9 @@ function WorkspaceContent({
             <ViewToggle active={view === "grid"} onClick={() => setView("grid")}>
               <LayoutGrid className="size-3.5" /> Grid
             </ViewToggle>
+            <ViewToggle active={view === "logs"} onClick={() => setView("logs")}>
+              <ScrollText className="size-3.5" /> Logs
+            </ViewToggle>
           </div>
           <button
             onClick={() => setProjectsOpen(true)}
@@ -113,11 +117,13 @@ function WorkspaceContent({
         </div>
       )}
 
-      {services.length === 0 ? (
+      {view === "logs" ? (
+        <ProjectLogs projects={projects} />
+      ) : services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
         <PanelErrorBoundary>
-          <FlowCanvas services={services} edges={edges} onSelect={(s) => drawer.open(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} />
+          <FlowCanvas services={services} edges={edges} projects={projects} onDeployed={onDeployed} onSelect={(s) => drawer.open(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} />
         </PanelErrorBoundary>
       ) : (
         <>

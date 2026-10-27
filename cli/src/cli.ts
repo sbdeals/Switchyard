@@ -3,13 +3,16 @@ import { Command } from "commander";
 
 import { claudeCommand } from "./commands/claude.js";
 import { configCommand } from "./commands/config.js";
+import { createDeployCommand } from "./commands/deploy.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { downCommand } from "./commands/down.js";
 import { localIngressCommand } from "./commands/local-ingress.js";
+import { createLinkCommand } from "./commands/link.js";
 import { logsCommand } from "./commands/logs.js";
 import { openCommand } from "./commands/open.js";
 import { statusCommand } from "./commands/status.js";
 import { upCommand } from "./commands/up.js";
+import { createVariablesCommand } from "./commands/variables.js";
 import { UserError } from "./core/errors.js";
 import { pc } from "./core/prompts.js";
 import { parsePort } from "./core/util.js";
@@ -43,6 +46,10 @@ program
   .action(upCommand);
 
 program.command("status").description("Show stack status, container health, and URLs").action(statusCommand);
+
+program.addCommand(createDeployCommand());
+program.addCommand(createLinkCommand());
+program.addCommand(createVariablesCommand());
 
 program
   .command("down")
