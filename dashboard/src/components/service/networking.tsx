@@ -1,27 +1,22 @@
 "use client";
 
-/**
- * The application "Networking" surface (Railway-style): public domains, proxy
- * path redirects, published ports, and HTTP basic-auth. Every list is backed
- * by real Dokploy fields on `application.one` (domains/redirects/ports/
- * security). Config changes take effect on the service's next deploy.
- *
- * Kept in its own module so the redirect/port/security sections don't bloat
- * the frequently-edited AppTabs.tsx. The Domains section reuses DomainsTab.
- */
+/** Application networking and HTTP settings, applied on the next deploy. */
 
 import { useState, useTransition } from "react";
 import { Globe, ArrowRight, Plug, Lock, Plus, Loader2 } from "lucide-react";
 import type { Application } from "@/lib/dokploy";
 import { validatePort } from "@/lib/validation";
+import { previewRedirect, validateBasicAuth, validateRedirect } from "@/lib/app-security";
 import { DomainsTab } from "@/components/service/AppTabs";
 import { inputCls, Field, RemoveBtn } from "@/components/service/primitives";
 import {
   createRedirectAction,
+  updateRedirectAction,
   deleteRedirectAction,
   createPortAction,
   deletePortAction,
   createSecurityAction,
+  updateSecurityAction,
   deleteSecurityAction,
 } from "@/app/actions";
 
@@ -37,8 +32,19 @@ export function NetworkingTab({ app }: { app: Application }) {
         <DomainsTab app={app} />
       </section>
 
-      <RedirectsSection app={app} />
       <PortsSection app={app} />
+    </div>
+  );
+}
+
+export function AppHttpSettings({ app }: { app: Application }) {
+  return (
+    <div className="space-y-5 border-b border-[var(--color-border)] pb-5">
+      <div>
+        <h3 className="text-sm font-semibold">HTTP settings</h3>
+        <p className="mt-1 text-xs text-[var(--color-fg-subtle)]">Applies on next deploy.</p>
+      </div>
+      <RedirectsSection app={app} />
       <SecuritySection app={app} />
     </div>
   );
@@ -92,97 +98,156 @@ const rowCls =
 const tagCls =
   "shrink-0 rounded border border-[var(--color-border-strong)] px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)]";
 
+const actionCls =
+  "rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40";
+const saveCls =
+  "inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40";
+
 function RedirectsSection({ app }: { app: Application }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [regex, setRegex] = useState("");
   const [replacement, setReplacement] = useState("");
   const [permanent, setPermanent] = useState(true);
+  const [testUrl, setTestUrl] = useState("");
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const preview = testUrl ? previewRedirect(regex, replacement, testUrl) : null;
 
-  function add() {
-    if (!regex.trim() || !replacement.trim()) return;
+  function clear() {
+    setEditingId(null);
+    setRegex("");
+    setReplacement("");
+    setPermanent(true);
+    setTestUrl("");
     setError(null);
+  }
+
+  function save() {
+    const validation = validateRedirect(regex, replacement, permanent);
+    setError(validation);
+    if (validation) return;
     start(async () => {
-      const res = await createRedirectAction(app.id, regex, replacement, permanent);
-      if (res.ok) {
-        setRegex("");
-        setReplacement("");
-      } else setError(res.error);
+      try {
+        const res = editingId
+          ? await updateRedirectAction(app.id, editingId, regex, replacement, permanent)
+          : await createRedirectAction(app.id, regex, replacement, permanent);
+        if (res.ok) clear();
+        else setError(res.error);
+      } catch {
+        setError("Could not save the redirect. Try again.");
+      }
     });
   }
+
   function remove(id: string) {
     setError(null);
     setRemovingId(id);
     start(async () => {
-      const res = await deleteRedirectAction(id);
-      if (!res.ok) setError(res.error);
-      setRemovingId(null);
+      try {
+        const res = await deleteRedirectAction(app.id, id);
+        if (!res.ok) setError(res.error);
+        else if (editingId === id) clear();
+      } catch {
+        setError("Could not remove the redirect. Try again.");
+      } finally {
+        setRemovingId(null);
+      }
     });
   }
 
   return (
-    <section className="space-y-3">
-      <SectionTitle
-        icon={<ArrowRight className="size-4" />}
-        title="Redirects"
-        hint="regex → replacement"
-      />
-      {app.redirects.length > 0 ? (
-        <div className="space-y-2">
-          {app.redirects.map((r) => (
-            <div key={r.redirectId} className={rowCls}>
-              <code className="min-w-0 flex-1 truncate font-mono text-xs">
-                {r.regex} <span className="text-[var(--color-fg-subtle)]">→</span> {r.replacement}
-              </code>
-              <span className={tagCls}>{r.permanent ? "308" : "307"}</span>
-              <RemoveBtn
-                label={`Remove redirect ${r.regex}`}
-                pending={pending && removingId === r.redirectId}
-                onClick={() => remove(r.redirectId)}
+    <section>
+      <fieldset disabled={pending} className="min-w-0 space-y-3">
+        <SectionTitle icon={<ArrowRight className="size-4" />} title="Redirects" />
+        {app.redirects.length > 0 ? (
+          <div className="space-y-2">
+            {app.redirects.map((r) => (
+              <div key={r.redirectId} className={rowCls}>
+                <code className="min-w-0 flex-1 break-all font-mono text-xs">
+                  {r.regex} <span className="text-[var(--color-fg-subtle)]">→</span> {r.replacement}
+                </code>
+                <span className={tagCls}>{r.permanent ? "301" : "302"}</span>
+                <button
+                  type="button"
+                  aria-label={`Edit redirect ${r.regex}`}
+                  className="text-xs text-[var(--color-fg-muted)] hover:underline disabled:opacity-40"
+                  onClick={() => {
+                    setEditingId(r.redirectId);
+                    setRegex(r.regex);
+                    setReplacement(r.replacement);
+                    setPermanent(r.permanent);
+                    setError(null);
+                  }}
+                >
+                  Edit
+                </button>
+                <RemoveBtn
+                  label={`Remove redirect ${r.regex}`}
+                  pending={pending && removingId === r.redirectId}
+                  onClick={() => remove(r.redirectId)}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty>No redirects.</Empty>
+        )}
+        <form onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Regex">
+              <input
+                value={regex}
+                onChange={(e) => { setRegex(e.target.value); setError(null); }}
+                placeholder="^https?://example.com/old(.*)"
+                className={inputCls}
               />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <Empty>No redirects.</Empty>
-      )}
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
-          <Field label="Regex">
+            </Field>
+            <Field label="Replacement">
+              <input
+                value={replacement}
+                onChange={(e) => { setReplacement(e.target.value); setError(null); }}
+                placeholder="https://example.com/new${1}"
+                className={inputCls}
+              />
+            </Field>
+          </div>
+          <Field label="Test URL (optional)">
             <input
-              value={regex}
-              onChange={(e) => setRegex(e.target.value)}
-              placeholder="^/old(.*)"
+              value={testUrl}
+              onChange={(e) => setTestUrl(e.target.value)}
+              placeholder="https://example.com/old/path"
               className={inputCls}
             />
           </Field>
-        </div>
-        <div className="flex-1">
-          <Field label="Replacement">
-            <input
-              value={replacement}
-              onChange={(e) => setReplacement(e.target.value)}
-              placeholder="/new$1"
-              className={inputCls}
-            />
-          </Field>
-        </div>
-        <label className="flex items-center gap-1.5 pb-2 text-xs text-[var(--color-fg-muted)]">
-          <input
-            type="checkbox"
-            checked={permanent}
-            onChange={(e) => setPermanent(e.target.checked)}
-          />
-          Permanent
-        </label>
-        <AddBtn
-          pending={pending && removingId === null}
-          disabled={!regex.trim() || !replacement.trim()}
-          onClick={add}
-        />
-      </div>
-      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
+          {preview && (
+            <p aria-live="polite" className="break-all text-xs text-[var(--color-fg-muted)]">
+              {preview.ok
+                ? `${testUrl} → ${preview.result}${preview.matched ? "" : " (no match)"}`
+                : preview.error}
+            </p>
+          )}
+          <p className="text-[11px] text-[var(--color-fg-subtle)]">
+            Matches the full URL. Use {"${1}"} for capture groups. Editor supports a subset of Traefik regular expressions.
+          </p>
+          <div className="flex items-center gap-2">
+            <label className="mr-auto flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
+              <input
+                type="checkbox"
+                checked={permanent}
+                onChange={(e) => setPermanent(e.target.checked)}
+              />
+              Permanent (301)
+            </label>
+            <button type="button" onClick={clear} className={actionCls}>Cancel</button>
+            <button type="submit" disabled={!regex.trim() || !replacement.trim()} className={saveCls}>
+              {pending && removingId === null && <Loader2 className="size-4 animate-spin" />}
+              {editingId ? "Save redirect" : "Add redirect"}
+            </button>
+          </div>
+        </form>
+        {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
+      </fieldset>
     </section>
   );
 }
@@ -296,88 +361,119 @@ function PortsSection({ app }: { app: Application }) {
 }
 
 function SecuritySection({ app }: { app: Application }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
-  function add() {
-    if (!username.trim() || !password) return;
+  function clear() {
+    setEditingId(null);
+    setUsername("");
+    setPassword("");
     setError(null);
+  }
+
+  function save() {
+    const validation = validateBasicAuth(username, password);
+    setError(validation);
+    if (validation) return;
     start(async () => {
-      const res = await createSecurityAction(app.id, username, password);
-      if (res.ok) {
-        setUsername("");
-        setPassword("");
-      } else setError(res.error);
+      try {
+        const res = editingId
+          ? await updateSecurityAction(app.id, editingId, username, password)
+          : await createSecurityAction(app.id, username, password);
+        if (res.ok) clear();
+        else setError(res.error);
+      } catch {
+        setError("Could not save the basic-auth user. Try again.");
+      }
     });
   }
+
   function remove(id: string) {
     setError(null);
     setRemovingId(id);
     start(async () => {
-      const res = await deleteSecurityAction(id);
-      if (!res.ok) setError(res.error);
-      setRemovingId(null);
+      try {
+        const res = await deleteSecurityAction(app.id, id);
+        if (!res.ok) setError(res.error);
+        else if (editingId === id) clear();
+      } catch {
+        setError("Could not remove the basic-auth user. Try again.");
+      } finally {
+        setRemovingId(null);
+      }
     });
   }
 
   return (
-    <section className="space-y-3">
-      <SectionTitle
-        icon={<Lock className="size-4" />}
-        title="Basic auth"
-        hint="HTTP credentials"
-      />
-      {app.security.length > 0 ? (
-        <div className="space-y-2">
-          {app.security.map((s) => (
-            <div key={s.securityId} className={rowCls}>
-              <span className="min-w-0 flex-1 truncate">{s.username}</span>
-              <span className="shrink-0 font-mono text-xs text-[var(--color-fg-subtle)]">
-                ••••••••
-              </span>
-              <RemoveBtn
-                label={`Remove basic-auth user ${s.username}`}
-                pending={pending && removingId === s.securityId}
-                onClick={() => remove(s.securityId)}
+    <section>
+      <fieldset disabled={pending} className="min-w-0 space-y-3">
+        <SectionTitle icon={<Lock className="size-4" />} title="Basic auth" />
+        {app.security.length > 0 ? (
+          <div className="space-y-2">
+            {app.security.map((s) => (
+              <div key={s.securityId} className={rowCls}>
+                <span className="min-w-0 flex-1 truncate">{s.username}</span>
+                <span className="shrink-0 font-mono text-xs text-[var(--color-fg-subtle)]">••••</span>
+                <button
+                  type="button"
+                  aria-label={`Replace password for ${s.username}`}
+                  className="text-xs text-[var(--color-fg-muted)] hover:underline disabled:opacity-40"
+                  onClick={() => {
+                    setEditingId(s.securityId);
+                    setUsername(s.username);
+                    setPassword("");
+                    setError(null);
+                  }}
+                >
+                  Replace
+                </button>
+                <RemoveBtn
+                  label={`Remove basic-auth user ${s.username}`}
+                  pending={pending && removingId === s.securityId}
+                  onClick={() => remove(s.securityId)}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty>No basic-auth users configured.</Empty>
+        )}
+        <form onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Username">
+              <input
+                value={username}
+                onChange={(e) => { setUsername(e.target.value); setError(null); }}
+                autoComplete="off"
+                placeholder="admin"
+                className={inputCls}
               />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <Empty>No basic-auth users — the app is publicly reachable.</Empty>
-      )}
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
-          <Field label="Username">
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="admin"
-              className={inputCls}
-            />
-          </Field>
-        </div>
-        <div className="flex-1">
-          <Field label="Password">
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className={inputCls}
-            />
-          </Field>
-        </div>
-        <AddBtn
-          pending={pending && removingId === null}
-          disabled={!username.trim() || !password}
-          onClick={add}
-        />
-      </div>
-      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
+            </Field>
+            <Field label={editingId ? "New password" : "Password"}>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setError(null); }}
+                autoComplete="new-password"
+                className={inputCls}
+              />
+            </Field>
+          </div>
+          <p className="text-[11px] text-[var(--color-fg-subtle)]">Passwords are write-only. Replace a password to change it.</p>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={clear} className={actionCls}>Cancel</button>
+            <button type="submit" disabled={!username.trim() || !password} className={saveCls}>
+              {pending && removingId === null && <Loader2 className="size-4 animate-spin" />}
+              {editingId ? "Save user" : "Add user"}
+            </button>
+          </div>
+        </form>
+        {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
+      </fieldset>
     </section>
   );
 }
