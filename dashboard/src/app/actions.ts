@@ -13,6 +13,12 @@ import {
   removeEnvironment,
   listProjects,
   getServiceEnvironment,
+  getServiceWebhook,
+  getServiceComposeFile,
+  getServiceCommands,
+  getApplicationSource,
+  getServiceDockerImage,
+  requireServiceOwnership,
   saveEnvironment,
   updateDatabase,
   reloadDatabase,
@@ -63,6 +69,7 @@ import {
   type Action,
   type DatabasePatch,
   type ApplicationPatch,
+  type HealthCheckSwarm,
   type BuildTypePatch,
   type DomainInput,
   type Engine,
@@ -100,6 +107,8 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { preserveUrlCredentials } from "@/lib/url-credentials";
+import { redactErrorMessage } from "@/lib/error-redaction";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type QuickDeployResult = { ok: true; id: string } | { ok: false; error: string };
@@ -119,6 +128,22 @@ async function wrap(fn: () => Promise<unknown>): Promise<ActionResult> {
   } catch (e) {
     unstable_rethrow(e); // let a /login redirect on an expired session through
     return fail(e);
+  }
+}
+
+/** Backend errors for secret-bearing settings must not echo submitted values. */
+async function wrapSensitive(
+  fn: () => Promise<unknown>,
+  error: string,
+  secrets: readonly (string | null | undefined)[] | null = [],
+): Promise<ActionResult> {
+  try {
+    await fn();
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: secrets === null ? error : redactErrorMessage(e, error, secrets) };
   }
 }
 
@@ -200,15 +225,25 @@ export async function updateDatabaseAction(
   appName: string,
   patch: DatabasePatch
 ): Promise<ActionResult> {
-  return wrap(async () => {
-    await updateDatabase(engine, id, patch);
+  const secrets = [patch.dockerImage];
+  return wrapSensitive(async () => {
+    const savedPatch = { ...patch };
+    if (typeof savedPatch.dockerImage === "string") {
+      savedPatch.dockerImage = preserveUrlCredentials(
+        savedPatch.dockerImage, await getServiceDockerImage(engine, id)
+      );
+      secrets.push(savedPatch.dockerImage);
+    } else {
+      await requireServiceOwnership(engine, id);
+    }
+    await updateDatabase(engine, id, savedPatch);
     const needsReload =
       patch.dockerImage !== undefined ||
       patch.cpuLimit !== undefined ||
       patch.memoryLimit !== undefined ||
       patch.externalPort !== undefined;
     if (needsReload) await reloadDatabase(engine, id, appName);
-  });
+  }, "Could not save database settings.", secrets);
 }
 
 export async function saveEnvironmentAction(
@@ -229,6 +264,40 @@ export async function loadServiceEnvAction(
   } catch (e) {
     unstable_rethrow(e);
     return { ok: false, error: "Could not load environment variables." };
+  }
+}
+
+export async function loadServiceWebhookAction(
+  id: string
+): Promise<{ ok: true; webhookUrl: string | null } | { ok: false; error: string }> {
+  try {
+    return { ok: true, webhookUrl: await getServiceWebhook(id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load webhook URL." };
+  }
+}
+
+export async function loadComposeFileAction(
+  id: string
+): Promise<{ ok: true; composeFile: string } | { ok: false; error: string }> {
+  try {
+    return { ok: true, composeFile: await getServiceComposeFile(id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load compose file." };
+  }
+}
+
+export async function loadServiceCommandsAction(
+  type: MountServiceType,
+  id: string
+): Promise<{ ok: true; command: string | null; healthCheckSwarm: HealthCheckSwarm | null } | { ok: false; error: string }> {
+  try {
+    return { ok: true, ...await getServiceCommands(type, id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load service commands." };
   }
 }
 
@@ -392,10 +461,14 @@ export async function updateApplicationAction(
   patch: ApplicationPatch,
   redeploy = false
 ): Promise<ActionResult> {
-  return wrap(async () => {
+  // Free-text errors can echo fragments of an inline secret, so these edits
+  // retain the generic fallback. Scalar settings keep their validation errors.
+  const hasFreeText = Boolean(patch.command || patch.healthCheckSwarm?.Test?.length || patch.description);
+  return wrapSensitive(async () => {
+    await requireServiceOwnership("application", id);
     await updateApplication(id, patch);
     if (redeploy) await applicationAction(id, "deploy");
-  });
+  }, "Could not save application settings.", hasFreeText ? null : []);
 }
 
 export async function saveApplicationEnvAction(id: string, env: string): Promise<ActionResult> {
@@ -424,13 +497,21 @@ export async function setAppDockerSourceAction(
   registry?: { username: string; password: string; registryUrl: string },
   redeploy = false
 ): Promise<ActionResult> {
-  return wrap(async () => {
+  const secrets: (string | null | undefined)[] = [registry?.username, registry?.password, registry?.registryUrl];
+  return wrapSensitive(async () => {
     const image = dockerImage.trim();
     if (!image) throw new Error("Image is required.");
+    secrets.push(dockerImage, image);
+    const stored = await getApplicationSource(id);
+    secrets.push(stored.dockerImage, stored.registryUrl);
     const hasCreds = registry && (registry.username || registry.password || registry.registryUrl);
-    await setAppDockerSource(id, image, hasCreds ? registry : undefined);
+    await setAppDockerSource(
+      id,
+      preserveUrlCredentials(image, stored.dockerImage),
+      hasCreds ? { ...registry, registryUrl: preserveUrlCredentials(registry.registryUrl, stored.registryUrl) } : undefined
+    );
     if (redeploy) await applicationAction(id, "deploy");
-  });
+  }, "Could not save Docker source.", secrets);
 }
 
 export async function createDomainAction(
@@ -574,18 +655,21 @@ export async function updateGitDeployAction(
     autoDeploy: boolean;
   }
 ): Promise<ActionResult> {
-  return wrap(async () => {
+  const secrets = [config.gitUrl];
+  return wrapSensitive(async () => {
+    const stored = await getApplicationSource(applicationId);
+    secrets.push(stored.gitUrl);
     if (config.gitUrl) {
       await setAppGitSource(
         applicationId,
-        config.gitUrl,
+        preserveUrlCredentials(config.gitUrl, stored.gitUrl),
         config.branch?.trim() || "main",
         config.buildPath?.trim() || "/",
         (config.watchPaths ?? []).map((p) => p.trim()).filter(Boolean)
       );
     }
     await setAppAutoDeploy(applicationId, config.autoDeploy);
-  });
+  }, "Could not save Git deploy settings.", secrets);
 }
 
 /**
@@ -652,10 +736,10 @@ export async function saveComposeFileAction(
   composeFile: string,
   redeploy = false
 ): Promise<ActionResult> {
-  return wrap(async () => {
+  return wrapSensitive(async () => {
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");
-  });
+  }, "Could not save compose file.", null);
 }
 
 export async function saveComposeEnvAction(id: string, env: string): Promise<ActionResult> {
