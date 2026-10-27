@@ -15,7 +15,16 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 
-vi.mock("@/app/actions", () => ({}));
+// Guarded client actions wrap every server action at import time.
+vi.mock("@/app/actions", () => new Proxy({} as Record<string, unknown>, {
+  has: (_target, key) => typeof key === "string" && key.endsWith("Action"),
+  get: (target, key) => {
+    if (typeof key !== "string" || !key.endsWith("Action")) return undefined;
+    return (target[key] ??= vi.fn());
+  },
+}));
+vi.mock("@/app/db-connect-actions", () => ({ getDatabaseConnectionAction: vi.fn() }));
+vi.mock("@/app/login/actions", () => ({ logoutAction: vi.fn() }));
 vi.mock("@/lib/engines", () => ({ ENGINE_LIST: [] }));
 vi.mock("@/components/GithubDeployModal", () => ({ GithubDeployModal: () => null }));
 vi.mock("@/components/use-focus-trap", () => ({ useDialogFocus: () => undefined }));
