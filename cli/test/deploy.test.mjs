@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -65,8 +65,8 @@ test("deploy parses default path and all flags without changing up", async () =>
   await cmd.parseAsync([], { from: "user" });
   assert.deepEqual(parsed, { path: ".", flags: {} });
   const explicit = createDeployCommand(async (path, flags) => { parsed = { path, flags }; });
-  await explicit.parseAsync(["./hello", "--service", "web", "--project", "demo", "--detach"], { from: "user" });
-  assert.deepEqual(parsed, { path: "./hello", flags: { service: "web", project: "demo", detach: true } });
+  await explicit.parseAsync(["./hello", "--service", "web", "--project", "demo", "--detach", "--include-env"], { from: "user" });
+  assert.deepEqual(parsed, { path: "./hello", flags: { service: "web", project: "demo", detach: true, includeEnv: true } });
 });
 
 for (const args of [["--service"], ["--project"], ["--unknown"], ["one", "two"]]) {
@@ -237,4 +237,97 @@ test("client reuses configured local auth and reports expired session", async (t
   });
   const client = await connectDeployClient(cfg);
   await assert.rejects(client.request("project.all"), /session expired/);
+});
+
+async function writeLink(directory, applicationId = app.applicationId) {
+  await mkdir(join(directory, ".switchyard"), { recursive: true });
+  await writeFile(join(directory, ".switchyard/link.json"), JSON.stringify({ projectId: "p1", environmentId: "env1", applicationId }));
+}
+
+test("deploy uses linked IDs across project/service renames and multiple environments", async (t) => {
+  const directory = await fixture(t);
+  const source = await fixture(t);
+  await writeLink(directory);
+  const steps = startSteps();
+  steps[0].value = [
+    { ...project, name: "renamed-project", environments: [
+      { ...environment, environmentId: "other", applications: [] },
+      { ...environment, name: "staging", applications: [{ ...app, name: "renamed-service" }] },
+    ] },
+    { ...project, projectId: "p2", name: "other" },
+  ];
+  const client = clientFor([...steps, { path: detail, value: app }]);
+  const output = [];
+  await deployDirectory(source, { detach: true }, client, { ...quiet, directory, log: (s) => output.push(s) });
+  client.done();
+  assert.ok(output.some((s) => s.includes("renamed-project/staging/renamed-service")));
+});
+
+test("--service overrides the linked application within its environment", async (t) => {
+  const path = await fixture(t);
+  await writeLink(path, "other");
+  const steps = startSteps();
+  steps[0].value = [
+    { ...project, projectId: "p2", environments: [{ ...environment, environmentId: "elsewhere", applications: [{ ...app, applicationId: "elsewhere" }] }] },
+    { ...project, environments: [{ ...environment, environmentId: "dev", name: "dev", applications: [{ ...app, applicationId: "dev-app" }] }, environment] },
+  ];
+  const client = clientFor([...steps, { path: detail, value: app }]);
+  await deployDirectory(path, { service: "web", detach: true }, client, { ...quiet, directory: path });
+  client.done();
+});
+
+test("missing --service override creates only in the linked environment", async (t) => {
+  const path = await fixture(t);
+  await writeLink(path);
+  const client = clientFor([
+    { path: "project.all", value: [{ ...project, environments: [
+      { ...environment, environmentId: "dev", name: "dev", applications: [{ ...app, name: "worker" }] }, environment,
+    ] }] },
+    { path: "application.create", method: "POST", body: { name: "worker", appName: "worker", environmentId: "env1", sourceType: "drop" }, value: { ...app, name: "worker" } },
+    ...startSteps().slice(1),
+    { path: detail, value: app },
+  ]);
+  await deployDirectory(path, { service: "worker", detach: true }, client, { ...quiet, directory: path });
+  client.done();
+});
+
+test("--project bypasses even an invalid link and retains directory-name defaults", async (t) => {
+  const path = await fixture(t);
+  await writeLink(path);
+  await writeFile(join(path, ".switchyard/link.json"), "invalid");
+  const name = path.split("/").at(-1);
+  const steps = startSteps();
+  steps[0].value = [{ ...project, environments: [{ ...environment, applications: [{ ...app, name }] }] }];
+  const client = clientFor([...steps, { path: detail, value: app }]);
+  await deployDirectory(path, { project: "demo", detach: true }, client, { ...quiet, directory: path });
+  client.done();
+});
+
+test("stale linked targets fail before any mutation even if a name matches", async (t) => {
+  const path = await fixture(t);
+  await writeLink(path);
+  for (const projects of [[], [{ ...project, environments: [] }], [{ ...project, environments: [{ ...environment, applications: [{ ...app, applicationId: "replacement" }] }] }]]) {
+    const client = clientFor([{ path: "project.all", value: projects }]);
+    await assert.rejects(deployDirectory(path, { detach: true }, client, { ...quiet, directory: path }), /Run `switchyard link` again/);
+    client.done();
+  }
+});
+
+test("deploy reports excluded env paths and --include-env passes them to the ZIP", async (t) => {
+  const path = await fixture(t);
+  await writeFile(join(path, ".env"), "FIXTURE=do-not-print\n");
+  for (const includeEnv of [false, true]) {
+    const client = clientFor([...startSteps(), { path: detail, value: app }]);
+    const upload = client.upload;
+    client.upload = async (id, archive) => {
+      // ZIP stores file names verbatim in its central directory.
+      assert.equal(Buffer.from(archive).includes(Buffer.from(".env")), includeEnv);
+      await upload(id, archive);
+    };
+    const output = [];
+    await deployDirectory(path, { service: "web", detach: true, includeEnv }, client, { ...quiet, directory: path, log: (s) => output.push(s) });
+    client.done();
+    assert.equal(output.some((s) => s.includes("Excluded env files: .env")), !includeEnv);
+    assert.ok(output.every((s) => !s.includes("do-not-print")));
+  }
 });
