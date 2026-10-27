@@ -15,7 +15,19 @@ import { StatusBadge } from "@/components/StatusBadge";
  * all config, lifecycle, logs and metrics live. A one-click Deploy shows inline
  * only when the service hasn't been deployed yet.
  */
-export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: () => void }) {
+export function ServiceCard({
+  service,
+  onOpen,
+  selected = false,
+  onToggleSelection,
+  selectionDisabled,
+}: {
+  service: Service;
+  onOpen?: () => void;
+  selected?: boolean;
+  onToggleSelection?: (shift: boolean) => void;
+  selectionDisabled?: boolean;
+}) {
   const accent = serviceAccent(service);
   const logos = useTemplateLogos();
   const [pending, startTransition] = useTransition();
@@ -43,12 +55,27 @@ export function ServiceCard({ service, onOpen }: { service: Service; onOpen?: ()
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ type: "spring", stiffness: 320, damping: 28 }}
       className="group relative overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-colors hover:bg-[var(--color-surface-hover)]"
+      style={selected ? { borderColor: "var(--color-brand)" } : undefined}
     >
       <span
         className="absolute inset-x-0 top-0 h-px opacity-60"
         style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }}
       />
       <div className="flex items-center gap-3">
+        {onToggleSelection && (
+          <input
+            type="checkbox"
+            aria-label={`Select ${service.name}`}
+            checked={selected}
+            disabled={selectionDisabled}
+            onChange={() => { /* Selection uses click so Shift is available, including keyboard clicks. */ }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelection(e.shiftKey);
+            }}
+            className="relative z-10 size-4 shrink-0 cursor-pointer accent-[var(--color-brand)] disabled:cursor-default"
+          />
+        )}
         <ServiceLogo
           service={service}
           logo={resolveServiceLogo(service, logos)}

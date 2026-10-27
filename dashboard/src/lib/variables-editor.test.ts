@@ -2,8 +2,11 @@ import { createElement, useReducer } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { VariablesTab } from "../components/service/VariablesTab";
+import { loadServiceEnvAction } from "@/lib/client-actions";
 import { DirtyGuardProvider } from "../components/DirtyGuard";
 import type { ComposeService } from "./dokploy";
+import { sharedReference } from "./shared-variables";
+import { appendDotenvKey } from "./dotenv-raw";
 import { createEditorState, dotenvEditorReducer, type EditorState } from "./dotenv-editor";
 import { initialVariablesEditorState, variablesEditorReducer } from "./variables-editor";
 
@@ -19,6 +22,9 @@ vi.mock("@/lib/client-actions", () => ({
   saveComposeEnvAction: vi.fn(),
 }));
 
+vi.mock("@/components/use-shared-variables", () => ({
+  useSharedVariableKeys: vi.fn(() => ({ keys: { project: ["SHARED_TOKEN"], environment: [] } })),
+}));
 const service: ComposeService = {
   kind: "compose",
   id: "compose-id",
@@ -196,5 +202,64 @@ describe("variables editor reducer", () => {
     expect(saved.value).toBe("TOKEN=newer");
     expect(saved.baseline).toBe("TOKEN=submitted");
     expect(saved.value).not.toBe(saved.baseline);
+  });
+
+  it("keeps inserted shared references dirty until saved against the loaded baseline", () => {
+    const env = "# Preserve existing values\nTOKEN=loaded-secret\n";
+    const loaded = dotenvEditorReducer(createEditorState(null), { type: "loaded", env });
+    const inserted = dotenvEditorReducer(loaded, {
+      type: "edit",
+      text: appendDotenvKey(loaded.text, "API_TOKEN", sharedReference("project", "SHARED_TOKEN")),
+    });
+
+    expect(inserted.text).toBe(`${env}API_TOKEN=\${{project.SHARED_TOKEN}}\n`);
+    expect(inserted.baseline).toBe(env);
+    expect(inserted.text).not.toBe(inserted.baseline);
+
+    const review = dotenvEditorReducer(inserted, { type: "review" });
+    expect(review.review).toBe(inserted.text);
+    const html = renderEditor(review);
+    expect(html).toContain("API_TOKEN=••••••••");
+    expect(html).not.toContain("loaded-secret");
+    expect(button(html, "Add shared reference")).toContain('disabled=""');
+    expect(button(html, "Confirm changes")).not.toContain('disabled=""');
+
+    const saved = dotenvEditorReducer(review, { type: "saved", text: review.review! });
+    expect(saved.text).toBe(saved.baseline);
+    expect(saved.text).toBe(inserted.text);
+  });
+
+  it("renders the loading skeleton without exposing the service's env prop", () => {
+    const service: ComposeService = {
+      kind: "compose",
+      id: "compose-id",
+      name: "test-compose",
+      appName: "test-compose-app",
+      status: "idle",
+      projectId: "project-id",
+      projectName: "Test project",
+      environmentId: "environment-id",
+      environmentName: "production",
+      dockerImage: null,
+      env: "TOKEN=env-redaction-prop-sentinel",
+      createdAt: null,
+      cpuLimit: null,
+      memoryLimit: null,
+      replicas: null,
+      composeFile: null,
+      composeType: "docker-compose",
+      domains: [],
+      deployments: [],
+    };
+
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+      createElement(VariablesTab, { service }),
+    ));
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-label="Loading environment variables"');
+    expect(html).not.toContain("env-redaction-prop-sentinel");
+    expect(html).not.toContain("<textarea");
+    expect(loadServiceEnvAction).not.toHaveBeenCalled();
   });
 });
