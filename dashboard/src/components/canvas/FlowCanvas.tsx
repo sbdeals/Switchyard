@@ -22,13 +22,15 @@ import "@xyflow/react/dist/style.css";
 import type { ServiceReferenceGraph } from "@/lib/service-references";
 import type { ProjectNode, Service } from "@/lib/dokploy";
 import { applySelectionChanges } from "@/lib/bulk-selection";
-import { serviceAccent } from "@/lib/service-meta";
+import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 import { serviceFilterOpacity } from "@/lib/service-filter";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
+import { SHORTCUTS } from "@/lib/shortcuts";
 import { useDialogFocus } from "@/components/use-focus-trap";
 import { pruneCanvasPositions } from "@/lib/canvas-positions";
 import { useTheme } from "@/components/ThemeProvider";
+import { hasSelectionModifier } from "@/lib/bulk-selection";
 import { CanvasResizeFit } from "@/components/canvas/CanvasResizeFit";
 import { canvasAutoLayout } from "@/lib/canvas-auto-layout";
 import {
@@ -141,9 +143,13 @@ export function FlowCanvas({
         }
         const x = col * COL_W;
         svcs.forEach((service, row) => {
+          const status = resolveServiceDisplay(service.status, service.runtime);
           nodes.push({
             id: service.id,
             type: "service",
+            ariaRole: "button",
+            ariaLabel: `${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""}${(graph.warnings[service.id]?.length ?? 0) > 0 ? `, ${graph.warnings[service.id].length} broken ref${graph.warnings[service.id].length === 1 ? "" : "s"}` : ""}${selectedIds.includes(service.id) ? ", selected" : ""} — open details`,
+            className: "rounded-xl focus-visible:!outline-2 focus-visible:!outline-offset-2 focus-visible:!outline-[var(--color-brand)]",
             selected: selectedIds.includes(service.id),
             position: { x, y: rowY + row * ROW_H },
             data: {
@@ -341,6 +347,23 @@ export function FlowCanvas({
               : updated, positions));
         }}
         onEdgesChange={onEdgesChange}
+        onNodeClick={(e, node) => {
+          // Shift/Ctrl/⌘-click toggles bulk selection instead of opening details.
+          if (!hasSelectionModifier(e)) onSelect((node.data as ServiceNodeData).service);
+        }}
+        onKeyDown={(e) => {
+          if (!SHORTCUTS.openService.keys.some((key) => key === e.key)) return;
+          if (hasSelectionModifier(e)) return;
+          const target = e.target as HTMLElement;
+          if (!target.classList.contains("react-flow__node")) return;
+          const service = services.find((s) => s.id === target.dataset.id);
+          if (!service) return;
+          e.preventDefault();
+          onSelect(service);
+        }}
+        ariaLabelConfig={{
+          "node.a11yDescription.keyboardDisabled": "Press Enter or Space to open service details. Use arrow keys to move a selected service; Escape clears selection.",
+        }}
         onEdgeMouseEnter={(event, edge) => setHoveredEdge({ id: edge.id, x: event.clientX, y: event.clientY })}
         onEdgeMouseMove={(event, edge) => setHoveredEdge({ id: edge.id, x: event.clientX, y: event.clientY })}
         onEdgeMouseLeave={() => setHoveredEdge(null)}
@@ -385,7 +408,9 @@ export function FlowCanvas({
             </div>
           </Panel>
         )}
-        <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)] max-sm:!bottom-auto max-sm:!top-0 max-lg:[&_button]:!h-10 max-lg:[&_button]:!w-10" />
+        <div role="group" aria-label="Canvas controls">
+          <Controls aria-label="" className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)] max-sm:!bottom-auto max-sm:!top-0 max-lg:[&_button]:!h-10 max-lg:[&_button]:!w-10" />
+        </div>
         <Panel position="top-right">
           <button
             type="button"

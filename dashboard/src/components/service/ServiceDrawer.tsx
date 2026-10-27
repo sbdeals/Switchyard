@@ -75,6 +75,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { nextTabIndex } from "@/lib/tab-navigation";
 import { ResourceSettings } from "@/components/service/ResourceSettings";
 import { resourceInputs } from "@/lib/resource-limits";
 import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
@@ -288,7 +289,7 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
   onDuplicate: (service: Service) => void;
 }) {
   const titleId = useId();
-  const dialogRef = useDialogFocus<HTMLElement>(onClose);
+  const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
   const tabs = service ? getServiceTabs(service) : [];
   const [showDeploymentLogs, setShowDeploymentLogs] = useState(Boolean(deploymentId));
@@ -317,7 +318,7 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
             exit={{ opacity: 0 }}
             onClick={onClose}
           />
-          <motion.aside
+          <motion.div
             ref={dialogRef}
             role="dialog"
             aria-modal="true"
@@ -338,12 +339,7 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
               role="tablist"
               aria-label="Service sections"
               onKeyDown={(e) => {
-                const idx = tabs.indexOf(tab);
-                let next: number | null = null;
-                if (e.key === "ArrowRight") next = (idx + 1) % tabs.length;
-                else if (e.key === "ArrowLeft") next = (idx - 1 + tabs.length) % tabs.length;
-                else if (e.key === "Home") next = 0;
-                else if (e.key === "End") next = tabs.length - 1;
+                const next = nextTabIndex(e.key, tabs.indexOf(tab), tabs.length);
                 if (next === null) return;
                 e.preventDefault();
                 onTabChange(tabs[next]);
@@ -460,7 +456,7 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
                 ))}
             </PanelErrorBoundary>
             </DirtyGuardScope>
-          </motion.aside>
+          </motion.div>
         </>
       )}
     </AnimatePresence>

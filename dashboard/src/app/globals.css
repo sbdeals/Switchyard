@@ -31,7 +31,8 @@
   --color-warn-soft: #f5a6231a;
   --color-danger: #ff5c5c;
   --color-danger-soft: #ff5c5c1a;
-  --color-idle: #8888a0;
+  /* >=4.5:1 on idle-soft over surface-hover (idle service badges). */
+  --color-idle: #8e8ea6;
   --color-idle-soft: #8888a01a;
 
   --color-code-bg: #0b0b10;
