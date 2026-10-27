@@ -21,9 +21,11 @@ import { augmentPath, DOCKER_INSTALL_DOCS_URL, DOCKER_LICENSE_URL } from "./prer
 import { loadSettings, saveSettings } from "./settings.js";
 import { createTray, refreshTray, TrayDeps } from "./tray.js";
 import { checkForUpdatesInteractive, initUpdater } from "./updater.js";
+import { isTrustedIpcSender, navigationDecision, permissionDecision } from "./url-policy.js";
 
 const SMOKE = process.env.SWITCHYARD_DESKTOP_SMOKE === "1";
 const SMOKE_TIMEOUT_MS = 12 * 60_000;
+const STATUS_FILE_PATH = join(__dirname, "index.html");
 
 /** Links the status view may open in the system browser. */
 const EXTERNAL_URL_ALLOWLIST = [DOCKER_LICENSE_URL, DOCKER_INSTALL_DOCS_URL];
@@ -131,15 +133,50 @@ function createWindow(show: boolean): void {
 
   // Only the local status view and the dashboard render inside the app —
   // everything else (deployed app URLs, GitHub, Dokploy) opens in the browser.
+  const decideNavigation = (url: string) =>
+    navigationDecision(url, STATUS_FILE_PATH, orchestrator.snapshot().dashboardUrl);
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/i.test(url)) void shell.openExternal(url);
+    if (decideNavigation(url) !== "deny") {
+      const { protocol } = new URL(url);
+      if (protocol === "http:" || protocol === "https:") void shell.openExternal(url);
+    }
     return { action: "deny" };
   });
-  win.webContents.on("will-navigate", (e, url) => {
-    if (!isInternalUrl(url)) {
+  const guardNavigation = (e: { preventDefault(): void }, url: string) => {
+    const decision = decideNavigation(url);
+    if (decision !== "allow") {
       e.preventDefault();
-      if (/^https?:/i.test(url)) void shell.openExternal(url);
+      if (decision === "external") void shell.openExternal(url);
     }
+  };
+  win.webContents.on("will-navigate", guardNavigation);
+  win.webContents.on("will-redirect", guardNavigation);
+  win.webContents.session.setPermissionCheckHandler(
+    (contents, permission, requestingOrigin, details) => {
+      let requestingUrl = details.requestingUrl || requestingOrigin;
+      // A file origin alone cannot identify the bundled document. Only the main
+      // frame may fall back to the webContents URL when its full URL is absent.
+      if ((!requestingUrl || requestingUrl === "file://") && details.isMainFrame) {
+        requestingUrl = contents?.getURL() || "";
+      }
+      return permissionDecision(
+        permission,
+        requestingUrl,
+        STATUS_FILE_PATH,
+        orchestrator.snapshot().dashboardUrl,
+      );
+    },
+  );
+  win.webContents.session.setPermissionRequestHandler((contents, permission, callback, details) => {
+    const requestingUrl = details.requestingUrl || (details.isMainFrame ? contents.getURL() : "");
+    callback(
+      permissionDecision(
+        permission,
+        requestingUrl,
+        STATUS_FILE_PATH,
+        orchestrator.snapshot().dashboardUrl,
+      ),
+    );
   });
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     if (currentView === "dashboard") {
@@ -151,16 +188,10 @@ function createWindow(show: boolean): void {
   void loadStatusView();
 }
 
-function isInternalUrl(url: string): boolean {
-  if (url.startsWith("file:")) return true;
-  const dash = orchestrator.snapshot().dashboardUrl;
-  return Boolean(dash && url.startsWith(dash));
-}
-
 async function loadStatusView(): Promise<void> {
   if (!win) return;
   currentView = "status";
-  await win.loadFile(join(__dirname, "index.html")).catch(() => {});
+  await win.loadFile(STATUS_FILE_PATH).catch(() => {});
 }
 
 async function loadDashboard(url: string): Promise<void> {
@@ -208,12 +239,12 @@ function wireOrchestrator(): void {
 
 function wireIpc(): void {
   ipcMain.handle("getState", (e) => {
-    if (!e.senderFrame?.url.startsWith("file:")) return null;
+    if (!isTrustedIpcSender(e.senderFrame, win?.webContents.mainFrame, STATUS_FILE_PATH)) return null;
     return orchestrator.snapshot();
   });
   ipcMain.handle("action", async (e, id: unknown, payload: unknown) => {
     // The dashboard is web content — only the bundled status view may drive the app.
-    if (!e.senderFrame?.url.startsWith("file:")) return;
+    if (!isTrustedIpcSender(e.senderFrame, win?.webContents.mainFrame, STATUS_FILE_PATH)) return;
     if (typeof id !== "string") return;
     await dispatchAction(id, payload);
   });

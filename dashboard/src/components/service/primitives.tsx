@@ -10,9 +10,7 @@ import {
   Children,
   cloneElement,
   isValidElement,
-  useEffect,
   useId,
-  useReducer,
   useState,
   useTransition,
 } from "react";
@@ -33,7 +31,6 @@ import {
 import type { Action, AppDomain, ServiceRuntime, ServiceStatus } from "@/lib/dokploy";
 import type { ActionResult } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
-import { reduceEditorDraft } from "@/lib/editor-draft";
 import { resolveServiceAction } from "@/lib/service-meta";
 import { cn } from "@/lib/utils";
 
@@ -65,24 +62,6 @@ export function useSavedFlash(ms = 1800) {
     setTimeout(() => setSaved(false), ms);
   };
   return [saved, flash] as const;
-}
-
-/** Retain edits on refresh, and acknowledge only the text that was saved. */
-export function useEditorDraft(savedValue: string, onDirtyChange: (dirty: boolean) => void) {
-  const [draft, dispatch] = useReducer(reduceEditorDraft, { value: savedValue, savedValue });
-  const [previousValue, setPreviousValue] = useState(savedValue);
-  if (savedValue !== previousValue) {
-    setPreviousValue(savedValue);
-    dispatch({ type: "refresh", value: savedValue });
-  }
-  const dirty = draft.value !== draft.savedValue;
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
-  return {
-    value: draft.value,
-    dirty,
-    setValue: (value: string) => dispatch({ type: "edit", value }),
-    markSaved: (value: string) => dispatch({ type: "saved", value }),
-  };
 }
 
 // --- primitives ---------------------------------------------------------------
