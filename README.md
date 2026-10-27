@@ -42,6 +42,13 @@ everything.
    Prefer browsing the [release page](https://github.com/sbdeals/Switchyard/releases/latest)?
    Its notes open with a "which file do I download" table — everything else
    under Assets is auto-updater plumbing you can ignore.
+
+   On Windows you can skip the download **and** the SmartScreen warning in
+   one move by installing from a terminal instead:
+
+   ```powershell
+   winget install sbdeals.Switchyard
+   ```
 2. **Run it.** The build isn't code-signed yet, so both OSes will warn you the
    first time:
    - **Windows:** SmartScreen may warn; click **More info → Run anyway**.
@@ -138,6 +145,11 @@ Re-running `up` is safe: it converges, and upgrades when a newer version is
 out. Settings are changed *after* setup with
 `switchyard config set <key> <value>`. Full reference: [docs/cli.md](docs/cli.md).
 
+Deploy a local directory with `switchyard deploy` (the Railway `up`
+equivalent), or `switchyard deploy ./my-app --service web --project demos`.
+Add `--detach` to return after queuing. `switchyard up` still starts the
+platform. See [deploy options and build requirements](docs/cli.md#deploy-a-directory).
+
 > The npm package is **`switchyard-cli`** (the bare npm name `switchyard` is an
 > unrelated squatted package; don't `npx switchyard`).
 
@@ -203,6 +215,7 @@ Claude Code here), `make doctor` (check prerequisites).
 | [Architecture](docs/architecture.md) | The BFF design, data model, SSE logs/metrics, canvas internals |
 | [Launch tooling](docs/launch-tooling.md) | Every make target and script, and why they exist |
 | [Troubleshooting](docs/troubleshooting.md) | Symptom → cause → fix, for both platforms |
+| [Licensing notes](docs/licensing-notes.md) | How Switchyard relates to Dokploy's dual license, and what to re-check on Dokploy upgrades |
 
 ## Repo layout
 
