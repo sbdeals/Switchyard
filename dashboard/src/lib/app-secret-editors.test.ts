@@ -13,6 +13,8 @@ vi.mock("@/app/actions", () => ({
 }));
 // AppTabs -> AppDeployControls imports the server-only deploy options action.
 vi.mock("@/app/deploy-actions", () => ({ deployOptionsAction: vi.fn() }));
+// AppTabs -> ComposeExportDialog imports the server-only compose export action.
+vi.mock("@/app/compose-export-actions", () => ({ loadComposeExportAction: vi.fn() }));
 
 const app: Application = {
   kind: "application",

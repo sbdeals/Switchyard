@@ -2,6 +2,8 @@ import "server-only";
 
 import { request } from "./dokploy";
 
+export { deploymentForService } from "./deployment-selection";
+
 interface DeploymentLogMetadata {
   deploymentId: string;
   status: string;

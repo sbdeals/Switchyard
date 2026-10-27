@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +16,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/dokploy", () => ({
   loadWorkspace: mocks.loadWorkspace,
   inferEdges: mocks.inferEdges,
+}));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => ({ value: "test-session" }) }),
+}));
+vi.mock("@/lib/session", () => ({
+  SESSION_COOKIE: "switchyard_session",
+  openSession: () => ({ email: "test@example.test" }),
 }));
 vi.mock("@/lib/collector", () => ({ ensureCollector: vi.fn() }));
 vi.mock("@/components/Workspace", () => ({ Workspace: mocks.workspace }));
@@ -150,6 +158,8 @@ describe("workspace page", () => {
     const html = renderToStaticMarkup(await Page());
     const props = mocks.workspace.mock.calls[0][0];
 
+    expect(props.notificationScope).toBe(createHash("sha256").update("test@example.test").digest("hex"));
+    expect(html).not.toContain("test@example.test");
     expect(html).not.toContain("ENV_PAGE_SENTINEL");
     expect(html).not.toContain("COMPOSE_PAGE_SENTINEL");
     expect(props.services[0]).toMatchObject({
