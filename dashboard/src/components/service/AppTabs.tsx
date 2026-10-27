@@ -67,6 +67,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { DomainHttpsToggle, useDomainHttps } from "@/components/service/DomainHttpsToggle";
 import { DeploymentCommitInfo } from "@/components/service/DeploymentCommitInfo";
 import {
   durationBarHeight,
@@ -143,9 +144,11 @@ type DomainDraft = Omit<DomainInput, "port"> & { port: string };
 function DomainFields({
   value,
   onChange,
+  httpsOptions,
 }: {
   value: DomainDraft;
   onChange: (patch: Partial<DomainDraft>) => void;
+  httpsOptions?: ReturnType<typeof useDomainHttps>;
 }) {
   return (
     <div className="space-y-3">
@@ -175,7 +178,8 @@ function DomainFields({
         <div className="min-w-0 flex-1">
           <Field label="Certificate">
             <select
-              value={value.certificateType}
+              value={httpsOptions && !httpsOptions.https ? "none" : value.certificateType}
+              disabled={httpsOptions && !httpsOptions.https}
               onChange={(e) => onChange({ certificateType: e.target.value as CertificateType })}
               className={inputCls}
             >
@@ -187,15 +191,16 @@ function DomainFields({
             </select>
           </Field>
         </div>
-        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs text-[var(--color-fg-muted)] max-lg:min-h-10">
+        {!httpsOptions && <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs text-[var(--color-fg-muted)] max-lg:min-h-10">
           <input
             type="checkbox"
             checked={value.https}
             onChange={(e) => onChange({ https: e.target.checked })}
           />
           HTTPS
-        </label>
+        </label>}
       </div>
+      {httpsOptions && <DomainHttpsToggle {...httpsOptions} />}
     </div>
   );
 }
@@ -318,13 +323,14 @@ function DomainRow({ d, appId }: { d: AppDomain; appId: string }) {
 const NEW_DOMAIN: DomainDraft = {
   host: "",
   port: "80",
-  https: true,
+  https: false,
   certificateType: "letsencrypt",
   path: "/",
 };
 
 export function DomainsTab({ app }: { app: Application }) {
   const [draft, setDraft] = useState<DomainDraft>(NEW_DOMAIN);
+  const httpsOptions = useDomainHttps(draft.host);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
@@ -337,7 +343,7 @@ export function DomainsTab({ app }: { app: Application }) {
     setGenerated(null);
     if (validationError) return;
     start(async () => {
-      const res = await createDomainAction(app.id, { ...draft, port: Number(draft.port) });
+      const res = await createDomainAction(app.id, { ...draft, port: Number(draft.port), https: httpsOptions.https });
       if (res.ok) setDraft(NEW_DOMAIN);
       else setError(res.error);
     });
@@ -359,9 +365,8 @@ export function DomainsTab({ app }: { app: Application }) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-[var(--color-fg-muted)]">
-        Attach a domain and point its DNS at this server. Let&apos;s Encrypt needs the host to
-        answer on ports 80/443 — for local/no-ingress setups choose certificate &ldquo;None&rdquo;
-        and untick HTTPS.
+        Attach a domain and point its DNS at this server. Choose HTTPS and a certificate
+        for encrypted connections.
       </p>
 
       {app.domains.length > 0 ? (
@@ -376,7 +381,11 @@ export function DomainsTab({ app }: { app: Application }) {
 
       <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-3">
         <div className="text-xs font-medium text-[var(--color-fg-muted)]">Add a domain</div>
-        <DomainFields value={draft} onChange={(patch) => setDraft((v) => ({ ...v, ...patch }))} />
+        <DomainFields
+          value={draft}
+          onChange={(patch) => setDraft((v) => ({ ...v, ...patch }))}
+          httpsOptions={httpsOptions}
+        />
         <div className="flex items-center justify-between gap-2">
           <GenerateUrlBtn pending={pending} onClick={generate} />
           <button

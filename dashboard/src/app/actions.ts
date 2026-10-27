@@ -41,6 +41,7 @@ import {
   saveApplicationEnvironment,
   createDomain,
   createComposeDomain,
+  domainHttpsConfigured,
   ensureAutoDomain,
   generateHostFor,
   updateDomain,
@@ -121,6 +122,7 @@ import {
   deleteProjectSettings,
 } from "@/lib/project-settings-server";
 import type { ProjectSettings } from "@/lib/project-settings";
+import { domainTlsOptions } from "@/lib/domain-https";
 import { readServiceVolumes } from "@/lib/volume-usage.server";
 import type { VolumeUsage } from "@/lib/volume-usage";
 import { duplicateService } from "@/lib/service-duplicate-operation";
@@ -635,7 +637,21 @@ export async function createDomainAction(
 ): Promise<ActionResult> {
   const error = validatePort(input?.port, "Container port");
   if (error) return { ok: false, error };
-  return wrap(() => createDomain(applicationId, { ...input, host: input.host.trim() }));
+  return wrap(() => createDomain(applicationId, {
+    ...input,
+    host: input.host.trim(),
+    https: input.https === true,
+    certificateType: input.https === true ? input.certificateType : "none",
+  }));
+}
+
+export async function domainHttpsConfiguredAction(): Promise<boolean | null> {
+  try {
+    return await domainHttpsConfigured();
+  } catch (e) {
+    unstable_rethrow(e);
+    return null;
+  }
 }
 
 export async function updateDomainAction(
@@ -682,11 +698,12 @@ export async function createComposeDomainAction(
   composeId: string,
   serviceName: string,
   host: string,
-  port: number
+  port: number,
+  https: boolean
 ): Promise<ActionResult> {
   const error = validatePort(port);
   if (error) return { ok: false, error };
-  return wrap(() => createComposeDomain(composeId, serviceName.trim(), host.trim(), port));
+  return wrap(() => createComposeDomain(composeId, serviceName.trim(), host.trim(), port, domainTlsOptions(https)));
 }
 
 /**
