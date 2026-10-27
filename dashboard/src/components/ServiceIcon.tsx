@@ -49,7 +49,7 @@ export function ServiceIcon({
   return (
     <div
       className={`flex ${size} shrink-0 items-center justify-center overflow-hidden ${rounded}`}
-      style={{ backgroundColor: `${accent}1a`, color }}
+      style={{ backgroundColor: `color-mix(in srgb, ${accent} 10%, transparent)`, color }}
     >
       {logo && logo !== failedLogo ? (
         // eslint-disable-next-line @next/next/no-img-element -- Dokploy catalog logos use arbitrary hosts

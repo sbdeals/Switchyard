@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useReducer, useState, useTransition } from "react";
-import { useDirtyGuard } from "@/components/DirtyGuard";
 import type { Service } from "@/lib/dokploy";
 import {
   loadServiceEnvAction,
@@ -9,6 +8,9 @@ import {
   saveApplicationEnvAction,
   saveComposeEnvAction,
 } from "@/app/actions";
+import { useSharedVariableKeys } from "@/components/use-shared-variables";
+import { sharedReference, sharedReferences, type SharedScope } from "@/lib/shared-variables";
+import { useDirtyGuard } from "@/components/DirtyGuard";
 import { createEditorState, dotenvEditorReducer } from "@/lib/dotenv-editor";
 import { appendDotenvKey, diffDotenvRaw, parseDotenvRaw, removeDotenvKey, setDotenvValue } from "@/lib/dotenv-raw";
 import { Btn, inputCls, RemoveBtn, SaveRow, useSavedFlash } from "@/components/service/primitives";
@@ -21,6 +23,12 @@ export function VariablesTab({ service }: { service: Service }) {
   const [pending, start] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
+  const [addingReference, setAddingReference] = useState(false);
+  const [scope, setScope] = useState<SharedScope>("project");
+  const [referenceKey, setReferenceKey] = useState("");
+  const [targetKey, setTargetKey] = useState("");
+  // Recheck definitions when a shared-variable save revalidates service props.
+  const shared = useSharedVariableKeys(service.projectId, service.environmentId, service);
   const [exported, setExported] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,6 +56,26 @@ export function VariablesTab({ service }: { service: Service }) {
   const invalid = parsed.errors.length > 0;
   const reviewing = editor.review !== null;
   const count = Object.keys(parsed.variables).length;
+
+  const availableKeys = shared?.keys?.[scope] ?? [];
+  const selectedKey = availableKeys.includes(referenceKey) ? referenceKey : (availableKeys[0] ?? "");
+  const references = shared?.keys ? sharedReferences(editor.text, shared.keys) : [];
+
+  function insertReference() {
+    if (pending || reviewing || invalid || !selectedKey) return;
+    const key = targetKey.trim() || selectedKey;
+    if (Object.hasOwn(parsed.variables, key)) {
+      setError(`${key} already exists. Choose another service variable name or edit its existing value.`);
+      return;
+    }
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      setError("Invalid key. Use letters, numbers and underscores; start with a letter or underscore.");
+      return;
+    }
+    edit(appendDotenvKey(editor.text, key, sharedReference(scope, selectedKey)));
+    setAddingReference(false);
+    setTargetKey("");
+  }
 
   function edit(text: string) {
     setError(null);
@@ -149,6 +177,39 @@ export function VariablesTab({ service }: { service: Service }) {
         {reviewing ? "Review these changes, then confirm to save. Values are masked." : "Edit variables, then review before saving. Comments and formatting are preserved."}
         {" "}Redeploy the service for changes to take effect.
       </p>
+      <div className="mb-3 space-y-2">
+        <button type="button" disabled={pending || reviewing || invalid} onClick={() => setAddingReference(!addingReference)} aria-expanded={addingReference} className="rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)]">
+          Add shared reference
+        </button>
+        {!shared && <p role="status" className="text-xs text-[var(--color-fg-muted)]">Checking shared variables…</p>}
+        {shared?.error && <p role="alert" className="text-xs text-[var(--color-danger)]">{shared.error}</p>}
+        {addingReference && !reviewing && shared?.keys && (
+          <div className="space-y-2 rounded-lg border border-[var(--color-border)] p-3">
+            <p className="text-xs text-[var(--color-fg-muted)]">Manage shared values in Projects → project Settings → Shared variables.</p>
+            <div className="flex flex-wrap gap-2">
+              <select aria-label="Shared reference scope" value={scope} onChange={(e) => { setScope(e.target.value as SharedScope); setReferenceKey(""); }} className="rounded border border-[var(--color-border-control)] bg-[var(--color-bg-elevated)] p-2 text-xs">
+                <option value="project">Project</option>
+                <option value="environment">Environment</option>
+              </select>
+              <select aria-label="Shared variable" value={selectedKey} onChange={(e) => setReferenceKey(e.target.value)} disabled={!availableKeys.length} className="min-w-0 flex-1 rounded border border-[var(--color-border-control)] bg-[var(--color-bg-elevated)] p-2 font-mono text-xs">
+                {!availableKeys.length && <option value="">No shared variables in this scope</option>}
+                {availableKeys.map((key) => <option key={key} value={key}>{key}</option>)}
+              </select>
+            </div>
+            <input aria-label="Service variable name" value={targetKey} placeholder={selectedKey || "SERVICE_VARIABLE_NAME"} onChange={(e) => setTargetKey(e.target.value)} className="w-full rounded border border-[var(--color-border-control)] bg-[var(--color-bg-elevated)] p-2 font-mono text-xs" />
+            <button type="button" onClick={insertReference} disabled={pending || invalid || !selectedKey} className="rounded-lg bg-[var(--color-brand-strong)] px-3 py-2 text-xs text-white disabled:opacity-40">Insert reference</button>
+          </div>
+        )}
+        {references.length > 0 && (
+          <ul aria-label="Shared reference status" className="space-y-1 text-xs">
+            {references.map((ref, index) => (
+              <li key={`${ref.variable}:${index}`} className={ref.defined ? "text-[var(--color-fg-muted)]" : "text-[var(--color-danger)]"}>
+                <code>{ref.variable}: {ref.reference}</code> — {ref.defined ? "Defined" : "Missing — deployment will fail"}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {!reviewing && (editor.mode === "raw" ? (
         <textarea
           value={editor.text}
@@ -161,7 +222,7 @@ export function VariablesTab({ service }: { service: Service }) {
           aria-label="Environment variables, one KEY=value per line"
           aria-invalid={invalid}
           aria-describedby={invalid ? "dotenv-errors" : undefined}
-          className="min-h-64 flex-1 resize-y rounded-lg border border-[var(--color-border-control)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+          className="min-h-64 flex-1 resize-y rounded-lg border border-[var(--color-border-control)] bg-[var(--color-code-bg)] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
         />
       ) : (
         <div className="space-y-2">

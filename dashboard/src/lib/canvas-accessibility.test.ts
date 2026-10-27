@@ -82,7 +82,7 @@ describe("service canvas accessibility", () => {
     captured.nodes = null;
     captured.effects = [];
     const render = () => renderToStaticMarkup(createElement(FlowCanvas, {
-      services: [service], edges: [], onSelect, projects: [], onDeployed: vi.fn(),
+      services: [service], edges: [], onSelect, projects: [], onDeployed: vi.fn(), selectedIds: [], onSelectionChange: vi.fn(),
     }));
     render();
     // Main initializes nodes after mount so hydration cannot overwrite saved
@@ -145,5 +145,12 @@ describe("service canvas accessibility", () => {
   it("opens the same service when its node is clicked", () => {
     captured.flow.onNodeClick!({} as never, captured.flow.nodes![0]);
     expect(onSelect).toHaveBeenCalledExactlyOnceWith(service);
+  });
+
+  it("leaves Shift/Ctrl/⌘-click to bulk selection instead of opening details", () => {
+    for (const modifier of ["shiftKey", "ctrlKey", "metaKey"]) {
+      captured.flow.onNodeClick!({ shiftKey: false, ctrlKey: false, metaKey: false, [modifier]: true } as never, captured.flow.nodes![0]);
+    }
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

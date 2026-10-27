@@ -160,7 +160,7 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
-        className="flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-3 font-mono text-[11px] leading-relaxed"
+        className="flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-3 font-mono text-[11px] leading-relaxed"
       >
         {shown.some((l) => l.stored) && (
           <div className="mb-2 border-b border-[var(--color-border)] pb-2 text-[var(--color-fg-subtle)]">

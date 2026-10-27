@@ -20,12 +20,14 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
   const status = resolveServiceDisplay(service.status, service.runtime);
   const notesSubtitle = serviceNotesSubtitle(service.description);
 
+  // React Flow's nokey class lets Shift-click select a node; Shift-drag on the
+  // surrounding canvas still starts the selection rectangle.
   return (
     <div
-      className="w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)]"
+      className="nokey w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)]"
       style={{
         borderColor: selected ? accent : "var(--color-border-strong)",
-        boxShadow: selected ? `0 0 0 1px ${accent}, 0 8px 30px -12px ${accent}80` : undefined,
+        boxShadow: selected ? `0 0 0 1px ${accent}, 0 8px 30px -12px color-mix(in srgb, ${accent} 50%, transparent)` : undefined,
       }}
     >
       <Handle type="target" position={Position.Left} style={{ background: accent, border: "none" }} />
