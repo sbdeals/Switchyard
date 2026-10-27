@@ -20,9 +20,17 @@ if (kind === "service" && action === "rm") finish();
 if (kind === "service" && action === "ls") {
   const busy = state.servicePolls > 0;
   if (busy) state.servicePolls--;
-  finish(0, busy ? "dokploy" : "");
+  finish(0, [...(busy ? ["dokploy"] : []), ...Object.keys(state.serviceAttachments || {})].join("\n"));
+}
+if (kind === "service" && action === "inspect") {
+  if (state.serviceInspectFailure) finish(1, "", "Cannot inspect service attachments");
+  finish(0, (state.serviceAttachments?.[rest[0]] || []).join("\n"));
 }
 if (kind === "ps") {
+  if (args.includes("network=dokploy-network")) {
+    if (state.attachmentFailure) finish(1, "", "Cannot inspect network attachments");
+    finish(0, (state.containerAttachments || []).map(({ name, service = "" }) => `${name}\t${service}`).join("\n"));
+  }
   const busy = state.containerPolls > 0;
   if (busy) state.containerPolls--;
   const nameFilter = args.find((arg) => arg.startsWith("label=com.docker.swarm.service.name="));
@@ -38,6 +46,7 @@ if (resources && action === "ls") {
 }
 if (resources && action === "inspect") {
   const name = rest.find((arg) => resources.includes(arg));
+  if (kind === "network" && name) finish(0, "dokploy-network-id");
   if (name) finish(0, "[{}]");
   finish(1, "", `Error: No such ${kind}: ${rest[0]}`);
 }

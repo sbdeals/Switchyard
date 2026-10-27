@@ -1,7 +1,9 @@
 import { STORE_VOLUME } from "./config.js";
 import { docker } from "./docker.js";
+import { networkHasWorkloads } from "./network-workloads.js";
 
-/** Failed listings are unknown, never evidence that data was removed. */
+/** Failed listings are unknown, never evidence that data was removed.
+ * Only a shared network with verified workload attachments may survive. */
 export async function inspectPurgeResources(): Promise<{ removedVolumes: string[]; error?: string }> {
   const resources = {
     network: ["dokploy-network"],
@@ -19,6 +21,13 @@ export async function inspectPurgeResources(): Promise<{ removedVolumes: string[
     }
     const present = new Set(res.stdout.split(/\r?\n/).map((name) => name.trim()));
     for (const name of names) {
+      if (kind === "network" && present.has(name)) {
+        try {
+          if (await networkHasWorkloads()) continue;
+        } catch (error) {
+          unverified.push(`network attachments: ${String(error)}`);
+        }
+      }
       if (present.has(name)) remaining.push(`${kind}: ${name}`);
       else if (kind === "volume") removedVolumes.push(name);
     }
