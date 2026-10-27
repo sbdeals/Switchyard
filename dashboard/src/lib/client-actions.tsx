@@ -83,6 +83,7 @@ export const updateApplicationAction = guardAction(serverActions.updateApplicati
 export const saveApplicationEnvAction = guardAction(serverActions.saveApplicationEnvAction);
 export const saveAppBuildTypeAction = guardAction(serverActions.saveAppBuildTypeAction);
 export const setAppDockerSourceAction = guardAction(serverActions.setAppDockerSourceAction);
+export const updateAppGitBranchAction = guardAction(serverActions.updateAppGitBranchAction);
 export const createDomainAction = guardAction(serverActions.createDomainAction);
 export const updateDomainAction = guardAction(serverActions.updateDomainAction);
 export const deleteDomainAction = guardAction(serverActions.deleteDomainAction);
