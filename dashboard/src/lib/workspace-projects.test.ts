@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   close: vi.fn(),
 }));
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 vi.mock("react", async (importOriginal) => ({
   ...await importOriginal<typeof import("react")>(),
   useState: mocks.useState,

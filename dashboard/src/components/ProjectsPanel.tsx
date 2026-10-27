@@ -15,6 +15,7 @@ import {
 } from "@/app/actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
 import { ProjectSettings } from "@/components/ProjectSettings";
+import { formatVolumeBytes } from "@/lib/volume-usage";
 import { SharedVariablesPanel } from "@/components/SharedVariablesPanel";
 import { EnvironmentCompare } from "@/components/EnvironmentCompare";
 import { DuplicateEnvironmentForm } from "@/components/DuplicateEnvironmentForm";
@@ -72,7 +73,7 @@ export function ProjectsPanel({
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 max-sm:pb-[max(1rem,env(safe-area-inset-bottom))] max-sm:pl-[max(1rem,env(safe-area-inset-left))] max-sm:pr-[max(1rem,env(safe-area-inset-right))] max-sm:pt-[max(1rem,env(safe-area-inset-top))]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -87,9 +88,9 @@ export function ProjectsPanel({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className={`relative flex max-h-[80vh] w-full ${comparingProject ? "max-w-6xl" : settingsProject ? "max-w-2xl" : "max-w-lg"} flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl`}
+            className={`relative flex max-h-[80vh] w-full ${comparingProject ? "max-w-6xl" : settingsProject ? "max-w-2xl" : "max-w-lg"} flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl max-sm:max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10 max-lg:[&_input]:min-h-10 max-lg:[&_select]:min-h-10`}
           >
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-border)] px-4 py-4 sm:px-5">
               <div className="flex min-w-0 items-center gap-2">
                 {settingsProject && <IconBtn title="Back to projects" onClick={() => setSettingsId(null)}><ArrowLeft className="size-4" /></IconBtn>}
                 <h2 id="projects-panel-title" className="truncate text-sm font-semibold">{settingsProjectId ? "Project settings" : comparingProject ? "Compare environments" : duplicate ? "Duplicate environment" : settingsProject ? `${settingsProject.name} · Shared variables` : "Projects & environments"}</h2>
@@ -98,7 +99,7 @@ export function ProjectsPanel({
                 onClick={close}
                 disabled={duplicating}
                 aria-label="Close projects"
-                className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+                className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
               >
                 <X className="size-4" />
               </button>
@@ -124,7 +125,7 @@ export function ProjectsPanel({
               />
             ) : (
             <>
-            <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
               {settingsProject ? <SharedVariablesPanel key={settingsProject.projectId} project={settingsProject} /> : duplicate ? (
                 <DuplicateEnvironmentForm
                   project={duplicate.project}
@@ -139,8 +140,8 @@ export function ProjectsPanel({
                   className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
                 >
                   <div className="flex items-center gap-2">
-                    <FolderGit2 className="size-4 text-[var(--color-brand)]" />
-                    <span className="flex-1 truncate text-sm font-medium">{p.name}</span>
+                    <FolderGit2 className="size-4 shrink-0 text-[var(--color-brand)]" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
                     <IconBtn title={`Shared variables for ${p.name}`} onClick={() => setSettingsId(p.projectId)}>
                       <Settings2 className="size-3.5" />
                     </IconBtn>
@@ -154,6 +155,9 @@ export function ProjectsPanel({
                     </button>
                   </div>
 
+                  <p className="mt-2 pl-6 text-xs text-[var(--color-fg-muted)]">
+                    Volume disk usage: {formatVolumeBytes(p.volumeSizeBytes)}
+                  </p>
                   {p.environments.length >= 2 && (
                     <button
                       id={`compare-project-${p.projectId}`}
@@ -164,11 +168,11 @@ export function ProjectsPanel({
                     </button>
                   )}
 
-                  <div className="mt-2 space-y-1 pl-6">
+                  <div className="mt-2 space-y-1 sm:pl-6">
                     {p.environments.map((e) => (
                       <div key={e.environmentId} className="flex items-center gap-2 text-xs">
-                        <Layers className="size-3.5 text-[var(--color-fg-subtle)]" />
-                        <span className="flex-1 truncate text-[var(--color-fg-muted)]">{e.name}</span>
+                        <Layers className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
+                        <span className="min-w-0 flex-1 truncate text-[var(--color-fg-muted)]">{e.name}</span>
                         <button
                           onClick={() => setDuplicate({ project: p, environmentId: e.environmentId, name: e.name })}
                           aria-label={`Duplicate ${e.name} environment`}
@@ -226,7 +230,7 @@ export function ProjectsPanel({
               )}
             </div>
 
-            {!settingsProject && !duplicate && <div className="border-t border-[var(--color-border)] px-5 py-4">
+            {!settingsProject && !comparingProject && !duplicate && <div className="shrink-0 border-t border-[var(--color-border)] px-4 py-4 sm:px-5">
               {error && <p role="alert" className="mb-2 text-xs text-[var(--color-danger)]">{error}</p>}
               <div className="flex items-center gap-2">
                 <input
@@ -240,7 +244,7 @@ export function ProjectsPanel({
                   }}
                   placeholder="new project name"
                   aria-label="New project name"
-                  className="flex-1 rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+                  className="min-w-0 flex-1 rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                 />
                 <button
                   onClick={() => {
@@ -250,7 +254,7 @@ export function ProjectsPanel({
                     }
                   }}
                   disabled={pending || !newProject.trim()}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
                 >
                   {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
                   Project
@@ -306,7 +310,7 @@ function IconBtn({
       title={title}
       aria-label={title}
       className={
-        "rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface-hover)] " +
+        "flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface-hover)] " +
         (danger ? "hover:text-[var(--color-danger)]" : "hover:text-[var(--color-fg)]")
       }
     >
