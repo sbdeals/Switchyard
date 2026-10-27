@@ -17,7 +17,8 @@ Five pieces live here:
   Double-click, and the window becomes your dashboard with the stack running
   underneath. Installs Docker Desktop for you if it's missing.
 - **The CLI** (`cli/`, npm **`switchyard-cli`**): the one-command installer
-  that converges the whole stack.
+  that converges the whole stack, deploys local directories, and manages
+  application variables.
 - **Launch tooling** (`Makefile` + `scripts/`): idempotent install of the
   Dokploy stack (Swarm + Traefik) on Linux hosts, including workarounds for
   hostile environments (no systemd, no IPVS, registry rate limits).
@@ -159,6 +160,19 @@ Deploy a local directory with `switchyard deploy` (the Railway `up`
 equivalent), or `switchyard deploy ./my-app --service web --project demos`.
 Add `--detach` to return after queuing. `switchyard up` still starts the
 platform. See [deploy options and build requirements](docs/cli.md#deploy-a-directory).
+
+Run `switchyard link --project demos --service web` once to remember an
+existing app for this directory, then use `switchyard deploy` without target
+flags. Add `.switchyard/` to `.gitignore`. Deploy excludes `.env` and `.env.*`
+files by default (except `.env.example`) and prints their paths; use
+`--include-env` to opt in, subject to your ignore rules.
+
+Manage the linked app with `switchyard variables`,
+`switchyard variables set KEY=VALUE`, and `switchyard variables unset KEY`.
+Values are masked unless you pass `--reveal` to list them. Edits preserve
+other variables and comments; add `--deploy` to queue a deployment immediately,
+or redeploy later. See [linking](docs/cli.md#link-a-directory) and
+[variables](docs/cli.md#manage-application-variables).
 
 > The npm package is **`switchyard-cli`** (the bare npm name `switchyard` is an
 > unrelated squatted package; don't `npx switchyard`).

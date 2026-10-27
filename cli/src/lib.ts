@@ -3,6 +3,9 @@
  * (tests import from dist/lib.js so they run against the built artifact).
  */
 export { connectDeployClient, createDeployCommand, deployDirectory } from "./commands/deploy.js";
+export { createLinkCommand, linkDirectory } from "./commands/link.js";
+export { createVariablesCommand, variables } from "./commands/variables.js";
+export { readLink, resolveApplication } from "./core/link.js";
 export { DEFAULT_DEPLOY_MAX_BYTES, packDirectory } from "./core/deploy-pack.js";
 export { uploadApplication } from "./core/dokploy-api.js";
 export {
