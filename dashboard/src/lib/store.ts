@@ -7,7 +7,8 @@
  * Degrades gracefully: when `SWITCHYARD_STORE_URL` is unset (dev mode / `npm run
  * dev`), persistence is simply off — every write is a no-op and every query
  * returns empty, so live behaviour is unchanged. Runtime store errors are
- * logged once and swallowed so a flaky store never takes the dashboard down.
+ * logged on state changes and swallowed so a flaky store never takes the
+ * dashboard down. Transient failures retry with bounded exponential backoff.
  *
  * This module is server-only by construction (it opens TCP sockets via `pg` and
  * is only imported from route handlers and the collector). It deliberately does
@@ -18,23 +19,61 @@ import { Pool } from "pg";
 import type { Sample, LogLine } from "./docker";
 
 const STORE_URL = process.env.SWITCHYARD_STORE_URL ?? "";
+const RETRY_MIN_MS = 5000;
+const RETRY_MAX_MS = 5 * 60_000;
 
-/** True when a durable store is configured. */
+/** True when a durable store is configured, even while waiting to retry. */
 export function storeEnabled(): boolean {
   return STORE_URL.length > 0;
 }
 
+/** Availability for the history API; a successful operation clears failures. */
+export function storeAvailable(): boolean {
+  return storeEnabled() && failure === null;
+}
+
 let pool: Pool | null = null;
 let schemaReady: Promise<void> | null = null;
-let disabledReason: string | null = null;
+let failure: { reason: string; retryAt: number } | null = null;
+let retryDelayMs = RETRY_MIN_MS;
+let retrying = false;
+
+function isPermanentError(e: unknown): boolean {
+  if (typeof e !== "object" || e === null) return false;
+  const code = "code" in e ? String(e.code) : "";
+  if (["28P01", "28000", "3D000", "42501", "ERR_INVALID_URL", "ERR_SOCKET_BAD_PORT"].includes(code)) return true;
+  // pg parses connection settings lazily when constructing a client, so URL
+  // parse/config errors can also surface on the first query. Everything else retries.
+  return e instanceof URIError || (e instanceof Error && [
+    "The server does not support SSL connections",
+    "sslnegotiation=direct requires SSL to be enabled",
+  ].includes(e.message));
+}
+
+function recordFailure(e: unknown): void {
+  const permanent = isPermanentError(e);
+  const now = Date.now();
+  // Concurrent queries/idle clients can fail together. Count one backoff per
+  // attempt, and never downgrade a permanent failure (28P01, 3D000, bad config).
+  if (failure?.retryAt === Infinity || (!permanent && failure && now < failure.retryAt)) return;
+  const reason = e instanceof Error ? e.message : String(e);
+  if (failure?.reason !== reason || permanent) {
+    console.warn(permanent ? "[store] disabled after error:" : "[store] backing off after error:", reason);
+  }
+  failure = { reason, retryAt: permanent ? Infinity : now + retryDelayMs };
+  if (!permanent) retryDelayMs = Math.min(retryDelayMs * 2, RETRY_MAX_MS);
+}
 
 function getPool(): Pool | null {
-  if (!storeEnabled() || disabledReason) return null;
+  if (!storeEnabled() || (failure && Date.now() < failure.retryAt)) return null;
   if (!pool) {
-    pool = new Pool({ connectionString: STORE_URL, max: 4 });
-    // A pool-level error (store restarted, network blip) must not crash the
-    // process; the next query re-establishes a connection.
-    pool.on("error", (e) => console.warn("[store] pool error:", e.message));
+    const p = new Pool({ connectionString: STORE_URL, max: 4 });
+    // Idle client errors use the same backoff as query failures. Ignore errors
+    // from a pool that closeStore has already retired.
+    p.on("error", (e) => {
+      if (pool === p) recordFailure(e);
+    });
+    pool = p;
   }
   return pool;
 }
@@ -64,7 +103,7 @@ async function ensureSchema(p: Pool): Promise<void> {
       )
       .then(() => undefined)
       .catch((e) => {
-        schemaReady = null; // allow a later retry
+        if (pool === p) schemaReady = null; // allow a later retry
         throw e;
       });
   }
@@ -73,18 +112,27 @@ async function ensureSchema(p: Pool): Promise<void> {
 
 /** Run `fn` with an initialized pool, or return `fallback` when the store is off/broken. */
 async function withStore<T>(fallback: T, fn: (p: Pool) => Promise<T>): Promise<T> {
-  const p = getPool();
-  if (!p) return fallback;
+  if (retrying) return fallback;
+  const previousFailure = failure;
+  let p: Pool | null = null;
   try {
+    p = getPool(); // pool/config construction failures must also degrade gracefully
+    if (!p) return fallback;
+    retrying = previousFailure !== null;
     await ensureSchema(p);
-    return await fn(p);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (disabledReason !== msg) {
-      disabledReason = msg;
-      console.warn("[store] disabled after error:", msg);
+    const result = await fn(p);
+    // A concurrent failure must not be cleared by an older successful query.
+    if (pool === p && failure === previousFailure) {
+      if (failure) console.warn("[store] recovered");
+      failure = null;
+      retryDelayMs = RETRY_MIN_MS;
     }
+    return result;
+  } catch (e) {
+    if (pool === p) recordFailure(e);
     return fallback;
+  } finally {
+    if (pool === p && previousFailure) retrying = false;
   }
 }
 
@@ -172,10 +220,13 @@ export async function pruneOld(
   });
 }
 
-/** Close the pool (used by tests). */
+/** Close the pool and reset health/backoff (used by tests). */
 export async function closeStore(): Promise<void> {
   const p = pool;
   pool = null;
   schemaReady = null;
+  failure = null;
+  retryDelayMs = RETRY_MIN_MS;
+  retrying = false;
   if (p) await p.end();
 }
