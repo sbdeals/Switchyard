@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Plus, Pencil, Trash2, FolderGit2, Layers, Loader2 } from "lucide-react";
+import { X, Plus, Pencil, Trash2, FolderGit2, Layers, Loader2, GitCompareArrows } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ProjectNode } from "@/lib/dokploy";
 import {
@@ -15,6 +15,8 @@ import {
   type ActionResult,
 } from "@/app/actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { EnvironmentCompare } from "@/components/EnvironmentCompare";
+import { DuplicateEnvironmentForm } from "@/components/DuplicateEnvironmentForm";
 
 export function ProjectsPanel({
   open,
@@ -30,6 +32,16 @@ export function ProjectsPanel({
   const [error, setError] = useState<string | null>(null);
   const [newProject, setNewProject] = useState("");
   const [newEnv, setNewEnv] = useState<Record<string, string>>({});
+  const [compareProjectId, setCompareProjectId] = useState<string | null>(null);
+  const comparingProject = projects.find((project) => project.projectId === compareProjectId && project.environments.length >= 2);
+  const [duplicate, setDuplicate] = useState<{ project: ProjectNode; environmentId: string; name: string } | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
+
+  const close = () => {
+    if (duplicating) return;
+    setCompareProjectId(null);
+    onClose();
+  };
 
   const act = (fn: () => Promise<ActionResult>) => {
     setError(null);
@@ -54,9 +66,9 @@ export function ProjectsPanel({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={close} />
           <FocusTrapPanel
-            onClose={onClose}
+            onClose={close}
             role="dialog"
             aria-modal="true"
             aria-labelledby="projects-panel-title"
@@ -64,12 +76,13 @@ export function ProjectsPanel({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className="relative flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl max-sm:max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10 max-lg:[&_input]:min-h-10"
+            className={`relative flex max-h-[80vh] w-full ${comparingProject ? "max-w-6xl" : "max-w-lg"} flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl max-sm:max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10 max-lg:[&_input]:min-h-10 max-lg:[&_select]:min-h-10`}
           >
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-border)] px-4 py-4 sm:px-5">
-              <h2 id="projects-panel-title" className="text-sm font-semibold">Projects &amp; environments</h2>
+              <h2 id="projects-panel-title" className="text-sm font-semibold">{comparingProject ? "Compare environments" : duplicate ? "Duplicate environment" : "Projects & environments"}</h2>
               <button
-                onClick={onClose}
+                onClick={close}
+                disabled={duplicating}
                 aria-label="Close projects"
                 className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
               >
@@ -77,8 +90,28 @@ export function ProjectsPanel({
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
-              {projects.map((p) => (
+            {comparingProject && (
+              <EnvironmentCompare
+                key={comparingProject.projectId}
+                project={comparingProject}
+                onBack={() => {
+                  const projectId = comparingProject.projectId;
+                  setCompareProjectId(null);
+                  requestAnimationFrame(() => document.getElementById(`compare-project-${projectId}`)?.focus());
+                }}
+              />
+            )}
+
+            {!comparingProject && <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+              {duplicate ? (
+                <DuplicateEnvironmentForm
+                  project={duplicate.project}
+                  environmentId={duplicate.environmentId}
+                  environmentName={duplicate.name}
+                  onBack={() => setDuplicate(null)}
+                  onBusyChange={setDuplicating}
+                />
+              ) : projects.map((p) => (
                 <div
                   key={p.projectId}
                   className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
@@ -101,11 +134,28 @@ export function ProjectsPanel({
                     </IconBtn>
                   </div>
 
+                  {p.environments.length >= 2 && (
+                    <button
+                      id={`compare-project-${p.projectId}`}
+                      onClick={() => setCompareProjectId(p.projectId)}
+                      className="mt-2 ml-6 inline-flex items-center gap-1.5 rounded-md text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+                    >
+                      <GitCompareArrows className="size-3.5" /> Compare environments
+                    </button>
+                  )}
+
                   <div className="mt-2 space-y-1 sm:pl-6">
                     {p.environments.map((e) => (
                       <div key={e.environmentId} className="flex items-center gap-2 text-xs">
                         <Layers className="size-3.5 shrink-0 text-[var(--color-fg-subtle)]" />
                         <span className="min-w-0 flex-1 truncate text-[var(--color-fg-muted)]">{e.name}</span>
+                        <button
+                          onClick={() => setDuplicate({ project: p, environmentId: e.environmentId, name: e.name })}
+                          aria-label={`Duplicate ${e.name} environment`}
+                          className="rounded-md px-1.5 py-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)]"
+                        >
+                          Duplicate
+                        </button>
                         <IconBtn title="Rename environment" onClick={() => rename(e.name, (n) => renameEnvironmentAction(e.environmentId, n))}>
                           <Pencil className="size-3" />
                         </IconBtn>
@@ -150,12 +200,12 @@ export function ProjectsPanel({
                   </div>
                 </div>
               ))}
-              {projects.length === 0 && (
+              {!duplicate && projects.length === 0 && (
                 <p className="text-center text-xs text-[var(--color-fg-subtle)]">No projects yet.</p>
               )}
-            </div>
+            </div>}
 
-            <div className="shrink-0 border-t border-[var(--color-border)] px-4 py-4 sm:px-5">
+            {!comparingProject && !duplicate && <div className="shrink-0 border-t border-[var(--color-border)] px-4 py-4 sm:px-5">
               {error && <p role="alert" className="mb-2 text-xs text-[var(--color-danger)]">{error}</p>}
               <div className="flex items-center gap-2">
                 <input
@@ -185,7 +235,7 @@ export function ProjectsPanel({
                   Project
                 </button>
               </div>
-            </div>
+            </div>}
           </FocusTrapPanel>
         </motion.div>
       )}
