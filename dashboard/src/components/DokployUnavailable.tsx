@@ -4,7 +4,9 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, Unplug } from "lucide-react";
 
-export function DokployUnavailable() {
+import { ErrorDetails } from "@/components/ErrorDetails";
+
+export function DokployUnavailable({ scrubbedDetails }: { scrubbedDetails?: string } = {}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -21,6 +23,7 @@ export function DokployUnavailable() {
           <code>DOKPLOY_PASSWORD</code> are correct. Set them with <code>switchyard config</code>{" "}
           for the managed container, or in <code>.env.local</code> when running from source.
         </p>
+        {scrubbedDetails && <ErrorDetails scrubbedDetails={scrubbedDetails} />}
         <button
           type="button"
           disabled={pending}

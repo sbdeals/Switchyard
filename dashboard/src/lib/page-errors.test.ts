@@ -1,6 +1,6 @@
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { redirect } from "next/navigation";
 
 const mocks = vi.hoisted(() => ({
@@ -64,7 +64,12 @@ function findRetry(node: ReactNode): (() => void) | undefined {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(console, "error").mockImplementation(() => {});
   mocks.pending = false;
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("workspace load failures", () => {
@@ -93,7 +98,8 @@ describe("workspace load failures", () => {
     expect(html).toContain("managed container");
     expect(html).toContain(".env.local");
     expect(html).toContain("source");
-    expect(html).not.toContain("fetch failed");
+    expect(html).toMatch(/<details\b[^>]*>.*Show details<\/summary><pre[^>]*>fetch failed<\/pre><\/details>/);
+    expect(html).not.toMatch(/<details\b[^>]*\bopen(?:\s|=|>)/);
     expect(html).not.toContain("private backend");
   });
 
@@ -124,11 +130,23 @@ describe("workspace load failures", () => {
   it.each([
     new TypeError("Cannot read properties of undefined"),
     new SyntaxError("Invalid JSON"),
+  ])("renders a generic panel and reference for non-transport errors: %s", async (error) => {
+    mocks.loadWorkspace.mockRejectedValueOnce(error);
+    const html = renderToStaticMarkup(await Page());
+    expect(html).toContain("Something went wrong");
+    expect(html).toMatch(/Error reference: <code>[a-f0-9]{8}<\/code>/);
+    expect(html).toContain("Show details");
+    expect(mocks.unstableRethrow).toHaveBeenCalledWith(error);
+  });
+
+  it.each([
     Object.assign(new Error("Unauthorized"), { status: 401 }),
-  ])("rethrows non-transport errors for the route boundary: %s", async (error) => {
+    Object.assign(new Error("Forbidden"), { status: 403 }),
+  ])("keeps rethrowing auth failures: %s", async (error) => {
     mocks.loadWorkspace.mockRejectedValueOnce(error);
     await expect(Page()).rejects.toBe(error);
     expect(mocks.unstableRethrow).toHaveBeenCalledWith(error);
+    expect(console.error).not.toHaveBeenCalled();
   });
 });
 
@@ -165,6 +183,7 @@ describe("route fallback UI", () => {
     expect(html).toContain("Back to projects");
     expect(html).not.toContain(error.message);
     expect(html).not.toContain(error.stack);
+    expect(html).not.toContain("Show details");
     const retry = findRetry(element);
     expect(retry).toBeDefined();
     retry!();
