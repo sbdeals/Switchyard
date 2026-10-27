@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ChevronRight, Loader2, TerminalSquare } from "lucide-react";
+import { AnsiText } from "@/components/service/AnsiText";
 
 interface Entry {
   id: number;
@@ -153,19 +154,19 @@ export function ConsoleTab({ appName }: { appName: string }) {
               </div>
               {en.stdout && (
                 <pre className="whitespace-pre-wrap break-all text-[var(--color-fg-muted)]">
-                  {en.stdout}
+                  <AnsiText value={en.stdout} />
                 </pre>
               )}
               {en.stderr && (
                 <pre className="whitespace-pre-wrap break-all text-[var(--color-danger)]">
                   <span className="sr-only">stderr: </span>
-                  {en.stderr}
+                  <AnsiText value={en.stderr} />
                 </pre>
               )}
               {en.error && (
                 <pre className="whitespace-pre-wrap break-all text-[var(--color-danger)]">
                   <span className="sr-only">error: </span>
-                  {en.error}
+                  <AnsiText value={en.error} />
                 </pre>
               )}
               {(en.exitCode ?? 0) !== 0 && en.exitCode !== null && (
