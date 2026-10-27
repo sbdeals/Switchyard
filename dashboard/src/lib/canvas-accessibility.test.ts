@@ -82,7 +82,7 @@ describe("service canvas accessibility", () => {
     captured.nodes = null;
     captured.effects = [];
     const render = () => renderToStaticMarkup(createElement(FlowCanvas, {
-      services: [service], edges: [], onSelect, projects: [], onDeployed: vi.fn(), selectedIds: [], onSelectionChange: vi.fn(),
+      services: [service], edges: [], matchingIds: new Set([service.id]), onSelect, projects: [], onDeployed: vi.fn(), selectedIds: [], onSelectionChange: vi.fn(),
     }));
     render();
     // Main initializes nodes after mount so hydration cannot overwrite saved
