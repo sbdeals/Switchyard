@@ -11,7 +11,7 @@ import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { AgentPanel } from "@/components/agent/AgentPanel";
-import { DirtyGuardProvider, useGuardedNavigation } from "@/components/DirtyGuard";
+import { useServiceDeeplink } from "@/components/use-service-deeplink";
 import { cn } from "@/lib/utils";
 
 type View = "canvas" | "grid";
@@ -25,37 +25,11 @@ export function Workspace({
   projects: ProjectNode[];
   edges: ServiceEdge[];
 }) {
-  return (
-    <DirtyGuardProvider>
-      <WorkspaceContent services={services} projects={projects} edges={edges} />
-    </DirtyGuardProvider>
-  );
-}
-
-function WorkspaceContent({
-  services,
-  projects,
-  edges,
-}: {
-  services: Service[];
-  projects: ProjectNode[];
-  edges: ServiceEdge[];
-}) {
   const [view, setView] = useState<View>("canvas");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const router = useRouter();
-  const navigate = useGuardedNavigation();
-  const selectService = (id: string) => navigate(() => setSelectedId(id), id === selectedId);
-
-  // Re-resolve the selected service from fresh props so the drawer updates.
-  const selected = services.find((s) => s.id === selectedId) ?? null;
-
-  // Open the new service's drawer and pull fresh state in.
-  const onDeployed = (id: string) => {
-    selectService(id);
-    router.refresh();
-  };
+  const drawer = useServiceDeeplink(services);
+  const { onDeployed } = drawer;
 
   return (
     <MotionConfig reducedMotion="user">
@@ -82,10 +56,7 @@ function WorkspaceContent({
             </ViewToggle>
           </div>
           <button
-            onClick={() => navigate(() => {
-              setSelectedId(null);
-              setProjectsOpen(true);
-            })}
+            onClick={() => setProjectsOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
           >
             <FolderGit2 className="size-3.5" /> Projects
@@ -103,18 +74,23 @@ function WorkspaceContent({
       {services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={(s) => selectService(s.id)} />
+        <FlowCanvas services={services} edges={edges} onSelect={(s) => drawer.open(s.id)} />
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {services.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => selectService(s.id)} />
+              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => drawer.open(s.id)} />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
 
-      <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
+      <ServiceDrawer service={drawer.service} tab={drawer.tab} onTabChange={drawer.selectTab} onClose={drawer.close} />
+      {drawer.notFound && (
+        <div role="status" className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-4 py-2 text-sm shadow-lg">
+          Service not found
+        </div>
+      )}
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
       <AgentPanel />
     </div>
