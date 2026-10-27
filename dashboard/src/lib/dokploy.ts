@@ -172,6 +172,7 @@ export interface AppDeployment {
   status: string;
   title: string;
   createdAt: string;
+  /** Dokploy timestamps are nullable; older deployments may not have timings. */
   description: string | null;
   startedAt: string | null;
   finishedAt: string | null;
@@ -318,6 +319,7 @@ export interface ProjectNode {
   projectId: string;
   name: string;
   environments: EnvironmentNode[];
+  volumeSizeBytes?: number | null;
 }
 
 // --- session handling -------------------------------------------------------

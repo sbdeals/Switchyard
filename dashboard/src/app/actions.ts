@@ -119,6 +119,8 @@ import {
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
 import { domainTlsOptions } from "@/lib/domain-https";
+import { readServiceVolumes } from "@/lib/volume-usage.server";
+import type { VolumeUsage } from "@/lib/volume-usage";
 import { duplicateService } from "@/lib/service-duplicate-operation";
 import type { DuplicateServiceRef } from "@/lib/service-duplicate";
 import { parseEnvironment, validateCron, validatePort } from "@/lib/validation";
@@ -1118,7 +1120,7 @@ export async function quickDeployTemplateAction(
 
 // --- mounts (persistent volumes) --------------------------------------------
 
-export type MountsResult = { ok: true; mounts: Mount[] } | { ok: false; error: string };
+export type MountsResult = { ok: true; mounts: Mount[]; usage: VolumeUsage[]; usageAvailable: boolean } | { ok: false; error: string };
 
 /** Read-only: the mounts attached to a service (fetched when the tab opens). */
 export async function listMountsAction(
@@ -1126,7 +1128,11 @@ export async function listMountsAction(
   serviceId: string
 ): Promise<MountsResult> {
   try {
-    return { ok: true, mounts: await listMounts(serviceType, serviceId) };
+    const { services } = await loadWorkspace();
+    const service = services.find((s) => s.id === serviceId &&
+      (s.kind === "database" ? s.engine : s.kind) === serviceType);
+    if (!service) return { ok: false, error: "Unknown service." };
+    return { ok: true, ...(await readServiceVolumes(service)) };
   } catch (e) {
     unstable_rethrow(e);
     return { ok: false, error: "Could not load mounts." };
