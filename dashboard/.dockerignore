@@ -3,6 +3,7 @@ node_modules
 out
 coverage
 **/*.test.ts
+vitest.config.ts
 .env*
 !.env.example
 *.md

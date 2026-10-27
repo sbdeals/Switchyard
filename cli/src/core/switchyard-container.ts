@@ -1,5 +1,5 @@
 import type { SwitchyardConfig } from "./config.js";
-import { metricsStoreUrl } from "./config.js";
+import { metricsStoreUrl, validateConfigPorts } from "./config.js";
 import { docker, dockerInherit, dockerOk } from "./docker.js";
 import { UserError } from "./errors.js";
 import { sha256, sleep } from "./util.js";
@@ -12,6 +12,8 @@ export interface ContainerPlan {
   image: string;
   bindHost: string;
   runArgs: string[];
+  /** Secret values inherited by Docker's name-only -e flags. */
+  runEnv: Record<string, string>;
   /** Fingerprint of everything that affects the running container. */
   hash: string;
 }
@@ -48,6 +50,11 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
   // when non-empty so an unset value leaves the hash (and Docker Desktop
   // containers) unchanged; a changed IP recreates the container.
   if (cfg.hostIp) env.SWITCHYARD_HOST_IP = cfg.hostIp;
+  const runEnv: Record<string, string> = {
+    DOKPLOY_PASSWORD: cfg.adminPassword,
+    SWITCHYARD_SESSION_SECRET: cfg.sessionSecret,
+    SWITCHYARD_STORE_URL: metricsStoreUrl(cfg),
+  };
   const spec = {
     image,
     network: NETWORK_NAME,
@@ -70,14 +77,14 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
     spec.publish,
     "-v",
     spec.socket,
-    ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+    ...Object.entries(env).flatMap(([k, v]) => ["-e", k in runEnv ? k : `${k}=${v}`]),
     "-l",
     "switchyard.managed=true",
     "-l",
     `${HASH_LABEL}=${hash}`,
     image,
   ];
-  return { image, bindHost, runArgs, hash };
+  return { image, bindHost, runArgs, runEnv, hash };
 }
 
 export type EnsureResult = "unchanged" | "created" | "recreated";
@@ -87,6 +94,7 @@ export async function ensureSwitchyard(
   cliVersion: string,
   log: (msg: string) => void,
 ): Promise<EnsureResult> {
+  validateConfigPorts(cfg);
   const plan = renderContainer(cfg, cliVersion);
 
   if (!(await dockerOk(["network", "inspect", NETWORK_NAME]))) {
@@ -124,7 +132,7 @@ export async function ensureSwitchyard(
   }
 
   if (exists) await docker(["rm", "-f", CONTAINER_NAME]);
-  const res = await docker(plan.runArgs);
+  const res = await docker(plan.runArgs, { env: { ...process.env, ...plan.runEnv } });
   if (res.code !== 0) {
     throw new UserError(`docker run for ${CONTAINER_NAME} failed:\n${res.stderr.trim()}`);
   }

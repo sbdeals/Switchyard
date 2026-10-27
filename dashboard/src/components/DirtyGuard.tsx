@@ -1,0 +1,169 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useDialogFocus } from "@/components/use-focus-trap";
+import { createDirtyRegistry, decideDirtyNavigation, discardMessage } from "@/lib/dirty-guard";
+
+type GuardContext = {
+  register: (key: string, label: string, dirty: boolean, scope: string) => void;
+  unregister: (key: string) => void;
+  navigate: (action: () => void, sameTarget?: boolean) => void;
+  getState: (scope: string | null) => { labels: string[]; pending: boolean };
+  activateScope: (scope: string | null) => void;
+  activeScope: string | null;
+  session: number;
+};
+
+const DirtyContext = createContext<GuardContext | null>(null);
+const ScopeContext = createContext<string | null>(null);
+
+export function DirtyGuardScope({ scope, children }: { scope: string; children: React.ReactNode }) {
+  return <ScopeContext.Provider value={scope}>{children}</ScopeContext.Provider>;
+}
+
+function useGuardContext() {
+  const context = useContext(DirtyContext);
+  if (!context) throw new Error("DirtyGuardProvider is required");
+  return context;
+}
+
+/** Each mounted form owns its registration, even when several share a label. */
+export function useDirtyGuard(id: string, dirty: boolean) {
+  const key = useId();
+  const scope = useContext(ScopeContext);
+  const { register, unregister, activeScope } = useGuardContext();
+  useLayoutEffect(() => {
+    if (scope === null || scope !== activeScope) return;
+    register(key, id, dirty, scope);
+    return () => unregister(key);
+  }, [key, id, dirty, scope, activeScope, register, unregister]);
+}
+
+export function useGuardedNavigation() {
+  return useGuardContext();
+}
+
+type PendingNavigation = { action: () => void; labels: string[]; focus: HTMLElement | null };
+
+export function DirtyGuardProvider({ children }: { children: React.ReactNode }) {
+  const [registry] = useState(createDirtyRegistry);
+  const [dirty, setDirty] = useState(false);
+  const [session, setSession] = useState(0);
+  const [activeScope, setActiveScope] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingNavigation | null>(null);
+  const pendingRef = useRef<PendingNavigation | null>(null);
+  const lastField = useRef<HTMLElement | null>(null);
+  const scopeRef = useRef<string | null>(null);
+
+  const register = useCallback((key: string, label: string, changed: boolean, scope: string) => {
+    // An exiting animated drawer must not register again after it has closed.
+    if (scope !== scopeRef.current) return;
+    registry.set(key, label, changed, scope);
+    setDirty(registry.labels().length > 0);
+  }, [registry]);
+
+  const getState = useCallback((scope: string | null) => ({
+    labels: scope === null ? [] : registry.labels(scope),
+    pending: pendingRef.current !== null,
+  }), [registry]);
+  const activateScope = useCallback((scope: string | null) => {
+    registry.retainScope(scope);
+    setDirty(registry.labels().length > 0);
+    if (scopeRef.current === scope) return;
+    scopeRef.current = scope;
+    setActiveScope(scope);
+    pendingRef.current = null;
+    setPending(null);
+    lastField.current = null;
+  }, [registry]);
+  const unregister = useCallback((key: string) => {
+    registry.remove(key);
+    setDirty(registry.labels().length > 0);
+  }, [registry]);
+
+  const navigate = useCallback((action: () => void, sameTarget = false) => {
+    const labels = scopeRef.current === null ? [] : registry.labels(scopeRef.current);
+    const decision = decideDirtyNavigation(labels, pendingRef.current !== null, sameTarget);
+    if (decision === "ignore") return;
+    if (decision === "proceed") {
+      action();
+      return;
+    }
+    const focus = lastField.current?.isConnected
+      ? lastField.current
+      : document.querySelector<HTMLElement>('[role="tabpanel"]');
+    const request = { action, labels, focus };
+    pendingRef.current = request;
+    setPending(request);
+  }, [registry]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [dirty]);
+
+  const resolve = (discard: boolean) => {
+    const request = pendingRef.current;
+    if (!request) return;
+    pendingRef.current = null;
+    setPending(null);
+    if (discard) {
+      registry.clear();
+      setDirty(false);
+      setSession((value) => value + 1);
+      request.action();
+    } else {
+      // Let the dialog's focus-trap cleanup finish before returning to the field.
+      requestAnimationFrame(() => {
+        if (request.focus?.isConnected) request.focus.focus();
+      });
+    }
+  };
+
+  const context = useMemo(() => ({ register, unregister, navigate, getState, activateScope, activeScope, session }),
+    [register, unregister, navigate, getState, activateScope, activeScope, session]);
+  return (
+    <DirtyContext.Provider value={context}>
+      <div className="contents" onFocusCapture={(event) => {
+        if (event.target instanceof HTMLElement && event.target.matches('input, textarea, select, [contenteditable=true], [role="switch"]')) {
+          lastField.current = event.target;
+        }
+      }}>
+        {children}
+        {pending && <DiscardDialog labels={pending.labels} onKeep={() => resolve(false)} onDiscard={() => resolve(true)} />}
+      </div>
+    </DirtyContext.Provider>
+  );
+}
+
+function DiscardDialog({ labels, onKeep, onDiscard }: { labels: string[]; onKeep: () => void; onDiscard: () => void }) {
+  const titleId = useId();
+  const ref = useDialogFocus<HTMLDivElement>(onKeep);
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onKeep} />
+      <div
+        ref={ref}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative w-full max-w-sm rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-5 shadow-2xl"
+      >
+        <h2 id={titleId} className="text-sm font-semibold">{discardMessage(labels)}</h2>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" data-autofocus onClick={onKeep} className="rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium hover:bg-[var(--color-surface-hover)]">
+            Keep editing
+          </button>
+          <button type="button" onClick={onDiscard} className="rounded-lg bg-[var(--color-danger)] px-3 py-2 text-xs font-semibold text-white hover:opacity-90">
+            Discard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
