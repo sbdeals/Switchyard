@@ -18,8 +18,10 @@ vi.mock("react", async (importOriginal) => ({
   useState: mocks.useState,
   useMemo: <T,>(factory: () => T) => factory(),
   useCallback: <T,>(callback: T) => callback,
+  useRef: <T,>(value: T) => ({ current: value }),
+  useEffect: () => {},
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/components/use-service-deeplink", () => ({ useServiceDeeplink: mocks.useServiceDeeplink }));
 vi.mock("@/components/DirtyGuard", () => ({
   DirtyGuardProvider: () => null,
@@ -46,7 +48,7 @@ function elements(node: ReactNode): Element[] {
     return [element, ...elements(element.props.children)];
   });
 }
-const service = { id: "app", projectId: "project", kind: "application" } as Service;
+const service = { id: "app", name: "app", appName: "app", status: "running", projectId: "project", kind: "application" } as Service;
 
 function mount() {
   const states: unknown[] = [];
@@ -60,7 +62,7 @@ function mount() {
   mocks.useServiceDeeplink.mockReturnValue(drawer);
   mocks.useState.mockImplementation((initial: unknown) => {
     const key = index++;
-    if (!(key in states)) states[key] = initial;
+    if (!(key in states)) states[key] = typeof initial === "function" ? (initial as () => unknown)() : initial;
     return [states[key], (next: unknown) => {
       if (!Object.is(states[key], next)) changed = true;
       states[key] = next;
