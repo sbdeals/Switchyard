@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
+import type { Node } from "@xyflow/react";
 import {
   anchoredMenuPosition,
   canvasCenter,
   CANVAS_POSITIONS_KEY,
   isCanvasCreateShortcut,
+  mergeNodePositions,
   parsePositions,
   placeService,
   screenToFlowPosition,
+  shouldRefitCanvas,
 } from "./canvas-layout";
 
 describe("isCanvasCreateShortcut", () => {
@@ -27,6 +30,85 @@ describe("isCanvasCreateShortcut", () => {
 
   it("ignores events from descendants such as inputs, nodes and controls", () => {
     expect(isCanvasCreateShortcut(event, false)).toBe(false);
+  });
+});
+
+function node(id: string, x = 0, y = 0): Node {
+  return { id, position: { x, y }, data: {} };
+}
+
+describe("hydrated canvas positions", () => {
+  it("restores saved drags over the initial default nodes after hydration", () => {
+    const defaults = [node("app"), node("db", 300)];
+    const initial = mergeNodePositions(defaults, {});
+    const saved = parsePositions('{"app":{"x":720,"y":400}}');
+    expect(mergeNodePositions(defaults, saved, initial).map((n) => n.position))
+      .toEqual([{ x: 720, y: 400 }, { x: 300, y: 0 }]);
+    expect(defaults[0].position).toEqual({ x: 0, y: 0 });
+  });
+
+  it("lets an ongoing drag beat saved and created positions during a refresh", () => {
+    const dragging = { ...node("app", 900, 700), dragging: true, selected: true, measured: { width: 250, height: 100 } };
+    const saved = placeService({}, "app", { x: 300, y: 200 });
+    const result = mergeNodePositions([node("app")], saved, [dragging]);
+    expect(result[0]).toMatchObject(dragging);
+    expect(mergeNodePositions([node("app")], saved, [{ ...dragging, dragging: false }])[0].position)
+      .toEqual(saved.app);
+  });
+
+  it("reserves created positions before placing new services and hydrated defaults", () => {
+    const saved = placeService({}, "created", { x: 0, y: 0 });
+    const defaults = [node("new"), node("existing"), node("created")];
+    const result = mergeNodePositions(defaults, saved, [node("existing")]);
+    expect(result.map((n) => n.position)).toEqual([
+      { x: 0, y: 208 }, { x: 0, y: 104 }, { x: 0, y: 0 },
+    ]);
+    // Collision avoidance must not freeze automatic positions into storage.
+    expect(saved).toEqual({ created: { x: 0, y: 0 } });
+  });
+
+  it("uses measured card sizes for collision avoidance and ignores deleted services", () => {
+    const defaults = [{ ...node("saved"), measured: { width: 240, height: 200 } }, node("new")];
+    const saved = { saved: { x: 0, y: 0 }, deleted: { x: 0, y: 312 } };
+    expect(mergeNodePositions(defaults, saved)[1].position).toEqual({ x: 0, y: 312 });
+  });
+
+  it("keeps existing automatic positions when a new service sorts before them", () => {
+    const result = mergeNodePositions([node("new"), node("existing", 0, 104)], {}, [node("existing")]);
+    expect(result.map((n) => n.position)).toEqual([{ x: 0, y: 104 }, { x: 0, y: 0 }]);
+  });
+});
+
+describe("canvas resize fitting", () => {
+  const resize = {
+    previous: { width: 1000, height: 800 },
+    next: { width: 500, height: 400 },
+    nodes: [node("app", 800, 600)],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    interacting: false,
+  };
+
+  it("recovers an empty viewport after a significant resize", () => {
+    expect(shouldRefitCanvas(resize)).toBe(true);
+  });
+
+  it("preserves navigation while a card is visible, even if only partially", () => {
+    expect(shouldRefitCanvas({ ...resize, nodes: [node("app", 490, 390)] })).toBe(false);
+    expect(shouldRefitCanvas({ ...resize, viewport: { x: -400, y: -400, zoom: 1 } })).toBe(false);
+    expect(shouldRefitCanvas({ ...resize, viewport: { x: 0, y: 0, zoom: 0.5 } })).toBe(false);
+  });
+
+  it("does not fit during gestures, small changes, initialization or an empty graph", () => {
+    expect(shouldRefitCanvas({ ...resize, interacting: true })).toBe(false);
+    expect(shouldRefitCanvas({ ...resize, next: { width: 950, height: 750 } })).toBe(false);
+    expect(shouldRefitCanvas({ ...resize, previous: { width: 0, height: 0 } })).toBe(false);
+    expect(shouldRefitCanvas({ ...resize, next: { width: 0, height: 0 } })).toBe(false);
+    expect(shouldRefitCanvas({ ...resize, nodes: [] })).toBe(false);
+    expect(shouldRefitCanvas({ ...resize, nodes: [{ ...node("hidden"), hidden: true }] })).toBe(false);
+  });
+
+  it("fits when the viewport only intersects empty space between groups", () => {
+    expect(shouldRefitCanvas({ ...resize, nodes: [node("left", -500), node("right", 800)] })).toBe(true);
   });
 });
 
