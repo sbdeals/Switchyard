@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Plus, Settings, Trash2, FolderGit2, Layers, Loader2 } from "lucide-react";
+import { X, Plus, Settings, Trash2, FolderGit2, Layers, Loader2, GitCompareArrows } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ProjectNode } from "@/lib/dokploy";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/app/actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
 import { ProjectSettings } from "@/components/ProjectSettings";
+import { EnvironmentCompare } from "@/components/EnvironmentCompare";
 import { DuplicateEnvironmentForm } from "@/components/DuplicateEnvironmentForm";
 
 export function ProjectsPanel({
@@ -32,12 +33,15 @@ export function ProjectsPanel({
   const [newProject, setNewProject] = useState("");
   const [settingsProjectId, setSettingsProjectId] = useState<string | null>(null);
   const [newEnv, setNewEnv] = useState<Record<string, string>>({});
+  const [compareProjectId, setCompareProjectId] = useState<string | null>(null);
+  const comparingProject = projects.find((project) => project.projectId === compareProjectId && project.environments.length >= 2);
   const [duplicate, setDuplicate] = useState<{ project: ProjectNode; environmentId: string; name: string } | null>(null);
   const [duplicating, setDuplicating] = useState(false);
   const close = () => {
     if (duplicating) return;
     setSettingsProjectId(null);
     setDuplicate(null);
+    setCompareProjectId(null);
     onClose();
   };
 
@@ -69,10 +73,10 @@ export function ProjectsPanel({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className="relative flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl"
+            className={`relative flex max-h-[80vh] w-full ${comparingProject ? "max-w-6xl" : "max-w-lg"} flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl`}
           >
             <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
-              <h2 id="projects-panel-title" className="text-sm font-semibold">{settingsProjectId ? "Project settings" : duplicate ? "Duplicate environment" : "Projects & environments"}</h2>
+              <h2 id="projects-panel-title" className="text-sm font-semibold">{settingsProjectId ? "Project settings" : comparingProject ? "Compare environments" : duplicate ? "Duplicate environment" : "Projects & environments"}</h2>
               <button
                 onClick={close}
                 disabled={duplicating}
@@ -90,6 +94,16 @@ export function ProjectsPanel({
                 selectedProjectId={selectedProjectId}
                 onBack={() => setSettingsProjectId(null)}
                 onDeleted={() => setSettingsProjectId(null)}
+              />
+            ) : comparingProject ? (
+              <EnvironmentCompare
+                key={comparingProject.projectId}
+                project={comparingProject}
+                onBack={() => {
+                  const projectId = comparingProject.projectId;
+                  setCompareProjectId(null);
+                  requestAnimationFrame(() => document.getElementById(`compare-project-${projectId}`)?.focus());
+                }}
               />
             ) : (
             <>
@@ -119,6 +133,16 @@ export function ProjectsPanel({
                       <Settings className="size-3.5" /> Project settings
                     </button>
                   </div>
+
+                  {p.environments.length >= 2 && (
+                    <button
+                      id={`compare-project-${p.projectId}`}
+                      onClick={() => setCompareProjectId(p.projectId)}
+                      className="mt-2 ml-6 inline-flex items-center gap-1.5 rounded-md text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+                    >
+                      <GitCompareArrows className="size-3.5" /> Compare environments
+                    </button>
+                  )}
 
                   <div className="mt-2 space-y-1 pl-6">
                     {p.environments.map((e) => (

@@ -73,6 +73,7 @@ import {
   type ApplicationPatch,
   type HealthCheckSwarm,
   type BuildTypePatch,
+  type DockerRegistryPatch,
   type DomainInput,
   type Engine,
   type DokployTemplate,
@@ -117,6 +118,8 @@ import {
   deleteProjectSettings,
 } from "@/lib/project-settings-server";
 import type { ProjectSettings } from "@/lib/project-settings";
+import { validateComposeFile } from "@/lib/compose-validation";
+import { parseAppPort } from "@/lib/app-port";
 import { validateMount } from "@/lib/mounts";
 import { preserveUrlCredentials } from "@/lib/url-credentials";
 import { redactErrorMessage } from "@/lib/error-redaction";
@@ -357,11 +360,13 @@ export async function removeEnvironmentAction(id: string): Promise<ActionResult>
 export async function quickDeployImageAction(
   image: string,
   name?: string,
-  environmentId?: string
+  environmentId?: string,
+  port?: string
 ): Promise<QuickDeployResult> {
   return wrapId(async () => {
     const trimmed = image.trim();
     if (!trimmed) throw new Error("Image is required.");
+    const explicitPort = parseAppPort(port);
     // Derive a friendly name from the image (e.g. "nginx:alpine" -> "nginx").
     const derived = trimmed.split("/").pop()!.split(":")[0];
     const id = await createApplication(
@@ -370,7 +375,7 @@ export async function quickDeployImageAction(
     );
     await setAppDockerSource(id, trimmed);
     await applicationAction(id, "deploy");
-    await mintAutoDomain(id);
+    await mintAutoDomain(id, explicitPort);
     return id;
   });
 }
@@ -402,9 +407,9 @@ export async function quickDeployRepoAction(
  * Linux/Traefik path — see `ensureAutoDomain`). Never fails the deploy over
  * domain creation; the user can always add one in the Domains tab.
  */
-async function mintAutoDomain(applicationId: string): Promise<void> {
+async function mintAutoDomain(applicationId: string, port?: number): Promise<void> {
   try {
-    await ensureAutoDomain(applicationId);
+    await ensureAutoDomain(applicationId, port);
   } catch {
     /* leave the app domain-less rather than failing the deploy */
   }
@@ -515,12 +520,13 @@ export async function saveAppBuildTypeAction(
 
 /**
  * Point a docker-image application at an image, optionally with private
- * registry credentials. Empty credentials mean a public image.
+ * registry credentials. Empty credentials preserve stored values; clearing
+ * credentials requires the explicit clearCredentials flag.
  */
 export async function setAppDockerSourceAction(
   id: string,
   dockerImage: string,
-  registry?: { username: string; password: string; registryUrl: string },
+  registry?: DockerRegistryPatch,
   redeploy = false
 ): Promise<ActionResult> {
   const secrets: (string | null | undefined)[] = [registry?.username, registry?.password, registry?.registryUrl];
@@ -529,12 +535,20 @@ export async function setAppDockerSourceAction(
     if (!image) throw new Error("Image is required.");
     secrets.push(dockerImage, image);
     const stored = await getApplicationSource(id);
-    secrets.push(stored.dockerImage, stored.registryUrl);
-    const hasCreds = registry && (registry.username || registry.password || registry.registryUrl);
+    secrets.push(stored.dockerImage, stored.registryUrl, stored.username, stored.password);
+    const hasCreds = registry && (
+      registry.clearCredentials || registry.username || registry.password || registry.registryUrl != null
+    );
     await setAppDockerSource(
       id,
       preserveUrlCredentials(image, stored.dockerImage),
-      hasCreds ? { ...registry, registryUrl: preserveUrlCredentials(registry.registryUrl, stored.registryUrl) } : undefined
+      hasCreds ? {
+        ...registry,
+        registryUrl: registry.registryUrl == null
+          ? registry.registryUrl
+          : preserveUrlCredentials(registry.registryUrl, stored.registryUrl),
+      } : undefined,
+      stored
     );
     if (redeploy) await applicationAction(id, "deploy");
   }, "Could not save Docker source.", secrets);
@@ -860,6 +874,10 @@ export async function saveComposeFileAction(
   composeFile: string,
   redeploy = false
 ): Promise<ActionResult> {
+  if (redeploy) {
+    const error = validateComposeFile(composeFile, true);
+    if (error) return { ok: false, error };
+  }
   return wrapSensitive(async () => {
     await updateComposeFile(id, composeFile);
     if (redeploy) await composeAction(id, "deploy");

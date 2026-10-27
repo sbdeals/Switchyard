@@ -131,7 +131,7 @@ export function useServiceDeeplink(services: Service[]) {
     tab,
     scope,
     notFound: notice !== null,
-    open: (id: string) => navigate(id, "overview"),
+    open: (id: string, nextTab: TabId = "overview") => navigate(id, nextTab),
     close: () => navigate(null),
     selectTab: (nextTab: TabId) => navigate(serviceId, nextTab, true),
     onDeployed: (id: string) => {
