@@ -80,6 +80,20 @@ function WorkspaceContent({
     drawer.open(id);
   }, drawer.service?.id === id && drawer.tab === "overview");
   const { onDeployed } = drawer;
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
+  // Remember the last viewed project, including services opened by deep link,
+  // after the guarded drawer closes to show project deletion confirmation.
+  const activeProjectId = drawer.service?.projectId ?? null;
+  if (activeProjectId !== null && activeProjectId !== selectedProjectId) {
+    setSelectedProjectId(activeProjectId);
+  }
+
+  const openProjects = () => navigate(() => {
+    drawer.close();
+    setProjectsOpen(true);
+  });
+
   const scope = useMemo(() => getWorkspaceScope(projects, services, graph.edges, currentProject), [projects, services, graph.edges, currentProject]);
   const visibleServices = scope.services;
   const visibleGraph = useMemo<ServiceReferenceGraph>(() => {
@@ -206,7 +220,7 @@ function WorkspaceContent({
             </ViewToggle>
           </div>
           <button
-            onClick={() => setProjectsOpen(true)}
+            onClick={openProjects}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-xs font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)] max-lg:min-h-10"
           >
             <FolderGit2 className="size-3.5" /> Projects
@@ -359,7 +373,7 @@ function WorkspaceContent({
           Service not found
         </div>
       )}
-      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} services={services} />
+      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} services={services} selectedProjectId={activeProjectId ?? currentProject ?? selectedProjectId} />
       {activityOpen && (
         <ActivityPanel
           projects={projects}

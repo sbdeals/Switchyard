@@ -2,21 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Plus, Pencil, Trash2, FolderGit2, Layers, Loader2, GitCompareArrows, Settings2, ArrowLeft } from "lucide-react";
+import { X, Plus, Settings, Trash2, FolderGit2, Layers, Loader2, GitCompareArrows, Settings2, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ProjectNode, Service } from "@/lib/dokploy";
 import { deleteImpact } from "@/lib/delete-impact";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import {
   createProjectAction,
-  renameProjectAction,
-  removeProjectAction,
   createEnvironmentAction,
-  renameEnvironmentAction,
   removeEnvironmentAction,
   type ActionResult,
 } from "@/lib/client-actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { ProjectSettings } from "@/components/ProjectSettings";
 import { formatVolumeBytes } from "@/lib/volume-usage";
 import { SharedVariablesPanel } from "@/components/SharedVariablesPanel";
 import { EnvironmentCompare } from "@/components/EnvironmentCompare";
@@ -26,17 +24,20 @@ export function ProjectsPanel({
   open,
   onClose,
   projects,
+  selectedProjectId,
   services,
 }: {
   open: boolean;
   onClose: () => void;
   projects: ProjectNode[];
+  selectedProjectId: string | null;
   services: Service[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [newProject, setNewProject] = useState("");
+  const [settingsProjectId, setSettingsProjectId] = useState<string | null>(null);
   const [newEnv, setNewEnv] = useState<Record<string, string>>({});
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const settingsProject = projects.find((p) => p.projectId === settingsId);
@@ -50,9 +51,10 @@ export function ProjectsPanel({
   const comparingProject = projects.find((project) => project.projectId === compareProjectId && project.environments.length >= 2);
   const [duplicate, setDuplicate] = useState<{ project: ProjectNode; environmentId: string; name: string } | null>(null);
   const [duplicating, setDuplicating] = useState(false);
-
   const close = () => {
     if (duplicating) return;
+    setSettingsProjectId(null);
+    setDuplicate(null);
     setCompareProjectId(null);
     setSettingsId(null);
     onClose();
@@ -65,11 +67,6 @@ export function ProjectsPanel({
       if (!r.ok) setError(r.error);
       else router.refresh();
     });
-  };
-
-  const rename = (current: string, fn: (name: string) => Promise<ActionResult>) => {
-    const name = prompt("New name", current);
-    if (name && name.trim() && name !== current) act(() => fn(name.trim()));
   };
 
   return (
@@ -96,7 +93,7 @@ export function ProjectsPanel({
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-border)] px-4 py-4 sm:px-5">
               <div className="flex min-w-0 items-center gap-2">
                 {settingsProject && <IconBtn title="Back to projects" onClick={() => setSettingsId(null)}><ArrowLeft className="size-4" /></IconBtn>}
-                <h2 id="projects-panel-title" className="truncate text-sm font-semibold">{comparingProject ? "Compare environments" : duplicate ? "Duplicate environment" : settingsProject ? `${settingsProject.name} · Settings` : "Projects & environments"}</h2>
+                <h2 id="projects-panel-title" className="truncate text-sm font-semibold">{settingsProjectId ? "Project settings" : comparingProject ? "Compare environments" : duplicate ? "Duplicate environment" : settingsProject ? `${settingsProject.name} · Shared variables` : "Projects & environments"}</h2>
               </div>
               <button
                 onClick={close}
@@ -108,7 +105,15 @@ export function ProjectsPanel({
               </button>
             </div>
 
-            {comparingProject && (
+            {settingsProjectId ? (
+              <ProjectSettings
+                key={settingsProjectId}
+                projectId={settingsProjectId}
+                selectedProjectId={selectedProjectId}
+                onBack={() => setSettingsProjectId(null)}
+                onDeleted={() => setSettingsProjectId(null)}
+              />
+            ) : comparingProject ? (
               <EnvironmentCompare
                 key={comparingProject.projectId}
                 project={comparingProject}
@@ -118,9 +123,9 @@ export function ProjectsPanel({
                   requestAnimationFrame(() => document.getElementById(`compare-project-${projectId}`)?.focus());
                 }}
               />
-            )}
-
-            {!comparingProject && <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+            ) : (
+            <>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
               {settingsProject ? <SharedVariablesPanel key={settingsProject.projectId} project={settingsProject} /> : duplicate ? (
                 <DuplicateEnvironmentForm
                   project={duplicate.project}
@@ -137,26 +142,17 @@ export function ProjectsPanel({
                   <div className="flex items-center gap-2">
                     <FolderGit2 className="size-4 shrink-0 text-[var(--color-brand)]" />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
-                    <IconBtn title={`Settings for ${p.name}`} onClick={() => setSettingsId(p.projectId)}>
+                    <IconBtn title={`Shared variables for ${p.name}`} onClick={() => setSettingsId(p.projectId)}>
                       <Settings2 className="size-3.5" />
                     </IconBtn>
-                    <IconBtn title="Rename project" onClick={() => rename(p.name, (n) => renameProjectAction(p.projectId, n))}>
-                      <Pencil className="size-3.5" />
-                    </IconBtn>
-                    <IconBtn
-                      title="Delete project"
-                      danger
-                      onClick={() => {
-                        setDeleting({
-                          name: p.name,
-                          resource: "project",
-                          impact: deleteImpact(services.filter((s) => s.projectId === p.projectId), p.environments.length),
-                          confirm: () => removeProjectAction(p.projectId),
-                        });
-                      }}
+                    <button
+                      type="button"
+                      onClick={() => setSettingsProjectId(p.projectId)}
+                      aria-label={`Project settings for ${p.name}`}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-fg)]"
                     >
-                      <Trash2 className="size-3.5" />
-                    </IconBtn>
+                      <Settings className="size-3.5" /> Project settings
+                    </button>
                   </div>
 
                   <p className="mt-2 pl-6 text-xs text-[var(--color-fg-muted)]">
@@ -184,9 +180,6 @@ export function ProjectsPanel({
                         >
                           Duplicate
                         </button>
-                        <IconBtn title="Rename environment" onClick={() => rename(e.name, (n) => renameEnvironmentAction(e.environmentId, n))}>
-                          <Pencil className="size-3" />
-                        </IconBtn>
                         <IconBtn
                           title="Delete environment"
                           danger
@@ -235,7 +228,7 @@ export function ProjectsPanel({
               {!settingsProject && !duplicate && projects.length === 0 && (
                 <p className="text-center text-xs text-[var(--color-fg-subtle)]">No projects yet.</p>
               )}
-            </div>}
+            </div>
 
             {!settingsProject && !comparingProject && !duplicate && <div className="shrink-0 border-t border-[var(--color-border)] px-4 py-4 sm:px-5">
               {error && <p role="alert" className="mb-2 text-xs text-[var(--color-danger)]">{error}</p>}
@@ -268,6 +261,8 @@ export function ProjectsPanel({
                 </button>
               </div>
             </div>}
+            </>
+            )}
           </FocusTrapPanel>
           {deleting && (
             <DeleteConfirmDialog
