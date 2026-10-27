@@ -69,6 +69,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { ConfigAsCodePanel } from "@/components/service/ConfigAsCodePanel";
 import { useDirtyGuard } from "@/components/DirtyGuard";
 import { hasDirtyFields } from "@/lib/dirty-guard";
 import { loadClientSecret } from "@/lib/client-secret-loader";
@@ -665,6 +666,7 @@ export function AppBuildTab({ app }: { app: Application }) {
     <div className="space-y-6">
       {isDocker ? <DockerSourceForm app={app} /> : <BuildStrategyForm app={app} />}
       <AppCommandEditor key={app.id} app={app} />
+      {!isDocker && <ConfigAsCodePanel key={app.id} app={app} />}
     </div>
   );
 }
