@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
 import { DomainHttpsToggle, useDomainHttps } from "@/components/service/DomainHttpsToggle";
+import { DomainStatus } from "@/components/service/DomainStatus";
 import { validateComposeFile } from "@/lib/compose-validation";
 import { getPortWarnings, parseComposePorts } from "@/lib/port-conflicts";
 import { PortConflictWarning, type PortConflictProps } from "@/components/service/PortConflictWarning";
@@ -187,21 +188,26 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
       {compose.domains.length > 0 ? (
         <div className="space-y-2">
           {compose.domains.map((d) => (
-            <a
+            <div
               key={d.domainId}
-              href={`${d.https ? "https" : "http"}://${d.host}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm hover:bg-[var(--color-surface-hover)]"
+              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
             >
-              <Globe className="size-3.5 text-[var(--color-brand)]" />
-              <span className="flex-1 truncate">{d.host}</span>
-              {d.serviceName && (
-                <span className="text-xs text-[var(--color-fg-subtle)]">→ {d.serviceName}</span>
-              )}
-              {d.port && <span className="text-xs text-[var(--color-fg-subtle)]">:{d.port}</span>}
-              <ExternalLink className="size-3 text-[var(--color-fg-subtle)]" />
-            </a>
+              <a
+                href={`${d.https ? "https" : "http"}://${d.host}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-[var(--color-surface-hover)]"
+              >
+                <Globe className="size-3.5 text-[var(--color-brand)]" />
+                <span className="flex-1 truncate">{d.host}</span>
+                {d.serviceName && (
+                  <span className="text-xs text-[var(--color-fg-subtle)]">→ {d.serviceName}</span>
+                )}
+                {d.port && <span className="text-xs text-[var(--color-fg-subtle)]">:{d.port}</span>}
+                <ExternalLink className="size-3 text-[var(--color-fg-subtle)]" />
+              </a>
+              <DomainStatus serviceType="compose" serviceId={compose.id} domainId={d.domainId} host={d.host} https={d.https} path={d.path} />
+            </div>
           ))}
         </div>
       ) : (

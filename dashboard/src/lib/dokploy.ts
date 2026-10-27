@@ -989,6 +989,13 @@ function mapDeployments(deployments: RawDeployment[] | undefined): AppDeployment
   }));
 }
 
+/** Exact build/deploy log, authorized by Dokploy with the current user's session. */
+export async function readDeploymentLogs(deploymentId: string): Promise<string> {
+  return request<string>(
+    `deployment.readLogs?deploymentId=${encodeURIComponent(deploymentId)}&tail=10000`
+  );
+}
+
 /** List every application in the tree, enriched with detail. */
 async function listApplications(tree: RawProject[]): Promise<Application[]> {
   const refs = collectIds(tree, (env) => (env.applications ?? []).map((a) => a.applicationId));
