@@ -70,6 +70,7 @@ import {
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
 import { DeploymentCommitInfo } from "@/components/service/DeploymentCommitInfo";
+import { DomainStatus } from "@/components/service/DomainStatus";
 import { ComposeExportButton } from "@/components/service/ComposeExportDialog";
 import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
 import { DiagnosisCard } from "@/components/service/DiagnosisCard";
@@ -200,7 +201,7 @@ function toInput(d: AppDomain): DomainInput {
 }
 
 /** One attached domain: display row that expands into an inline editor. */
-function DomainRow({ d }: { d: AppDomain }) {
+function DomainRow({ d, appId }: { d: AppDomain; appId: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<DomainInput>(() => toInput(d));
   const [pending, start] = useTransition();
@@ -257,44 +258,47 @@ function DomainRow({ d }: { d: AppDomain }) {
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm">
-      <Globe className="size-3.5 shrink-0 text-[var(--color-brand)]" />
-      <a
-        href={`${d.https ? "https" : "http"}://${d.host}`}
-        target="_blank"
-        rel="noreferrer"
-        className="flex min-w-0 flex-1 items-center gap-1.5 truncate hover:underline"
-      >
-        <span className="truncate">{d.host}</span>
-        {d.port && <span className="text-xs text-[var(--color-fg-subtle)]">:{d.port}</span>}
-        <ExternalLink className="size-3 shrink-0 text-[var(--color-fg-subtle)]" />
-      </a>
-      <span className="shrink-0 rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)]">
-        {d.certificateType === "letsencrypt" ? "LE" : d.https ? "HTTPS" : "HTTP"}
-      </span>
-      <button
-        onClick={() => {
-          setDraft(toInput(d));
-          setEditing(true);
-        }}
-        disabled={pending}
-        className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
-        title="Edit domain"
-        aria-label="Edit domain"
-        aria-expanded={editing}
-      >
-        <Pencil className="size-3.5" />
-      </button>
-      <button
-        onClick={remove}
-        disabled={pending}
-        className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
-        title="Remove domain"
-        aria-label="Remove domain"
-      >
-        {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-      </button>
-      {error && <span role="alert" className="text-xs text-[var(--color-danger)]">{error}</span>}
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div className="flex items-center gap-2 px-3 py-2 text-sm">
+        <Globe className="size-3.5 shrink-0 text-[var(--color-brand)]" />
+        <a
+          href={`${d.https ? "https" : "http"}://${d.host}`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex min-w-0 flex-1 items-center gap-1.5 truncate hover:underline"
+        >
+          <span className="truncate">{d.host}</span>
+          {d.port && <span className="text-xs text-[var(--color-fg-subtle)]">:{d.port}</span>}
+          <ExternalLink className="size-3 shrink-0 text-[var(--color-fg-subtle)]" />
+        </a>
+        <span className="shrink-0 rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)]">
+          {d.certificateType === "letsencrypt" ? "LE" : d.https ? "HTTPS" : "HTTP"}
+        </span>
+        <button
+          onClick={() => {
+            setDraft(toInput(d));
+            setEditing(true);
+          }}
+          disabled={pending}
+          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+          title="Edit domain"
+          aria-label="Edit domain"
+          aria-expanded={editing}
+        >
+          <Pencil className="size-3.5" />
+        </button>
+        <button
+          onClick={remove}
+          disabled={pending}
+          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
+          title="Remove domain"
+          aria-label="Remove domain"
+        >
+          {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+        </button>
+        {error && <span role="alert" className="text-xs text-[var(--color-danger)]">{error}</span>}
+      </div>
+      <DomainStatus serviceType="application" serviceId={appId} domainId={d.domainId} host={d.host} https={d.https} path={d.path} />
     </div>
   );
 }
@@ -347,7 +351,7 @@ export function DomainsTab({ app }: { app: Application }) {
       {app.domains.length > 0 ? (
         <div className="space-y-2">
           {app.domains.map((d) => (
-            <DomainRow key={d.domainId} d={d} />
+            <DomainRow key={d.domainId} d={d} appId={app.id} />
           ))}
         </div>
       ) : (
@@ -1245,7 +1249,6 @@ export function AppDeployTab({ app }: { app: Application }) {
 }
 
 export function AppSettingsTab({ app, onClose }: { app: Application; onClose: () => void }) {
-  const { pending: lifePending, error: lifeError, run } = useAppLifecycle(app);
   const [name, setName] = useState(app.name);
   const [cpu, setCpu] = useState(app.cpuLimit ?? "");
   const [mem, setMem] = useState(app.memoryLimit ?? "");
@@ -1309,11 +1312,9 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
       <Info label="App name" value={app.appName} mono />
 
       <DangerZone
-        name={app.name}
+        service={app}
         message="Destroying removes the application and its container."
-        pending={lifePending}
-        error={lifeError}
-        onDestroy={() => run("remove", onClose)}
+        onDeleted={onClose}
       />
     </div>
   );
