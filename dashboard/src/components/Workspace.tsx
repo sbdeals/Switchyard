@@ -83,7 +83,7 @@ function WorkspaceContent({
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
         <PanelErrorBoundary>
-          <FlowCanvas services={services} edges={edges} onSelect={(s) => drawer.open(s.id)} />
+          <FlowCanvas services={services} edges={edges} projects={projects} onDeployed={onDeployed} onSelect={(s) => drawer.open(s.id)} />
         </PanelErrorBoundary>
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
