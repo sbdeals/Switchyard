@@ -222,7 +222,7 @@ export function VariablesTab({ service }: { service: Service }) {
           aria-label="Environment variables, one KEY=value per line"
           aria-invalid={invalid}
           aria-describedby={invalid ? "dotenv-errors" : undefined}
-          className="min-h-64 flex-1 resize-y rounded-lg border border-[var(--color-border-control)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+          className="min-h-64 flex-1 resize-y rounded-lg border border-[var(--color-border-control)] bg-[var(--color-code-bg)] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
         />
       ) : (
         <div className="space-y-2">

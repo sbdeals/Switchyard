@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Switchyard — dark, Railway-inspired theme.
+ * Switchyard — dark by default, with an explicit light token set.
  * Tailwind v4 is configured in CSS via @theme.
  */
 @theme {
@@ -34,6 +34,20 @@
   --color-idle: #8888a0;
   --color-idle-soft: #8888a01a;
 
+  --color-code-bg: #0b0b10;
+  --color-canvas-dots: #ffffff2b;
+  --color-canvas-mask: #0a0a0fcc;
+  --color-info: #4a9eff;
+  --color-info-soft: #4a9eff1a;
+  --color-teal: #2dd4bf;
+  --color-teal-soft: #2dd4bf1a;
+  --color-violet: #a78bfa;
+  --color-violet-soft: #a78bfa1a;
+  --color-chart-cursor: #ffffff08;
+  --color-shadow: #000;
+  --color-glow-brand: #6d28d918;
+  --color-glow-info: #4f46e514;
+
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
@@ -44,26 +58,74 @@ html {
   color-scheme: dark;
 }
 
+[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #faf9fc;
+  --color-bg-elevated: #ffffff;
+  --color-surface: #f4f3f8;
+  --color-surface-hover: #eae8f1;
+  --color-border: #ded9e8;
+  --color-border-strong: #c2b9d1;
+  --color-border-control: #81778f;
+  --color-fg: #24212f;
+  --color-fg-muted: #575363;
+  /* >=5:1 on every light surface, including hover and code backgrounds. */
+  --color-fg-subtle: #655e72;
+
+  --color-brand: #7133c7;
+  --color-brand-strong: #7c3aed;
+  --color-brand-deep: #6d28d9;
+  --color-brand-soft: #7133c70f;
+  --color-ok: #116d43;
+  --color-ok-soft: #116d430f;
+  --color-warn: #895200;
+  --color-warn-soft: #8952000f;
+  --color-danger: #b82939;
+  --color-danger-soft: #b829390f;
+  --color-idle: #655e72;
+  --color-idle-soft: #655e720f;
+
+  --color-code-bg: #f0eef5;
+  --color-canvas-dots: #655e7240;
+  --color-canvas-mask: #faf9fccc;
+  --color-info: #225fa6;
+  --color-info-soft: #225fa60f;
+  --color-teal: #0f6b63;
+  --color-teal-soft: #0f6b630f;
+  --color-violet: #6e45bb;
+  --color-violet-soft: #6e45bb0f;
+  --color-chart-cursor: #655e720d;
+  --color-shadow: #21132d26;
+  --color-glow-brand: #6d28d908;
+  --color-glow-info: #4f46e506;
+}
+
 body {
   background-color: var(--color-bg);
   color: var(--color-fg);
   /* Subtle radial glow, the Railway look. */
   background-image:
-    radial-gradient(60rem 60rem at 80% -10%, #6d28d918, transparent 60%),
-    radial-gradient(50rem 50rem at -10% 10%, #4f46e514, transparent 55%),
+    radial-gradient(60rem 60rem at 80% -10%, var(--color-glow-brand), transparent 60%),
+    radial-gradient(50rem 50rem at -10% 10%, var(--color-glow-info), transparent 55%),
     linear-gradient(to bottom, transparent, var(--color-bg));
   background-attachment: fixed;
 }
 
-/* Thin, dark scrollbars to match the theme. */
+/* Thin scrollbars to match the theme. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-strong) transparent;
 }
 
-/* Dark-theme the React Flow controls (they ship light by default). */
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-fg-subtle);
+  opacity: 1;
+}
+
+/* Keep React Flow controls aligned with the dashboard tokens. */
 .react-flow__controls {
-  box-shadow: 0 8px 24px -12px #000;
+  box-shadow: 0 8px 24px -12px var(--color-shadow);
   border-radius: 10px;
   overflow: hidden;
 }
