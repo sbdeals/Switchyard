@@ -96,7 +96,7 @@ describe("applyDeployOptions", () => {
 
     await expect(applyDeployOptions("app-1", { kind: "redeploy" })).rejects.toBe(redirectError);
 
-    expect(mocks.redirect).toHaveBeenCalledWith("/login");
+    expect(mocks.redirect).toHaveBeenCalledWith("/api/session/expired");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(mutationCalls()).toHaveLength(0);
   });
