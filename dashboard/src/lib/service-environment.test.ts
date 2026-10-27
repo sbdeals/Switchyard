@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadServiceEnvAction } from "../app/actions";
-import { ENGINES, type MountServiceType } from "./dokploy";
+import { ENGINES, loadWorkspace, type MountServiceType } from "./dokploy";
 
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
@@ -119,5 +119,31 @@ describe("loadServiceEnvAction", () => {
     mocks.fetch.mockResolvedValueOnce(new Response(null, { status: 401 }));
 
     await expect(loadServiceEnvAction("application", "id")).rejects.toBe(mocks.redirect);
+  });
+});
+
+describe("workspace project page data", () => {
+  it("keeps only project and environment identifiers and names, excluding shared values", async () => {
+    mocks.fetch.mockResolvedValueOnce(Response.json([{
+      projectId: "owned-project",
+      name: "Owned project",
+      env: "PROJECT_TOKEN=project-page-data-sentinel",
+      environments: [{
+        environmentId: "owned-environment",
+        name: "production",
+        env: "ENV_TOKEN=environment-page-data-sentinel",
+      }],
+    }]));
+
+    const { projects, services } = await loadWorkspace();
+
+    expect(projects).toEqual([{
+      projectId: "owned-project",
+      name: "Owned project",
+      environments: [{ environmentId: "owned-environment", name: "production" }],
+    }]);
+    expect(JSON.stringify(projects)).not.toContain("sentinel");
+    expect(services).toEqual([]);
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
 });
