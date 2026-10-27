@@ -12,6 +12,7 @@ import {
   renameEnvironment,
   removeEnvironment,
   listProjects,
+  getServiceEnvironment,
   saveEnvironment,
   updateDatabase,
   reloadDatabase,
@@ -216,6 +217,19 @@ export async function saveEnvironmentAction(
   env: string
 ): Promise<ActionResult> {
   return wrap(() => saveEnvironment(engine, id, env));
+}
+
+/** Environment values are fetched only by the open Variables tab. */
+export async function loadServiceEnvAction(
+  type: MountServiceType,
+  id: string
+): Promise<{ ok: true; env: string } | { ok: false; error: string }> {
+  try {
+    return { ok: true, env: await getServiceEnvironment(type, id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load environment variables." };
+  }
 }
 
 // --- projects & environments ------------------------------------------------
