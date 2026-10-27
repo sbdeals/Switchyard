@@ -238,6 +238,7 @@ export interface Application extends ServiceBase {
   redirects: AppRedirect[];
   ports: AppPort[];
   security: AppSecurity[];
+  mounts: Mount[];
   deployments: AppDeployment[];
   // Docker Swarm soft resource reservations (Docker-format strings, like the limits).
   cpuReservation: string | null;
@@ -909,6 +910,7 @@ interface RawApplicationDetail {
     publishMode?: string;
   }[];
   security?: { securityId: string; username?: string }[];
+  mounts?: RawMount[];
   deployments?: RawDeployment[];
 }
 
@@ -1009,6 +1011,7 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
           securityId: s.securityId,
           username: s.username ?? "",
         })),
+        mounts: mapMounts(d.mounts),
         deployments: mapDeployments(d.deployments),
         autoDeploy: d.autoDeploy ?? false,
         branch: d.branch ?? d.customGitBranch ?? null,
@@ -1791,14 +1794,24 @@ interface RawMount {
   content?: string | null;
 }
 
-/** List the mounts attached to a service. */
-export async function listMounts(
+/** Check the current user's project tree before reading or mutating mounts. */
+async function assertMountService(
   serviceType: MountServiceType,
   serviceId: string
-): Promise<Mount[]> {
-  const raw = await request<RawMount[]>(
-    `mounts.listByServiceId?serviceType=${serviceType}&serviceId=${encodeURIComponent(serviceId)}`
-  );
+): Promise<void> {
+  if (![...ENGINES, "application", "compose"].includes(serviceType) || !serviceId) {
+    throw new Error("Unknown service.");
+  }
+  const tree = await rawTree();
+  const refs = collectIds(tree, (env) => {
+    if (serviceType === "application") return (env.applications ?? []).map((a) => a.applicationId);
+    if (serviceType === "compose") return (env.compose ?? []).map((c) => c.composeId);
+    return (env[serviceType] ?? []).map((db) => (db as Record<string, string>)[idKey(serviceType)]);
+  });
+  if (!refs.some((ref) => ref.id === serviceId)) throw new Error("Unknown service.");
+}
+
+function mapMounts(raw: RawMount[] | undefined): Mount[] {
   return (raw ?? []).map((m) => ({
     mountId: m.mountId,
     type: m.type ?? "volume",
@@ -1808,6 +1821,23 @@ export async function listMounts(
     filePath: m.filePath ?? null,
     content: m.content ?? null,
   }));
+}
+
+/** v0.30.10 application.one includes mounts; every read checks workspace scope. */
+export async function listMounts(
+  serviceType: MountServiceType,
+  serviceId: string
+): Promise<Mount[]> {
+  await assertMountService(serviceType, serviceId);
+  if (serviceType === "application") {
+    const app = await request<RawApplicationDetail>(
+      `application.one?applicationId=${encodeURIComponent(serviceId)}`
+    );
+    return mapMounts(app.mounts);
+  }
+  return mapMounts(await request<RawMount[]>(
+    `mounts.listByServiceId?serviceType=${serviceType}&serviceId=${encodeURIComponent(serviceId)}`
+  ));
 }
 
 export interface CreateMountInput {
