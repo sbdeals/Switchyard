@@ -28,8 +28,11 @@ import {
   Network,
   Sparkles,
 } from "lucide-react";
-import type { Action, AppDomain, ServiceStatus } from "@/lib/dokploy";
+import type { Action, AppDomain, Service, ServiceStatus } from "@/lib/dokploy";
 import type { ActionResult } from "@/app/actions";
+import { appLifecycleAction, composeLifecycleAction, lifecycleAction } from "@/lib/client-actions";
+import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
+import { serviceDeleteImpact } from "@/lib/delete-impact";
 import { StatusBadge } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
 
@@ -384,18 +387,20 @@ export function SaveRow({
 
 /** Destroy block with confirmation; `message` names what gets removed. */
 export function DangerZone({
-  name,
+  service,
   message,
-  pending,
-  error,
-  onDestroy,
+  onDeleted,
 }: {
-  name: string;
+  service: Service;
   message: string;
-  pending: boolean;
-  error: string | null;
-  onDestroy: () => void;
+  onDeleted: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const remove = () => {
+    if (service.kind === "application") return appLifecycleAction(service.id, "remove");
+    if (service.kind === "compose") return composeLifecycleAction(service.id, "remove");
+    return lifecycleAction(service.engine, service.id, "remove");
+  };
   return (
     <div className="rounded-xl border border-[var(--color-danger)]/40 bg-[var(--color-danger-soft)] p-4">
       <h3 className="text-sm font-semibold text-[var(--color-danger)]">Danger zone</h3>
@@ -404,18 +409,20 @@ export function DangerZone({
       </p>
       <button
         type="button"
-        onClick={() => {
-          if (confirm(`Destroy "${name}"? This cannot be undone.`)) onDestroy();
-        }}
-        disabled={pending}
+        onClick={() => setOpen(true)}
         className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] disabled:opacity-50"
       >
-        <Trash2 className="size-3.5" /> Destroy {name}
+        <Trash2 className="size-3.5" /> Destroy {service.name}
       </button>
-      {error && (
-        <p role="alert" className="mt-2 text-xs text-[var(--color-danger)]">
-          {error}
-        </p>
+      {open && (
+        <DeleteConfirmDialog
+          name={service.name}
+          resource="service"
+          impact={serviceDeleteImpact(service)}
+          onConfirm={remove}
+          onClose={() => setOpen(false)}
+          onDeleted={onDeleted}
+        />
       )}
     </div>
   );

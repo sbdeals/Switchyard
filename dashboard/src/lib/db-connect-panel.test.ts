@@ -5,6 +5,10 @@ import type { Database, Engine } from "./dokploy";
 import { ConnectTab } from "../components/service/ConnectTab";
 import { getDatabaseConnectionAction } from "@/lib/client-actions";
 
+// primitives' DangerZone imports the server-only lifecycle actions.
+vi.mock("@/app/actions", () => ({
+  appLifecycleAction: vi.fn(), composeLifecycleAction: vi.fn(), lifecycleAction: vi.fn(),
+}));
 vi.mock("@/lib/client-actions", () => ({ getDatabaseConnectionAction: vi.fn() }));
 
 function database(overrides: Partial<Database> = {}): Database {

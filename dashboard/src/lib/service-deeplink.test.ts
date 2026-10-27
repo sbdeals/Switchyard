@@ -258,6 +258,34 @@ afterEach(() => {
 });
 
 describe("service drawer navigation", () => {
+  it("opens Activity's Deploys destination in history and restores it on Forward", () => {
+    const hook = mount("/?project=one#canvas");
+    hook.render().open("app", "deployments");
+    expect(hook.render()).toMatchObject({ service: services[0], tab: "deployments" });
+    expect(hook.history.pushState).toHaveBeenCalledExactlyOnceWith(
+      null, "", "/?project=one&service=app&tab=deployments#canvas",
+    );
+    hook.back();
+    expect(hook.render().service).toBeNull();
+    hook.forward();
+    expect(hook.render()).toMatchObject({ service: services[0], tab: "deployments" });
+  });
+
+  it("guards Activity navigation until unsaved changes are discarded", () => {
+    const hook = mount("/?service=app&tab=variables");
+    hook.render();
+    hook.markDirty();
+    hook.render().open("app", "deployments");
+    expect(hook.pending).toBe(true);
+    expect(hook.render()).toMatchObject({ service: services[0], tab: "variables" });
+    hook.keep();
+    expect(hook.registry.labels()).toEqual(["Variables"]);
+    hook.render().open("app", "deployments");
+    hook.discard();
+    expect(hook.render()).toMatchObject({ service: services[0], tab: "deployments" });
+    expect(hook.registry.labels()).toEqual([]);
+  });
+
   it("pushes opening/closing and replaces tabs while preserving unrelated params and hash", () => {
     const hook = mount("/workspace?project=one&filter=a&filter=b#canvas");
     expect(hook.render().service).toBeNull();
@@ -441,7 +469,7 @@ describe("dirty drawer navigation", () => {
     expect(hook.render().service).toBeNull();
   });
 
-  it.each(["close", "tab", "service"])("keeps the current form until a dirty %s change is discarded", (change) => {
+  it.each(["close", "tab", "service", "notification"])("keeps the current form until a dirty %s change is discarded", (change) => {
     const hook = mount("/?service=app&tab=variables");
     hook.render();
     hook.markDirty();
@@ -450,6 +478,7 @@ describe("dirty drawer navigation", () => {
       const drawer = hook.render();
       if (change === "close") drawer.close();
       else if (change === "tab") drawer.selectTab("settings");
+      else if (change === "notification") drawer.open("db", "logs");
       else drawer.open("db");
     };
 
@@ -470,8 +499,8 @@ describe("dirty drawer navigation", () => {
     expect(hook.guard.navigate).toHaveBeenCalledTimes(2);
     hook.discard();
     const destination = hook.render();
-    expect(destination.service).toBe(change === "close" ? null : change === "service" ? services[1] : services[0]);
-    expect(destination.tab).toBe(change === "tab" ? "settings" : "overview");
+    expect(destination.service).toBe(change === "close" ? null : (change === "service" || change === "notification") ? services[1] : services[0]);
+    expect(destination.tab).toBe(change === "tab" ? "settings" : change === "notification" ? "logs" : "overview");
     expect(hook.registry.labels()).toEqual([]);
     expect(hook.pending).toBe(false);
   });

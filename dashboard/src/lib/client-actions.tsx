@@ -7,7 +7,7 @@ import { logoutAction as serverLogoutAction } from "@/app/login/actions";
 import { callAction, SESSION_EXPIRED_MESSAGE, signInHref } from "@/lib/action-call";
 import { useDialogFocus } from "@/components/use-focus-trap";
 
-export type { ActionResult, MountsResult } from "@/app/actions";
+export type { ActionResult, MountsResult, ScheduleExecution } from "@/app/actions";
 
 let sessionExpired = false;
 const listeners = new Set<() => void>();
@@ -100,6 +100,8 @@ export const createScheduleAction = guardAction(serverActions.createScheduleActi
 export const updateScheduleAction = guardAction(serverActions.updateScheduleAction);
 export const deleteScheduleAction = guardAction(serverActions.deleteScheduleAction);
 export const runScheduleAction = guardAction(serverActions.runScheduleAction);
+export const saveServiceNotesAction = guardAction(serverActions.saveServiceNotesAction);
+export const listScheduleExecutionsAction = guardAction(serverActions.listScheduleExecutionsAction);
 export const createComposeAction = guardAction(serverActions.createComposeAction);
 export const composeLifecycleAction = guardAction(serverActions.composeLifecycleAction);
 export const saveComposeFileAction = guardAction(serverActions.saveComposeFileAction);
