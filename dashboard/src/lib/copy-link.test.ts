@@ -3,6 +3,10 @@ import type { ReactElement, ReactNode } from "react";
 import { CopyLinkButton } from "../components/service/CopyLinkButton";
 
 const mocks = vi.hoisted(() => ({ useState: vi.fn() }));
+// primitives' DangerZone imports the server-only lifecycle actions.
+vi.mock("@/app/actions", () => ({
+  appLifecycleAction: vi.fn(), composeLifecycleAction: vi.fn(), lifecycleAction: vi.fn(),
+}));
 vi.mock("react", async (importOriginal) => ({
   ...await importOriginal<typeof import("react")>(),
   useState: mocks.useState,

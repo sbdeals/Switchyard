@@ -37,6 +37,7 @@ import { BackupsTab } from "@/components/service/BackupsTab";
 import { VolumesTab } from "@/components/service/VolumesTab";
 import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
+import { DeploymentLogs } from "@/components/service/DeploymentLogs";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
 import { ServiceNotes } from "@/components/service/ServiceNotes";
@@ -273,10 +274,11 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, services, onSelectService, tab, sessionKey, onTabChange, onClose, onDuplicate }: PortConflictProps & {
+export function ServiceDrawer({ service, services, onSelectService, tab, sessionKey, deploymentId, onTabChange, onClose, onDuplicate }: PortConflictProps & {
   service: Service | null;
   tab: TabId;
   sessionKey: string | null;
+  deploymentId?: string | null;
   onTabChange: (tab: TabId) => void;
   onClose: () => void;
   onDuplicate: (service: Service) => void;
@@ -285,6 +287,13 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
   const tabs = service ? getServiceTabs(service) : [];
+  const [showDeploymentLogs, setShowDeploymentLogs] = useState(Boolean(deploymentId));
+  const target = service ? JSON.stringify([service.id, deploymentId, sessionKey]) : null;
+  const [shownTarget, setShownTarget] = useState(target);
+  if (target !== shownTarget) {
+    setShownTarget(target);
+    setShowDeploymentLogs(Boolean(deploymentId));
+  }
   const latestDeployment = service && service.kind !== "database"
     ? [...service.deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     : undefined;
@@ -424,7 +433,14 @@ export function ServiceDrawer({ service, services, onSelectService, tab, session
               )}
               {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
-              {tab === "logs" && <LogsTab key={service.appName} appName={service.appName} active />}
+              {tab === "logs" && (deploymentId && showDeploymentLogs ? (
+                <DeploymentLogs
+                  key={deploymentId}
+                  service={service}
+                  deploymentId={deploymentId}
+                  onRuntimeLogs={() => setShowDeploymentLogs(false)}
+                />
+              ) : <LogsTab key={service.appName} appName={service.appName} active />)}
               {tab === "console" && <ConsoleTab key={service.appName} appName={service.appName} />}
               {tab === "backups" && service.kind === "database" && <BackupsTab db={service} />}
               {tab === "settings" &&
@@ -541,7 +557,6 @@ function OverviewTab({ db }: { db: Database }) {
 }
 
 function SettingsTab({ db, services, onSelectService, onClose }: PortConflictProps & { db: Database; onClose: () => void }) {
-  const { pending: lifePending, error: lifeError, run } = useDbLifecycle(db);
   const meta = ENGINE_META[db.engine];
   const currentVersion = db.dockerImage?.split(":")[1] ?? meta.versions[0];
 
@@ -621,11 +636,9 @@ function SettingsTab({ db, services, onSelectService, onClose }: PortConflictPro
       <Info label="Created" value={db.createdAt ? new Date(db.createdAt).toLocaleString() : "—"} />
 
       <DangerZone
-        name={db.name}
+        service={db}
         message="Destroying removes the service and its container."
-        pending={lifePending}
-        error={lifeError}
-        onDestroy={() => run("remove", onClose)}
+        onDeleted={onClose}
       />
     </div>
   );

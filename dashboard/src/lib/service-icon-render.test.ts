@@ -93,8 +93,8 @@ describe("ServiceIcon", () => {
       const markup = render(icon, accent);
       const color = /(?:;|\")color:(#[a-f0-9]{6})/i.exec(markup)?.[1];
       expect(color).toBeDefined();
-      expect(markup).toContain(`background-color:${accent}1a`);
-      const alpha = 0x1a / 255;
+      expect(markup).toContain(`background-color:color-mix(in srgb, ${accent} 10%, transparent)`);
+      const alpha = 0.1;
       const background = rgb(accent).map((channel, index) => channel * alpha + surface[index] * (1 - alpha));
       const foregroundLuminance = luminance(rgb(color!));
       const backgroundLuminance = luminance(background);

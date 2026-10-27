@@ -5,6 +5,46 @@ A Railway-style control plane for [Dokploy](https://dokploy.com). First mileston
 
 Built with Next.js 16 (App Router) + TypeScript + Tailwind v4 + Framer Motion.
 
+## Themes
+
+Choose **Light**, **Dark**, or **System** beside Sign out (also available on the
+login screen). Dark is the default. The choice persists in localStorage;
+System follows live `prefers-color-scheme` changes. A small inline script in
+the root layout sets the theme before paint. Blocked storage falls back to
+dark on the next load while the current page's switcher still works.
+
+Theme colors live in `src/app/globals.css`, with light overrides under
+`[data-theme="light"]`. `src/lib/contrast.test.ts` checks the actual CSS token
+values: body, muted, and subtle text must each reach WCAG AA's 4.5:1 on the
+page, elevated, surface, hover, and code backgrounds. Code, logs, charts, and
+the React Flow canvas/minimap use these tokens too.
+
+Hard-coded color audit (run from `dashboard`):
+
+```bash
+rg -n '#[0-9a-fA-F]{3,8}\b|bg-black|text-white|bg-white' src/components
+```
+
+| Previous component colors | Replacement |
+|---|---|
+| `#0b0b10` in AppTabs, ComposeTabs, ConsoleTab, DataTab, LogsTab, ServiceDrawer, VariablesTab, VolumesTab, primitives | `--color-code-bg` |
+| MetricsTab `#12121a`, `#34344a` tooltip | `--color-bg-elevated`, `--color-border-strong` |
+| MetricsTab `#a06bff`, `#3ecf8e`, `#4a9eff`, `#f5a623`, `#ff5c5c` | `--color-brand`, `--color-ok`, `--color-info`, `--color-warn`, `--color-danger` |
+| MetricsTab `#ffffff08`, DataTab white row stripe | `--color-chart-cursor` |
+| QuickDeployMenu `#2dd4bf`, `#a78bfa` and their `1a` backgrounds | `--color-teal`, `--color-violet` and their `-soft` tokens |
+| FlowCanvas `#a06bff`, `#ffffff2b`, `#0a0a0fcc` | `--color-brand`, `--color-canvas-dots`, `--color-canvas-mask` |
+| AgentPanel/ChangesBar `#000` shadows | `--color-shadow` |
+
+No hex colors remain in components. White text on purple action buttons,
+white switch knobs, and translucent black modal backdrops are intentional in
+both themes. Fixed database identity colors in `src/lib/engines.ts` remain
+decorative icon/edge accents; application and compose accents use theme tokens.
+Alpha variants of service accents use `color-mix` so CSS variables work too.
+
+Tests run with the workspace's preinstalled Vitest (`npx vitest run`). This
+checkout's package manifest does not declare Vitest; test files are excluded
+from the runtime Docker build context, which installs only declared dependencies.
+
 ## How it works
 
 The dashboard is a **backend-for-frontend (BFF)** over the Dokploy API:
