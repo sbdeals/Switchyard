@@ -6,7 +6,7 @@
  * Dokploy session cookie inside a sealed Switchyard session cookie and use it
  * for every request THAT user makes (`request()` -> `userCookie()`, read from
  * next/headers). The raw Dokploy cookie never reaches the browser. On a Dokploy
- * 401 we bounce the user to /login rather than escalating privilege.
+ * 401 we clear the Switchyard session and send the user back to /login.
  *
  * The env admin credentials (`DOKPLOY_EMAIL`/`DOKPLOY_PASSWORD`) survive for a
  * SINGLE purpose: the system self-probe `ping()` behind /api/health?deep=1,
@@ -105,6 +105,8 @@ export interface ServiceBase {
   replicas: number | null;
   /** Mount kinds from the detail response; undefined when not returned. */
   mounts?: { type: MountType }[];
+  /** Safe deletion metadata computed before environment values are redacted. */
+  environmentVariableCount?: number;
   /**
    * Engine truth: what is actually running for this service right now.
    * `status` above is only the last DEPLOY result — after a Docker Desktop VM
@@ -235,8 +237,10 @@ export interface Application extends ServiceBase {
   dockerBuildStage: string | null;
   /** Custom start/run command appended to the container's entrypoint. */
   command: string | null;
-  /** Registry host for docker-image apps (credentials are never read back). */
+  /** Registry details for docker-image apps. The stored password stays server-side. */
   registryUrl: string | null;
+  registryUsername: string | null;
+  hasRegistryPassword: boolean;
   domains: AppDomain[];
   redirects: AppRedirect[];
   ports: AppPort[];
@@ -372,13 +376,13 @@ async function userCookie(): Promise<string> {
   return session.dokployCookie;
 }
 
-type ReqInit = { method?: "GET" | "POST"; body?: unknown };
+type ReqInit = { method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal };
 
 /**
  * User-serving Dokploy request. Threads the per-user cookie via next/headers so
  * the call signature stays `request(path, init)` for every existing caller. On
- * a Dokploy 401 the user's session has expired -> redirect to /login (we do NOT
- * silently fall back to the admin session).
+ * a Dokploy 401 the user's session has expired -> redirect through the session
+ * clearing route (we do NOT silently fall back to the admin session).
  *
  * Exported so the embedded agent module (`lib/agent/`) can reach Dokploy
  * procedures this file does not yet wrap without duplicating the per-user auth
@@ -430,7 +434,9 @@ async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
         cache: "no-store",
         // Bound the call so an unresponsive Dokploy backend can't hang the caller
         // indefinitely (e.g. the agent's tool loop, which awaits each tool inline).
-        signal: AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
+        signal: init.signal
+          ? AbortSignal.any([init.signal, AbortSignal.timeout(DOKPLOY_TIMEOUT_MS)])
+          : AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
       });
       if (await isInvalidOrigin(attempt)) continue;
       workingOrigin = origin;
@@ -443,7 +449,7 @@ async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
     }
     throw e;
   }
-  if (res.status === 401) redirect("/login");
+  if (res.status === 401) redirect("/api/session/expired");
   if (!res.ok) {
     const body = await res.text();
     // Backup errors are sanitized and summarized by withBackupErrors first;
@@ -617,6 +623,8 @@ export async function getApplicationSource(id: string): Promise<{
   gitUrl: string | null;
   dockerImage: string | null;
   registryUrl: string | null;
+  username: string | null;
+  password: string | null;
 }> {
   await requireServiceOwnership("application", id);
   const detail = await request<RawApplicationDetail>(
@@ -626,6 +634,8 @@ export async function getApplicationSource(id: string): Promise<{
     gitUrl: detail.customGitUrl ?? null,
     dockerImage: detail.dockerImage ?? null,
     registryUrl: detail.registryUrl ?? null,
+    username: detail.username ?? null,
+    password: detail.password ?? null,
   };
 }
 
@@ -767,6 +777,7 @@ export function inferEdges(services: Service[]): ServiceEdge[] {
     if (!haystack) continue;
     for (const b of services) {
       if (a.id === b.id) continue;
+      if (a.projectId !== b.projectId || a.environmentId !== b.environmentId) continue;
       const needles = [b.appName, b.name].filter(Boolean).map((s) => s.toLowerCase());
       if (needles.some((n) => n.length > 2 && haystack.includes(n))) {
         const key = `${a.id}->${b.id}`;
@@ -886,7 +897,12 @@ interface RawApplicationDetail {
   dockerBuildStage?: string | null;
   command?: string | null;
   registryUrl?: string | null;
+  username?: string | null;
+  password?: string | null;
   env?: string | null;
+  buildArgs?: string | null;
+  buildSecrets?: string | null;
+  createEnvFile?: boolean | null;
   createdAt?: string | null;
   cpuLimit?: string | null;
   memoryLimit?: string | null;
@@ -910,8 +926,8 @@ interface RawApplicationDetail {
     publishMode?: string;
   }[];
   security?: { securityId: string; username?: string }[];
-  deployments?: RawDeployment[];
   mounts?: RawMount[];
+  deployments?: RawDeployment[];
 }
 
 /** Domain shape returned nested under `application.one` / `compose.one`. */
@@ -984,6 +1000,8 @@ async function listApplications(tree: RawProject[]): Promise<Application[]> {
         dockerBuildStage: d.dockerBuildStage ?? null,
         command: d.command ?? null,
         registryUrl: d.registryUrl ?? null,
+        registryUsername: d.username ?? null,
+        hasRegistryPassword: Boolean(d.password),
         env: d.env ?? null,
         createdAt: d.createdAt ?? null,
         cpuLimit: d.cpuLimit ?? null,
@@ -1035,20 +1053,38 @@ export async function createApplication(name: string, environmentId: string): Pr
   return created.applicationId;
 }
 
-/** Point an application at a public/private Docker image. */
+export interface DockerRegistryPatch {
+  /** Empty or omitted credentials preserve their stored values. */
+  username?: string | null;
+  password?: string | null;
+  /** Omit to preserve the registry host; an empty string resets it. */
+  registryUrl?: string | null;
+  /** Explicitly remove the username, password, and registry host. */
+  clearCredentials?: boolean;
+}
+
+/** Point an application at an image, preserving untouched registry credentials. */
 export async function setAppDockerSource(
   applicationId: string,
   dockerImage: string,
-  registry?: { username: string; password: string; registryUrl: string }
+  registry?: DockerRegistryPatch,
+  /** Reuse the server-only snapshot already read and authorized by the action. */
+  stored?: Pick<RawApplicationDetail, "username" | "password" | "registryUrl">
 ): Promise<void> {
+  const clear = registry?.clearCredentials === true;
+  // saveDockerProvider overwrites all three fields. Read the current secrets
+  // server-side so an image-only edit never sends empty credentials.
+  const current = clear ? null : stored ?? await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(applicationId)}`
+  );
   await request("application.saveDockerProvider", {
     method: "POST",
     body: {
       applicationId,
       dockerImage,
-      username: registry?.username ?? null,
-      password: registry?.password ?? null,
-      registryUrl: registry?.registryUrl ?? null,
+      username: clear ? null : (registry?.username || current?.username) ?? null,
+      password: clear ? null : (registry?.password || current?.password) ?? null,
+      registryUrl: clear ? null : registry?.registryUrl ?? current?.registryUrl ?? null,
     },
   });
 }
@@ -1308,11 +1344,24 @@ export async function saveAppBuildType(id: string, patch: BuildTypePatch): Promi
   await request("application.saveBuildType", { method: "POST", body });
 }
 
-export async function saveApplicationEnvironment(id: string, env: string): Promise<void> {
-  // application.saveEnvironment also accepts build args/secrets; send empty.
+export async function saveApplicationEnvironment(
+  id: string,
+  env: string,
+  settings: { buildArgs?: string; buildSecrets?: string; createEnvFile?: boolean } = {},
+): Promise<void> {
+  const current = await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(id)}`
+  );
+  // saveEnvironment requires all fields, including build settings unrelated to runtime env.
   await request("application.saveEnvironment", {
     method: "POST",
-    body: { applicationId: id, env, buildArgs: "", buildSecrets: "", createEnvFile: false },
+    body: {
+      applicationId: id,
+      env,
+      buildArgs: settings.buildArgs ?? current.buildArgs ?? "",
+      buildSecrets: settings.buildSecrets ?? current.buildSecrets ?? "",
+      createEnvFile: settings.createEnvFile ?? current.createEnvFile ?? false,
+    },
   });
 }
 
@@ -1737,8 +1786,16 @@ export async function deleteSchedule(scheduleId: string): Promise<void> {
 }
 
 /** Trigger a schedule immediately (run-now); the container must be running. */
-export async function runSchedule(scheduleId: string): Promise<void> {
-  await request("schedule.runManually", { method: "POST", body: { scheduleId } });
+/** Runs a schedule now. Dokploy can answer HTTP 200 with `status: "error"`, so return it. */
+export async function runSchedule(scheduleId: string): Promise<{ status?: string } | null> {
+  return request<{ status?: string } | null>("schedule.runManually", { method: "POST", body: { scheduleId } });
+}
+
+/** A schedule's executions (Dokploy records each run as a deployment of type "schedule"). */
+export async function listScheduleExecutions(scheduleId: string): Promise<AppDeployment[]> {
+  return (await request<AppDeployment[] | null>(
+    `deployment.allByType?id=${encodeURIComponent(scheduleId)}&type=schedule`
+  )) ?? [];
 }
 
 // --- mounts (persistent volumes) --------------------------------------------
@@ -1778,14 +1835,24 @@ function mapMountTypes(mounts: RawMount[] | undefined): { type: MountType }[] | 
   return mounts?.map((mount) => ({ type: mount.type ?? "volume" }));
 }
 
-/** List the mounts attached to a service. */
-export async function listMounts(
+/** Check the current user's project tree before reading or mutating mounts. */
+async function assertMountService(
   serviceType: MountServiceType,
   serviceId: string
-): Promise<Mount[]> {
-  const raw = await request<RawMount[]>(
-    `mounts.listByServiceId?serviceType=${serviceType}&serviceId=${encodeURIComponent(serviceId)}`
-  );
+): Promise<void> {
+  if (![...ENGINES, "application", "compose"].includes(serviceType) || !serviceId) {
+    throw new Error("Unknown service.");
+  }
+  const tree = await rawTree();
+  const refs = collectIds(tree, (env) => {
+    if (serviceType === "application") return (env.applications ?? []).map((a) => a.applicationId);
+    if (serviceType === "compose") return (env.compose ?? []).map((c) => c.composeId);
+    return (env[serviceType] ?? []).map((db) => (db as Record<string, string>)[idKey(serviceType)]);
+  });
+  if (!refs.some((ref) => ref.id === serviceId)) throw new Error("Unknown service.");
+}
+
+function mapMounts(raw: RawMount[] | undefined): Mount[] {
   return (raw ?? []).map((m) => ({
     mountId: m.mountId,
     type: m.type ?? "volume",
@@ -1795,6 +1862,23 @@ export async function listMounts(
     filePath: m.filePath ?? null,
     content: m.content ?? null,
   }));
+}
+
+/** v0.30.10 application.one includes mounts; every read checks workspace scope. */
+export async function listMounts(
+  serviceType: MountServiceType,
+  serviceId: string
+): Promise<Mount[]> {
+  await assertMountService(serviceType, serviceId);
+  if (serviceType === "application") {
+    const app = await request<RawApplicationDetail>(
+      `application.one?applicationId=${encodeURIComponent(serviceId)}`
+    );
+    return mapMounts(app.mounts);
+  }
+  return mapMounts(await request<RawMount[]>(
+    `mounts.listByServiceId?serviceType=${serviceType}&serviceId=${encodeURIComponent(serviceId)}`
+  ));
 }
 
 export interface CreateMountInput {
@@ -2222,7 +2306,7 @@ async function restoreBackupWithLogs(input: RestoreBackupInput): Promise<void> {
     headers: { Accept: "text/event-stream", Origin: workingOrigin, Cookie: await userCookie() },
     cache: "no-store",
   });
-  if (res.status === 401) redirect("/login");
+  if (res.status === 401) redirect("/api/session/expired");
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Dokploy restore failed (${res.status}): ${body}`);
@@ -2313,6 +2397,7 @@ export async function deployTemplate(
       `compose.one?composeId=${encodeURIComponent(created.composeId)}`
     );
     const rewrite = rewriteDataBindsToVolumes(detail.composeFile ?? "");
+    if (rewrite.error) console.warn("[templates]", rewrite.error);
     if (rewrite.rewritten.length > 0) {
       await request("compose.update", {
         method: "POST",
@@ -2332,7 +2417,7 @@ export async function deployTemplate(
  * services of all kinds (enriched with per-service detail) plus the
  * project/environment tree.
  */
-export async function loadWorkspace(): Promise<{
+export async function loadWorkspace({ includeRuntime = true }: { includeRuntime?: boolean } = {}): Promise<{
   services: Service[];
   projects: ProjectNode[];
 }> {
@@ -2349,6 +2434,7 @@ export async function loadWorkspace(): Promise<{
   // tie containers to services (compose project / swarm service name — both
   // equal the service's appName). Best-effort: with no reachable Docker
   // socket every badge falls back to the deploy status alone.
+  if (!includeRuntime) return { services, projects: projectsFromTree(tree) };
   try {
     const runtime = await listRuntimeStates();
     for (const s of services) {

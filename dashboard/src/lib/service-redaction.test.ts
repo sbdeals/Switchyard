@@ -5,6 +5,7 @@ import { ENGINES, inferEdges, type Application, type ComposeService, type Servic
 import { redactServiceForClient } from "./service-redaction";
 import { ComposeDomainsTab, ComposeEditorTab } from "../components/service/ComposeTabs";
 import { DirtyGuardProvider } from "../components/DirtyGuard";
+import { serviceDeleteImpact } from "./delete-impact";
 
 vi.mock("server-only", () => ({}));
 vi.mock("./docker", () => ({}));
@@ -89,12 +90,20 @@ describe("redactServiceForClient", () => {
 
     expect(redacted).not.toBe(service);
     expect(redacted.env).toBeNull();
+    expect(redacted.environmentVariableCount).toBe(2);
+    expect(serviceDeleteImpact(redacted)).toContain("2 environment variables");
     expect(JSON.stringify(redacted)).not.toContain("env-redaction-sentinel");
     expect(service).toEqual(original);
   });
 
   it.each([null, ""])("handles an empty env (%s)", (env) => {
     expect(redactServiceForClient({ ...services[0], env }).env).toBeNull();
+    expect(redactServiceForClient({ ...services[0], env }).environmentVariableCount).toBe(0);
+  });
+
+  it("preserves safe counts when a service is redacted again", () => {
+    const redacted = redactServiceForClient(services[0]);
+    expect(redactServiceForClient(redacted).environmentVariableCount).toBe(2);
   });
 
   it("keeps env available to server-side edge inference after redaction", () => {

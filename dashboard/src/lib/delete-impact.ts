@@ -4,6 +4,7 @@ import type { MountType, ServiceKind } from "./dokploy";
 export interface ImpactService {
   kind: ServiceKind;
   env?: string | null;
+  environmentVariableCount?: number;
   domains?: readonly unknown[];
   mounts?: readonly { type: MountType }[];
   deployments?: readonly unknown[];
@@ -19,7 +20,7 @@ export function nameMatches(input: string, name: string): boolean {
 }
 
 /** Count dotenv assignments, ignoring comments and lines inside quoted values. */
-function variableCount(env: string | null): number {
+export function variableCount(env: string | null): number {
   const names = new Set<string>();
   let quote: string | null = null;
   for (const line of (env ?? "").split(/\r?\n/)) {
@@ -68,7 +69,8 @@ function serviceCounts(services: readonly ImpactService[], includeEmpty = false)
       unavailable.add(mountCategory);
     }
 
-    if (service.env === undefined) unavailable.add("Environment variables");
+    if (service.environmentVariableCount !== undefined) variables += service.environmentVariableCount;
+    else if (service.env === undefined) unavailable.add("Environment variables");
     else variables += variableCount(service.env);
 
     if (service.deployments) deployments += service.deployments.length;
