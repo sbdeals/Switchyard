@@ -69,7 +69,7 @@ export function ChangesBar({
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            className="pointer-events-auto flex max-w-full items-center gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-2 py-1.5 shadow-[0_10px_30px_-12px_#000] backdrop-blur max-sm:flex-wrap"
+            className="pointer-events-auto flex max-w-full items-center gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-2 py-1.5 shadow-[0_10px_30px_-12px_var(--color-shadow)] backdrop-blur max-sm:flex-wrap"
           >
             <span className="flex items-center gap-2 pl-1.5 pr-1 text-xs font-medium text-[var(--color-fg)]">
               <span className="flex size-5 items-center justify-center rounded-md bg-[var(--color-warn-soft)] text-[var(--color-warn)]">
@@ -106,7 +106,7 @@ export function ChangesBar({
                 <MoreVertical className="size-4" />
               </button>
               {menuOpen && (
-                <div className="absolute right-0 top-full mt-1 w-44 overflow-hidden rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] py-1 shadow-[0_10px_30px_-12px_#000] max-sm:bottom-full max-sm:top-auto max-sm:mb-1 max-sm:mt-0">
+                <div className="absolute right-0 top-full mt-1 w-44 overflow-hidden rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] py-1 shadow-[0_10px_30px_-12px_var(--color-shadow)] max-sm:bottom-full max-sm:top-auto max-sm:mb-1 max-sm:mt-0">
                   <button
                     onClick={() => {
                       setMenuOpen(false);
@@ -127,7 +127,7 @@ export function ChangesBar({
       {results && count === 0 && (
         <div
           role="status"
-          className="pointer-events-auto flex max-w-full items-start gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 text-xs shadow-[0_10px_30px_-12px_#000] backdrop-blur [overflow-wrap:anywhere]"
+          className="pointer-events-auto flex max-w-full items-start gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 text-xs shadow-[0_10px_30px_-12px_var(--color-shadow)] backdrop-blur [overflow-wrap:anywhere]"
         >
           <div className="flex min-w-0 flex-col gap-1">
             {results.map((r) => (

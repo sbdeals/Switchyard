@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Plus, Pencil, Trash2, FolderGit2, Layers, Loader2, GitCompareArrows } from "lucide-react";
+import { X, Plus, Pencil, Trash2, FolderGit2, Layers, Loader2, GitCompareArrows, Settings2, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ProjectNode, Service } from "@/lib/dokploy";
 import { deleteImpact } from "@/lib/delete-impact";
@@ -17,6 +17,7 @@ import {
   type ActionResult,
 } from "@/app/actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { SharedVariablesPanel } from "@/components/SharedVariablesPanel";
 import { EnvironmentCompare } from "@/components/EnvironmentCompare";
 import { DuplicateEnvironmentForm } from "@/components/DuplicateEnvironmentForm";
 
@@ -36,6 +37,8 @@ export function ProjectsPanel({
   const [error, setError] = useState<string | null>(null);
   const [newProject, setNewProject] = useState("");
   const [newEnv, setNewEnv] = useState<Record<string, string>>({});
+  const [settingsId, setSettingsId] = useState<string | null>(null);
+  const settingsProject = projects.find((p) => p.projectId === settingsId);
   const [deleting, setDeleting] = useState<{
     name: string;
     resource: string;
@@ -50,6 +53,7 @@ export function ProjectsPanel({
   const close = () => {
     if (duplicating) return;
     setCompareProjectId(null);
+    setSettingsId(null);
     onClose();
   };
 
@@ -86,10 +90,13 @@ export function ProjectsPanel({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className={`relative flex max-h-[80vh] w-full ${comparingProject ? "max-w-6xl" : "max-w-lg"} flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl max-sm:max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10 max-lg:[&_input]:min-h-10 max-lg:[&_select]:min-h-10`}
+            className={`relative flex max-h-[80vh] w-full ${comparingProject ? "max-w-6xl" : settingsProject ? "max-w-2xl" : "max-w-lg"} flex-col overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-2xl max-sm:max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10 max-lg:[&_input]:min-h-10 max-lg:[&_select]:min-h-10`}
           >
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-border)] px-4 py-4 sm:px-5">
-              <h2 id="projects-panel-title" className="text-sm font-semibold">{comparingProject ? "Compare environments" : duplicate ? "Duplicate environment" : "Projects & environments"}</h2>
+              <div className="flex min-w-0 items-center gap-2">
+                {settingsProject && <IconBtn title="Back to projects" onClick={() => setSettingsId(null)}><ArrowLeft className="size-4" /></IconBtn>}
+                <h2 id="projects-panel-title" className="truncate text-sm font-semibold">{comparingProject ? "Compare environments" : duplicate ? "Duplicate environment" : settingsProject ? `${settingsProject.name} · Settings` : "Projects & environments"}</h2>
+              </div>
               <button
                 onClick={close}
                 disabled={duplicating}
@@ -113,7 +120,7 @@ export function ProjectsPanel({
             )}
 
             {!comparingProject && <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
-              {duplicate ? (
+              {settingsProject ? <SharedVariablesPanel key={settingsProject.projectId} project={settingsProject} /> : duplicate ? (
                 <DuplicateEnvironmentForm
                   project={duplicate.project}
                   environmentId={duplicate.environmentId}
@@ -129,6 +136,9 @@ export function ProjectsPanel({
                   <div className="flex items-center gap-2">
                     <FolderGit2 className="size-4 shrink-0 text-[var(--color-brand)]" />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
+                    <IconBtn title={`Settings for ${p.name}`} onClick={() => setSettingsId(p.projectId)}>
+                      <Settings2 className="size-3.5" />
+                    </IconBtn>
                     <IconBtn title="Rename project" onClick={() => rename(p.name, (n) => renameProjectAction(p.projectId, n))}>
                       <Pencil className="size-3.5" />
                     </IconBtn>
@@ -218,12 +228,12 @@ export function ProjectsPanel({
                   </div>
                 </div>
               ))}
-              {!duplicate && projects.length === 0 && (
+              {!settingsProject && !duplicate && projects.length === 0 && (
                 <p className="text-center text-xs text-[var(--color-fg-subtle)]">No projects yet.</p>
               )}
             </div>}
 
-            {!comparingProject && !duplicate && <div className="shrink-0 border-t border-[var(--color-border)] px-4 py-4 sm:px-5">
+            {!settingsProject && !comparingProject && !duplicate && <div className="shrink-0 border-t border-[var(--color-border)] px-4 py-4 sm:px-5">
               {error && <p role="alert" className="mb-2 text-xs text-[var(--color-danger)]">{error}</p>}
               <div className="flex items-center gap-2">
                 <input

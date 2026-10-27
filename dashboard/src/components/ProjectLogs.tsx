@@ -218,7 +218,7 @@ function ScopedLogs({ projectId, environmentId }: { projectId: string; environme
           const element = e.currentTarget;
           stick.current = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
         }}
-        className="h-[min(60vh,640px)] min-h-64 overflow-auto bg-[#0b0b10] px-4 py-2 font-mono text-[11px] leading-relaxed"
+        className="h-[min(60vh,640px)] min-h-64 overflow-auto bg-[var(--color-code-bg)] px-4 py-2 font-mono text-[11px] leading-relaxed"
       >
         {shown.length > 0 ? shown.map((line) => <LogRow key={line.id} line={line} />) : (
           <div className="flex h-full items-center justify-center gap-2 text-[var(--color-fg-muted)]">

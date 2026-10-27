@@ -25,6 +25,7 @@ import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
 import { resolveAppPort } from "./app-port";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
+import { variableValues, type SharedScope, type SharedVariables, type SharedVariableKeys } from "./shared-variables";
 import { formatBackupError, validateS3Endpoint } from "./backup-errors";
 import {
   deriveComposeRuntime,
@@ -101,8 +102,10 @@ export interface ServiceBase {
   dockerImage: string | null;
   /** Raw env block on the server; redacted to null in workspace page props. */
   env: string | null;
+  /** Server-derived onboarding milestone; contains no variable names or values. */
+  hasVariables?: boolean;
   createdAt: string | null;
-  // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
+  // Dokploy v0.30.10 stores integer strings: CPU nanocpus and memory bytes.
   cpuLimit: string | null;
   memoryLimit: string | null;
   replicas: number | null;
@@ -122,6 +125,8 @@ export interface ServiceBase {
 export interface Database extends ServiceBase {
   kind: "database";
   engine: Engine;
+  cpuReservation: string | null;
+  memoryReservation: string | null;
   databaseName: string | null;
   databaseUser: string | null;
   /** Always null in workspace data; fetched explicitly by the Connect action. */
@@ -520,6 +525,7 @@ interface RawEnvironment {
 interface RawProject {
   projectId: string;
   name: string;
+  env?: string | null;
   environments: RawEnvironment[];
 }
 
@@ -568,6 +574,66 @@ function projectsFromTree(tree: RawProject[]): ProjectNode[] {
 
 export async function listProjects(): Promise<ProjectNode[]> {
   return projectsFromTree(await rawTree());
+}
+
+async function sharedVariableTarget(projectId: string, environmentId?: string) {
+  const project = (await rawTree()).find((p) => p.projectId === projectId);
+  if (!project) throw new Error("Project not found or access denied.");
+  const environment = project.environments.find((e) => e.environmentId === environmentId);
+  if (environmentId !== undefined && !environment) {
+    throw new Error("Environment does not belong to this project.");
+  }
+  return { project, environment };
+}
+
+/** Load only the selected scope after checking the current user's project tree. */
+export async function getSharedVariables(
+  projectId: string,
+  environmentId?: string
+): Promise<SharedVariables> {
+  const { project, environment } = await sharedVariableTarget(projectId, environmentId);
+  // v0.30.10 project.all includes project.env, but trims environment columns.
+  const detail = environment
+    ? await request<{ env: string | null }>(
+      `environment.one?environmentId=${encodeURIComponent(environment.environmentId)}`
+    )
+    : null;
+  return { project: project.env ?? "", environment: detail?.env ?? "" };
+}
+
+/** Reference badges/pickers need names only, never the shared values. */
+export async function getSharedVariableKeys(
+  projectId: string,
+  environmentId?: string
+): Promise<SharedVariableKeys> {
+  const shared = await getSharedVariables(projectId, environmentId);
+  return {
+    project: Object.keys(variableValues(shared.project)),
+    environment: Object.keys(variableValues(shared.environment)),
+  };
+}
+
+export async function saveSharedVariables(
+  projectId: string,
+  environmentId: string | undefined,
+  scope: SharedScope,
+  env: string
+): Promise<void> {
+  if (scope !== "project" && scope !== "environment") {
+    throw new Error("Invalid shared variable scope.");
+  }
+  if (typeof env !== "string") throw new Error("Variables must be text.");
+  const { project, environment } = await sharedVariableTarget(projectId, environmentId);
+  // Verified against Dokploy v0.30.10's project/environment update schemas.
+  if (scope === "project") {
+    await request("project.update", { method: "POST", body: { projectId: project.projectId, env } });
+  } else {
+    if (!environment) throw new Error("Select an environment first.");
+    await request("environment.update", {
+      method: "POST",
+      body: { environmentId: environment.environmentId, env },
+    });
+  }
 }
 
 /** Check the current user's workspace before reading or editing secret fields. */
@@ -693,6 +759,8 @@ interface RawDatabaseDetail {
   env?: string | null;
   cpuLimit?: string | null;
   memoryLimit?: string | null;
+  cpuReservation?: string | null;
+  memoryReservation?: string | null;
   command?: string | null;
   replicas?: number | null;
   mounts?: RawMount[];
@@ -756,6 +824,8 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
         env: d.env ?? null,
         cpuLimit: d.cpuLimit ?? null,
         memoryLimit: d.memoryLimit ?? null,
+        cpuReservation: d.cpuReservation ?? null,
+        memoryReservation: d.memoryReservation ?? null,
         command: d.command ?? null,
         replicas: d.replicas ?? null,
         mounts: mapMountTypes(d.mounts),

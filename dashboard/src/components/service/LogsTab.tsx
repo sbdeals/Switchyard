@@ -160,16 +160,27 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
-        className="flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-3 font-mono text-[11px] leading-relaxed"
+        className="flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-3 font-mono text-[11px] leading-relaxed"
       >
         {shown.some((l) => l.stored) && (
           <div className="mb-2 border-b border-[var(--color-border)] pb-2 text-[var(--color-fg-subtle)]">
             from history
           </div>
         )}
-        {shown.length === 0 ? (
+        {lines.length === 0 ? (
           <div className="flex h-full items-center justify-center gap-2 text-[var(--color-fg-subtle)]">
             <Loader2 className="size-4 animate-spin" /> waiting for logs…
+          </div>
+        ) : shown.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-[var(--color-fg-subtle)]">
+            <p className="max-w-full break-all">No logs match &quot;{filter}&quot;</p>
+            <button
+              type="button"
+              onClick={() => setFilter("")}
+              className="rounded-lg border border-[var(--color-border-strong)] px-3 py-1.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+            >
+              Clear filter
+            </button>
           </div>
         ) : (
           shown.map((l) => <LogLine key={l.id} line={l} />)

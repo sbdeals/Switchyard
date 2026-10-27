@@ -286,7 +286,7 @@ export function AgentPanel() {
         <button
           ref={openBtnRef}
           onClick={toggle}
-          className="fixed right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-xl border border-r-0 border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-3 text-[var(--color-fg-muted)] shadow-[0_10px_30px_-12px_#000] hover:text-[var(--color-fg)] max-lg:min-w-10"
+          className="fixed right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-xl border border-r-0 border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-3 text-[var(--color-fg-muted)] shadow-[0_10px_30px_-12px_var(--color-shadow)] hover:text-[var(--color-fg)] max-lg:min-w-10"
           aria-label="Open agent"
         >
           <Sparkles className="size-4 text-[var(--color-brand)]" />

@@ -69,6 +69,8 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { ResourceSettings } from "@/components/service/ResourceSettings";
+import { ImageTagPicker } from "@/components/service/ImageTagPicker";
 import { DomainStatus } from "@/components/service/DomainStatus";
 import { ComposeExportButton } from "@/components/service/ComposeExportDialog";
 import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
@@ -102,9 +104,9 @@ export function AppOverviewTab({ app }: { app: Application }) {
 
   return (
     <div className="space-y-5">
-      <PublicUrlBar domains={app.domains} status={app.status} />
+      <PublicUrlBar domains={app.domains} status={app.status} runtime={app.runtime} />
 
-      <LifecycleButtons status={app.status} pending={pending} error={error} run={run} />
+      <LifecycleButtons status={app.status} runtime={app.runtime} pending={pending} error={error} run={run} />
 
       <PrivateNetwork host={app.appName} />
 
@@ -440,7 +442,7 @@ function WebhookUrl({ app }: { app: Application }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
+      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)] p-2.5">
         <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
           {url ?? "••••••••••••••••"}
         </code>
@@ -825,14 +827,7 @@ function DockerSourceForm({ app }: { app: Application }) {
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-[var(--color-fg)]">Image &amp; registry</h3>
-      <Field label="Image" hint="repo:tag">
-        <input
-          value={image}
-          onChange={(e) => setImage(e.target.value)}
-          placeholder="registry.example.com/app:latest"
-          className={inputCls}
-        />
-      </Field>
+      <ImageTagPicker image={image} currentImage={app.dockerImage ?? ""} onChange={setImage} />
       <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
         <p className="text-[11px] text-[var(--color-fg-subtle)]">
           Leave username or password blank to keep saved credentials. Clear credentials for public images.
@@ -1248,37 +1243,17 @@ export function AppDeployTab({ app }: { app: Application }) {
 
 export function AppSettingsTab({ app, onClose }: { app: Application; onClose: () => void }) {
   const [name, setName] = useState(app.name);
-  const [cpu, setCpu] = useState(app.cpuLimit ?? "");
-  const [mem, setMem] = useState(app.memoryLimit ?? "");
-  const [cpuRes, setCpuRes] = useState(app.cpuReservation ?? "");
-  const [memRes, setMemRes] = useState(app.memoryReservation ?? "");
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const resourcesDirty =
-    cpu !== (app.cpuLimit ?? "") ||
-    mem !== (app.memoryLimit ?? "") ||
-    cpuRes !== (app.cpuReservation ?? "") ||
-    memRes !== (app.memoryReservation ?? "");
-  const dirty = name !== app.name || resourcesDirty;
+  const dirty = name !== app.name;
   useDirtyGuard("Settings", dirty);
 
   function save() {
     setSaveError(null);
     startSave(async () => {
-      const res = await updateApplicationAction(
-        app.id,
-        {
-          name: name.trim(),
-          cpuLimit: cpu || null,
-          memoryLimit: mem || null,
-          cpuReservation: cpuRes || null,
-          memoryReservation: memRes || null,
-        },
-        // Resource changes only bind on redeploy.
-        resourcesDirty
-      );
+      const res = await updateApplicationAction(app.id, { name: name.trim() });
       if (res.ok) flashSaved();
       else setSaveError(res.error);
     });
@@ -1290,22 +1265,10 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
         <Field label="Name">
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="CPU limit" hint='e.g. "0.5"'>
-            <input value={cpu} onChange={(e) => setCpu(e.target.value)} placeholder="unlimited" className={inputCls} />
-          </Field>
-          <Field label="Memory limit" hint='e.g. "256m"'>
-            <input value={mem} onChange={(e) => setMem(e.target.value)} placeholder="unlimited" className={inputCls} />
-          </Field>
-          <Field label="CPU reservation" hint="soft floor">
-            <input value={cpuRes} onChange={(e) => setCpuRes(e.target.value)} placeholder="none" className={inputCls} />
-          </Field>
-          <Field label="Memory reservation" hint="soft floor">
-            <input value={memRes} onChange={(e) => setMemRes(e.target.value)} placeholder="none" className={inputCls} />
-          </Field>
-        </div>
         <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
       </div>
+
+      <ResourceSettings key={app.id} service={app} />
 
       <Info label="App name" value={app.appName} mono />
 

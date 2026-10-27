@@ -373,7 +373,7 @@ function MountForm({
             onChange={(e) => setContent(e.target.value)}
             spellCheck={false}
             placeholder={"NODE_ENV=production\nPORT=3000\n"}
-            className="min-h-28 w-full resize-none rounded-lg border border-[var(--color-border-control)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+            className="min-h-28 w-full resize-none rounded-lg border border-[var(--color-border-control)] bg-[var(--color-code-bg)] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
           />
         </Field>
       )}

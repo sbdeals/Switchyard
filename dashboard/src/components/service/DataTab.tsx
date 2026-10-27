@@ -466,7 +466,7 @@ function SqlView({ app, targetKey }: { app: string; targetKey: string }) {
           autoCorrect="off"
           placeholder="SELECT * FROM … — ⌘/Ctrl+Enter to run"
           rows={4}
-          className="w-full resize-y rounded-lg border border-[var(--color-border-control)] bg-[#0b0b10] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+          className="w-full resize-y rounded-lg border border-[var(--color-border-control)] bg-[var(--color-code-bg)] p-3 font-mono text-xs leading-relaxed text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
         />
       </div>
 
@@ -619,7 +619,7 @@ function ResultGrid({ columns, rows }: { columns: string[]; rows: (string | null
     );
 
   return (
-    <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[#0b0b10]">
+    <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-code-bg)]">
       <table className="w-full border-collapse text-left font-mono text-[11px]">
         <thead className="sticky top-0 z-10 bg-[var(--color-bg-elevated)]">
           <tr>
@@ -655,7 +655,7 @@ function ResultGrid({ columns, rows }: { columns: string[]; rows: (string | null
         </thead>
         <tbody>
           {sorted.map((row, r) => (
-            <tr key={r} className="even:bg-white/[0.02] hover:bg-[var(--color-surface-hover)]">
+            <tr key={r} className="even:bg-[var(--color-chart-cursor)] hover:bg-[var(--color-surface-hover)]">
               <td className="border-b border-[var(--color-border)]/50 px-2 py-1 text-[10px] text-[var(--color-fg-subtle)]">
                 {r + 1}
               </td>
