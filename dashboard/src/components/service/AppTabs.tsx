@@ -50,6 +50,8 @@ import {
   updateScheduleAction,
   deleteScheduleAction,
   runScheduleAction,
+  listScheduleExecutionsAction,
+  type ScheduleExecution,
   loadServiceWebhookAction,
   loadServiceCommandsAction,
 } from "@/app/actions";
@@ -68,6 +70,7 @@ import {
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
 import { ImageTagPicker } from "@/components/service/ImageTagPicker";
+import { ConfigAsCodePanel } from "@/components/service/ConfigAsCodePanel";
 import { useDirtyGuard } from "@/components/DirtyGuard";
 import { hasDirtyFields } from "@/lib/dirty-guard";
 import { loadClientSecret } from "@/lib/client-secret-loader";
@@ -663,6 +666,7 @@ export function AppBuildTab({ app }: { app: Application }) {
     <div className="space-y-6">
       {isDocker ? <DockerSourceForm app={app} /> : <BuildStrategyForm app={app} />}
       <AppCommandEditor key={app.id} app={app} />
+      {!isDocker && <ConfigAsCodePanel key={app.id} app={app} />}
     </div>
   );
 }
@@ -1271,10 +1275,15 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
 
 // --- schedules --------------------------------------------------------------
 
+function scheduleRunDisabledReason(runtime: Application["runtime"]): string | null {
+  return runtime && (runtime.total === 0 || runtime.running === 0) ? "Start the service first" : null;
+}
+
 export function SchedulesTab({ app }: { app: Application }) {
   const [schedules, setSchedules] = useState<Schedule[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, startLoad] = useTransition();
+  const runDisabledReason = scheduleRunDisabledReason(app.runtime);
 
   const reload = useCallback(() => {
     startLoad(async () => {
@@ -1309,7 +1318,9 @@ export function SchedulesTab({ app }: { app: Application }) {
         ) : schedules.length === 0 ? (
           <p className="text-xs text-[var(--color-fg-subtle)]">No schedules yet.</p>
         ) : (
-          schedules.map((s) => <ScheduleRow key={s.scheduleId} schedule={s} onChanged={reload} />)
+          schedules.map((s) => (
+            <ScheduleRow key={s.scheduleId} schedule={s} onChanged={reload} runDisabledReason={runDisabledReason} />
+          ))
         )}
       </div>
       {loading && schedules !== null && (
@@ -1420,10 +1431,65 @@ function CreateScheduleForm({
   );
 }
 
-function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: () => void }) {
+function ScheduleExecutionHistory({ scheduleId, refreshKey }: { scheduleId: string; refreshKey: number }) {
+  const [executions, setExecutions] = useState<ScheduleExecution[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, start] = useTransition();
+
+  const reload = useCallback(() => {
+    start(async () => {
+      try {
+        const res = await listScheduleExecutionsAction(scheduleId);
+        if (res.ok) {
+          setExecutions([...res.executions].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+          setError(null);
+        } else {
+          setError(res.error);
+        }
+      } catch {
+        setError("Could not load execution history. Refresh to try again.");
+      }
+    });
+  }, [scheduleId]);
+
+  useEffect(() => reload(), [reload, refreshKey]);
+
+  return (
+    <div className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3">
+      <div className="flex items-center justify-between gap-2 text-xs text-[var(--color-fg-muted)]">
+        <p>Execution history (newest first)</p>
+        <button onClick={reload} disabled={loading} className="hover:text-[var(--color-fg)] disabled:opacity-40">
+          {loading ? "Refreshing…" : "Refresh history"}
+        </button>
+      </div>
+      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
+      {!error && executions?.length === 0 && (
+        <p className="text-xs text-[var(--color-fg-subtle)]">No executions yet.</p>
+      )}
+      {executions?.map((execution) => (
+        <div key={execution.deploymentId} className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-[var(--color-fg-subtle)]">
+            {execution.createdAt ? new Date(execution.createdAt).toLocaleString() : "—"}
+          </span>
+          <span className={cn("capitalize", execution.status === "error" ? "text-[var(--color-danger)]" : "text-[var(--color-fg-muted)]")}>
+            {execution.status}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ScheduleRow({ schedule, onChanged, runDisabledReason }: {
+  schedule: Schedule;
+  onChanged: () => void;
+  runDisabledReason: string | null;
+}) {
   const [editing, setEditing] = useState(false);
   const [busy, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [runMessage, setRunMessage] = useState<string | null>(null);
+  const [historyRefresh, setHistoryRefresh] = useState<number | null>(null);
 
   // Draft fields, initialized from the schedule; reset when the row collapses.
   const [name, setName] = useState(schedule.name);
@@ -1437,12 +1503,14 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
     setCommand(schedule.command);
     setShell(schedule.shellType);
     setError(null);
+    setRunMessage(null);
     setEditing(true);
   }
 
   // update reuses Dokploy's create schema, so every field is resent each time.
   function runUpdate(patch: { enabled?: boolean }, after?: () => void) {
     setError(null);
+    setRunMessage(null);
     start(async () => {
       const res = await updateScheduleAction(schedule.scheduleId, {
         name: name.trim() || schedule.name,
@@ -1458,10 +1526,28 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
 
   function act(fn: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     setError(null);
+    setRunMessage(null);
     start(async () => {
       const res = await fn();
       if (res.ok) onChanged();
       else setError(res.error);
+    });
+  }
+
+  function runNow() {
+    if (busy || runDisabledReason) return;
+    setError(null);
+    setRunMessage(null);
+    start(async () => {
+      try {
+        const res = await runScheduleAction(schedule.scheduleId);
+        if (res.ok) setRunMessage(res.message);
+        else setError(res.error);
+      } catch {
+        setError("Could not confirm the run. Check execution history before retrying.");
+      }
+      // Failed commands also produce deployments; refresh after every attempt.
+      setHistoryRefresh((v) => (v ?? 0) + 1);
     });
   }
 
@@ -1489,9 +1575,11 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
           </code>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <IconBtn title="Run now" onClick={() => act(() => runScheduleAction(schedule.scheduleId))} disabled={busy}>
-            <Play className="size-3.5" />
-          </IconBtn>
+          <span title={runDisabledReason ?? undefined}>
+            <IconBtn title={runDisabledReason ?? "Run now"} onClick={runNow} disabled={busy || !!runDisabledReason}>
+              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+            </IconBtn>
+          </span>
           <IconBtn
             title={schedule.enabled ? "Disable" : "Enable"}
             onClick={() => runUpdate({ enabled: !schedule.enabled }, onChanged)}
@@ -1564,6 +1652,14 @@ function ScheduleRow({ schedule, onChanged }: { schedule: Schedule; onChanged: (
       )}
 
       {error && <p role="alert" className="mt-2 text-xs text-[var(--color-danger)]">{error}</p>}
+      {runMessage && <p role="status" className="mt-2 text-xs text-[var(--color-ok)]">{runMessage}</p>}
+      {historyRefresh === null ? (
+        <button onClick={() => setHistoryRefresh(0)} className="mt-2 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]">
+          View execution history
+        </button>
+      ) : (
+        <ScheduleExecutionHistory scheduleId={schedule.scheduleId} refreshKey={historyRefresh} />
+      )}
     </div>
   );
 }
