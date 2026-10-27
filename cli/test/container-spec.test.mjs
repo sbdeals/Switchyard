@@ -1,12 +1,42 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import test, { mock } from "node:test";
 
-import { defaultConfig, metricsStoreUrl, renderContainer } from "../dist/lib.js";
+import { defaultConfig, ensureSwitchyard, metricsStoreUrl, renderContainer, UserError } from "../dist/lib.js";
+
+test("ensureSwitchyard rejects invalid replacement ports before any Docker calls", async () => {
+  const spawn = mock.method(childProcess, "spawn", () => {
+    throw new Error("Unexpected Docker call");
+  });
+  syncBuiltinESMExports();
+  try {
+    for (const key of ["dokployPort", "dashboardPort", "localIngressHttpPort", "localIngressHttpsPort"]) {
+      for (const value of [0, -1, 65536, "abc", 1.5, NaN, Infinity, null, "3001"]) {
+        await assert.rejects(
+          ensureSwitchyard({ ...defaultConfig(), [key]: value }, "1.0.0", () => {}),
+          (err) => {
+            assert.ok(err instanceof UserError);
+            assert.ok(err.message.includes(key));
+            assert.match(err.message, /integer between 1 and 65535/);
+            return true;
+          },
+        );
+      }
+    }
+    assert.equal(spawn.mock.callCount(), 0);
+  } finally {
+    spawn.mock.restore();
+    syncBuiltinESMExports();
+  }
+});
 
 test("hash is stable for identical config", () => {
   const a = renderContainer(defaultConfig("linux"), "1.0.0");
   const b = renderContainer(defaultConfig("linux"), "1.0.0");
   assert.equal(a.hash, b.hash);
+  // Preserve the pre-transport-change fingerprint: no unnecessary recreate.
+  assert.equal(a.hash, "74b16c6619f54139b143b3ebd41ff0ee4849ef8bb3b1b2f5fd9931203ef5ee4f");
 });
 
 test("hash changes when a container-relevant setting changes", () => {
@@ -49,7 +79,8 @@ test("run args carry the BFF env and labels", () => {
   const cfg = { ...defaultConfig("linux"), adminEmail: "a@b.co", adminPassword: "pw" };
   const plan = renderContainer(cfg, "1.0.0");
   assert.ok(plan.runArgs.includes("DOKPLOY_EMAIL=a@b.co"));
-  assert.ok(plan.runArgs.includes("DOKPLOY_PASSWORD=pw"));
+  assert.ok(plan.runArgs.includes("DOKPLOY_PASSWORD"));
+  assert.equal(plan.runEnv.DOKPLOY_PASSWORD, "pw");
   assert.ok(plan.runArgs.includes("DOKPLOY_URL=http://dokploy:3000"));
   assert.ok(plan.runArgs.includes(`switchyard.config-hash=${plan.hash}`));
   assert.equal(plan.runArgs.at(-1), plan.image);
@@ -58,7 +89,8 @@ test("run args carry the BFF env and labels", () => {
 test("session secret is passed to the dashboard and folds into the hash", () => {
   const cfg = { ...defaultConfig("linux"), sessionSecret: "s3cr3t" };
   const plan = renderContainer(cfg, "1.0.0");
-  assert.ok(plan.runArgs.includes("SWITCHYARD_SESSION_SECRET=s3cr3t"));
+  assert.ok(plan.runArgs.includes("SWITCHYARD_SESSION_SECRET"));
+  assert.equal(plan.runEnv.SWITCHYARD_SESSION_SECRET, "s3cr3t");
   // Changing the secret must change the fingerprint so `up` recreates.
   const other = renderContainer({ ...cfg, sessionSecret: "different" }, "1.0.0");
   assert.notEqual(plan.hash, other.hash);
@@ -69,14 +101,16 @@ test("metrics store URL is wired into the container env and the hash", () => {
   // No password yet → empty URL, and the env var is present-but-empty.
   assert.equal(metricsStoreUrl(cfg), "");
   const noStore = renderContainer(cfg, "1.0.0");
-  assert.ok(noStore.runArgs.includes("SWITCHYARD_STORE_URL="));
+  assert.ok(noStore.runArgs.includes("SWITCHYARD_STORE_URL"));
+  assert.equal(noStore.runEnv.SWITCHYARD_STORE_URL, "");
 
   // With a password, the URL points at the store service by DNS and is hashed.
   const withPw = { ...cfg, storePassword: "s3cret" };
   const url = metricsStoreUrl(withPw);
   assert.match(url, /^postgresql:\/\/switchyard:s3cret@switchyard-metrics:5432\/switchyard$/);
   const plan = renderContainer(withPw, "1.0.0");
-  assert.ok(plan.runArgs.includes(`SWITCHYARD_STORE_URL=${url}`));
+  assert.ok(plan.runArgs.includes("SWITCHYARD_STORE_URL"));
+  assert.equal(plan.runEnv.SWITCHYARD_STORE_URL, url);
   assert.notEqual(noStore.hash, plan.hash);
 });
 
