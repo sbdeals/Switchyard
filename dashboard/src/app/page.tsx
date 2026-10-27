@@ -71,7 +71,7 @@ export default async function Page() {
   }));
 
   return (
-    <>
+    <main>
       <LogoutButton />
       <Suspense>
         <Workspace
@@ -82,6 +82,6 @@ export default async function Page() {
           notificationScope={notificationScope}
         />
       </Suspense>
-    </>
+    </main>
   );
 }

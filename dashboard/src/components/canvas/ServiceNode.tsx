@@ -5,10 +5,8 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { TriangleAlert } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import type { ReferenceWarning } from "@/lib/service-references";
-import { hasSelectionModifier } from "@/lib/bulk-selection";
 import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
 import { serviceNotesSubtitle } from "@/lib/service-notes";
-import { SHORTCUTS } from "@/lib/shortcuts";
 import { resolveServiceIcon } from "@/lib/service-icon";
 import { ServiceIcon } from "@/components/ServiceIcon";
 
@@ -21,7 +19,7 @@ export interface ServiceNodeData extends Record<string, unknown> {
 }
 
 function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData }) {
-  const { service, logo, referenceWarnings = [], onSelect } = data;
+  const { service, logo, referenceWarnings = [] } = data;
   const accent = serviceAccent(service);
   const status = resolveServiceDisplay(service.status, service.runtime);
   const warningLabel = referenceWarnings.length > 0
@@ -33,20 +31,7 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
   // surrounding canvas still starts the selection rectangle.
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-pressed={selected}
-      aria-label={`${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""}${warningLabel ? `, ${warningLabel}` : ""} — open details`}
-      onClick={(e) => {
-        if (!hasSelectionModifier(e)) onSelect(service);
-      }}
-      onKeyDown={(e) => {
-        if (SHORTCUTS.openService.keys.some((key) => key === e.key)) {
-          e.preventDefault();
-          if (!hasSelectionModifier(e)) onSelect(service);
-        }
-      }}
-      className="nokey w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+      className="nokey w-60 cursor-pointer rounded-xl border bg-[var(--color-surface)] p-3 transition-colors hover:bg-[var(--color-surface-hover)]"
       style={{
         borderColor: selected ? accent : "var(--color-border-strong)",
         boxShadow: selected ? `0 0 0 1px ${accent}, 0 8px 30px -12px color-mix(in srgb, ${accent} 50%, transparent)` : undefined,
