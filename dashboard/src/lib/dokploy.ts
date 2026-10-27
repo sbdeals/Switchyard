@@ -103,6 +103,8 @@ export interface ServiceBase {
   dockerImage: string | null;
   /** Raw env block on the server; redacted to null in workspace page props. */
   env: string | null;
+  /** Server-derived onboarding milestone; contains no variable names or values. */
+  hasVariables?: boolean;
   createdAt: string | null;
   // Dokploy v0.30.10 stores integer strings: CPU nanocpus and memory bytes.
   cpuLimit: string | null;

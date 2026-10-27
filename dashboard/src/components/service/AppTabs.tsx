@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import {
   Globe,
   ExternalLink,
@@ -71,6 +71,7 @@ import {
 import { cn } from "@/lib/utils";
 import { isGitSource } from "@/lib/deploy-triggers";
 import { DeployTriggerSettings } from "./DeployTriggerSettings";
+import { validateCron, validatePort } from "@/lib/validation";
 import { ResourceSettings } from "@/components/service/ResourceSettings";
 import { ImageTagPicker } from "@/components/service/ImageTagPicker";
 import { DomainStatus } from "@/components/service/DomainStatus";
@@ -133,13 +134,15 @@ export function AppOverviewTab({ app }: { app: Application }) {
   );
 }
 
+type DomainDraft = Omit<DomainInput, "port"> & { port: string };
+
 /** Shared host/port/https/cert-type editor used by the add form and edit rows. */
 function DomainFields({
   value,
   onChange,
 }: {
-  value: DomainInput;
-  onChange: (patch: Partial<DomainInput>) => void;
+  value: DomainDraft;
+  onChange: (patch: Partial<DomainDraft>) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -157,8 +160,9 @@ function DomainFields({
         <div className="w-24">
           <Field label="Container port">
             <input
-              value={String(value.port)}
-              onChange={(e) => onChange({ port: Number(e.target.value.replace(/[^0-9]/g, "")) || 0 })}
+              value={value.port}
+              onChange={(e) => onChange({ port: e.target.value })}
+              inputMode="numeric"
               className={inputCls}
             />
           </Field>
@@ -193,10 +197,10 @@ function DomainFields({
   );
 }
 
-function toInput(d: AppDomain): DomainInput {
+function toInput(d: AppDomain): DomainDraft {
   return {
     host: d.host,
-    port: d.port ?? 80,
+    port: String(d.port ?? 80),
     https: d.https,
     certificateType: d.certificateType,
     path: d.path ?? "/",
@@ -206,16 +210,18 @@ function toInput(d: AppDomain): DomainInput {
 /** One attached domain: display row that expands into an inline editor. */
 function DomainRow({ d, appId }: { d: AppDomain; appId: string }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<DomainInput>(() => toInput(d));
+  const [draft, setDraft] = useState<DomainDraft>(() => toInput(d));
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   useDirtyGuard("Domains", editing && hasDirtyFields(draft, toInput(d)));
 
   function save() {
     if (!draft.host.trim()) return;
-    setError(null);
+    const validationError = validatePort(draft.port, "Container port");
+    setError(validationError);
+    if (validationError) return;
     start(async () => {
-      const res = await updateDomainAction(d.domainId, draft);
+      const res = await updateDomainAction(d.domainId, { ...draft, port: Number(draft.port) });
       if (res.ok) setEditing(false);
       else setError(res.error);
     });
@@ -306,16 +312,16 @@ function DomainRow({ d, appId }: { d: AppDomain; appId: string }) {
   );
 }
 
-const NEW_DOMAIN: DomainInput = {
+const NEW_DOMAIN: DomainDraft = {
   host: "",
-  port: 80,
+  port: "80",
   https: true,
   certificateType: "letsencrypt",
   path: "/",
 };
 
 export function DomainsTab({ app }: { app: Application }) {
-  const [draft, setDraft] = useState<DomainInput>(NEW_DOMAIN);
+  const [draft, setDraft] = useState<DomainDraft>(NEW_DOMAIN);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
@@ -323,10 +329,12 @@ export function DomainsTab({ app }: { app: Application }) {
 
   function add() {
     if (!draft.host.trim()) return;
-    setError(null);
+    const validationError = validatePort(draft.port, "Container port");
+    setError(validationError);
     setGenerated(null);
+    if (validationError) return;
     start(async () => {
-      const res = await createDomainAction(app.id, draft);
+      const res = await createDomainAction(app.id, { ...draft, port: Number(draft.port) });
       if (res.ok) setDraft(NEW_DOMAIN);
       else setError(res.error);
     });
@@ -334,10 +342,12 @@ export function DomainsTab({ app }: { app: Application }) {
 
   // Attach a random routable host with no typing, on the form's current port.
   function generate() {
-    setError(null);
+    const validationError = validatePort(draft.port, "Container port");
+    setError(validationError);
     setGenerated(null);
+    if (validationError) return;
     start(async () => {
-      const res = await generateDomainAction(app.id, app.appName, draft.port);
+      const res = await generateDomainAction(app.id, app.appName, Number(draft.port));
       if (res.ok) setGenerated(res.host);
       else setError(res.error);
     });
@@ -1311,11 +1321,13 @@ function CreateScheduleForm({
   const [shell, setShell] = useState<"bash" | "sh">("bash");
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const cronErrorId = useId();
+  const cronError = cron.trim() ? validateCron(cron) : null;
 
   const valid = name.trim() && cron.trim() && command.trim();
 
   function create() {
-    if (!valid) return;
+    if (!valid || cronError) return;
     setError(null);
     start(async () => {
       const res = await createScheduleAction({
@@ -1351,13 +1363,16 @@ function CreateScheduleForm({
             className={inputCls}
           />
         </Field>
-        <Field label="Cron expression" hint="min hour dom mon dow">
+        <Field label="Cron expression" hint="[sec] min hour dom mon dow">
           <input
             value={cron}
             onChange={(e) => setCron(e.target.value)}
             placeholder={CRON_PLACEHOLDER}
+            aria-invalid={Boolean(cronError)}
+            aria-describedby={cronError ? cronErrorId : undefined}
             className={cn(inputCls, "font-mono")}
           />
+          {cronError && <p id={cronErrorId} role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{cronError}</p>}
         </Field>
       </div>
       <Field label="Command">
@@ -1460,6 +1475,8 @@ function ScheduleRow({ schedule, onChanged, runDisabledReason }: {
   const [cron, setCron] = useState(schedule.cronExpression);
   const [command, setCommand] = useState(schedule.command);
   const [shell, setShell] = useState(schedule.shellType);
+  const cronErrorId = useId();
+  const cronError = validateCron(cron);
 
   function openEdit() {
     setName(schedule.name);
@@ -1473,14 +1490,20 @@ function ScheduleRow({ schedule, onChanged, runDisabledReason }: {
 
   // update reuses Dokploy's create schema, so every field is resent each time.
   function runUpdate(patch: { enabled?: boolean }, after?: () => void) {
+    const toggling = patch.enabled !== undefined;
+    const cronExpression = toggling ? schedule.cronExpression : cron.trim();
+    if (validateCron(cronExpression)) {
+      if (toggling) openEdit();
+      return;
+    }
     setError(null);
     setRunMessage(null);
     start(async () => {
       const res = await updateScheduleAction(schedule.scheduleId, {
-        name: name.trim() || schedule.name,
-        cronExpression: cron.trim() || schedule.cronExpression,
-        command: command.trim() || schedule.command,
-        shellType: shell,
+        name: toggling ? schedule.name : name.trim(),
+        cronExpression,
+        command: toggling ? schedule.command : command.trim(),
+        shellType: toggling ? schedule.shellType : shell,
         enabled: patch.enabled ?? schedule.enabled,
       });
       if (res.ok) after?.();
@@ -1577,8 +1600,11 @@ function ScheduleRow({ schedule, onChanged, runDisabledReason }: {
               <input
                 value={cron}
                 onChange={(e) => setCron(e.target.value)}
+                aria-invalid={Boolean(cronError)}
+                aria-describedby={cronError ? cronErrorId : undefined}
                 className={cn(inputCls, "font-mono")}
               />
+              {cronError && <p id={cronErrorId} role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{cronError}</p>}
             </Field>
           </div>
           <Field label="Command">
