@@ -43,7 +43,7 @@ import {
   generateDomainAction,
   updateDomainAction,
   deleteDomainAction,
-  updateGitDeployAction,
+  updateAppGitBranchAction,
   rollbackDeploymentAction,
   listSchedulesAction,
   createScheduleAction,
@@ -67,6 +67,8 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { isGitSource } from "@/lib/deploy-triggers";
+import { DeployTriggerSettings } from "./DeployTriggerSettings";
 import { DomainHttpsToggle, useDomainHttps } from "@/components/service/DomainHttpsToggle";
 import { DeploymentCommitInfo } from "@/components/service/DeploymentCommitInfo";
 import {
@@ -497,34 +499,21 @@ function WebhookUrl({ app }: { app: Application }) {
 }
 
 /**
- * Push-to-deploy config for a custom-git app: the copyable Dokploy deploy
- * webhook to wire into a Git host, plus branch / watch-paths / auto-deploy.
+ * Existing custom-git branch and webhook settings; trigger controls live in Settings.
  */
 function AutoDeployPanel({ app }: { app: Application }) {
   const [branch, setBranch] = useState(app.branch ?? "main");
-  const [autoDeploy, setAutoDeploy] = useState(app.autoDeploy);
-  const [watch, setWatch] = useState(app.watchPaths.join("\n"));
   const [saving, start] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
 
-  const watchList = watch.split("\n").map((s) => s.trim()).filter(Boolean);
-  const dirty =
-    branch !== (app.branch ?? "main") ||
-    autoDeploy !== app.autoDeploy ||
-    watchList.join("\n") !== app.watchPaths.join("\n");
+  const dirty = branch !== (app.branch ?? "main");
   useDirtyGuard("Deployments", dirty);
 
   function save() {
     setError(null);
     start(async () => {
-      const res = await updateGitDeployAction(app.id, {
-        gitUrl: app.gitUrl,
-        branch,
-        buildPath: app.buildPath ?? "/",
-        watchPaths: watchList,
-        autoDeploy,
-      });
+      const res = await updateAppGitBranchAction(app.id, branch);
       if (res.ok) flashSaved();
       else setError(res.error);
     });
@@ -548,55 +537,21 @@ function AutoDeployPanel({ app }: { app: Application }) {
         app while auto-deploy is on.
       </p>
 
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Branch">
-          <div className="relative">
-            <GitBranch className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-fg-subtle)]" />
-            <input
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
-              placeholder="main"
-              className={`${inputCls} pl-8`}
-            />
-          </div>
-        </Field>
-        <Field label="Auto-deploy" hint="webhook on/off">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={autoDeploy}
-            onClick={() => setAutoDeploy((v) => !v)}
-            className={`inline-flex h-9 w-full items-center justify-between rounded-lg border px-3 text-xs font-medium transition-colors ${
-              autoDeploy
-                ? "border-[var(--color-brand)] text-[var(--color-fg)]"
-                : "border-[var(--color-border-strong)] text-[var(--color-fg-muted)]"
-            }`}
-          >
-            {autoDeploy ? "Enabled" : "Disabled"}
-            <span
-              className={`relative h-4 w-7 rounded-full transition-colors ${
-                autoDeploy ? "bg-[var(--color-brand-strong)]" : "bg-[var(--color-idle)]"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${
-                  autoDeploy ? "left-3.5" : "left-0.5"
-                }`}
-              />
-            </span>
-          </button>
-        </Field>
-      </div>
-
-      <Field label="Watch paths" hint="one per line · blank = any change">
-        <textarea
-          value={watch}
-          onChange={(e) => setWatch(e.target.value)}
-          placeholder="src/&#10;package.json"
-          rows={2}
-          className={`${inputCls} resize-y font-mono`}
-        />
+      <Field label="Branch">
+        <div className="relative">
+          <GitBranch className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-fg-subtle)]" />
+          <input
+            value={branch}
+            onChange={(e) => setBranch(e.target.value)}
+            placeholder="main"
+            maxLength={255}
+            className={`${inputCls} pl-8`}
+          />
+        </div>
       </Field>
+      <p className="text-[11px] text-[var(--color-fg-subtle)]">
+        Manage auto-deploy on push and watch paths under Settings → Deploy triggers.
+      </p>
 
       <SaveRow saving={saving} saved={saved} error={error} disabled={!dirty} onSave={save} />
     </div>
@@ -1381,6 +1336,7 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
 
   return (
     <div className="space-y-5">
+      {isGitSource(app.sourceType) && <DeployTriggerSettings key={app.id} service={app} />}
       <div className="space-y-3">
         <Field label="Name">
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />

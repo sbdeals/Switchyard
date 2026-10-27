@@ -11,6 +11,7 @@ vi.mock("@/lib/client-actions", () => ({
   loadServiceWebhookAction: vi.fn(),
   appLifecycleAction: vi.fn(),
 }));
+vi.mock("@/app/deploy-trigger-actions", () => ({}));
 // #129: DeploymentHistory refreshes running deploys through the app router.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("server-only", () => ({}));
@@ -55,6 +56,7 @@ const app: Application = {
   healthCheckSwarm: { Test: ["CMD-SHELL", "curl -H 'Authorization: sentinel-health' http://localhost"] },
   restartPolicySwarm: null,
   autoDeploy: false,
+  triggerType: null,
   branch: "main",
   buildPath: null,
   gitUrl: "https://example.com/repo.git",

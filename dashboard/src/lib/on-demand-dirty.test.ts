@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ComposeEditorTab } from "../components/service/ComposeTabs";
 import { VariablesTab } from "../components/service/VariablesTab";
+import { DeployTriggerSettings } from "../components/service/DeployTriggerSettings";
 import type { ComposeService } from "./dokploy";
 import { sharedReference } from "./shared-variables";
 import { appendDotenvKey } from "./dotenv-raw";
@@ -23,6 +24,7 @@ vi.mock("react", async (importOriginal) => ({
 vi.mock("@/components/DirtyGuard", () => ({ useDirtyGuard: mocks.useDirtyGuard }));
 vi.mock("@/lib/client-actions", () => ({}));
 vi.mock("@/app/actions", () => ({}));
+vi.mock("@/app/deploy-trigger-actions", () => ({}));
 vi.mock("@/components/use-shared-variables", () => ({
   useSharedVariableKeys: () => ({ keys: { project: ["SHARED_TOKEN"], environment: [] } }),
 }));
@@ -34,6 +36,25 @@ const edited = variablesEditorReducer(loaded, { type: "edited", value: "TOKEN=ed
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.useState.mockImplementation((initial) => [initial, vi.fn()]);
+});
+
+describe("deploy trigger dirty guard", () => {
+  it.each([
+    ["unchanged", false, "", false],
+    ["toggle edited", true, "", true],
+    ["paths edited", false, "src/**", true],
+    ["invalid paths", false, "!", true],
+    ["whitespace only", false, " \n ", false],
+  ] as const)("guards %s settings", (_, autoDeploy, watchPaths, dirty) => {
+    mocks.useState
+      .mockReturnValueOnce([autoDeploy, vi.fn()])
+      .mockReturnValueOnce([watchPaths, vi.fn()]);
+    DeployTriggerSettings({
+      service: { ...service, autoDeploy: false, watchPaths: [], triggerType: null },
+    });
+
+    expect(mocks.useDirtyGuard).toHaveBeenCalledExactlyOnceWith("Deploy triggers", dirty);
+  });
 });
 
 describe.each(["Variables", "Compose"] as const)("%s on-demand dirty baseline", (tab) => {

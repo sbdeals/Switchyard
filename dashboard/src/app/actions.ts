@@ -25,6 +25,7 @@ import {
   createApplication,
   setAppDockerSource,
   setAppGitSource,
+  updateAppGitBranch,
   setAppAutoDeploy,
   rollbackToDeployment,
   setAppGithubSource,
@@ -851,6 +852,18 @@ async function wrapSecurity(fn: () => Promise<unknown>, error: string): Promise<
 // --- push-to-deploy + rollback ----------------------------------------------
 // (Deploys-tab actions. Kept in their own section so the application actions
 //  above stay untouched.)
+
+/** Change only the branch, preserving stored source credentials and deploy triggers. */
+export async function updateAppGitBranchAction(
+  applicationId: string,
+  branch: string
+): Promise<ActionResult> {
+  return wrapSensitive(
+    () => updateAppGitBranch(applicationId, branch),
+    "Could not save Git branch.",
+    null,
+  );
+}
 
 /**
  * Update a custom-git app's push-to-deploy config: branch, watch paths, and the

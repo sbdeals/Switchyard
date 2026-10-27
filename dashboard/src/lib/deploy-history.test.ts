@@ -38,6 +38,8 @@ vi.mock("@/app/login/actions", () => ({ logoutAction: vi.fn() }));
 // Main's AppTabs imports the server-only compose export action via ComposeExportDialog.
 vi.mock("@/app/compose-export-actions", () => ({ loadComposeExportAction: vi.fn() }));
 vi.mock("@/app/deploy-actions", () => ({ deployOptionsAction: vi.fn() }));
+vi.mock("@/app/deploy-trigger-actions", () => ({}));
+vi.mock("server-only", () => ({}));
 vi.mock("@/components/service/primitives", () => ({}));
 vi.mock("@/lib/utils", () => ({}));
 vi.mock("@/lib/deploy-stats", () => import("./deploy-stats"));
