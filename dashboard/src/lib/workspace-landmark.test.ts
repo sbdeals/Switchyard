@@ -10,6 +10,13 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/dokploy", () => ({ loadWorkspace, inferEdges: () => [] }));
 vi.mock("@/lib/collector", () => ({ ensureCollector: () => {} }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => ({ value: "test-session" }) }),
+}));
+vi.mock("@/lib/session", () => ({
+  SESSION_COOKIE: "switchyard_session",
+  openSession: () => ({ email: "test@example.test" }),
+}));
 vi.mock("@/components/Workspace", () => ({
   Workspace: () => createElement("section", null, "Workspace contents"),
 }));

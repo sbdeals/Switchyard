@@ -59,6 +59,8 @@ export function useDialogFocus<T extends HTMLElement>(onClose: () => void) {
     const onKey = (e: KeyboardEvent) => {
       if (stack[stack.length - 1]?.panel !== panel) return;
       if (e.key === SHORTCUTS.close.keys[0]) {
+        // Inline editors use Escape to cancel their draft before closing the panel.
+        if (e.target instanceof Element && e.target.closest("[data-escape-handled]")) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         closeRef.current();

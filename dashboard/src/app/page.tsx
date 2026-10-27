@@ -1,6 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Suspense } from "react";
 import { unstable_rethrow } from "next/navigation";
+import { cookies } from "next/headers";
+import { openSession, SESSION_COOKIE } from "@/lib/session";
 
 import { loadWorkspace, inferEdges } from "@/lib/dokploy";
 import { redactServiceForClient } from "@/lib/service-redaction";
@@ -55,6 +57,9 @@ export default async function Page() {
     );
   }
 
+  const session = openSession((await cookies()).get(SESSION_COOKIE)?.value);
+  const notificationScope = createHash("sha256").update(session?.email ?? "").digest("hex");
+
   return (
     <main>
       <LogoutButton />
@@ -63,6 +68,7 @@ export default async function Page() {
           services={result.services.map(redactServiceForClient)}
           projects={result.projects}
           edges={inferEdges(result.services)}
+          notificationScope={notificationScope}
         />
       </Suspense>
     </main>
