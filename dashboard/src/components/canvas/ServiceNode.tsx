@@ -6,6 +6,7 @@ import { TriangleAlert } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import type { ReferenceWarning } from "@/lib/service-references";
 import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/service-meta";
+import { serviceNotesSubtitle } from "@/lib/service-notes";
 import { SHORTCUTS } from "@/lib/shortcuts";
 import { resolveServiceIcon } from "@/lib/service-icon";
 import { ServiceIcon } from "@/components/ServiceIcon";
@@ -19,12 +20,13 @@ export interface ServiceNodeData extends Record<string, unknown> {
 }
 
 function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData }) {
-  const { service, logo, referenceWarnings, onSelect } = data;
+  const { service, logo, referenceWarnings = [], onSelect } = data;
   const accent = serviceAccent(service);
   const status = resolveServiceDisplay(service.status, service.runtime);
   const warningLabel = referenceWarnings.length > 0
     ? `${referenceWarnings.length} broken ref${referenceWarnings.length === 1 ? "" : "s"}`
     : null;
+  const notesSubtitle = serviceNotesSubtitle(service.description);
 
   return (
     <div
@@ -51,8 +53,11 @@ function ServiceNodeBase({ data, selected }: NodeProps & { data: ServiceNodeData
         <ServiceLogo service={service} logo={logo} accent={accent} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{service.name}</div>
-          <div className="truncate text-[11px] text-[var(--color-fg-muted)]">
-            {serviceSubtitle(service)}
+          <div
+            title={notesSubtitle ? service.description ?? undefined : undefined}
+            className="truncate text-[11px] text-[var(--color-fg-muted)]"
+          >
+            {notesSubtitle || serviceSubtitle(service)}
           </div>
           <div className="truncate text-[10px] text-[var(--color-fg-subtle)]">
             {service.projectName} / {service.environmentName}

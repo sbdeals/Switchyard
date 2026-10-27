@@ -92,6 +92,7 @@ export interface ServiceBase {
   kind: ServiceKind;
   id: string;
   name: string;
+  description: string | null;
   appName: string;
   status: ServiceStatus;
   projectId: string;
@@ -229,7 +230,6 @@ export interface Application extends ServiceBase {
   kind: "application";
   sourceType: AppSource | null;
   buildType: BuildType | null;
-  description: string | null;
   /** Source repo/image reference for display (git URL or owner/repo). */
   repository: string | null;
   // Build configuration (used to prefill the Build settings tab).
@@ -670,6 +670,7 @@ export async function removeEnvironment(environmentId: string): Promise<void> {
 
 interface RawDatabaseDetail {
   name?: string;
+  description?: string | null;
   appName?: string;
   applicationStatus?: DatabaseStatus;
   dockerImage?: string | null;
@@ -731,6 +732,7 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
         ...s,
         kind: "database",
         name: d.name ?? s.id,
+        description: d.description ?? null,
         appName: d.appName ?? "",
         status: d.applicationStatus ?? "idle",
         dockerImage: d.dockerImage ?? null,
@@ -1887,6 +1889,7 @@ export async function removeMount(mountId: string): Promise<void> {
 
 interface RawComposeDetail {
   name?: string;
+  description?: string | null;
   appName?: string;
   composeStatus?: ServiceStatus;
   composeType?: string | null;
@@ -1917,6 +1920,7 @@ async function listCompose(tree: RawProject[]): Promise<ComposeService[]> {
         kind: "compose",
         id,
         name: d.name ?? id,
+        description: d.description ?? null,
         appName: d.appName ?? "",
         status: d.composeStatus ?? "idle",
         dockerImage: null,
@@ -2377,6 +2381,25 @@ export async function deployTemplate(
 }
 
 // --- unified service listing ------------------------------------------------
+
+type ServiceNotesTarget =
+  | Pick<Application | ComposeService, "kind" | "id">
+  | Pick<Database, "kind" | "id" | "engine">;
+
+/**
+ * Dokploy v0.30.10 accepts description on application.update, compose.update,
+ * and every database engine's update schema. This metadata needs no redeploy.
+ */
+export async function updateServiceNotes(
+  service: ServiceNotesTarget,
+  description: string
+): Promise<void> {
+  const type = service.kind === "database" ? service.engine : service.kind;
+  await request(`${type}.update`, {
+    method: "POST",
+    body: { [`${type}Id`]: service.id, description },
+  });
+}
 
 /**
  * Everything the workspace page needs, from a single `project.all` fetch:
