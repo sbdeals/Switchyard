@@ -27,6 +27,11 @@ vi.mock("@/components/ProjectsPanel", () => ({ ProjectsPanel: () => null }));
 vi.mock("@/components/canvas/FlowCanvas", () => ({ FlowCanvas: () => null }));
 vi.mock("@/components/service/ServiceDrawer", () => ({ ServiceDrawer: () => null }));
 vi.mock("@/components/agent/AgentPanel", () => ({ AgentPanel: () => null }));
+vi.mock("@/components/use-workspace-polling", () => ({ useWorkspacePolling: (initial: unknown) => initial }));
+vi.mock("@/components/DeployNotifications", () => ({ DeployNotifications: () => null }));
+vi.mock("@/components/ActivityPanel", () => ({ ActivityPanel: () => null }));
+vi.mock("@/components/KeyboardShortcuts", () => ({ KeyboardShortcuts: () => null }));
+vi.mock("@/components/ProjectLogs", () => ({ ProjectLogs: () => null }));
 
 type Element = ReactElement<Record<string, unknown> & { children?: ReactNode }>;
 function elements(node: ReactNode): Element[] {

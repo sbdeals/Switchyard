@@ -10,6 +10,8 @@ import {
   createEnvironment,
   removeEnvironment,
   listProjects,
+  loadWorkspace,
+  updateServiceNotes,
   getServiceEnvironment,
   getServiceWebhook,
   getServiceComposeFile,
@@ -118,6 +120,7 @@ import {
   deleteProjectSettings,
 } from "@/lib/project-settings-server";
 import type { ProjectSettings } from "@/lib/project-settings";
+import { normalizeServiceNotes } from "@/lib/service-notes";
 import { validateComposeFile } from "@/lib/compose-validation";
 import { parseAppPort } from "@/lib/app-port";
 import { validateMount } from "@/lib/mounts";
@@ -198,6 +201,24 @@ async function resolveTargetEnv(environmentId?: string): Promise<string> {
   return after[0].environmentId;
 }
 
+/** Resolve ownership and the service type from the current user's workspace. */
+export async function saveServiceNotesAction(id: string, notes: string): Promise<ActionResult> {
+  try {
+    if (typeof id !== "string" || !id.trim() || typeof notes !== "string") {
+      throw new Error("Invalid service notes.");
+    }
+    const { services } = await loadWorkspace();
+    const service = services.find((candidate) => candidate.id === id);
+    if (!service) throw new Error("Service unavailable.");
+    await updateServiceNotes(service, normalizeServiceNotes(notes));
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not save service notes. Please try again." };
+  }
+}
+
 // --- databases ----------------------------------------------------------------
 
 /**
@@ -227,7 +248,10 @@ export async function lifecycleAction(
   id: string,
   action: Action
 ): Promise<ActionResult> {
-  return wrap(() => databaseAction(engine, id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership(engine, id);
+    await databaseAction(engine, id, action);
+  });
 }
 
 /**
@@ -351,7 +375,14 @@ export async function renameEnvironmentAction(id: string, name: string): Promise
   return wrapSensitive(() => updateProjectEnvironment(id, name), "Could not rename environment.");
 }
 export async function removeEnvironmentAction(id: string): Promise<ActionResult> {
-  return wrap(() => removeEnvironment(id));
+  return wrap(async () => {
+    if (!(await listProjects()).some((project) =>
+      project.environments.some((environment) => environment.environmentId === id)
+    )) {
+      throw new Error("Environment not found in this workspace.");
+    }
+    await removeEnvironment(id);
+  });
 }
 
 // --- applications -----------------------------------------------------------
@@ -484,7 +515,10 @@ export async function quickDeployGithubAction(input: {
 }
 
 export async function appLifecycleAction(id: string, action: Action): Promise<ActionResult> {
-  return wrap(() => applicationAction(id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership("application", id);
+    await applicationAction(id, action);
+  });
 }
 
 export async function updateApplicationAction(
@@ -866,7 +900,10 @@ export async function createComposeAction(
 }
 
 export async function composeLifecycleAction(id: string, action: Action): Promise<ActionResult> {
-  return wrap(() => composeAction(id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership("compose", id);
+    await composeAction(id, action);
+  });
 }
 
 export async function saveComposeFileAction(
@@ -926,7 +963,12 @@ export async function createDestinationAction(
 }
 
 export async function removeDestinationAction(destinationId: string): Promise<ActionResult> {
-  return wrap(() => removeDestination(destinationId));
+  return wrap(async () => {
+    if (!(await listDestinations()).some((destination) => destination.destinationId === destinationId)) {
+      throw new Error("Destination not found in this workspace.");
+    }
+    await removeDestination(destinationId);
+  });
 }
 
 export async function listDatabaseBackupsAction(
