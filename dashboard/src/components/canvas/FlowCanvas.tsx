@@ -22,6 +22,7 @@ import { resolveServiceDisplay, serviceAccent, serviceSubtitle } from "@/lib/ser
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
 import { SHORTCUTS } from "@/lib/shortcuts";
+import { CanvasResizeFit } from "@/components/canvas/CanvasResizeFit";
 import { canvasAutoLayout } from "@/lib/canvas-auto-layout";
 import {
   createCanvasLayoutActions,
@@ -31,8 +32,10 @@ import {
 } from "@/lib/canvas-layout-actions";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import {
+  CANVAS_ROW_HEIGHT as ROW_H,
   canvasCenter,
   isCanvasCreateShortcut,
+  mergeNodePositions,
   placeService,
   screenToFlowPosition,
   type Point,
@@ -40,7 +43,6 @@ import {
 } from "@/lib/canvas-layout";
 
 const COL_W = 300;
-const ROW_H = 104;
 /**
  * Group-columns per grid row. With one column per project, an unbounded row
  * turns a dozen projects into a horizontal strip; wrapping at 4 keeps the
@@ -84,8 +86,8 @@ export function FlowCanvas({
   const logos = useTemplateLogos();
 
   const buildNodes = useCallback(
-    (overrides?: Positions): Node[] => {
-      const saved = { ...loadPositions(), ...createdPositions, ...(overrides ?? {}) };
+    (overrides: Positions, current: Node[] = []): Node[] => {
+      const saved = { ...loadPositions(), ...createdPositions, ...overrides };
       // Group by project / environment for a tidy default layout. The group
       // name renders inside each card (nodes are draggable — a label pinned to
       // the background would stay behind when its services move).
@@ -118,14 +120,14 @@ export function FlowCanvas({
             ariaRole: "button",
             ariaLabel: `${service.name}, ${serviceSubtitle(service)}, ${status.label}${status.detail ? ` (${status.detail})` : ""} — open details`,
             className: "rounded-xl focus-visible:!outline-2 focus-visible:!outline-offset-2 focus-visible:!outline-[var(--color-brand)]",
-            position: saved[service.id] ?? { x, y: rowY + row * ROW_H },
+            position: { x, y: rowY + row * ROW_H },
             data: { service, logo: resolveServiceLogo(service, logos) } as ServiceNodeData,
           });
         });
         rowMaxServices = Math.max(rowMaxServices, svcs.length);
         col++;
       }
-      return nodes;
+      return mergeNodePositions(nodes, saved, current);
     },
     [services, logos, createdPositions]
   );
@@ -197,8 +199,7 @@ export function FlowCanvas({
   };
 
   // Re-sync with fresh server data (added/removed services, status changes)
-  // while keeping any in-session node positions. Standard React Flow
-  // controlled-data pattern.
+  // while keeping in-session positions, including Tidy/Undo and active drags.
   useEffect(() => {
     // Restore browser storage after hydration. Reading it during the first
     // render disagrees with the server's default positions.
@@ -206,7 +207,7 @@ export function FlowCanvas({
     positionsLoaded.current = true;
     setNodes((curr) => {
       const current = curr.filter((node) => node.type === "service");
-      return buildNodes(positionsForCanvasSync(current, preserveCurrent));
+      return buildNodes(positionsForCanvasSync(current, preserveCurrent), preserveCurrent ? current : []);
     });
     setEdges(buildEdges());
   }, [buildNodes, buildEdges, setNodes, setEdges]);
@@ -273,6 +274,14 @@ export function FlowCanvas({
         nodes={nodes}
         edges={edges}
         onNodesChange={handleNodesChange}
+        onNodeDragStop={(_, _node, draggedNodes) => {
+          // A later drag supersedes a quick-deploy placement, including when
+          // localStorage is unavailable and only the in-memory placement exists.
+          setCreatedPositions((positions) => draggedNodes.reduce((updated, node) =>
+            Object.hasOwn(updated, node.id)
+              ? placeService(updated, node.id, node.position)
+              : updated, positions));
+        }}
         onEdgesChange={onEdgesChange}
         onNodeClick={(_, node) => onSelect((node.data as ServiceNodeData).service)}
         onKeyDown={(e) => {
@@ -296,6 +305,7 @@ export function FlowCanvas({
         minZoom={0.3}
         maxZoom={1.5}
       >
+        <CanvasResizeFit />
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#ffffff2b" />
         <div role="group" aria-label="Canvas controls">
           <Controls aria-label="" className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />

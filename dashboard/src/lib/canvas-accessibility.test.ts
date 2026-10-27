@@ -15,6 +15,8 @@ vi.mock("react", async (importOriginal) => ({
   useEffect: (effect: () => void) => { captured.effects.push(effect); },
 }));
 
+vi.mock("@/components/canvas/CanvasResizeFit", () => ({ CanvasResizeFit: () => null }));
+
 vi.mock("@xyflow/react", () => ({
   ReactFlow: (props: ReactFlowProps) => {
     captured.flow = props;
