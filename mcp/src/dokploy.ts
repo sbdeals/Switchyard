@@ -217,6 +217,9 @@ interface RawDetail {
   applicationStatus?: string;
   composeStatus?: string;
   env?: string | null;
+  buildArgs?: string | null;
+  buildSecrets?: string | null;
+  createEnvFile?: boolean | null;
 }
 
 async function dbDetail(engine: Engine, id: string): Promise<RawDetail> {
@@ -243,6 +246,7 @@ export interface ServiceRef {
 /**
  * Enumerate every service across the workspace, enriched with per-service
  * detail (an N+1 fan-out, same as the dashboard's loadWorkspace).
+ * Includes raw env for manage_env; discovery responses must project metadata only.
  */
 export async function listServices(): Promise<ServiceSummary[]> {
   const tree = await rawTree();
@@ -394,10 +398,21 @@ export async function setAppGitSource(
   });
 }
 
-export async function saveApplicationEnvironment(id: string, env: string): Promise<void> {
+export async function saveApplicationEnvironment(
+  id: string,
+  env: string,
+  settings: { buildArgs?: string; buildSecrets?: string; createEnvFile?: boolean } = {}
+): Promise<void> {
+  const current = await appDetail(id);
   await request("application.saveEnvironment", {
     method: "POST",
-    body: { applicationId: id, env, buildArgs: "", buildSecrets: "", createEnvFile: false },
+    body: {
+      applicationId: id,
+      env,
+      buildArgs: settings.buildArgs ?? current.buildArgs ?? "",
+      buildSecrets: settings.buildSecrets ?? current.buildSecrets ?? "",
+      createEnvFile: settings.createEnvFile ?? current.createEnvFile ?? false,
+    },
   });
 }
 
