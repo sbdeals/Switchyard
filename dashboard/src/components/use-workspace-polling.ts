@@ -51,7 +51,7 @@ export function useWorkspacePolling(initial: WorkspaceData, projectId: string | 
       pending = true;
       try {
         const response = await fetch("/api/workspace", { cache: "no-store", signal: controller.signal });
-        if (response.redirected && new URL(response.url).pathname === "/login") {
+        if (response.status === 401 || (response.redirected && new URL(response.url).pathname === "/login")) {
           router.replace("/login");
           return;
         }

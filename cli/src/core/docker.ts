@@ -76,8 +76,8 @@ export async function dockerOk(args: string[]): Promise<boolean> {
   return (await docker(args)).code === 0;
 }
 
-export const dockerInherit = (args: string[]): Promise<number> =>
-  runInherit(dockerCommand, args, { env: { ...process.env, ...dockerExtraEnv } });
+export const dockerInherit = (args: string[], opts: Omit<RunOptions, "input"> = {}): Promise<number> =>
+  runInherit(dockerCommand, args, { ...opts, env: { ...(opts.env ?? process.env), ...dockerExtraEnv } });
 
 export type DockerAvailability = "ok" | "no-cli" | "no-daemon";
 

@@ -28,9 +28,9 @@ export function DeploymentLogs({
         const result = await response.json() as { logs: string };
         if (!controller.signal.aborted) setLogs(result.logs);
       })
-      .catch((cause: unknown) => {
+      .catch(() => {
         if (!controller.signal.aborted) {
-          setError(cause instanceof Error ? cause.message : "Deployment logs unavailable.");
+          setError("Deployment logs unavailable. Try again.");
         }
       });
     return () => controller.abort();

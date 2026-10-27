@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { DirtyGuardScope } from "@/components/DirtyGuard";
 import {
   X,
   Database as DatabaseIcon,
@@ -12,8 +13,7 @@ import {
   Settings2,
   SlidersHorizontal,
   KeyRound,
-  Eye,
-  EyeOff,
+  Plug,
   Box,
   Globe,
   Layers,
@@ -29,9 +29,9 @@ import {
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
-import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
+import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { VariablesTab } from "@/components/service/VariablesTab";
 import { BackupsTab } from "@/components/service/BackupsTab";
 import { VolumesTab } from "@/components/service/VolumesTab";
@@ -40,6 +40,8 @@ import { LogsTab } from "@/components/service/LogsTab";
 import { DeploymentLogs } from "@/components/service/DeploymentLogs";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { CopyLinkButton } from "@/components/service/CopyLinkButton";
+import { ConnectTab } from "@/components/service/ConnectTab";
 import {
   AppOverviewTab,
   AppBuildTab,
@@ -49,7 +51,7 @@ import {
   DeploymentHistory,
   SchedulesTab,
 } from "@/components/service/AppTabs";
-import { NetworkingTab } from "@/components/service/networking";
+import { AppHttpSettings, NetworkingTab } from "@/components/service/networking";
 import {
   ComposeOverviewTab,
   ComposeEditorTab,
@@ -60,7 +62,6 @@ import {
   inputCls,
   Field,
   Info,
-  CopyButton,
   LifecycleButtons,
   SaveRow,
   DangerZone,
@@ -68,25 +69,11 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { getServiceTabs, type TabId } from "@/lib/deeplink";
 
-type TabId =
-  | "overview"
-  | "variables"
-  | "data"
-  | "deploy"
-  | "build"
-  | "domains"
-  | "deployments"
-  | "schedules"
-  | "editor"
-  | "volumes"
-  | "metrics"
-  | "logs"
-  | "console"
-  | "backups"
-  | "settings";
 const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
+  connect: { label: "Connect", icon: <Plug className="size-4" /> },
   variables: { label: "Variables", icon: <KeyRound className="size-4" /> },
   data: { label: "Data", icon: <Table2 className="size-4" /> },
   deploy: { label: "Deploy", icon: <Server className="size-4" /> },
@@ -102,70 +89,6 @@ const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   backups: { label: "Backups", icon: <Archive className="size-4" /> },
   settings: { label: "Settings", icon: <Settings2 className="size-4" /> },
 };
-const DB_TABS: TabId[] = [
-  "overview",
-  "variables",
-  "volumes",
-  "metrics",
-  "logs",
-  "console",
-  "backups",
-  "settings",
-];
-const APP_TABS: TabId[] = [
-  "overview",
-  "variables",
-  "deploy",
-  "build",
-  "domains",
-  "deployments",
-  "schedules",
-  "volumes",
-  "metrics",
-  "logs",
-  "console",
-  "settings",
-];
-const COMPOSE_TABS: TabId[] = [
-  "overview",
-  "variables",
-  "domains",
-  "deployments",
-  "editor",
-  "volumes",
-  "metrics",
-  "logs",
-  "console",
-  "settings",
-];
-
-/**
- * Whether to show the Postgres "Data" tab for a service. Covers the two data
- * models the tab supports: a Dokploy-managed Postgres database, and a compose
- * stack that declares a postgres-imaged service. Both signals are static (no
- * runtime container query) so the tab list can render synchronously; the tab
- * itself resolves the actual running container(s) server-side.
- */
-function isPostgresService(s: Service): boolean {
-  if (s.kind === "database") return s.engine === "postgres" || /postgres/i.test(s.dockerImage ?? "");
-  if (s.kind === "compose") return composeMentionsPostgres(s.composeFile);
-  return false;
-}
-
-/** True when a compose file has a service whose `image:` references postgres. */
-function composeMentionsPostgres(file: string | null): boolean {
-  if (!file) return false;
-  return /^[ \t]*image:[ \t]*["']?[^\n#"']*postgres/im.test(file);
-}
-
-/** Insert the Data tab right after Overview. */
-function withDataTab(base: TabId[]): TabId[] {
-  const out = [...base];
-  const i = out.indexOf("overview");
-  out.splice(i + 1, 0, "data");
-  return out;
-}
-
 /**
  * Resizable-drawer width, persisted per browser.
  *
@@ -345,36 +268,29 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, deploymentId, onClose }: {
+export function ServiceDrawer({ service, tab, sessionKey, deploymentId, onTabChange, onClose }: {
   service: Service | null;
+  tab: TabId;
+  sessionKey: string | null;
   deploymentId?: string | null;
+  onTabChange: (tab: TabId) => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<TabId>("overview");
-  const [showDeploymentLogs, setShowDeploymentLogs] = useState(Boolean(deploymentId));
   const titleId = useId();
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   const { width, apply: applyWidth, reset: resetWidth } = useDrawerWidth();
-  // Reset when a different service or deployment is opened (adjust state during
-  // render — the React-recommended alternative to a resetting effect).
-  const [shownTarget, setShownTarget] = useState<string | null>(null);
-  const target = service ? `${service.id}:${deploymentId ?? ""}` : null;
+  const tabs = service ? getServiceTabs(service) : [];
+  const [showDeploymentLogs, setShowDeploymentLogs] = useState(Boolean(deploymentId));
+  const target = service ? JSON.stringify([service.id, deploymentId, sessionKey]) : null;
+  const [shownTarget, setShownTarget] = useState(target);
   if (target !== shownTarget) {
     setShownTarget(target);
-    setTab(deploymentId ? "logs" : "overview");
     setShowDeploymentLogs(Boolean(deploymentId));
   }
-  const baseTabs =
-    service?.kind === "application"
-      ? APP_TABS
-      : service?.kind === "compose"
-        ? COMPOSE_TABS
-        : DB_TABS;
-  const tabs = service && isPostgresService(service) ? withDataTab(baseTabs) : baseTabs;
 
   return (
     <AnimatePresence>
-      {service && (
+      {service && sessionKey && (
         <>
           <motion.div
             className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
@@ -412,7 +328,7 @@ export function ServiceDrawer({ service, deploymentId, onClose }: {
                 else if (e.key === "End") next = tabs.length - 1;
                 if (next === null) return;
                 e.preventDefault();
-                setTab(tabs[next]);
+                onTabChange(tabs[next]);
                 const el = e.currentTarget.querySelector<HTMLElement>(
                   `#drawer-tab-${tabs[next]}`
                 );
@@ -429,7 +345,7 @@ export function ServiceDrawer({ service, deploymentId, onClose }: {
                   aria-selected={tab === id}
                   aria-controls="drawer-tabpanel"
                   tabIndex={tab === id ? 0 : -1}
-                  onClick={() => setTab(id)}
+                  onClick={() => onTabChange(id)}
                   className={cn(
                     "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
                     tab === id
@@ -443,7 +359,9 @@ export function ServiceDrawer({ service, deploymentId, onClose }: {
               ))}
             </nav>
 
-            <div
+            <DirtyGuardScope key={sessionKey} scope={sessionKey}>
+            <PanelErrorBoundary
+              key={`${service.kind}:${service.id}:${tab}`}
               id="drawer-tabpanel"
               role="tabpanel"
               aria-labelledby={`drawer-tab-${tab}`}
@@ -458,10 +376,11 @@ export function ServiceDrawer({ service, deploymentId, onClose }: {
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "connect" && service.kind === "database" && <ConnectTab key={service.id} db={service} />}
+              {tab === "variables" && <VariablesTab key={`${service.kind}:${service.id}`} service={service} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
-              {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
-              {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
+              {tab === "deploy" && service.kind === "application" && <AppDeployTab key={service.id} app={service} />}
+              {tab === "build" && service.kind === "application" && <AppBuildTab key={service.id} app={service} />}
               {tab === "domains" && service.kind === "application" && (
                 <NetworkingTab app={service} />
               )}
@@ -469,7 +388,7 @@ export function ServiceDrawer({ service, deploymentId, onClose }: {
                 <ComposeDomainsTab compose={service} />
               )}
               {tab === "deployments" && service.kind === "application" && (
-                <DeploymentsTab app={service} />
+                <DeploymentsTab key={service.id} app={service} />
               )}
               {tab === "deployments" && service.kind === "compose" && (
                 <DeploymentHistory deployments={service.deployments} />
@@ -478,7 +397,7 @@ export function ServiceDrawer({ service, deploymentId, onClose }: {
                 <SchedulesTab app={service} />
               )}
               {tab === "editor" && service.kind === "compose" && (
-                <ComposeEditorTab compose={service} />
+                <ComposeEditorTab key={service.id} compose={service} />
               )}
               {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
@@ -498,9 +417,13 @@ export function ServiceDrawer({ service, deploymentId, onClose }: {
                 ) : service.kind === "compose" ? (
                   <ComposeSettingsTab compose={service} onClose={onClose} />
                 ) : (
-                  <AppSettingsTab app={service} onClose={onClose} />
+                  <div className="space-y-5">
+                    <AppHttpSettings key={service.id} app={service} />
+                    <AppSettingsTab app={service} onClose={onClose} />
+                  </div>
                 ))}
-            </div>
+            </PanelErrorBoundary>
+            </DirtyGuardScope>
           </motion.aside>
         </>
       )}
@@ -543,14 +466,17 @@ function Header({
           </div>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close service details"
-        className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
-      >
-        <X className="size-4" />
-      </button>
+      <div className="flex shrink-0 items-center gap-2">
+        <CopyLinkButton key={service.id} />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close service details"
+          className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -561,22 +487,10 @@ const useDbLifecycle = (db: Database) =>
 function OverviewTab({ db }: { db: Database }) {
   const meta = ENGINE_META[db.engine];
   const { pending, error, run } = useDbLifecycle(db);
-  const conn = connectionString(db);
 
   return (
     <div className="space-y-5">
       <LifecycleButtons status={db.status} pending={pending} error={error} run={run} />
-
-      {conn && (
-        <Field label="Connection string">
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
-            <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
-              {conn}
-            </code>
-            <CopyButton text={conn} />
-          </div>
-        </Field>
-      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Info label="Image" value={db.dockerImage ?? "—"} mono />
@@ -668,8 +582,6 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
         <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
       </div>
 
-      <PasswordRow db={db} />
-
       <Info label="App name" value={db.appName} mono />
       <Info label="Created" value={db.createdAt ? new Date(db.createdAt).toLocaleString() : "—"} />
 
@@ -681,29 +593,5 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
         onDestroy={() => run("remove", onClose)}
       />
     </div>
-  );
-}
-
-function PasswordRow({ db }: { db: Database }) {
-  const [show, setShow] = useState(false);
-  if (!db.databasePassword) return null;
-  return (
-    <Field label="Password" hint="rotation coming soon">
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2">
-        <code className="flex-1 truncate font-mono text-xs text-[var(--color-fg-muted)]">
-          {show ? db.databasePassword : "•".repeat(16)}
-        </code>
-        <button
-          type="button"
-          onClick={() => setShow((s) => !s)}
-          aria-label={show ? "Hide password" : "Show password"}
-          aria-pressed={show}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
-        >
-          {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-        </button>
-        <CopyButton text={db.databasePassword} />
-      </div>
-    </Field>
   );
 }
