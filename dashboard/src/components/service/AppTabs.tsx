@@ -67,6 +67,8 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { useDirtyGuard } from "@/components/DirtyGuard";
+import { hasDirtyFields } from "@/lib/dirty-guard";
 import { loadClientSecret } from "@/lib/client-secret-loader";
 
 /** Human labels for Dokploy's build strategies. */
@@ -195,6 +197,7 @@ function DomainRow({ d }: { d: AppDomain }) {
   const [draft, setDraft] = useState<DomainInput>(() => toInput(d));
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  useDirtyGuard("Domains", editing && hasDirtyFields(draft, toInput(d)));
 
   function save() {
     if (!draft.host.trim()) return;
@@ -301,6 +304,7 @@ export function DomainsTab({ app }: { app: Application }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
+  useDirtyGuard("Domains", hasDirtyFields(draft, NEW_DOMAIN));
 
   function add() {
     if (!draft.host.trim()) return;
@@ -472,6 +476,7 @@ function AutoDeployPanel({ app }: { app: Application }) {
     branch !== (app.branch ?? "main") ||
     autoDeploy !== app.autoDeploy ||
     watchList.join("\n") !== app.watchPaths.join("\n");
+  useDirtyGuard("Deployments", dirty);
 
   function save() {
     setError(null);
@@ -678,6 +683,7 @@ function BuildStrategyForm({ app }: { app: Application }) {
       (dockerfile !== (app.dockerfile ?? "Dockerfile") ||
         contextPath !== (app.dockerContextPath ?? "") ||
         buildStage !== (app.dockerBuildStage ?? "")));
+  useDirtyGuard("Build", dirty);
 
   function save() {
     setError(null);
@@ -768,6 +774,7 @@ function DockerSourceForm({ app }: { app: Application }) {
     registryUrl.trim() !== (app.registryUrl ?? "") ||
     username !== "" ||
     password !== "";
+  useDirtyGuard("Build", dirty);
 
   function save() {
     setError(null);
@@ -885,6 +892,7 @@ function StartCommandForm({ app, onSaved }: { app: Application; onSaved: (comman
   const [error, setError] = useState<string | null>(null);
 
   const dirty = command !== (app.command ?? "");
+  useDirtyGuard("Build", dirty);
 
   function save() {
     setError(null);
@@ -983,6 +991,7 @@ function ReplicasForm({ app }: { app: Application }) {
   const [replicas, setReplicas] = useState(current);
   const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
   const dirty = replicas !== "" && replicas !== current;
+  useDirtyGuard("Deploy", dirty);
 
   return (
     <DeploySection
@@ -1024,6 +1033,7 @@ function RestartPolicyForm({ app }: { app: Application }) {
   const [maxAttempts, setMaxAttempts] = useState(curMax);
   const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
   const dirty = condition !== curCond || maxAttempts !== curMax;
+  useDirtyGuard("Deploy", dirty);
 
   function onSave() {
     // Merge over any existing policy so Delay/Window set via Dokploy's advanced
@@ -1097,6 +1107,7 @@ function HealthCheckForm({ app, onSaved }: { app: Application; onSaved: (healthC
     timeoutSec !== curTimeout ||
     startSec !== curStart ||
     retries !== curRetries;
+  useDirtyGuard("Deploy", dirty);
 
   const decimal = (v: string) => v.replace(/[^0-9.]/g, "");
 
@@ -1210,6 +1221,7 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
     cpuRes !== (app.cpuReservation ?? "") ||
     memRes !== (app.memoryReservation ?? "");
   const dirty = name !== app.name || resourcesDirty;
+  useDirtyGuard("Settings", dirty);
 
   function save() {
     setSaveError(null);

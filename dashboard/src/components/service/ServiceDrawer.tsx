@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { DirtyGuardScope } from "@/components/DirtyGuard";
 import {
   X,
   Database as DatabaseIcon,
@@ -266,9 +267,10 @@ function ResizeHandle({
   );
 }
 
-export function ServiceDrawer({ service, tab, onTabChange, onClose }: {
+export function ServiceDrawer({ service, tab, sessionKey, onTabChange, onClose }: {
   service: Service | null;
   tab: TabId;
+  sessionKey: string | null;
   onTabChange: (tab: TabId) => void;
   onClose: () => void;
 }) {
@@ -279,7 +281,7 @@ export function ServiceDrawer({ service, tab, onTabChange, onClose }: {
 
   return (
     <AnimatePresence>
-      {service && (
+      {service && sessionKey && (
         <>
           <motion.div
             className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
@@ -348,6 +350,7 @@ export function ServiceDrawer({ service, tab, onTabChange, onClose }: {
               ))}
             </nav>
 
+            <DirtyGuardScope key={sessionKey} scope={sessionKey}>
             <PanelErrorBoundary
               key={`${service.kind}:${service.id}:${tab}`}
               id="drawer-tabpanel"
@@ -404,6 +407,7 @@ export function ServiceDrawer({ service, tab, onTabChange, onClose }: {
                   </div>
                 ))}
             </PanelErrorBoundary>
+            </DirtyGuardScope>
           </motion.aside>
         </>
       )}

@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ENGINES, inferEdges, type Application, type ComposeService, type Service, type ServiceBase } from "./dokploy";
 import { redactServiceForClient } from "./service-redaction";
 import { ComposeDomainsTab, ComposeEditorTab } from "../components/service/ComposeTabs";
+import { DirtyGuardProvider } from "../components/DirtyGuard";
 
 vi.mock("server-only", () => ({}));
 vi.mock("./docker", () => ({}));
@@ -169,7 +170,9 @@ describe("redactServiceForClient", () => {
     expect(redacted).toMatchObject({ composeFile: null, serviceNames: ["web", "db"], hasPostgres: true });
     expect(JSON.stringify(redacted)).not.toContain("compose-sentinel");
     expect(compose.composeFile).toContain("compose-sentinel");
-    const html = renderToStaticMarkup(createElement(ComposeDomainsTab, { compose: redacted }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+      createElement(ComposeDomainsTab, { compose: redacted }),
+    ));
     expect(html).toContain('<option value="web"');
     expect(html).toContain('<option value="db"');
     expect(html).not.toContain("compose-sentinel");
@@ -184,7 +187,9 @@ describe("redactServiceForClient", () => {
 
   it("keeps the compose editor unavailable until its lazy fetch completes", () => {
     const compose = { ...services[1] as ComposeService, composeFile: "TOKEN=compose-prop-sentinel" };
-    const html = renderToStaticMarkup(createElement(ComposeEditorTab, { compose }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+      createElement(ComposeEditorTab, { compose }),
+    ));
 
     expect(html).toContain("Loading compose file");
     expect(html).not.toContain("compose-prop-sentinel");
