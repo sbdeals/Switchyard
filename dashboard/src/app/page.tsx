@@ -58,6 +58,9 @@ export default async function Page() {
   }
 
   const session = openSession((await cookies()).get(SESSION_COOKIE)?.value);
+  const userId = session
+    ? createHash("sha256").update(session.email.trim().toLowerCase()).digest("hex")
+    : null;
   const notificationScope = createHash("sha256").update(session?.email ?? "").digest("hex");
 
   return (
@@ -68,6 +71,7 @@ export default async function Page() {
           services={result.services.map(redactServiceForClient)}
           projects={result.projects}
           edges={inferEdges(result.services)}
+          userId={userId}
           notificationScope={notificationScope}
         />
       </Suspense>

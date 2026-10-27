@@ -32,6 +32,10 @@ export function redactServiceForClient(service: Service): Service {
     ...service,
     environmentVariableCount: service.environmentVariableCount ?? variableCount(service.env),
     env: null,
+    // Safe boolean for onboarding; kept when an already-redacted service is redacted again.
+    hasVariables: service.hasVariables ?? (service.env ?? "").split("\n").some((line) =>
+      /^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=/.test(line.trim()),
+    ),
     dockerImage: redactUrl(service.dockerImage),
   };
   if (base.kind === "compose") {
