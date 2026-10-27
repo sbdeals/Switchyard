@@ -10,7 +10,7 @@ import {
   updateGitDeployAction,
   updateAppGitBranchAction,
 } from "../app/actions";
-import { ENGINES, type MountServiceType } from "./dokploy";
+import { ENGINES, type DockerRegistryPatch, type MountServiceType } from "./dokploy";
 
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
@@ -58,6 +58,66 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("Docker registry credential preservation", () => {
+  const stored = {
+    dockerImage: "private/image:old",
+    username: "SENTINEL_saved_user",
+    password: 'SENTINEL_saved_"password\\secret',
+    registryUrl: "https://SENTINEL_url_user:SENTINEL_registry@registry.example",
+  };
+  const credentials = {
+    username: stored.username,
+    password: stored.password,
+    registryUrl: stored.registryUrl,
+  };
+  const cases: { name: string; patch?: DockerRegistryPatch; expected: typeof credentials | {
+    username: null; password: null; registryUrl: null;
+  } }[] = [
+    { name: "image-only edit", expected: credentials },
+    { name: "untouched fields", patch: {}, expected: credentials },
+    { name: "null fields", patch: { username: null, password: null, registryUrl: null }, expected: credentials },
+    { name: "blank username and password", patch: { username: "", password: "" }, expected: credentials },
+    { name: "changed username", patch: { username: "new-user" }, expected: { ...credentials, username: "new-user" } },
+    { name: "changed password", patch: { password: "new-password" }, expected: { ...credentials, password: "new-password" } },
+    { name: "redacted registry URL", patch: { registryUrl: "https://registry.example" }, expected: credentials },
+    { name: "changed registry URL", patch: { registryUrl: "https://other.example" }, expected: { ...credentials, registryUrl: "https://other.example" } },
+    { name: "empty registry URL", patch: { registryUrl: "" }, expected: { ...credentials, registryUrl: "" } },
+    { name: "explicit clear", patch: { clearCredentials: true }, expected: { username: null, password: null, registryUrl: null } },
+    { name: "clear overrides drafts", patch: { ...credentials, clearCredentials: true }, expected: { username: null, password: null, registryUrl: null } },
+  ];
+
+  it.each(cases)("handles $name without returning secrets", async ({ patch, expected }) => {
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json(projectsWith("application")))
+      .mockResolvedValueOnce(Response.json(stored))
+      .mockResolvedValueOnce(Response.json({}));
+
+    expect(await setAppDockerSourceAction("owned-id", " private/image:new ", patch)).toEqual({ ok: true });
+    expect(mocks.fetch).toHaveBeenCalledTimes(3);
+    expect(mocks.fetch.mock.calls[2][0]).toMatch(/\/api\/application\.saveDockerProvider$/);
+    expect(JSON.parse(mocks.fetch.mock.calls[2][1].body)).toEqual({
+      applicationId: "owned-id",
+      dockerImage: "private/image:new",
+      ...expected,
+    });
+  });
+
+  it.each([false, true])("scrubs stored credentials from backend errors (clear: %s)", async (clearCredentials) => {
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json(projectsWith("application")))
+      .mockResolvedValueOnce(Response.json(stored))
+      .mockResolvedValueOnce(new Response(
+        `Invalid registry ${stored.registryUrl}; user ${stored.username}; password ${stored.password}; ${JSON.stringify({ password: stored.password })}`,
+        { status: 400 },
+      ));
+
+    expect(await setAppDockerSourceAction("owned-id", "private/image:new", { clearCredentials })).toEqual({
+      ok: false,
+      error: 'Dokploy application.saveDockerProvider failed (400): Invalid registry ***; user ***; password ***; {"password":"***"}',
+    });
+  });
+});
 
 const readers = [
   { name: "webhook", type: "application" as const, run: loadServiceWebhookAction, error: "Could not load webhook URL." },
