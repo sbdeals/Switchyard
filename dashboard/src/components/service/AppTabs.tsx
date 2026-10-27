@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
   Globe,
   ExternalLink,
@@ -17,6 +17,8 @@ import {
   Power,
   Clock,
   X,
+  Copy,
+  Check,
 } from "lucide-react";
 import type {
   Application,
@@ -48,12 +50,13 @@ import {
   updateScheduleAction,
   deleteScheduleAction,
   runScheduleAction,
+  loadServiceWebhookAction,
+  loadServiceCommandsAction,
 } from "@/app/actions";
 import {
   inputCls,
   Field,
   Info,
-  CopyButton,
   LifecycleButtons,
   SaveRow,
   DangerZone,
@@ -64,6 +67,9 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { useDirtyGuard } from "@/components/DirtyGuard";
+import { hasDirtyFields } from "@/lib/dirty-guard";
+import { loadClientSecret } from "@/lib/client-secret-loader";
 
 /** Human labels for Dokploy's build strategies. */
 const BUILD_TYPE_LABELS: Record<BuildType, string> = {
@@ -191,6 +197,7 @@ function DomainRow({ d }: { d: AppDomain }) {
   const [draft, setDraft] = useState<DomainInput>(() => toInput(d));
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  useDirtyGuard("Domains", editing && hasDirtyFields(draft, toInput(d)));
 
   function save() {
     if (!draft.host.trim()) return;
@@ -297,6 +304,7 @@ export function DomainsTab({ app }: { app: Application }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
+  useDirtyGuard("Domains", hasDirtyFields(draft, NEW_DOMAIN));
 
   function add() {
     if (!draft.host.trim()) return;
@@ -375,6 +383,82 @@ export function DeploymentsTab({ app }: { app: Application }) {
   );
 }
 
+function WebhookUrl({ app }: { app: Application }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const live = useRef(false);
+
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; };
+  }, []);
+
+  async function load(copy: boolean) {
+    setPending(true);
+    setError(null);
+    setCopied(false);
+    try {
+      const res = await loadServiceWebhookAction(app.id);
+      if (!live.current) return;
+      if (!res.ok || !res.webhookUrl) {
+        setError("Could not load deploy webhook.");
+        return;
+      }
+      if (copy) {
+        await navigator.clipboard.writeText(res.webhookUrl);
+        if (live.current) setCopied(true);
+      } else {
+        setUrl(res.webhookUrl);
+      }
+    } catch {
+      if (live.current) setError(copy ? "Could not copy deploy webhook." : "Could not load deploy webhook.");
+    } finally {
+      if (live.current) setPending(false);
+    }
+  }
+
+  if (!app.hasWebhook) {
+    return (
+      <p className="text-xs text-[var(--color-fg-subtle)]">
+        No webhook token yet — deploy the app once to generate one.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
+        <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
+          {url ?? "••••••••••••••••"}
+        </code>
+        <button
+          type="button"
+          onClick={() => url ? setUrl(null) : void load(false)}
+          disabled={pending}
+          aria-label={url ? "Hide deploy webhook" : "Reveal deploy webhook"}
+          className="inline-flex items-center gap-1 text-xs text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+        >
+          {pending ? <Loader2 className="size-3.5 animate-spin" /> : url ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+          {url ? "Hide" : "Reveal"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void load(true)}
+          disabled={pending}
+          aria-label="Copy deploy webhook"
+          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+        >
+          {copied ? <Check className="size-3.5 text-[var(--color-ok)]" /> : <Copy className="size-3.5" />}
+          <span aria-live="polite" className="sr-only">{copied ? "Copied" : ""}</span>
+        </button>
+      </div>
+      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
+    </div>
+  );
+}
+
 /**
  * Push-to-deploy config for a custom-git app: the copyable Dokploy deploy
  * webhook to wire into a Git host, plus branch / watch-paths / auto-deploy.
@@ -392,6 +476,7 @@ function AutoDeployPanel({ app }: { app: Application }) {
     branch !== (app.branch ?? "main") ||
     autoDeploy !== app.autoDeploy ||
     watchList.join("\n") !== app.watchPaths.join("\n");
+  useDirtyGuard("Deployments", dirty);
 
   function save() {
     setError(null);
@@ -416,18 +501,7 @@ function AutoDeployPanel({ app }: { app: Application }) {
       </div>
 
       <Field label="Deploy webhook URL" hint="add to your Git host">
-        {app.webhookUrl ? (
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
-            <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
-              {app.webhookUrl}
-            </code>
-            <CopyButton text={app.webhookUrl} />
-          </div>
-        ) : (
-          <p className="text-xs text-[var(--color-fg-subtle)]">
-            No webhook token yet — deploy the app once to generate one.
-          </p>
-        )}
+        <WebhookUrl key={app.id} app={app} />
       </Field>
       <p className="text-[11px] leading-relaxed text-[var(--color-fg-subtle)]">
         Add this as a push webhook in your Git host (GitHub: Settings → Webhooks,
@@ -588,7 +662,7 @@ export function AppBuildTab({ app }: { app: Application }) {
   return (
     <div className="space-y-6">
       {isDocker ? <DockerSourceForm app={app} /> : <BuildStrategyForm app={app} />}
-      <StartCommandForm app={app} />
+      <AppCommandEditor key={app.id} app={app} />
     </div>
   );
 }
@@ -609,6 +683,7 @@ function BuildStrategyForm({ app }: { app: Application }) {
       (dockerfile !== (app.dockerfile ?? "Dockerfile") ||
         contextPath !== (app.dockerContextPath ?? "") ||
         buildStage !== (app.dockerBuildStage ?? "")));
+  useDirtyGuard("Build", dirty);
 
   function save() {
     setError(null);
@@ -699,6 +774,7 @@ function DockerSourceForm({ app }: { app: Application }) {
     registryUrl.trim() !== (app.registryUrl ?? "") ||
     username !== "" ||
     password !== "";
+  useDirtyGuard("Build", dirty);
 
   function save() {
     setError(null);
@@ -779,7 +855,36 @@ function DockerSourceForm({ app }: { app: Application }) {
   );
 }
 
-function StartCommandForm({ app }: { app: Application }) {
+function AppCommandEditor({ app, healthcheck = false }: { app: Application; healthcheck?: boolean }) {
+  const [commands, setCommands] = useState<Pick<Application, "command" | "healthCheckSwarm"> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => loadClientSecret(
+    () => loadServiceCommandsAction("application", app.id),
+    (res) => {
+      if (res.ok) setCommands({ command: res.command, healthCheckSwarm: res.healthCheckSwarm });
+      else setError("Could not load service commands.");
+    },
+    () => setError("Could not load service commands."),
+  ), [app.id]);
+
+  if (error) return <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>;
+  if (!commands) {
+    return (
+      <div role="status" aria-label="Loading service commands" className="flex items-center gap-2 text-xs text-[var(--color-fg-subtle)]">
+        <Loader2 className="size-4 animate-spin" /> Loading service commands…
+      </div>
+    );
+  }
+  const loadedApp = { ...app, ...commands };
+  return healthcheck ? (
+    <HealthCheckForm app={loadedApp} onSaved={(healthCheckSwarm) => setCommands({ ...commands, healthCheckSwarm })} />
+  ) : (
+    <StartCommandForm app={loadedApp} onSaved={(command) => setCommands({ ...commands, command })} />
+  );
+}
+
+function StartCommandForm({ app, onSaved }: { app: Application; onSaved: (command: string | null) => void }) {
   const [command, setCommand] = useState(app.command ?? "");
   const [redeploy, setRedeploy] = useState(false);
   const [saving, startSave] = useTransition();
@@ -787,6 +892,7 @@ function StartCommandForm({ app }: { app: Application }) {
   const [error, setError] = useState<string | null>(null);
 
   const dirty = command !== (app.command ?? "");
+  useDirtyGuard("Build", dirty);
 
   function save() {
     setError(null);
@@ -796,7 +902,10 @@ function StartCommandForm({ app }: { app: Application }) {
         { command: command.trim() || null },
         redeploy
       );
-      if (res.ok) flashSaved();
+      if (res.ok) {
+        onSaved(command.trim() || null);
+        flashSaved();
+      }
       else setError(res.error);
     });
   }
@@ -863,11 +972,14 @@ function useDeploySave(app: Application) {
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
-  const save = (patch: ApplicationPatch) => {
+  const save = (patch: ApplicationPatch, onSaved?: () => void) => {
     setError(null);
     startSave(async () => {
       const res = await updateApplicationAction(app.id, patch, redeploy);
-      if (res.ok) flashSaved();
+      if (res.ok) {
+        onSaved?.();
+        flashSaved();
+      }
       else setError(res.error);
     });
   };
@@ -879,6 +991,7 @@ function ReplicasForm({ app }: { app: Application }) {
   const [replicas, setReplicas] = useState(current);
   const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
   const dirty = replicas !== "" && replicas !== current;
+  useDirtyGuard("Deploy", dirty);
 
   return (
     <DeploySection
@@ -920,6 +1033,7 @@ function RestartPolicyForm({ app }: { app: Application }) {
   const [maxAttempts, setMaxAttempts] = useState(curMax);
   const { redeploy, setRedeploy, saving, saved, error, save } = useDeploySave(app);
   const dirty = condition !== curCond || maxAttempts !== curMax;
+  useDirtyGuard("Deploy", dirty);
 
   function onSave() {
     // Merge over any existing policy so Delay/Window set via Dokploy's advanced
@@ -974,7 +1088,7 @@ function RestartPolicyForm({ app }: { app: Application }) {
   );
 }
 
-function HealthCheckForm({ app }: { app: Application }) {
+function HealthCheckForm({ app, onSaved }: { app: Application; onSaved: (healthCheck: HealthCheckSwarm | null) => void }) {
   const hc = app.healthCheckSwarm;
   const curCmd = decodeTest(hc?.Test);
   const curInterval = nsToSec(hc?.Interval);
@@ -993,6 +1107,7 @@ function HealthCheckForm({ app }: { app: Application }) {
     timeoutSec !== curTimeout ||
     startSec !== curStart ||
     retries !== curRetries;
+  useDirtyGuard("Deploy", dirty);
 
   const decimal = (v: string) => v.replace(/[^0-9.]/g, "");
 
@@ -1004,7 +1119,8 @@ function HealthCheckForm({ app }: { app: Application }) {
     if (timeoutSec !== "") next.Timeout = secToNs(timeoutSec);
     if (startSec !== "") next.StartPeriod = secToNs(startSec);
     if (retries !== "") next.Retries = Number(retries);
-    save({ healthCheckSwarm: Object.keys(next).length > 0 ? next : null });
+    const healthCheckSwarm = Object.keys(next).length > 0 ? next : null;
+    save({ healthCheckSwarm }, () => onSaved(healthCheckSwarm));
   }
 
   return (
@@ -1083,7 +1199,7 @@ export function AppDeployTab({ app }: { app: Application }) {
       </p>
       <ReplicasForm app={app} />
       <RestartPolicyForm app={app} />
-      <HealthCheckForm app={app} />
+      <AppCommandEditor key={app.id} app={app} healthcheck />
     </div>
   );
 }
@@ -1104,6 +1220,7 @@ export function AppSettingsTab({ app, onClose }: { app: Application; onClose: ()
     cpuRes !== (app.cpuReservation ?? "") ||
     memRes !== (app.memoryReservation ?? "");
   const dirty = name !== app.name || resourcesDirty;
+  useDirtyGuard("Settings", dirty);
 
   function save() {
     setSaveError(null);
