@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import { createElement } from "react";
+import { createHash } from "node:crypto";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Page from "../app/page";
 import type { ComposeService, Service } from "./dokploy";
 import { redactErrorMessage } from "./error-redaction";
+import { openSession } from "./session";
 
 const mocks = vi.hoisted(() => ({
   loadWorkspace: vi.fn(),
@@ -22,7 +24,7 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("@/lib/session", () => ({
   SESSION_COOKIE: "switchyard_session",
-  openSession: () => ({ email: "test@example.test" }),
+  openSession: vi.fn(() => ({ email: "test@example.test" })),
 }));
 vi.mock("@/lib/collector", () => ({ ensureCollector: vi.fn() }));
 vi.mock("@/components/Workspace", () => ({ Workspace: mocks.workspace }));
@@ -164,12 +166,26 @@ describe("workspace page", () => {
     expect(html).not.toContain("COMPOSE_PAGE_SENTINEL");
     expect(props.services[0]).toMatchObject({
       env: null,
+      hasVariables: true,
       composeFile: null,
       serviceNames: ["db"],
       hasPostgres: true,
     });
     expect(mocks.inferEdges).toHaveBeenCalledWith(services);
     expect(services).toEqual(original);
+  });
+
+  it("passes only the normalized email hash for onboarding dismissal", async () => {
+    const email = " Onboarding.User@Example.test ";
+    vi.mocked(openSession).mockReturnValueOnce({ email, dokployCookie: "SESSION_SENTINEL", iat: 0 });
+    mocks.loadWorkspace.mockResolvedValueOnce({ services: [], projects: [] });
+
+    const html = renderToStaticMarkup(await Page());
+    const props = mocks.workspace.mock.calls[0][0];
+
+    expect(props.userId).toBe(createHash("sha256").update("onboarding.user@example.test").digest("hex"));
+    expect(html).not.toContain(email);
+    expect(html).not.toContain("SESSION_SENTINEL");
   });
 
   it("preserves a login redirect instead of rendering the error panel", async () => {

@@ -258,6 +258,24 @@ afterEach(() => {
 });
 
 describe("service drawer navigation", () => {
+  it.each(["domains", "variables"] as const)("opens a checklist destination at %s through the dirty guard", (tab) => {
+    const hook = mount("/?service=app&tab=overview");
+    hook.render();
+    hook.markDirty("Settings");
+
+    hook.render().open("app", tab);
+    expect(hook.pending).toBe(true);
+    expect(hook.render().tab).toBe("overview");
+    hook.keep();
+    expect(hook.registry.labels()).toEqual(["Settings"]);
+
+    hook.render().open("app", tab);
+    hook.discard();
+    expect(hook.render()).toMatchObject({ service: services[0], tab });
+    expect(new URL(hook.location.href).searchParams.get("tab")).toBe(tab);
+    expect(hook.registry.labels()).toEqual([]);
+  });
+
   it("opens Activity's Deploys destination in history and restores it on Forward", () => {
     const hook = mount("/?project=one#canvas");
     hook.render().open("app", "deployments");
