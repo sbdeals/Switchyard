@@ -13,6 +13,7 @@ import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { ProjectLogs } from "@/components/ProjectLogs";
 import { useServiceDeeplink } from "@/components/use-service-deeplink";
 import { DirtyGuardProvider } from "@/components/DirtyGuard";
@@ -87,6 +88,7 @@ function WorkspaceContent({
           >
             <RefreshCw className="size-3.5" /> Refresh
           </button>
+          <KeyboardShortcuts />
           <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
         </div>
       </header>
@@ -109,7 +111,7 @@ function WorkspaceContent({
         </motion.div>
       )}
 
-      <ServiceDrawer service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
+      <ServiceDrawer services={services} onSelectService={drawer.open} service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
       {drawer.notFound && (
         <div role="status" className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-4 py-2 text-sm shadow-lg">
           Service not found
