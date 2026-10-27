@@ -3,6 +3,7 @@ import type { CreateMountInput, Mount, MountPatch } from "./dokploy";
 
 const api = vi.hoisted(() => ({
   listMounts: vi.fn(),
+  loadWorkspace: vi.fn(async () => ({ services: [{ id: "owned-app", kind: "application" }], projects: [] })),
   createMount: vi.fn(),
   updateMount: vi.fn(),
   removeMount: vi.fn(),
@@ -11,6 +12,8 @@ const api = vi.hoisted(() => ({
   unstable_rethrow: vi.fn(),
 }));
 
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 vi.mock("@/lib/dokploy", () => api);
 vi.mock("next/cache", () => ({ revalidatePath: api.revalidatePath }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: api.unstable_rethrow }));
