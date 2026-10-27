@@ -25,10 +25,16 @@ interface Snapshot {
   fetchedAt: number;
 }
 
-export function ProjectLogs({ projects }: { projects: ProjectNode[] }) {
+export function ProjectLogs({ projects, selectedProjectId }: {
+  projects: ProjectNode[];
+  /** The workspace supplies its shared project filter; standalone callers keep the local selector. */
+  selectedProjectId?: string | null;
+}) {
   const [projectId, setProjectId] = useState("");
   const [environmentId, setEnvironmentId] = useState("");
-  const project = projects.find((p) => p.projectId === projectId) ?? projects[0];
+  const project = selectedProjectId === undefined
+    ? projects.find((p) => p.projectId === projectId) ?? projects[0]
+    : projects.find((p) => p.projectId === selectedProjectId);
   const environment = project?.environments.find((e) => e.environmentId === environmentId)
     ?? project?.environments[0];
 
@@ -42,7 +48,7 @@ export function ProjectLogs({ projects }: { projects: ProjectNode[] }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
+          {selectedProjectId === undefined && <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
             Project
             <select
               aria-label="Log project"
@@ -52,7 +58,7 @@ export function ProjectLogs({ projects }: { projects: ProjectNode[] }) {
             >
               {projects.map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}
             </select>
-          </label>
+          </label>}
           <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
             Environment
             <select
@@ -69,7 +75,9 @@ export function ProjectLogs({ projects }: { projects: ProjectNode[] }) {
       {project && environment ? (
         <ScopedLogs key={`${project.projectId}:${environment.environmentId}`} projectId={project.projectId} environmentId={environment.environmentId} />
       ) : (
-        <p className="py-12 text-center text-sm text-[var(--color-fg-muted)]">Create a project and environment to explore its logs.</p>
+        <p className="py-12 text-center text-sm text-[var(--color-fg-muted)]">{projects.length > 0 && selectedProjectId === null
+          ? "Select a project above to explore its logs."
+          : "Create a project and environment to explore its logs."}</p>
       )}
     </section>
   );
