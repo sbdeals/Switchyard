@@ -3,13 +3,13 @@ import { redirect } from "next/navigation";
 import { callAction, safeReturnTo, SESSION_EXPIRED_MESSAGE, signInHref } from "./action-call";
 import { sessionExpiredResult } from "./session-action-error";
 import {
-  renameProjectAction, updateApplicationAction, createSecurityAction,
+  createProjectAction, updateApplicationAction, createSecurityAction,
   loadServiceEnvAction, loadComposeFileAction, loadServiceCommandsAction, loadServiceWebhookAction,
 } from "@/app/actions";
 import { getDatabaseConnectionAction } from "@/app/db-connect-actions";
 
 const mocks = vi.hoisted(() => ({
-  renameProject: vi.fn(),
+  createProject: vi.fn(),
   requireServiceOwnership: vi.fn(),
   updateApplication: vi.fn(),
   assertApplicationAccess: vi.fn(),
@@ -32,7 +32,7 @@ beforeEach(() => vi.resetAllMocks());
 
 describe("server action recovery", () => {
   const actions = [
-    { name: "ordinary mutation", run: () => renameProjectAction("project", "draft name"), source: mocks.renameProject },
+    { name: "ordinary mutation", run: () => createProjectAction("draft name"), source: mocks.createProject },
     { name: "sensitive mutation", run: () => updateApplicationAction("app", { command: "draft command" }), source: mocks.requireServiceOwnership },
     { name: "security mutation", run: () => createSecurityAction("app", "user", "test-password"), source: mocks.assertApplicationAccess },
     { name: "env loader", run: () => loadServiceEnvAction("application", "app"), source: mocks.getServiceEnvironment },
