@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
-import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { newestDeployment } from "@/lib/deployment-commit";
 import { LAST_DEPLOY_LABEL, resolveServiceState, serviceAccent, serviceLabel } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
