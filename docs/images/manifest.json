@@ -7,7 +7,7 @@
   {
     "file": "new-service-menu.png",
     "title": "New service menu",
-    "shows": "The open 'New service' dropdown. APPLICATION section: docker-image quick deploy input, git-repo (Nixpacks build) input, and Compose stack row. DATABASE section: PostgreSQL, MySQL, MariaDB, MongoDB, and Redis rows with their image:version tags (postgres:18, mysql:8.4, mariadb:11, mongo:8, redis:7)."
+    "shows": "The open 'New service' dropdown with the project selector (My Project / production). APPLICATION section: docker-image quick deploy input, git-repo (Nixpacks build) input, From GitHub (private repos) row, and Compose stack row. TEMPLATES section: App catalog. DATABASE section: PostgreSQL, MySQL, MariaDB, MongoDB, and Redis rows with their image:version tags (postgres:18, mysql:8.4, mariadb:11, mongo:8, redis:7)."
   },
   {
     "file": "deploy-image-filled.png",
@@ -52,7 +52,7 @@
   {
     "file": "compose-editor.png",
     "title": "Compose stack editor",
-    "shows": "The drawer opened by New service > Compose stack (compose-sgzh, Idle): the Compose tab's docker-compose.yml editor seeded with the starter template (nginx:alpine on port 8080), with Save and Save & deploy buttons. Closed without saving or deploying."
+    "shows": "The drawer opened by New service > Compose stack (compose-iduw, Idle): the Compose tab's docker-compose.yml editor seeded with the starter template (nginx:alpine on port 8080), with Save and Save & deploy buttons. Closed without saving or deploying."
   },
   {
     "file": "grid-view.png",

@@ -1,4 +1,6 @@
 import { chmodSync, existsSync, readdirSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -50,19 +52,37 @@ export function bundledScriptsDir(): string {
   );
 }
 
-/** Run `bash script` as root, passing env as sudo VAR=val args when needed. */
-async function runScript(script: string, envPairs: string[], scriptArgs: string[] = []): Promise<number> {
+/** Run `bash script` as root, keeping secret values out of sudo's argv. */
+export async function runScript(
+  script: string,
+  envPairs: string[],
+  scriptArgs: string[] = [],
+  secretEnv: Record<string, string> = {},
+): Promise<number> {
   if (isRoot()) {
-    const env = { ...process.env };
+    const env = { ...process.env, ...secretEnv };
     for (const pair of envPairs) {
       const idx = pair.indexOf("=");
       env[pair.slice(0, idx)] = pair.slice(idx + 1);
     }
     return runInherit("bash", [script, ...scriptArgs], { env });
   }
-  // `sudo VAR=val bash script` — the documented pattern; works regardless of
-  // sudoers env_reset policy.
-  return runInherit("sudo", [...envPairs, "bash", script, ...scriptArgs]);
+  if (Object.keys(secretEnv).length === 0) {
+    return runInherit("sudo", [...envPairs, "bash", script, ...scriptArgs]);
+  }
+  // sudo may reset the environment. The script reads a private shell env file
+  // instead; single-quoted values preserve whitespace and shell metacharacters.
+  const dir = await mkdtemp(join(tmpdir(), "switchyard-env-"));
+  try {
+    const file = join(dir, "env");
+    const contents = Object.entries(secretEnv)
+      .map(([key, value]) => `${key}='${value.replaceAll("'", "'\\''")}'\n`)
+      .join("");
+    await writeFile(file, contents, { mode: 0o600, flag: "wx" });
+    return await runInherit("sudo", [...envPairs, `SWITCHYARD_ENV_FILE=${file}`, "bash", script, ...scriptArgs]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 export const linuxPlatform: PlatformModule = {
@@ -117,7 +137,7 @@ export const linuxPlatform: PlatformModule = {
     if (cfg.store && cfg.storePassword) {
       const storeScript = join(bundledScriptsDir(), "switchyard-store-up.sh");
       log(`Provisioning the metrics store via ${storeScript} ...`);
-      const code = await runScript(storeScript, [`SWITCHYARD_METRICS_PASSWORD=${cfg.storePassword}`]);
+      const code = await runScript(storeScript, [], [], { SWITCHYARD_METRICS_PASSWORD: cfg.storePassword });
       if (code !== 0) throw new UserError("switchyard-store-up.sh failed (see output above).");
     }
   },

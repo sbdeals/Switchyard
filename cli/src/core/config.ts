@@ -136,6 +136,9 @@ export const CONFIG_KEY_TYPES = {
 
 export type ConfigKey = keyof typeof CONFIG_KEY_TYPES;
 
+/** Keys redacted in config list/set output unless --show-secrets is passed. */
+export const SECRET_KEYS = new Set<ConfigKey>(["adminPassword", "sessionSecret", "storePassword"]);
+
 export function coerceConfigValue(key: ConfigKey, raw: string): number | boolean | string {
   const kind = CONFIG_KEY_TYPES[key];
   if (kind === "number") {

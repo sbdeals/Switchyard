@@ -1,7 +1,12 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { STORE_SERVICE, STORE_VOLUME } from "../core/config.js";
 import { docker, dockerInherit, dockerOk } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { ensureLocalIngress, removeLocalIngress } from "../core/local-ingress.js";
+import { inspectPurgeResources } from "../core/purge.js";
 import { serviceExists, waitServicesConverged } from "../core/swarm.js";
 import { removeSwitchyardDataVolume } from "../core/switchyard-data.js";
 import { randomSecret, sleep } from "../core/util.js";
@@ -133,17 +138,26 @@ async function createServices(dokployPort: number, log: (m: string) => void): Pr
 async function ensureMetricsStore(storePassword: string, log: (m: string) => void): Promise<void> {
   if (await serviceExists(STORE_SERVICE)) return;
   log(`Creating service ${STORE_SERVICE} (metrics store) ...`);
-  const code = await dockerInherit([
-    "service", "create", "--detach", "--name", STORE_SERVICE,
-    "--constraint", "node.role==manager",
-    "--network", "dokploy-network",
-    "--env", "POSTGRES_USER=switchyard",
-    "--env", "POSTGRES_DB=switchyard",
-    "--env", `POSTGRES_PASSWORD=${storePassword}`,
-    "--mount", `type=volume,source=${STORE_VOLUME},target=/var/lib/postgresql/data`,
-    "postgres:16",
-  ]);
-  if (code !== 0) throw new UserError(`Creating ${STORE_SERVICE} failed.`);
+  const dir = await mkdtemp(join(tmpdir(), "switchyard-store-"));
+  try {
+    const envFile = join(dir, "env");
+    // Docker reads name-only env-file entries from its client environment.
+    // Keeping the value out of the line-based file also preserves newlines.
+    await writeFile(envFile, "POSTGRES_PASSWORD\n", { mode: 0o600, flag: "wx" });
+    const code = await dockerInherit([
+      "service", "create", "--detach", "--name", STORE_SERVICE,
+      "--constraint", "node.role==manager",
+      "--network", "dokploy-network",
+      "--env", "POSTGRES_USER=switchyard",
+      "--env", "POSTGRES_DB=switchyard",
+      "--env-file", envFile,
+      "--mount", `type=volume,source=${STORE_VOLUME},target=/var/lib/postgresql/data`,
+      "postgres:16",
+    ], { env: { ...process.env, POSTGRES_PASSWORD: storePassword } });
+    if (code !== 0) throw new UserError(`Creating ${STORE_SERVICE} failed.`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 export const dockerDesktopPlatform: PlatformModule = {
@@ -220,6 +234,7 @@ export const dockerDesktopPlatform: PlatformModule = {
       // stack's containers to drain (bounded), then retry the removals.
       const deadline = Date.now() + 60_000;
       for (;;) {
+        const services = await docker(["service", "ls", "--format", "{{.Name}}"]);
         const ps = await docker([
           "ps",
           "--all",
@@ -229,8 +244,16 @@ export const dockerDesktopPlatform: PlatformModule = {
           "{{.Label \"com.docker.swarm.service.name\"}}",
         ]);
         const draining = [...SERVICES, STORE_SERVICE];
-        const busy = ps.stdout.split(/\r?\n/).some((n) => draining.includes(n.trim()));
-        if (!busy || Date.now() > deadline) break;
+        const busy = `${services.stdout}\n${ps.stdout}`.split(/\r?\n/).some((n) => draining.includes(n.trim()));
+        if (services.code !== 0 || ps.code !== 0) {
+          log("Could not check task drain; attempting removal and verifying the remaining resources.");
+          break;
+        }
+        if (!busy) break;
+        if (Date.now() >= deadline) {
+          log("Timed out waiting for tasks to drain; attempting removal and verifying the remaining resources.");
+          break;
+        }
         await sleep(2000);
       }
       const removals: string[][] = [
@@ -248,6 +271,8 @@ export const dockerDesktopPlatform: PlatformModule = {
           log(`  warning: ${args.join(" ")} failed: ${res.stderr.trim().split("\n")[0]}`);
         }
       }
+      const result = await inspectPurgeResources();
+      if (result.error) throw new UserError(result.error);
     }
     await removeSwitchyardDataVolume(opts.purge, log);
   },
