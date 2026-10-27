@@ -1,9 +1,10 @@
+import { UserError } from "./errors.js";
 import { sleep } from "./util.js";
 
 /**
- * Minimal client for the two Dokploy (better-auth) endpoints the installer
- * needs. Both calls require an Origin header (CSRF) — same as the dashboard's
- * BFF client in dashboard/src/lib/dokploy.ts.
+ * Minimal Dokploy client shared by the installer and deployment commands.
+ * Requests require an Origin header (CSRF) — same as the dashboard's BFF
+ * client in dashboard/src/lib/dokploy.ts.
  */
 
 function headers(base: string): Record<string, string> {
@@ -101,6 +102,52 @@ export async function apiRequest<T = unknown>(
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : null) as T;
+}
+
+/**
+ * Dokploy v0.30.10 expects a ZIP in multipart form data. dropDeployment sets
+ * sourceType to "drop" and queues a deploy itself; do not call deploy again.
+ */
+export async function uploadApplication(
+  base: string,
+  cookie: string,
+  applicationId: string,
+  archive: Uint8Array,
+): Promise<void> {
+  const form = new FormData();
+  form.set("applicationId", applicationId);
+  form.set("zip", new Blob([new Uint8Array(archive)], { type: "application/zip" }), "source.zip");
+  form.set("dropBuildPath", "");
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/application.dropDeployment`, {
+      method: "POST",
+      // fetch supplies Content-Type together with the multipart boundary.
+      headers: { Origin: base, Cookie: cookie },
+      body: form,
+      redirect: "manual",
+      signal: AbortSignal.timeout(120000),
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      throw new UserError("Upload timed out. Check the dashboard before retrying; Dokploy may have accepted the deployment.");
+    }
+    throw new UserError(`Cannot upload to Dokploy at ${base}. Check that the platform is running (\`switchyard up\`).`);
+  }
+  if (res.status === 413) {
+    throw new UserError("Upload too large for Dokploy or its proxy. Exclude more files with .gitignore or .dockerignore and retry.");
+  }
+  if (res.status === 401) {
+    throw new UserError("Not logged in to Dokploy (401). Run `switchyard up` to sign in again.");
+  }
+  if (res.status === 403) {
+    throw new UserError("Dokploy denied permission to deploy this application (403).");
+  }
+  if (!res.ok) {
+    const body = (await res.text()).slice(0, 200);
+    throw new UserError(`Dokploy upload failed (${res.status}): ${body}`);
+  }
 }
 
 export type SignUpResult =

@@ -145,6 +145,11 @@ Re-running `up` is safe: it converges, and upgrades when a newer version is
 out. Settings are changed *after* setup with
 `switchyard config set <key> <value>`. Full reference: [docs/cli.md](docs/cli.md).
 
+Deploy a local directory with `switchyard deploy` (the Railway `up`
+equivalent), or `switchyard deploy ./my-app --service web --project demos`.
+Add `--detach` to return after queuing. `switchyard up` still starts the
+platform. See [deploy options and build requirements](docs/cli.md#deploy-a-directory).
+
 > The npm package is **`switchyard-cli`** (the bare npm name `switchyard` is an
 > unrelated squatted package; don't `npx switchyard`).
 
