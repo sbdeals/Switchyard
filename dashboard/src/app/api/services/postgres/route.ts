@@ -23,12 +23,12 @@ export const dynamic = "force-dynamic";
  *    /login). The requested `app` must be one of the current user's Dokploy
  *    services — otherwise an authed user could reach an unrelated host container
  *    by name. This mirrors /api/services/exec.
- *  - Read-only: the `query` op is classified server-side (lib/postgres.ts
- *    #classifyStatement) and rejected unless it is read-only OR the request
- *    explicitly sets allowWrites. The client flag can only relax the guard; the
- *    server validates the statement class regardless.
- *  - SQL is always delivered to psql over stdin, never interpolated into argv or
- *    a shell (see runPsqlCsv). Catalog-sourced identifiers are double-quoted.
+ *  - Read-only: PostgreSQL enforces read-only transactions unless the request
+ *    explicitly sets allowWrites. The classifier also rejects statement batches
+ *    and provides early feedback (lib/postgres.ts #classifyStatement).
+ *  - Read-only SQL uses psql --command so meta-commands are not interpreted;
+ *    write mode uses stdin. Neither uses a shell (see runPsqlCsv).
+ *    Catalog-sourced identifiers are double-quoted.
  */
 
 // Ops (documentation of the discriminated request shapes):
