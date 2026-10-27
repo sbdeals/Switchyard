@@ -9,6 +9,7 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
+  MarkerType,
   Panel,
   type Node,
   type Edge,
@@ -18,8 +19,9 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import type { ServiceReferenceGraph } from "@/lib/service-references";
+import type { ProjectNode, Service } from "@/lib/dokploy";
 import { applySelectionChanges } from "@/lib/bulk-selection";
-import type { ProjectNode, Service, ServiceEdge } from "@/lib/dokploy";
 import { serviceAccent } from "@/lib/service-meta";
 import { serviceFilterOpacity } from "@/lib/service-filter";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
@@ -63,7 +65,7 @@ const nodeTypes = { service: ServiceNode };
 export function FlowCanvas({
   services,
   allServices = services,
-  edges: serviceEdges,
+  graph,
   matchingIds,
   onSelect,
   onDuplicate,
@@ -75,7 +77,7 @@ export function FlowCanvas({
 }: {
   services: Service[];
   allServices?: Service[];
-  edges: ServiceEdge[];
+  graph: ServiceReferenceGraph;
   matchingIds: ReadonlySet<string>;
   onSelect: (service: Service) => void;
   selectedIds: string[];
@@ -104,6 +106,7 @@ export function FlowCanvas({
 
   // Catalog logos for Railway-style node icons (null while the catalog loads).
   const logos = useTemplateLogos();
+  const [hoveredEdge, setHoveredEdge] = useState<{ id: string; x: number; y: number } | null>(null);
   const selectedIdsRef = useRef(selectedIds);
 
   useEffect(() => {
@@ -143,7 +146,12 @@ export function FlowCanvas({
             type: "service",
             selected: selectedIds.includes(service.id),
             position: { x, y: rowY + row * ROW_H },
-            data: { service, logo: resolveServiceLogo(service, logos), onSelect } as ServiceNodeData,
+            data: {
+              service,
+              logo: resolveServiceLogo(service, logos),
+              referenceWarnings: graph.warnings[service.id] ?? [],
+              onSelect,
+            } as ServiceNodeData,
           });
         });
         rowMaxServices = Math.max(rowMaxServices, svcs.length);
@@ -151,26 +159,35 @@ export function FlowCanvas({
       }
       return mergeNodePositions(nodes, saved, current);
     },
-    [services, onSelect, logos, selectedIds, createdPositions]
+    [services, onSelect, logos, graph.warnings, selectedIds, createdPositions]
   );
 
   const buildEdges = useCallback(
     (): Edge[] =>
-      serviceEdges.map((e) => {
+      graph.edges.map((e) => {
         const source = services.find((s) => s.id === e.source);
         const target = services.find((s) => s.id === e.target);
-        const accent = target ? serviceAccent(target) : "var(--color-brand)";
+        const inferred = e.kind === "inferred";
+        const accent = inferred ? "var(--color-fg-subtle)" : target ? serviceAccent(target) : "var(--color-brand)";
+        const description = e.kind === "reference"
+          ? `${source?.name} references ${target?.name}: ${e.variables.map((v) => `${target?.name}.${v}`).join(", ")}`
+          : `inferred: ${source?.name} mentions ${target?.name} in its env (heuristic)`;
         return {
           id: `${e.source}->${e.target}`,
           source: e.source,
           target: e.target,
-          animated: true,
-          ariaLabel:
-            source && target ? `${source.name} connects to ${target.name}` : undefined,
-          style: { stroke: accent, strokeWidth: 1.5 },
+          ariaLabel: description,
+          label: e.kind === "reference" ? e.variables.join(", ") : undefined,
+          labelStyle: { fill: "var(--color-fg)", fontSize: 11 },
+          labelBgStyle: { fill: "var(--color-surface)", stroke: "var(--color-border-strong)" },
+          labelBgPadding: [6, 4] as [number, number],
+          labelBgBorderRadius: 4,
+          markerEnd: { type: MarkerType.ArrowClosed, color: accent, width: 18, height: 18 },
+          deletable: false,
+          style: { stroke: accent, strokeWidth: 1.5, strokeDasharray: inferred ? "5 5" : undefined },
         };
       }),
-    [serviceEdges, services]
+    [graph.edges, services]
   );
 
   // Saved positions are browser-only. Build nodes in the effect below so server
@@ -216,9 +233,10 @@ export function FlowCanvas({
         width: node.measured?.width,
         height: node.measured?.height,
       };
-    }), serviceEdges);
+    }), graph.edges);
     layoutActions.current?.tidy(positions);
   };
+  const hoveredDescription = edges.find((e) => e.id === hoveredEdge?.id)?.ariaLabel;
 
   // Re-sync with fresh server data (added/removed services, status changes)
   // while keeping in-session positions, including Tidy/Undo and active drags.
@@ -323,6 +341,9 @@ export function FlowCanvas({
               : updated, positions));
         }}
         onEdgesChange={onEdgesChange}
+        onEdgeMouseEnter={(event, edge) => setHoveredEdge({ id: edge.id, x: event.clientX, y: event.clientY })}
+        onEdgeMouseMove={(event, edge) => setHoveredEdge({ id: edge.id, x: event.clientX, y: event.clientY })}
+        onEdgeMouseLeave={() => setHoveredEdge(null)}
         onNodeContextMenu={(event, node) => {
           event.preventDefault();
           setMenu({
@@ -331,7 +352,10 @@ export function FlowCanvas({
             y: Math.min(event.clientY, window.innerHeight - 52),
           });
         }}
-        onMoveStart={() => setMenu(null)}
+        onMoveStart={() => {
+          setHoveredEdge(null);
+          setMenu(null);
+        }}
         nodeTypes={nodeTypes}
         elementsSelectable={!selectionDisabled}
         multiSelectionKeyCode={["Shift", "Control", "Meta"]}
@@ -347,6 +371,20 @@ export function FlowCanvas({
       >
         <CanvasResizeFit />
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="var(--color-canvas-dots)" bgColor="var(--color-bg)" />
+        {edges.length > 0 && (
+          <Panel position="top-left">
+            <div aria-label="Connection legend" className="flex gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[11px] text-[var(--color-fg-muted)]">
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden="true" className="w-5 border-t-2 border-[var(--color-fg)]" />
+                Reference
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden="true" className="w-5 border-t-2 border-dashed border-[var(--color-fg-subtle)]" />
+                Inferred
+              </span>
+            </div>
+          </Panel>
+        )}
         <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)] max-sm:!bottom-auto max-sm:!top-0 max-lg:[&_button]:!h-10 max-lg:[&_button]:!w-10" />
         <Panel position="top-right">
           <button
@@ -387,6 +425,18 @@ export function FlowCanvas({
           className="!bg-[var(--color-bg-elevated)] max-sm:hidden"
         />
       </ReactFlow>
+      {hoveredEdge && hoveredDescription && (
+        <div
+          role="tooltip"
+          className="pointer-events-none fixed z-50 max-w-xs rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-3 py-2 text-xs text-[var(--color-fg)] shadow-lg"
+          style={{
+            left: Math.max(8, Math.min(hoveredEdge.x + 12, window.innerWidth - 332)),
+            top: Math.max(8, Math.min(hoveredEdge.y + 12, window.innerHeight - 100)),
+          }}
+        >
+          {hoveredDescription}
+        </div>
+      )}
       {menu && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setMenu(null)} onContextMenu={(event) => {

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 const mocks = vi.hoisted(() => ({
   loadWorkspace: vi.fn(),
-  inferEdges: vi.fn(() => []),
+  workspace: vi.fn(),
   ensureCollector: vi.fn(),
   unstableRethrow: vi.fn(),
   refresh: vi.fn(),
@@ -21,7 +21,6 @@ vi.mock("react", async (importOriginal) => ({
 }));
 vi.mock("@/lib/dokploy", () => ({
   loadWorkspace: mocks.loadWorkspace,
-  inferEdges: mocks.inferEdges,
 }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: () => ({ value: "test-session" }) }),
@@ -32,7 +31,7 @@ vi.mock("@/lib/session", () => ({
 }));
 vi.mock("@/lib/collector", () => ({ ensureCollector: mocks.ensureCollector }));
 vi.mock("@/components/Workspace", () => ({
-  Workspace: () => createElement("div", null, "Workspace loaded"),
+  Workspace: mocks.workspace,
 }));
 vi.mock("@/components/LogoutButton", () => ({
   LogoutButton: () => createElement("button", null, "Sign out"),
@@ -73,6 +72,7 @@ function findRetry(node: ReactNode): (() => void) | undefined {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.workspace.mockImplementation(() => createElement("div", null, "Workspace loaded"));
   vi.spyOn(console, "error").mockImplementation(() => {});
   mocks.pending = false;
 });
@@ -87,7 +87,9 @@ describe("workspace load failures", () => {
     const html = renderToStaticMarkup(await Page());
     expect(html).toContain("Workspace loaded");
     expect(html).toContain("Sign out");
-    expect(mocks.inferEdges).toHaveBeenCalledWith([]);
+    expect(mocks.workspace.mock.calls[0][0]).toEqual({
+      services: [], projects: [], graph: { edges: [], warnings: {} }, notificationScope: expect.any(String), userId: expect.any(String),
+    });
   });
 
   it("renders a sanitized outage state with Retry", async () => {
