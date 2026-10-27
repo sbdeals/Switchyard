@@ -15,6 +15,8 @@ import { ServiceDrawer } from "@/components/service/ServiceDrawer";
 import { DuplicateServiceDialog } from "@/components/service/DuplicateServiceDialog";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { GettingStarted } from "@/components/GettingStarted";
+import { getWorkspaceScope, type OnboardingItem } from "@/lib/onboarding";
 import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { ProjectLogs } from "@/components/ProjectLogs";
 import { useServiceDeeplink } from "@/components/use-service-deeplink";
@@ -32,6 +34,7 @@ type WorkspaceProps = {
   services: Service[];
   projects: ProjectNode[];
   edges: ServiceEdge[];
+  userId: string | null;
   notificationScope: string;
 };
 
@@ -44,11 +47,13 @@ function WorkspaceContent({
   projects: initialProjects,
   edges: initialEdges,
   notificationScope,
+  userId,
 }: WorkspaceProps) {
   const [view, setView] = useState<View>("canvas");
   const [duplicateSource, setDuplicateSource] = useState<Service | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [deployOpen, setDeployOpen] = useState(false);
   const [deployment, setDeployment] = useState<DeploymentEvent | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
   const router = useRouter();
@@ -58,7 +63,6 @@ function WorkspaceContent({
     edges: initialEdges,
   }, projectId);
   const currentProject = projects.some((p) => p.projectId === projectId) ? projectId : null;
-  const visibleServices = currentProject ? services.filter((s) => s.projectId === currentProject) : services;
   const drawer = useServiceDeeplink(services);
   const { navigate } = useGuardedNavigation();
   const openService = (id: string) => navigate(() => {
@@ -66,6 +70,24 @@ function WorkspaceContent({
     drawer.open(id);
   }, drawer.service?.id === id && drawer.tab === "overview");
   const { onDeployed } = drawer;
+  const scope = useMemo(() => getWorkspaceScope(projects, services, edges, currentProject), [projects, services, edges, currentProject]);
+  const visibleServices = scope.services;
+
+  // Deploy progress for the checklist comes from useWorkspacePolling above.
+
+  const navigateChecklist = (item: OnboardingItem) => {
+    if (item.id === "project" || item.id === "environment") {
+      setProjectsOpen(true);
+    } else if (item.serviceId) {
+      const serviceId = item.serviceId;
+      navigate(() => {
+        setDeployment(null);
+        drawer.open(serviceId, item.id === "domain" ? "domains" : item.id === "variable" ? "variables" : "overview");
+      });
+    } else {
+      setDeployOpen(true);
+    }
+  };
   const [bulkSelection, setBulkSelection] = useState(emptySelection);
   const [bulkRequest, setBulkRequest] = useState<{ action: BulkAction; services: Service[] } | null>(null);
   const serviceIds = useMemo(() => visibleServices.map((service) => service.id), [visibleServices]);
@@ -80,7 +102,7 @@ function WorkspaceContent({
 
   return (
     <MotionConfig reducedMotion="user">
-    <div className="mx-auto max-w-7xl px-6 pb-8 pt-20 sm:pt-8">
+    <div className="mx-auto max-w-7xl px-4 pb-24 pt-20 sm:px-6 sm:pt-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
@@ -150,7 +172,7 @@ function WorkspaceContent({
             <RefreshCw className="size-3.5" /> Refresh
           </button>
           <KeyboardShortcuts />
-          <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
+          <QuickDeployMenu key={scope.project?.projectId ?? "all"} projects={scope.projects} onDeployed={onDeployed} menuOpen={deployOpen} onMenuOpenChange={setDeployOpen} />
         </div>
       </header>
 
@@ -176,11 +198,11 @@ function WorkspaceContent({
 
       {view === "logs" ? (
         <ProjectLogs key={currentProject ?? "all"} projects={projects} selectedProjectId={currentProject} />
-      ) : visibleServices.length === 0 ? (
-        <EmptyState projects={projects} onDeployed={onDeployed} />
+      ) : scope.services.length === 0 ? (
+        <EmptyState key={scope.project?.projectId ?? "all"} projects={scope.projects} projectName={scope.project?.name} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
         <PanelErrorBoundary>
-          <FlowCanvas services={visibleServices} edges={edges.filter((e) => visibleServices.some((s) => s.id === e.source) && visibleServices.some((s) => s.id === e.target))} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} onDuplicate={setDuplicateSource} />
+          <FlowCanvas key={scope.project?.projectId ?? "all"} services={visibleServices} allServices={services} edges={scope.edges} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} onDuplicate={setDuplicateSource} />
         </PanelErrorBoundary>
       ) : (
         <>
@@ -202,6 +224,7 @@ function WorkspaceContent({
         </>
       )}
 
+      <GettingStarted key={userId} projects={projects} services={services} userId={userId} onNavigate={navigateChecklist} />
       {bulkRequest && <BulkActionDialog {...bulkRequest} onClose={() => setBulkRequest(null)} />}
       <ServiceDrawer deploymentId={deployment?.serviceId === drawer.service?.id ? deployment?.deploymentId : undefined} services={services} onSelectService={openService} service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} onDuplicate={setDuplicateSource} />
       {duplicateSource && (
@@ -270,25 +293,27 @@ function ViewToggle({
 
 function EmptyState({
   projects,
+  projectName,
   onDeployed,
 }: {
   projects: ProjectNode[];
+  projectName?: string;
   onDeployed: (id: string) => void;
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex min-w-0 flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-border-strong)] px-4 py-20 text-center sm:px-0"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-w-0 rounded-2xl border border-dashed border-[var(--color-border-strong)] px-5 py-10 text-center sm:px-10 sm:py-14"
     >
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
+      <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
         <Boxes className="size-7" />
       </div>
-      <h2 className="mt-4 font-medium">No services yet</h2>
-      <p className="mb-5 mt-1 w-full max-w-sm text-sm text-[var(--color-fg-muted)]">
-        Deploy an app from a Docker image, or spin up a managed database in one click.
+      <h2 className="mt-4 text-lg font-semibold">{projectName ? `${projectName} is ready for its first service` : "Bring your first project to life"}</h2>
+      <p className="mx-auto mb-7 mt-2 w-full max-w-md text-sm text-[var(--color-fg-muted)]">
+        Start with your code, a container image, or a database. We&apos;ll help you get it running.
       </p>
-      <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
+      <QuickDeployMenu variant="cards" projects={projects} onDeployed={onDeployed} />
     </motion.div>
   );
 }

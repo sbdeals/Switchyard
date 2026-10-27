@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Tear down the Dokploy stack.
 #   Usage: sudo scripts/dokploy-down.sh [--purge]
-#   --purge also removes the dokploy-network, secrets, and data volumes.
+#   --purge also removes control-plane secrets/data and dokploy-network unless
+#   deployed workloads still need that shared network.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,6 +24,31 @@ log "Removing the Switchyard metrics store..."
 docker service rm switchyard-metrics 2>/dev/null || true
 
 if [ "$PURGE" = "1" ]; then
+  # Match core/network-workloads.ts: busy endpoints alone do not establish
+  # workload ownership. Exact control-plane names/labels are the only exclusions.
+  network_has_workloads() {
+    local network_id containers services name service targets target
+    network_id=$(docker network inspect dokploy-network --format '{{.Id}}') || return 2
+    [ -n "$network_id" ] || return 2
+    containers=$(docker ps --all --filter network=dokploy-network --format '{{.Names}}\t{{.Label "com.docker.swarm.service.name"}}') || return 2
+    while IFS=$'\t' read -r name service; do
+      [ -n "$name" ] || continue
+      case "$name" in switchyard|switchyard-traefik|dokploy-traefik) continue ;; esac
+      case "$service" in dokploy|dokploy-postgres|dokploy-redis|switchyard-metrics) continue ;; esac
+      return 0
+    done <<< "$containers"
+    # Include attachments from workload services running on other Swarm nodes.
+    services=$(docker service ls --format '{{.Name}}') || return 2
+    for service in $services; do
+      case "$service" in dokploy|dokploy-postgres|dokploy-redis|switchyard-metrics) continue ;; esac
+      targets=$(docker service inspect "$service" --format '{{range .Spec.TaskTemplate.Networks}}{{println .Target}}{{end}}') || return 2
+      for target in $targets; do
+        [ "$target" != "$network_id" ] && [ "$target" != "dokploy-network" ] || return 0
+      done
+    done
+    return 1
+  }
+
   # Swarm removes services asynchronously; their containers may still hold data.
   tasks_drained() {
     local services containers service
@@ -76,6 +102,10 @@ if [ "$PURGE" = "1" ]; then
       continue
     fi
     for name in $resources; do
+      if [ "$kind:$name" = "network:dokploy-network" ] && network_has_workloads; then
+        log "Keeping dokploy-network: it still has attached workloads."
+        continue
+      fi
       case "$kind:$name" in
         network:dokploy-network|secret:dokploy_postgres_password|secret:dokploy_auth_secret|\
         volume:dokploy|volume:dokploy-postgres|volume:dokploy-redis|volume:switchyard-metrics)

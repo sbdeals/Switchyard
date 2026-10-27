@@ -24,6 +24,7 @@ import { serviceAccent } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { pruneCanvasPositions } from "@/lib/canvas-positions";
 import { useTheme } from "@/components/ThemeProvider";
 import { CanvasResizeFit } from "@/components/canvas/CanvasResizeFit";
 import { canvasAutoLayout } from "@/lib/canvas-auto-layout";
@@ -60,6 +61,7 @@ const nodeTypes = { service: ServiceNode };
 
 export function FlowCanvas({
   services,
+  allServices = services,
   edges: serviceEdges,
   onSelect,
   onDuplicate,
@@ -70,6 +72,7 @@ export function FlowCanvas({
   onDeployed,
 }: {
   services: Service[];
+  allServices?: Service[];
   edges: ServiceEdge[];
   onSelect: (service: Service) => void;
   selectedIds: string[];
@@ -243,7 +246,7 @@ export function FlowCanvas({
       // dragged. Saving every node's position (the old behavior) froze the
       // auto-layout into localStorage, so default-layout improvements never
       // applied to returning users. Stale entries for deleted services are
-      // pruned against the current node set.
+      // pruned against the full workspace, including filtered-out projects.
       const draggedIds = changes
         .filter((c) => c.type === "position" && !c.dragging)
         .map((c) => (c as { id: string }).id);
@@ -254,14 +257,12 @@ export function FlowCanvas({
             const n = curr.find((n) => n.id === id && n.type === "service");
             if (n) pos[id] = n.position;
           }
-          const live = new Set(curr.filter((n) => n.type === "service").map((n) => n.id));
-          for (const id of Object.keys(pos)) if (!live.has(id)) delete pos[id];
-          savePositions(pos);
+          savePositions(pruneCanvasPositions(pos, allServices.map((service) => service.id)));
           return curr;
         });
       }
     },
-    [onNodesChange, setNodes, onSelectionChange, selectionDisabled]
+    [onNodesChange, setNodes, allServices, onSelectionChange, selectionDisabled]
   );
 
   return (
