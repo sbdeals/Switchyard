@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
 import { DomainHttpsToggle, useDomainHttps } from "@/components/service/DomainHttpsToggle";
+import { useDirtyGuard } from "@/components/DirtyGuard";
+import { hasDirtyFields } from "@/lib/dirty-guard";
+import { loadClientSecret } from "@/lib/client-secret-loader";
 import {
   composeLifecycleAction,
   saveComposeFileAction,
+  loadComposeFileAction,
   createComposeDomainAction,
   generateComposeDomainAction,
 } from "@/app/actions";
@@ -45,19 +49,45 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
 }
 
 export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
-  const [value, setValue] = useState(compose.composeFile ?? "");
+  const [value, setValue] = useState("");
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => loadClientSecret(
+    () => loadComposeFileAction(compose.id),
+    (res) => {
+      if (res.ok) {
+        setValue(res.composeFile);
+        setBaseline(res.composeFile);
+      } else {
+        setLoadError("Could not load compose file.");
+      }
+    },
+    () => setLoadError("Could not load compose file."),
+  ), [compose.id]);
   const [pending, start] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
-  const dirty = value !== (compose.composeFile ?? "");
+  const dirty = baseline !== null && loadError === null && value !== baseline;
+  useDirtyGuard("Compose", dirty);
 
   function save(redeploy: boolean) {
+    if (baseline === null || loadError) return;
     setError(null);
     start(async () => {
       const res = await saveComposeFileAction(compose.id, value, redeploy);
-      if (res.ok) flashSaved();
-      else setError(res.error);
+      if (res.ok) {
+        setBaseline(value);
+        flashSaved();
+      } else setError(res.error);
     });
+  }
+
+  if (loadError) {
+    return <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>;
+  }
+  if (baseline === null) {
+    return <p role="status" className="text-xs text-[var(--color-fg-muted)]">Loading compose file…</p>;
   }
 
   return (
@@ -84,41 +114,17 @@ export function ComposeEditorTab({ compose }: { compose: ComposeService }) {
   );
 }
 
-/**
- * Best-effort extraction of the top-level service names from a compose file,
- * used to suggest domain targets. No YAML dependency: read the keys directly
- * under `services:` at the first child indent level. Free-text entry still
- * works (via the datalist) when parsing misses an entry.
- */
-function composeServiceNames(file: string | null): string[] {
-  if (!file) return [];
-  const lines = file.split("\n");
-  const start = lines.findIndex((l) => /^services:\s*(#.*)?$/.test(l));
-  if (start === -1) return [];
-  const names: string[] = [];
-  let childIndent: number | null = null;
-  for (let i = start + 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim() || line.trim().startsWith("#")) continue;
-    const indent = line.match(/^(\s*)/)![1].length;
-    if (indent === 0) break; // dedented back to a top-level key — block ended
-    if (childIndent === null) childIndent = indent;
-    if (indent !== childIndent) continue; // deeper (a service's own keys)
-    const m = line.match(/^\s+([A-Za-z0-9._-]+):\s*(#.*)?$/);
-    if (m) names.push(m[1]);
-  }
-  return names;
-}
-
 export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
-  const services = composeServiceNames(compose.composeFile);
+  const services = compose.serviceNames ?? [];
   const [serviceName, setServiceName] = useState(services[0] ?? "");
   const [host, setHost] = useState("");
   const httpsOptions = useDomainHttps(host);
   const [port, setPort] = useState("80");
+  const [defaults, setDefaults] = useState({ serviceName, port });
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
+  useDirtyGuard("Domains", hasDirtyFields({ host, serviceName, port }, { host: "", ...defaults }));
 
   function add() {
     if (!host.trim() || !serviceName.trim()) return;
@@ -132,8 +138,10 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
         Number(port) || 80,
         httpsOptions.https
       );
-      if (res.ok) setHost("");
-      else setError(res.error);
+      if (res.ok) {
+        setHost("");
+        setDefaults({ serviceName, port });
+      } else setError(res.error);
     });
   }
 
@@ -149,8 +157,10 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
         serviceName,
         Number(port) || 80
       );
-      if (res.ok) setGenerated(res.host);
-      else setError(res.error);
+      if (res.ok) {
+        setGenerated(res.host);
+        setDefaults({ serviceName, port });
+      } else setError(res.error);
     });
   }
 
