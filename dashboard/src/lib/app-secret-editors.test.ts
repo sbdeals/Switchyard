@@ -11,6 +11,8 @@ vi.mock("@/app/actions", () => ({
   loadServiceWebhookAction: vi.fn(),
 }));
 vi.mock("@/app/deploy-trigger-actions", () => ({}));
+// AppTabs -> ComposeExportDialog imports the server-only compose export action.
+vi.mock("@/app/compose-export-actions", () => ({ loadComposeExportAction: vi.fn() }));
 
 const app: Application = {
   kind: "application",

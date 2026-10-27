@@ -3,6 +3,7 @@ import { ComposeEditorTab } from "../components/service/ComposeTabs";
 import { VariablesTab } from "../components/service/VariablesTab";
 import { DeployTriggerSettings } from "../components/service/DeployTriggerSettings";
 import type { ComposeService } from "./dokploy";
+import { createEditorState } from "./dotenv-editor";
 import { initialVariablesEditorState, variablesEditorReducer } from "./variables-editor";
 
 const mocks = vi.hoisted(() => ({
@@ -62,7 +63,7 @@ describe.each(["Variables", "Compose"] as const)("%s on-demand dirty baseline", 
     ["failed after editing", variablesEditorReducer(edited, { type: "failed", error: "Load failed" }), false],
   ] as const)("registers the correct guard while %s", (_, state, dirty) => {
     if (tab === "Variables") {
-      mocks.useReducer.mockReturnValue([state, vi.fn()]);
+      mocks.useReducer.mockReturnValue([{ ...createEditorState(state.baseline), text: state.value, loadError: state.loadError }, vi.fn()]);
       VariablesTab({ service });
     } else {
       mocks.useState

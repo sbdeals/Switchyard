@@ -13,6 +13,8 @@ import {
   renameEnvironment,
   removeEnvironment,
   listProjects,
+  loadWorkspace,
+  updateServiceNotes,
   getServiceEnvironment,
   getServiceWebhook,
   getServiceComposeFile,
@@ -115,6 +117,7 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { normalizeServiceNotes } from "@/lib/service-notes";
 import { validateComposeFile } from "@/lib/compose-validation";
 import { parseAppPort } from "@/lib/app-port";
 import { validateMount } from "@/lib/mounts";
@@ -193,6 +196,24 @@ async function resolveTargetEnv(environmentId?: string): Promise<string> {
   const after = (await listProjects()).flatMap((p) => p.environments);
   if (after.length === 0) throw new Error("Could not create a default environment.");
   return after[0].environmentId;
+}
+
+/** Resolve ownership and the service type from the current user's workspace. */
+export async function saveServiceNotesAction(id: string, notes: string): Promise<ActionResult> {
+  try {
+    if (typeof id !== "string" || !id.trim() || typeof notes !== "string") {
+      throw new Error("Invalid service notes.");
+    }
+    const { services } = await loadWorkspace();
+    const service = services.find((candidate) => candidate.id === id);
+    if (!service) throw new Error("Service unavailable.");
+    await updateServiceNotes(service, normalizeServiceNotes(notes));
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not save service notes. Please try again." };
+  }
 }
 
 // --- databases ----------------------------------------------------------------

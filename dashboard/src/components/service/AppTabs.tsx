@@ -71,6 +71,7 @@ import {
 import { cn } from "@/lib/utils";
 import { isGitSource } from "@/lib/deploy-triggers";
 import { DeployTriggerSettings } from "./DeployTriggerSettings";
+import { ComposeExportButton } from "@/components/service/ComposeExportDialog";
 import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
 import { DiagnosisCard } from "@/components/service/DiagnosisCard";
 import { ConfigAsCodePanel } from "@/components/service/ConfigAsCodePanel";
@@ -124,6 +125,7 @@ export function AppOverviewTab({ app }: { app: Application }) {
         <Info label="Build" value={app.buildType ?? "—"} />
         <Info label="Replicas" value={String(app.replicas ?? 1)} />
       </div>
+      <ComposeExportButton key={app.id} id={app.id} name={app.name} />
     </div>
   );
 }
