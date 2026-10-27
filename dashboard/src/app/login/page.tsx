@@ -11,14 +11,16 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string | string[] }>;
+  searchParams: Promise<{ next?: string | string[]; expired?: string | string[] }>;
 }) {
-  const nextPath = safeNextPath((await searchParams).next);
+  const params = await searchParams;
+  const nextPath = safeNextPath(params.next);
   // Already signed in? Skip the form.
   const store = await cookies();
   if (openSession(store.get(SESSION_COOKIE)?.value)) {
     redirect(nextPath);
   }
+  const expired = params.expired === "1";
 
   return (
     <main className="flex min-h-full items-center justify-center px-6 py-16">
@@ -36,7 +38,7 @@ export default async function LoginPage({
           </div>
           <h1 className="text-xl font-semibold tracking-tight">Sign in to Switchyard</h1>
           <p className="mt-1.5 text-sm text-[var(--color-fg-muted)]">
-            Use your Dokploy account.
+            {expired ? "Your session expired. Sign in again." : "Use your Dokploy account."}
           </p>
         </div>
         <LoginForm nextPath={nextPath} />

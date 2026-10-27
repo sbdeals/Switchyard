@@ -81,6 +81,7 @@ version → the container is recreated (that's also the upgrade path:
 | Command | What it does |
 |---|---|
 | `switchyard up` | Install/converge/upgrade the whole stack (idempotent) |
+| `switchyard deploy [path]` | Upload and deploy a local directory to Dokploy (see flags below) |
 | `switchyard status` | Services, container health, URLs, config path |
 | `switchyard down` | Stop the stack; data volumes survive |
 | `switchyard down --purge` | Also delete network, secrets, and volumes (fresh slate; clears stored admin creds) |
@@ -108,6 +109,56 @@ version → the container is recreated (that's also the upgrade path:
 
 Environment passthrough: `ADVERTISE_ADDR` and `DOKPLOY_VERSION` are honored
 exactly as documented for `scripts/dokploy-up.sh`.
+
+### Deploy a directory
+
+`switchyard deploy` is the Railway `up` equivalent: it deploys the current
+directory. `switchyard up` continues to install and start the platform.
+
+```bash
+switchyard deploy
+switchyard deploy ./my-app --service web --project demos
+switchyard deploy . --service web --project demos --detach
+```
+
+| Argument / flag | Meaning |
+|---|---|
+| `[path]` | Directory to upload (default: the current directory) |
+| `--service <name>` | Reuse or create an application with this exact name (default: directory name) |
+| `--project <name>` | Reuse or create a project with this exact name |
+| `--detach` | Return once the deployment is queued, without waiting for the result |
+
+Without `--project`, the CLI uses the only existing project, or creates
+`Default` if there are none. If several projects exist, choose one with
+`--project`. Within that project it uses the `production` environment, or
+the only environment if there is no `production`; ambiguous selections fail
+with guidance instead of choosing a target silently.
+
+The directory needs a root `Dockerfile`, or a project Dokploy can build with
+Nixpacks: Node (`package.json`), Python (`requirements.txt`, `pyproject.toml`,
+or `Pipfile`), or Go (`go.mod`). Other projects need a `Dockerfile`.
+
+The CLI uploads a ZIP using Dokploy's drop deployment source. Reusing an
+application replaces its source and build type; its variables and domains
+remain configured. Packing honors
+`.gitignore` files, including nested ones, and the root `.dockerignore`
+(or `Dockerfile.dockerignore`, which takes precedence when present).
+Negation (`!`) rules apply within each ignore system; Docker rules never
+override Git exclusions. The `Dockerfile` and Docker ignore files are
+retained despite Docker exclusions so builds can use them. `.git` and
+`node_modules` are always excluded. Symlinks are skipped with a notice.
+Both the total included file size and the ZIP are
+limited to 100 MiB; use ignore rules to remove build output or other large
+files if the upload is too large. Dokploy's ZIP extraction does not preserve
+executable bits; if the build runs uploaded scripts, make them executable
+in the Dockerfile (for example, `RUN chmod +x ./start.sh`).
+
+Deploy uses the local Dokploy port and admin credentials saved by
+`switchyard up`. Missing credentials, rejected login, or a stopped platform
+produce an error before deployment. By default it polls the new deployment
+for up to 15 minutes and exits with an error on failure or timeout. It prints
+an existing application URL when available; attach a domain in the dashboard
+if the application has none. Deploy does not create domains.
 
 ## Configuration
 
@@ -153,8 +204,10 @@ switchyard config set imageTag latest                # track latest instead of t
 
 Editing the JSON by hand is fine too — run `switchyard up` afterwards to
 converge (it recreates the container only when the rendered spec's hash
-changed). `switchyard config list` redacts secrets unless you pass
-`--show-secrets`.
+changed). `switchyard config list` and `set` confirmations redact
+`adminPassword`, `sessionSecret`, and `storePassword` unless you pass
+`--show-secrets`. `switchyard config get <key>` always returns the raw value,
+including secrets, without requiring `--show-secrets`.
 
 If service DNS doesn't work in your setup, point the container at the host
 instead:

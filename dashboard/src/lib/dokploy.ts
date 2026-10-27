@@ -6,7 +6,7 @@
  * Dokploy session cookie inside a sealed Switchyard session cookie and use it
  * for every request THAT user makes (`request()` -> `userCookie()`, read from
  * next/headers). The raw Dokploy cookie never reaches the browser. On a Dokploy
- * 401 we bounce the user to /login rather than escalating privilege.
+ * 401 we clear the Switchyard session and send the user back to /login.
  *
  * The env admin credentials (`DOKPLOY_EMAIL`/`DOKPLOY_PASSWORD`) survive for a
  * SINGLE purpose: the system self-probe `ping()` behind /api/health?deep=1,
@@ -374,8 +374,8 @@ type ReqInit = { method?: "GET" | "POST"; body?: unknown };
 /**
  * User-serving Dokploy request. Threads the per-user cookie via next/headers so
  * the call signature stays `request(path, init)` for every existing caller. On
- * a Dokploy 401 the user's session has expired -> redirect to /login (we do NOT
- * silently fall back to the admin session).
+ * a Dokploy 401 the user's session has expired -> redirect through the session
+ * clearing route (we do NOT silently fall back to the admin session).
  *
  * Exported so the embedded agent module (`lib/agent/`) can reach Dokploy
  * procedures this file does not yet wrap without duplicating the per-user auth
@@ -440,7 +440,7 @@ async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
     }
     throw e;
   }
-  if (res.status === 401) redirect("/login");
+  if (res.status === 401) redirect("/api/session/expired");
   if (!res.ok) {
     const body = await res.text();
     // Backup errors are sanitized and summarized by withBackupErrors first;
@@ -2222,7 +2222,7 @@ async function restoreBackupWithLogs(input: RestoreBackupInput): Promise<void> {
     headers: { Accept: "text/event-stream", Origin: workingOrigin, Cookie: await userCookie() },
     cache: "no-store",
   });
-  if (res.status === 401) redirect("/login");
+  if (res.status === 401) redirect("/api/session/expired");
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Dokploy restore failed (${res.status}): ${body}`);
