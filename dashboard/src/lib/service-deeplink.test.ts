@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Service } from "./dokploy";
 import { createDirtyRegistry, decideDirtyNavigation } from "./dirty-guard";
+import { POPSTATE_GUARD_SCRIPT } from "./popstate-guard";
 import { useServiceDeeplink } from "../components/use-service-deeplink";
 
 const mocks = vi.hoisted(() => ({
@@ -40,12 +41,14 @@ type Effect = { deps: unknown[]; cleanup?: void | (() => void) };
 
 // Execute the real hook with persistent state/effects. Query re-renders and
 // completion of router.refresh are explicit; browser proof covers Next itself.
-function mount(path = "/", initialHistoryState: unknown = null) {
+function mount(path = "/", initialHistoryState: unknown = null, synchronousNext = false) {
   const location = { href: new URL(path, "http://localhost:3067").href };
   const entries = [location.href];
   const entryStates = [initialHistoryState];
   let entry = 0;
   let refreshing = false;
+  let mounted = false;
+  let renderedServices = services;
   let dirty = false;
   let stateIndex = 0;
   let effectIndex = 0;
@@ -121,13 +124,20 @@ function mount(path = "/", initialHistoryState: unknown = null) {
     stopImmediatePropagation = vi.fn(() => { this.stopped = true; });
   });
   const dispatchEvent = vi.fn((event: PopStateEvent) => {
-    for (const { listener } of [...listeners].sort((a, b) => Number(b.capture) - Number(a.capture))) {
+    for (const { listener } of [...listeners]) {
       listener(event);
       if ((event as unknown as { stopped: boolean }).stopped) break;
     }
     return true;
   });
   vi.stubGlobal("window", { location, history, setTimeout, clearTimeout, addEventListener, removeEventListener, dispatchEvent });
+  // Run the same head bootstrap before Next registers its window listener.
+  // Window-target listeners dispatch in registration order, regardless of capture.
+  new Function("window", POPSTATE_GUARD_SCRIPT)(window);
+  const nextPopstate = vi.fn<(event: PopStateEvent) => void>(() => {
+    if (synchronousNext && mounted) render(renderedServices);
+  });
+  addEventListener("popstate", nextPopstate);
   mocks.useState.mockImplementation((initial: unknown) => {
     const index = stateIndex++;
     if (!(index in states)) states[index] = typeof initial === "function" ? initial() : initial;
@@ -178,6 +188,8 @@ function mount(path = "/", initialHistoryState: unknown = null) {
   }
 
   function render(nextServices = services, flush = true) {
+    mounted = true;
+    renderedServices = nextServices;
     let value: ReturnType<typeof useServiceDeeplink>;
     let renders = 0;
     do {
@@ -209,7 +221,7 @@ function mount(path = "/", initialHistoryState: unknown = null) {
   }
 
   return {
-    location, history, render, flushEffects, guard, registry, entries, addEventListener, removeEventListener, dispatchEvent,
+    location, history, render, flushEffects, guard, registry, entries, addEventListener, removeEventListener, dispatchEvent, nextPopstate,
     back: () => travel(-1),
     forward: () => travel(1),
     markDirty: (label = "Variables") => {
@@ -229,6 +241,7 @@ function mount(path = "/", initialHistoryState: unknown = null) {
     get listenerCount() { return listeners.size; },
     finishRefresh: () => { refreshing = false; },
     unmount: () => {
+      mounted = false;
       for (const effect of [...layouts, ...effects]) effect?.cleanup?.();
     },
   };
@@ -301,6 +314,26 @@ describe("service drawer navigation", () => {
     expect(hook.history.pushState).not.toHaveBeenCalled();
     expect(hook.history.replaceState).not.toHaveBeenCalled();
   });
+
+  it("delivers clean Back and Forward to the earlier Next listener for synchronous rendering", () => {
+    const hook = mount("/", null, true);
+    hook.render().open("app");
+    hook.render().selectTab("variables");
+    hook.render().open("db");
+    hook.render().selectTab("data");
+    hook.render();
+
+    const back = hook.back();
+    expect(back.stopImmediatePropagation).not.toHaveBeenCalled();
+    expect(hook.nextPopstate).toHaveBeenCalledExactlyOnceWith(back);
+    expect(hook.render()).toMatchObject({ service: services[0], tab: "variables" });
+    const forward = hook.forward();
+    expect(forward.stopImmediatePropagation).not.toHaveBeenCalled();
+    expect(hook.nextPopstate).toHaveBeenCalledTimes(2);
+    expect(hook.nextPopstate).toHaveBeenLastCalledWith(forward);
+    expect(hook.render()).toMatchObject({ service: services[1], tab: "data" });
+    expect(hook.guard.navigate).not.toHaveBeenCalled();
+  });
 });
 
 describe("invalid drawer links", () => {
@@ -370,6 +403,44 @@ describe("newly created service links", () => {
 });
 
 describe("dirty drawer navigation", () => {
+  it("intercepts dirty Back before Next can synchronously render, then delivers only the accepted replay", () => {
+    const hook = mount("/", { tree: "workspace" }, true);
+    hook.render().open("app");
+    hook.render().selectTab("variables");
+    hook.render();
+    hook.markDirty();
+    const before = hook.location.href;
+    expect(hook.addEventListener).toHaveBeenCalledTimes(2);
+    expect(hook.addEventListener.mock.calls[1][1]).toBe(hook.nextPopstate);
+
+    const back = hook.back();
+    expect(back.stopImmediatePropagation).toHaveBeenCalledTimes(1);
+    expect(hook.nextPopstate).not.toHaveBeenCalled();
+    expect(hook.location.href).toBe(before);
+    expect(hook.pending).toBe(true);
+    expect(hook.registry.labels()).toEqual(["Variables"]);
+    hook.keep();
+    expect(hook.render()).toMatchObject({ service: services[0], tab: "variables" });
+    expect(hook.registry.labels()).toEqual(["Variables"]);
+
+    const retry = hook.back();
+    expect(hook.nextPopstate).not.toHaveBeenCalled();
+    expect(hook.guard.navigate).toHaveBeenCalledTimes(2);
+    hook.discard();
+    expect(hook.nextPopstate).toHaveBeenCalledTimes(1);
+    const replay = hook.nextPopstate.mock.calls[0][0];
+    expect(replay).not.toBe(back);
+    expect(replay).not.toBe(retry);
+    expect(replay.state).toEqual({ tree: "workspace" });
+    expect(replay.stopImmediatePropagation).not.toHaveBeenCalled();
+    expect(hook.dispatchEvent).toHaveBeenCalledTimes(3);
+    expect(hook.guard.navigate).toHaveBeenCalledTimes(2);
+    expect(hook.pending).toBe(false);
+    expect(hook.registry.labels()).toEqual([]);
+    expect(hook.location.href).toBe("http://localhost:3067/");
+    expect(hook.render().service).toBeNull();
+  });
+
   it.each(["close", "tab", "service"])("keeps the current form until a dirty %s change is discarded", (change) => {
     const hook = mount("/?service=app&tab=variables");
     hook.render();
@@ -699,17 +770,24 @@ describe("dirty drawer navigation", () => {
     expect(hook.guard.navigate).toHaveBeenCalledTimes(1);
   });
 
-  it("maintains one capture listener across renders and removes it on unmount", () => {
-    const hook = mount("/?service=app&tab=variables");
+  it("keeps the early listener across renders and clears its delegate on unmount", () => {
+    const hook = mount();
+    hook.render().open("app");
     hook.render();
-    hook.render();
-    expect(hook.listenerCount).toBe(1);
-    expect(hook.addEventListener).toHaveBeenCalledExactlyOnceWith("popstate", expect.any(Function), true);
+    expect(hook.listenerCount).toBe(2);
+    expect(hook.addEventListener).toHaveBeenCalledTimes(2);
     hook.render().selectTab("settings");
     hook.render();
-    expect(hook.listenerCount).toBe(1);
-    expect(hook.removeEventListener).toHaveBeenCalledWith("popstate", expect.any(Function), true);
+    expect(hook.listenerCount).toBe(2);
+    expect(hook.addEventListener).toHaveBeenCalledTimes(2);
+    expect(hook.removeEventListener).not.toHaveBeenCalled();
+    hook.markDirty("Settings");
     hook.unmount();
-    expect(hook.listenerCount).toBe(0);
+    expect(hook.listenerCount).toBe(2);
+    const event = hook.back();
+    expect(event.stopImmediatePropagation).not.toHaveBeenCalled();
+    expect(hook.nextPopstate).toHaveBeenCalledExactlyOnceWith(event);
+    expect(hook.guard.navigate).not.toHaveBeenCalled();
+    expect(hook.location.href).toBe("http://localhost:3067/");
   });
 });

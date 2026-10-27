@@ -6,6 +6,7 @@ import type { Service } from "@/lib/dokploy";
 import { parseDeeplink, serializeDeeplink, type TabId } from "@/lib/deeplink";
 import { decideDeeplinkNavigation } from "@/lib/dirty-guard";
 import { useGuardedNavigation } from "@/components/DirtyGuard";
+import { installPopstateGuard, replayPopstate } from "@/lib/popstate-guard";
 
 export function useServiceDeeplink(services: Service[]) {
   const query = useSearchParams().toString();
@@ -65,9 +66,9 @@ export function useServiceDeeplink(services: Service[]) {
         pop ? targetState : null, "", url.pathname + url.search + url.hash,
       );
       currentState.current = window.history.state;
-      // Restore Next's popped route tree as well as its URL. Our listener sees
-      // the accepted target as current on replay, so it cannot prompt again.
-      if (pop) window.dispatchEvent(new PopStateEvent("popstate", { state: targetState }));
+      // Restore Next's popped route tree as well as its URL, bypassing only our
+      // guard for this already accepted event.
+      if (pop) replayPopstate(new PopStateEvent("popstate", { state: targetState }));
     };
     if (result.decision === "repair") {
       pop?.stopImmediatePropagation();
@@ -75,7 +76,7 @@ export function useServiceDeeplink(services: Service[]) {
       return;
     }
     if (result.restore) {
-      // Capture before Next handles popstate. pushState restores the open panel
+      // The head listener runs before Next. pushState restores the open panel
       // without another popstate; repeated Back/Keep replaces the forward entry,
       // so history does not grow. This also covers invalid targets: only Discard
       // applies their repaired destination; a pending prompt keeps its target.
@@ -96,10 +97,9 @@ export function useServiceDeeplink(services: Service[]) {
     }
   }, [getState, scope, activateScope, guard]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onPop = (event: PopStateEvent) => navigateUrl(new URL(window.location.href), true, event);
-    window.addEventListener("popstate", onPop, true);
-    return () => window.removeEventListener("popstate", onPop, true);
+    return installPopstateGuard(onPop);
   }, [navigateUrl]);
 
   useEffect(() => {
