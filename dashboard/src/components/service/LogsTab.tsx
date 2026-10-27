@@ -167,9 +167,20 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
             from history
           </div>
         )}
-        {shown.length === 0 ? (
+        {lines.length === 0 ? (
           <div className="flex h-full items-center justify-center gap-2 text-[var(--color-fg-subtle)]">
             <Loader2 className="size-4 animate-spin" /> waiting for logs…
+          </div>
+        ) : shown.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-[var(--color-fg-subtle)]">
+            <p className="max-w-full break-all">No logs match &quot;{filter}&quot;</p>
+            <button
+              type="button"
+              onClick={() => setFilter("")}
+              className="rounded-lg border border-[var(--color-border-strong)] px-3 py-1.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+            >
+              Clear filter
+            </button>
           </div>
         ) : (
           shown.map((l) => <LogLine key={l.id} line={l} />)
