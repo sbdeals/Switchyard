@@ -1,5 +1,5 @@
 import type { SwitchyardConfig } from "./config.js";
-import { metricsStoreUrl } from "./config.js";
+import { metricsStoreUrl, validateConfigPorts } from "./config.js";
 import { docker, dockerInherit, dockerOk } from "./docker.js";
 import { UserError } from "./errors.js";
 import { sha256, sleep } from "./util.js";
@@ -87,6 +87,7 @@ export async function ensureSwitchyard(
   cliVersion: string,
   log: (msg: string) => void,
 ): Promise<EnsureResult> {
+  validateConfigPorts(cfg);
   const plan = renderContainer(cfg, cliVersion);
 
   if (!(await dockerOk(["network", "inspect", NETWORK_NAME]))) {
