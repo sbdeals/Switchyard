@@ -12,8 +12,7 @@ import {
   Settings2,
   SlidersHorizontal,
   KeyRound,
-  Eye,
-  EyeOff,
+  Plug,
   Box,
   Globe,
   Layers,
@@ -29,7 +28,6 @@ import {
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
-import { connectionString } from "@/lib/connection";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VariablesTab } from "@/components/service/VariablesTab";
@@ -39,6 +37,7 @@ import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { ConnectTab } from "@/components/service/ConnectTab";
 import {
   AppOverviewTab,
   AppBuildTab,
@@ -48,7 +47,7 @@ import {
   DeploymentHistory,
   SchedulesTab,
 } from "@/components/service/AppTabs";
-import { NetworkingTab } from "@/components/service/networking";
+import { AppHttpSettings, NetworkingTab } from "@/components/service/networking";
 import {
   ComposeOverviewTab,
   ComposeEditorTab,
@@ -59,7 +58,6 @@ import {
   inputCls,
   Field,
   Info,
-  CopyButton,
   LifecycleButtons,
   SaveRow,
   DangerZone,
@@ -70,6 +68,7 @@ import { cn } from "@/lib/utils";
 
 type TabId =
   | "overview"
+  | "connect"
   | "variables"
   | "data"
   | "deploy"
@@ -86,6 +85,7 @@ type TabId =
   | "settings";
 const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
   overview: { label: "Overview", icon: <SlidersHorizontal className="size-4" /> },
+  connect: { label: "Connect", icon: <Plug className="size-4" /> },
   variables: { label: "Variables", icon: <KeyRound className="size-4" /> },
   data: { label: "Data", icon: <Table2 className="size-4" /> },
   deploy: { label: "Deploy", icon: <Server className="size-4" /> },
@@ -103,6 +103,7 @@ const TAB_META: Record<TabId, { label: string; icon: React.ReactNode }> = {
 };
 const DB_TABS: TabId[] = [
   "overview",
+  "connect",
   "variables",
   "volumes",
   "metrics",
@@ -147,14 +148,8 @@ const COMPOSE_TABS: TabId[] = [
  */
 function isPostgresService(s: Service): boolean {
   if (s.kind === "database") return s.engine === "postgres" || /postgres/i.test(s.dockerImage ?? "");
-  if (s.kind === "compose") return composeMentionsPostgres(s.composeFile);
+  if (s.kind === "compose") return s.hasPostgres ?? false;
   return false;
-}
-
-/** True when a compose file has a service whose `image:` references postgres. */
-function composeMentionsPostgres(file: string | null): boolean {
-  if (!file) return false;
-  return /^[ \t]*image:[ \t]*["']?[^\n#"']*postgres/im.test(file);
 }
 
 /** Insert the Data tab right after Overview. */
@@ -450,10 +445,11 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : (
                   <AppOverviewTab app={service} />
                 ))}
-              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "connect" && service.kind === "database" && <ConnectTab key={service.id} db={service} />}
+              {tab === "variables" && <VariablesTab key={`${service.kind}:${service.id}`} service={service} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
-              {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
-              {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
+              {tab === "deploy" && service.kind === "application" && <AppDeployTab key={service.id} app={service} />}
+              {tab === "build" && service.kind === "application" && <AppBuildTab key={service.id} app={service} />}
               {tab === "domains" && service.kind === "application" && (
                 <NetworkingTab app={service} />
               )}
@@ -461,7 +457,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 <ComposeDomainsTab compose={service} />
               )}
               {tab === "deployments" && service.kind === "application" && (
-                <DeploymentsTab app={service} />
+                <DeploymentsTab key={service.id} app={service} />
               )}
               {tab === "deployments" && service.kind === "compose" && (
                 <DeploymentHistory deployments={service.deployments} />
@@ -470,7 +466,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 <SchedulesTab app={service} />
               )}
               {tab === "editor" && service.kind === "compose" && (
-                <ComposeEditorTab compose={service} />
+                <ComposeEditorTab key={service.id} compose={service} />
               )}
               {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
@@ -483,7 +479,10 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 ) : service.kind === "compose" ? (
                   <ComposeSettingsTab compose={service} onClose={onClose} />
                 ) : (
-                  <AppSettingsTab app={service} onClose={onClose} />
+                  <div className="space-y-5">
+                    <AppHttpSettings key={service.id} app={service} />
+                    <AppSettingsTab app={service} onClose={onClose} />
+                  </div>
                 ))}
             </div>
           </motion.aside>
@@ -546,22 +545,10 @@ const useDbLifecycle = (db: Database) =>
 function OverviewTab({ db }: { db: Database }) {
   const meta = ENGINE_META[db.engine];
   const { pending, error, run } = useDbLifecycle(db);
-  const conn = connectionString(db);
 
   return (
     <div className="space-y-5">
       <LifecycleButtons status={db.status} pending={pending} error={error} run={run} />
-
-      {conn && (
-        <Field label="Connection string">
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2.5">
-            <code className="flex-1 truncate font-mono text-[11px] text-[var(--color-fg-muted)]">
-              {conn}
-            </code>
-            <CopyButton text={conn} />
-          </div>
-        </Field>
-      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Info label="Image" value={db.dockerImage ?? "—"} mono />
@@ -653,8 +640,6 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
         <SaveRow saving={saving} saved={saved} error={saveError} disabled={!dirty} onSave={save} />
       </div>
 
-      <PasswordRow db={db} />
-
       <Info label="App name" value={db.appName} mono />
       <Info label="Created" value={db.createdAt ? new Date(db.createdAt).toLocaleString() : "—"} />
 
@@ -666,29 +651,5 @@ function SettingsTab({ db, onClose }: { db: Database; onClose: () => void }) {
         onDestroy={() => run("remove", onClose)}
       />
     </div>
-  );
-}
-
-function PasswordRow({ db }: { db: Database }) {
-  const [show, setShow] = useState(false);
-  if (!db.databasePassword) return null;
-  return (
-    <Field label="Password" hint="rotation coming soon">
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[#0b0b10] p-2">
-        <code className="flex-1 truncate font-mono text-xs text-[var(--color-fg-muted)]">
-          {show ? db.databasePassword : "•".repeat(16)}
-        </code>
-        <button
-          type="button"
-          onClick={() => setShow((s) => !s)}
-          aria-label={show ? "Hide password" : "Show password"}
-          aria-pressed={show}
-          className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
-        >
-          {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-        </button>
-        <CopyButton text={db.databasePassword} />
-      </div>
-    </Field>
   );
 }
