@@ -150,7 +150,7 @@ function DestinationsSection({
               <button
                 onClick={() => setDeleting(d)}
                 aria-label={`Remove destination ${d.name}`}
-                className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
+                className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
               >
                 <Trash2 className="size-3.5" />
               </button>

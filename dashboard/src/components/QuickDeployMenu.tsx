@@ -158,7 +158,7 @@ export function QuickDeployMenu({
         : "Add a database";
 
   const content = (
-    <div className="relative">
+    <div className="relative max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10 max-lg:[&_input]:min-h-10 max-lg:[&_select]:min-h-10">
       {cards ? (
         <div className="grid gap-3 sm:grid-cols-3">
           {([
@@ -212,8 +212,20 @@ export function QuickDeployMenu({
               transition={{ duration: 0.12 }}
               className={cards
                 ? "fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-5 shadow-2xl"
-                : `${anchor ? "fixed max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto" : "absolute right-0 mt-2 overflow-hidden"} z-50 w-80 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl`}
+                : `fixed left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-50 max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] overflow-y-auto overscroll-contain rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl sm:w-80 ${anchor ? "sm:left-[var(--menu-left)] sm:right-auto sm:top-[var(--menu-top)] sm:max-h-[calc(100dvh-1rem)] sm:max-w-[calc(100vw-1rem)]" : "sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:max-h-[calc(100dvh-8rem)]"}`}
             >
+              {!cards && (
+                <div className="mb-1 flex items-center justify-between pl-2 sm:hidden">
+                  <span className="text-sm font-semibold">New service</span>
+                  <button
+                    onClick={close}
+                    aria-label="Close new service"
+                    className="flex items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              )}
               {cards && (
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <h2 className="text-sm font-semibold">{title}</h2>
@@ -462,7 +474,7 @@ export function QuickDeployMenu({
                       )}
                     </span>
                     <span className="flex-1">{e.label}</span>
-                    <span className="text-[11px] text-[var(--color-fg-subtle)]">
+                    <span className="min-w-0 truncate text-[11px] text-[var(--color-fg-subtle)]">
                       {e.image}:{e.versions[0]}
                     </span>
                   </button>
@@ -519,8 +531,8 @@ function FocusTrapPanel({
       const point = anchoredMenuPosition(anchor,
         { width: window.innerWidth, height: window.innerHeight },
         { width: panel.offsetWidth, height: panel.offsetHeight });
-      panel.style.left = `${point.x}px`;
-      panel.style.top = `${point.y}px`;
+      panel.style.setProperty("--menu-left", `${point.x}px`);
+      panel.style.setProperty("--menu-top", `${point.y}px`);
     };
     position();
     const observer = new ResizeObserver(position);
