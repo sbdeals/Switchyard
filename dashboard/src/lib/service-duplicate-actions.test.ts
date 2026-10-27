@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   unstable_rethrow: vi.fn(),
 }));
 
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 vi.mock("@/lib/dokploy", () => ({ request: mocks.request }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: mocks.unstable_rethrow }));

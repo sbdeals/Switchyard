@@ -325,6 +325,7 @@ export interface ProjectNode {
   projectId: string;
   name: string;
   environments: EnvironmentNode[];
+  volumeSizeBytes?: number | null;
 }
 
 // --- session handling -------------------------------------------------------
