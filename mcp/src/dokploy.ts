@@ -217,6 +217,9 @@ interface RawDetail {
   applicationStatus?: string;
   composeStatus?: string;
   env?: string | null;
+  buildArgs?: string | null;
+  buildSecrets?: string | null;
+  createEnvFile?: boolean | null;
 }
 
 async function dbDetail(engine: Engine, id: string): Promise<RawDetail> {
@@ -243,6 +246,7 @@ export interface ServiceRef {
 /**
  * Enumerate every service across the workspace, enriched with per-service
  * detail (an N+1 fan-out, same as the dashboard's loadWorkspace).
+ * Includes raw env for manage_env; discovery responses must project metadata only.
  */
 export async function listServices(): Promise<ServiceSummary[]> {
   const tree = await rawTree();
@@ -308,19 +312,22 @@ export async function listServices(): Promise<ServiceSummary[]> {
 export async function findService(query: string): Promise<ServiceSummary> {
   const q = query.trim().toLowerCase();
   const services = await listServices();
-  const exact =
-    services.find((s) => s.id === query) ??
-    services.find((s) => s.appName.toLowerCase() === q) ??
-    services.find((s) => s.name.toLowerCase() === q);
-  if (exact) return exact;
-  const partial = services.filter(
-    (s) => s.name.toLowerCase().includes(q) || s.appName.toLowerCase().includes(q)
-  );
-  if (partial.length === 1) return partial[0]!;
-  if (partial.length > 1) {
+  const exactId = services.filter((s) => s.id === query);
+  const exactAppName = services.filter((s) => s.appName.toLowerCase() === q);
+  const exactName = services.filter((s) => s.name.toLowerCase() === q);
+  const matches =
+    [exactId, exactAppName, exactName].find((matches) => matches.length > 0) ??
+    services.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.appName.toLowerCase().includes(q)
+    );
+  if (matches.length === 1) return matches[0]!;
+  if (matches.length > 1) {
     throw new Error(
-      `"${query}" matches multiple services: ${partial.map((s) => s.name).join(", ")}. ` +
-        "Use an exact name or id."
+      `"${query}" matches multiple services:\n` +
+        matches.map((s) =>
+          `- ${s.name} (project: ${s.projectName}, environment: ${s.environmentName}, id: ${s.id}, appName: ${s.appName})`
+        ).join("\n") +
+        "\nPass the id or appName to select a service."
     );
   }
   throw new Error(`No service matches "${query}". Use list_services to see what exists.`);
@@ -332,7 +339,9 @@ export async function databaseAction(engine: Engine, id: string, action: Action)
   await request(`${engine}.${action}`, { method: "POST", body: { [idKey(engine)]: id } });
 }
 export async function applicationAction(id: string, action: Action): Promise<void> {
-  await request(`application.${action}`, { method: "POST", body: { applicationId: id } });
+  // Like compose, applications use delete instead of remove.
+  const proc = action === "remove" ? "delete" : action;
+  await request(`application.${proc}`, { method: "POST", body: { applicationId: id } });
 }
 export async function composeAction(id: string, action: Action): Promise<void> {
   // compose uses delete instead of remove.
@@ -389,10 +398,21 @@ export async function setAppGitSource(
   });
 }
 
-export async function saveApplicationEnvironment(id: string, env: string): Promise<void> {
+export async function saveApplicationEnvironment(
+  id: string,
+  env: string,
+  settings: { buildArgs?: string; buildSecrets?: string; createEnvFile?: boolean } = {}
+): Promise<void> {
+  const current = await appDetail(id);
   await request("application.saveEnvironment", {
     method: "POST",
-    body: { applicationId: id, env, buildArgs: "", buildSecrets: "", createEnvFile: false },
+    body: {
+      applicationId: id,
+      env,
+      buildArgs: settings.buildArgs ?? current.buildArgs ?? "",
+      buildSecrets: settings.buildSecrets ?? current.buildSecrets ?? "",
+      createEnvFile: settings.createEnvFile ?? current.createEnvFile ?? false,
+    },
   });
 }
 
