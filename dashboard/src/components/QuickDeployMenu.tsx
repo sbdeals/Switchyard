@@ -15,6 +15,7 @@ import {
   LayoutTemplate,
   Search,
   ChevronDown,
+  X,
 } from "lucide-react";
 import type { Engine, ProjectNode, DokployTemplate } from "@/lib/dokploy";
 import { ENGINE_LIST } from "@/lib/engines";
@@ -40,17 +41,30 @@ export function QuickDeployMenu({
   onDeployed,
   anchor,
   onClose,
+  variant = "menu",
+  menuOpen,
+  onMenuOpenChange,
 }: {
   projects: ProjectNode[];
   onDeployed: (id: string) => void;
   anchor?: Point;
   onClose?: () => void;
+  variant?: "menu" | "cards";
+  menuOpen?: boolean;
+  onMenuOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(!!anchor);
+  const [localOpen, setLocalOpen] = useState(!!anchor);
+  const open = menuOpen ?? localOpen;
+  function setOpen(next: boolean) {
+    setLocalOpen(next);
+    onMenuOpenChange?.(next);
+  }
+  const [source, setSource] = useState<"repo" | "image" | "database">("image");
   const [githubOpen, setGithubOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [image, setImage] = useState("");
+  const [name, setName] = useState("");
   const [port, setPort] = useState("");
   const [repo, setRepo] = useState("");
   const [, startTransition] = useTransition();
@@ -70,7 +84,9 @@ export function QuickDeployMenu({
     [projects]
   );
   const [target, setTarget] = useState<string>("");
-  const targetEnv = target || envOptions[0]?.id;
+  const targetEnv = envOptions.some((option) => option.id === target) ? target : envOptions[0]?.id;
+  const missingEnvironment = projects.length > 0 && envOptions.length === 0;
+  const environmentError = "Add an environment in Projects before deploying a service.";
 
   function close() {
     setOpen(false);
@@ -78,6 +94,10 @@ export function QuickDeployMenu({
   }
 
   function run(key: string, fn: () => Promise<{ ok: true; id: string } | { ok: false; error: string }>) {
+    if (missingEnvironment) {
+      setError(environmentError);
+      return;
+    }
     setError(null);
     setBusy(key);
     startTransition(async () => {
@@ -86,6 +106,7 @@ export function QuickDeployMenu({
       if (res.ok) {
         setOpen(false);
         setImage("");
+        setName("");
         setPort("");
         setRepo("");
         onDeployed(res.id);
@@ -95,7 +116,7 @@ export function QuickDeployMenu({
 
   const deployDb = (engine: Engine) =>
     run(`db:${engine}`, () => quickDeployDatabaseAction(engine, targetEnv));
-  const deployImage = () => run("app", () => quickDeployImageAction(image, undefined, targetEnv, port));
+  const deployImage = () => run("app", () => quickDeployImageAction(image, name.trim() || undefined, targetEnv, port));
   const deployRepo = () => run("repo", () => quickDeployRepoAction(repo, undefined, targetEnv));
   const createComposeStack = () => run("compose", () => createComposeAction(undefined, targetEnv));
   const deployTemplate = (id: string) =>
@@ -125,10 +146,45 @@ export function QuickDeployMenu({
     );
   }, [templates, query]);
 
+  const cards = variant === "cards";
+  const title = !cards
+    ? "New service"
+    : source === "repo"
+      ? "Deploy from GitHub repo"
+      : source === "image"
+        ? "Deploy a Docker image"
+        : "Add a database";
+
   const content = (
     <div className="relative">
-      {!anchor && <button
-        onClick={() => setOpen((o) => !o)}
+      {cards ? (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([
+            { source: "repo", label: "Deploy from GitHub repo", description: "Build and deploy your code.", Icon: GitBranch },
+            { source: "image", label: "Deploy a Docker image", description: "Run a ready-to-use container.", Icon: Box },
+            { source: "database", label: "Add a database", description: "Give your app a place for its data.", Icon: DatabaseIcon },
+          ] as const).map((action) => (
+            <button
+              key={action.source}
+              onClick={() => {
+                setSource(action.source);
+                setError(null);
+                setOpen(true);
+              }}
+              aria-haspopup="dialog"
+              aria-expanded={open && source === action.source}
+              className="flex flex-col items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-5 text-left transition-colors hover:border-[var(--color-brand)] hover:bg-[var(--color-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
+            >
+              <span className="flex size-10 items-center justify-center rounded-lg bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
+                <action.Icon className="size-5" aria-hidden="true" />
+              </span>
+              <span className="text-sm font-semibold">{action.label}</span>
+              <span className="text-xs text-[var(--color-fg-muted)]">{action.description}</span>
+            </button>
+          ))}
+        </div>
+      ) : !anchor && <button
+        onClick={() => setOpen(!open)}
         aria-haspopup="true"
         aria-expanded={open}
         className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)]"
@@ -139,18 +195,38 @@ export function QuickDeployMenu({
       <AnimatePresence>
         {open && (
           <>
-            <div className="fixed inset-0 z-40" onClick={close} />
+            <div className={`fixed inset-0 z-40 ${cards ? "bg-black/50" : ""}`} onClick={close} />
             <FocusTrapPanel
               onClose={close}
               anchor={anchor}
               role="dialog"
-              aria-label="New service"
+              aria-label={title}
+              aria-modal={cards ? true : undefined}
               initial={{ opacity: 0, y: -6, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.12 }}
-              className={`${anchor ? "fixed max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto" : "absolute right-0 mt-2 overflow-hidden"} z-50 w-80 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl`}
+              className={cards
+                ? "fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-5 shadow-2xl"
+                : `${anchor ? "fixed max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto" : "absolute right-0 mt-2 overflow-hidden"} z-50 w-80 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl`}
             >
+              {cards && (
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-semibold">{title}</h2>
+                  <button
+                    onClick={() => setOpen(false)}
+                    aria-label="Close deployment dialog"
+                    className="rounded-md p-2 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+              {cards && source === "repo" && (
+                <p className="mb-3 text-xs text-[var(--color-fg-muted)]">
+                  Paste a public repository URL or choose a connected GitHub repository.
+                </p>
+              )}
               {envOptions.length > 1 && (
                 <select
                   value={targetEnv}
@@ -166,7 +242,19 @@ export function QuickDeployMenu({
                 </select>
               )}
 
-              <SectionLabel>Application</SectionLabel>
+              {!cards && <SectionLabel>Application</SectionLabel>}
+              {(!cards || source === "image") && <>
+              {cards && (
+                <label className="mb-3 block text-xs text-[var(--color-fg-muted)]">
+                  Service name (optional)
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="my-app"
+                    className="mt-1.5 w-full rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-2 text-sm outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+                  />
+                </label>
+              )}
               <div className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1">
                 <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
                   <Box className="size-4" />
@@ -174,14 +262,15 @@ export function QuickDeployMenu({
                 <input
                   value={image}
                   onChange={(e) => setImage(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && image.trim() && deployImage()}
+                  onKeyDown={(e) => e.key === "Enter" && image.trim() && busy === null && deployImage()}
+                  data-autofocus={cards || undefined}
                   placeholder="docker image, e.g. nginx:alpine"
                   aria-label="Docker image"
                   className="min-w-0 flex-1 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                 />
                 <button
                   onClick={deployImage}
-                  disabled={!image.trim() || busy !== null}
+                  disabled={!image.trim() || busy !== null || missingEnvironment}
                   className="shrink-0 rounded-md bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
                 >
                   {busy === "app" ? (
@@ -203,11 +292,13 @@ export function QuickDeployMenu({
                   step={1}
                   value={port}
                   onChange={(e) => setPort(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && image.trim() && deployImage()}
+                  onKeyDown={(e) => e.key === "Enter" && image.trim() && busy === null && deployImage()}
                   placeholder="Auto"
                   className="w-24 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 text-xs text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                 />
               </label>
+              </>}
+              {(!cards || source === "repo") && <>
               <div className="mb-1 flex items-center gap-1.5 rounded-lg px-1 py-1">
                 <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
                   <GitBranch className="size-4" />
@@ -215,14 +306,15 @@ export function QuickDeployMenu({
                 <input
                   value={repo}
                   onChange={(e) => setRepo(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && repo.trim() && deployRepo()}
+                  onKeyDown={(e) => e.key === "Enter" && repo.trim() && busy === null && deployRepo()}
+                  data-autofocus={cards || undefined}
                   placeholder="git repo url (Nixpacks build)"
                   aria-label="Git repository URL"
                   className="min-w-0 flex-1 rounded-md border border-[var(--color-border-control)] bg-[var(--color-surface)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
                 />
                 <button
                   onClick={deployRepo}
-                  disabled={!repo.trim() || busy !== null}
+                  disabled={!repo.trim() || busy !== null || missingEnvironment}
                   className="shrink-0 rounded-md bg-[var(--color-brand-strong)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
                 >
                   {busy === "repo" ? (
@@ -236,11 +328,12 @@ export function QuickDeployMenu({
                 </button>
               </div>
               <button
+                disabled={missingEnvironment}
                 onClick={() => {
                   setOpen(false);
                   setGithubOpen(true);
                 }}
-                className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)]"
+                className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)] disabled:opacity-50"
               >
                 <span className="flex size-7 items-center justify-center rounded-md bg-[var(--color-surface)] text-[var(--color-fg)]">
                   <GitFork className="size-4" />
@@ -248,9 +341,11 @@ export function QuickDeployMenu({
                 <span className="flex-1">From GitHub</span>
                 <span className="text-[11px] text-[var(--color-fg-subtle)]">private repos</span>
               </button>
+              </>}
+              {!cards && <>
               <button
                 onClick={createComposeStack}
-                disabled={busy !== null}
+                disabled={busy !== null || missingEnvironment}
                 className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)] disabled:opacity-50"
               >
                 <span
@@ -316,7 +411,7 @@ export function QuickDeployMenu({
                         <button
                           key={t.id}
                           onClick={() => deployTemplate(t.id)}
-                          disabled={busy !== null}
+                          disabled={busy !== null || missingEnvironment}
                           title={t.description}
                           className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--color-surface)] disabled:opacity-50"
                         >
@@ -339,14 +434,16 @@ export function QuickDeployMenu({
                   )}
                 </div>
               )}
+              </>}
 
-              <SectionLabel>Database</SectionLabel>
+              {(!cards || source === "database") && <>
+              {!cards && <SectionLabel>Database</SectionLabel>}
               <div className="grid grid-cols-1">
                 {ENGINE_LIST.map((e) => (
                   <button
                     key={e.id}
                     onClick={() => deployDb(e.id)}
-                    disabled={busy !== null}
+                    disabled={busy !== null || missingEnvironment}
                     className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface)] disabled:opacity-50"
                   >
                     <span
@@ -366,10 +463,11 @@ export function QuickDeployMenu({
                   </button>
                 ))}
               </div>
+              </>}
 
-              {error && (
+              {(error || missingEnvironment) && (
                 <div role="alert" className="mt-1 flex items-start gap-1.5 px-2 py-1.5 text-xs text-[var(--color-danger)]">
-                  <AlertCircle className="mt-0.5 size-3.5 shrink-0" /> {error}
+                  <AlertCircle className="mt-0.5 size-3.5 shrink-0" /> {error || environmentError}
                 </div>
               )}
             </FocusTrapPanel>
@@ -378,7 +476,7 @@ export function QuickDeployMenu({
       </AnimatePresence>
 
       <GithubDeployModal
-        open={githubOpen}
+        open={githubOpen && !missingEnvironment}
         onClose={() => {
           setGithubOpen(false);
           onClose?.();
