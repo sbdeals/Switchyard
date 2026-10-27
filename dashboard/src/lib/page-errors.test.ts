@@ -21,6 +21,13 @@ vi.mock("@/lib/dokploy", () => ({
   loadWorkspace: mocks.loadWorkspace,
   inferEdges: mocks.inferEdges,
 }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => ({ value: "test-session" }) }),
+}));
+vi.mock("@/lib/session", () => ({
+  SESSION_COOKIE: "switchyard_session",
+  openSession: () => ({ email: "test@example.test" }),
+}));
 vi.mock("@/lib/collector", () => ({ ensureCollector: mocks.ensureCollector }));
 vi.mock("@/components/Workspace", () => ({
   Workspace: () => createElement("div", null, "Workspace loaded"),
