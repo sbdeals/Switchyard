@@ -4,6 +4,8 @@ import { unstable_rethrow } from "next/navigation";
 import { loadWorkspace, updateServiceNotes, type Service } from "./dokploy";
 import { saveServiceNotesAction } from "../app/actions";
 
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: vi.fn() }));
 vi.mock("@/lib/dokploy", () => ({
