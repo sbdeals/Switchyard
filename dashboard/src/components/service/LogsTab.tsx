@@ -35,6 +35,7 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
     if (!active || !appName) return;
     const es = new EventSource(`/api/services/logs?app=${encodeURIComponent(appName)}`);
     es.onopen = () => setConnected(true);
+    es.addEventListener("reset", () => setLines([]));
     es.onmessage = (e) => {
       try {
         const raw = JSON.parse(e.data) as { ts: number; text: string };
