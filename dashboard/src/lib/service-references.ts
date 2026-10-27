@@ -97,6 +97,7 @@ export function inferEdges(services: readonly ReferenceService[]): ServiceEdge[]
     if (!haystack) continue;
     for (const target of services) {
       if (source.id === target.id) continue;
+      if (source.projectId !== target.projectId || source.environmentId !== target.environmentId) continue;
       const needles = [target.appName, target.name].filter(Boolean).map((s) => s.toLowerCase());
       if (needles.some((name) => name.length > 2 && haystack.includes(name))) {
         const key = JSON.stringify([source.id, target.id]);

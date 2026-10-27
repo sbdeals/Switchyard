@@ -222,6 +222,18 @@ describe("buildServiceReferenceGraph", () => {
     });
   });
 
+  it("keeps inferred fallback edges within the consumer's project and environment", () => {
+    expect(buildServiceReferenceGraph([
+      service("api", { env: "URL=postgres://database:5432/app" }),
+      service("local-db", { name: "database" }),
+      service("copied-db", { name: "database", environmentId: "copy" }),
+      service("other-db", { name: "database", projectId: "other-project" }),
+    ])).toEqual({
+      edges: [{ source: "api", target: "local-db", kind: "inferred" }],
+      warnings: {},
+    });
+  });
+
   it("never merges explicit or inferred self edges", () => {
     expect(buildServiceReferenceGraph([
       service("cre-api", { env: "REF=${{cre-api.HOST}}\nURL=http://cre-api:80" }),

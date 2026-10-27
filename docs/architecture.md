@@ -75,23 +75,25 @@ The action surface, one line each:
 
 | Group | Actions |
 |---|---|
-| Quick deploy | `quickDeployDatabaseAction` (random name + password, latest engine version, then deploy), `quickDeployImageAction` (Docker image), `quickDeployRepoAction` (public Git repo, Nixpacks build), `createComposeAction` (starter YAML) |
+| Quick deploy | `quickDeployDatabaseAction` (random name + password, latest engine version, then deploy), `quickDeployImageAction` (Docker image), `quickDeployRepoAction` (public Git repo, Nixpacks build), `quickDeployGithubAction` (GitHub App, including private repos), `createComposeAction` (starter YAML) |
 | Lifecycle | `lifecycleAction` / `appLifecycleAction` / `composeLifecycleAction` — `deploy`, `start`, `stop`, `remove` (compose maps `remove` to Dokploy's `compose.delete`) |
 | Settings | `updateDatabaseAction` (reloads the container when image/resources/port change), `updateApplicationAction` (optional redeploy), `saveComposeFileAction` |
-| Env vars | `saveEnvironmentAction` (databases), `saveApplicationEnvAction` |
+| Env vars | `saveEnvironmentAction` (databases), `saveApplicationEnvAction`, `saveComposeEnvAction` |
 | Domains | `createDomainAction` — `domain.create` with `https: true` and Let's Encrypt; app quick-deploys additionally call `ensureAutoDomain` to mint a public URL automatically (see below) |
 | Projects | create/rename/remove project and environment |
 
 Quick deploys route through `resolveTargetEnv()`: if no environment is picked and none exists, it creates a default "My Project" (Dokploy auto-creates its default environment) and deploys there.
 
+**GitHub App sources.** `GithubDeployModal` lists Dokploy's installed GitHub providers, their accessible repositories (including private ones), and branches. `quickDeployGithubAction` creates an application and calls `application.saveGithubProvider` with the chosen installation/repository/branch, root build path, and push trigger, then enables auto-deploy and deploys. Without an App, the modal links to Dokploy's Git-provider settings for creation/installation (requires a public callback), then offers Refresh. The separate public clone-URL flow needs no App; see the [operator flow](dashboard-guide.md#deploy-from-a-git-repository).
+
 ### Auto-URL: a public URL on app deploy
 
-`quickDeployRepoAction` / `quickDeployImageAction` mint a reachable URL right after kicking off the deploy, so an app has a Public URL with no manual DNS. `ensureAutoDomain()` (in `dokploy.ts`) is gated on the `SWITCHYARD_HOST_IP` env var — set only on the Linux path where Dokploy's Traefik owns 80/443. Its logic:
+`quickDeployRepoAction` / `quickDeployImageAction` / `quickDeployGithubAction` attempt to mint a reachable URL right after kicking off the deploy, so an app has a Public URL with no manual DNS. `ensureAutoDomain()` (in `dokploy.ts`) is gated on the `SWITCHYARD_HOST_IP` env var — detected by the CLI on Linux where Dokploy's Traefik owns 80/443. Its logic:
 
 1. Prefer Dokploy's built-in `domain.generateDomain`, which returns a `*.traefik.me` host (`<appName>-<rand>.<hostIP>.traefik.me`) that resolves to the host IP with no DNS. traefik.me is served over a shared cert, so the domain is created with `certificateType: "none"`.
 2. Fall back to `<appName>.<SWITCHYARD_HOST_IP>.sslip.io` (sslip.io resolves any embedded IP) with a real Let's Encrypt cert, when Dokploy can't produce a usable host.
 
-It is idempotent — if the app already carries a `*.traefik.me`/`*.sslip.io` domain it returns that host instead of creating a second one — and best-effort: a failure to mint the URL never fails the deploy (the app is just left domain-less). The minted domain is created with HTTPS, so the Overview tab elects it as the Public URL. On **Docker Desktop and in dev mode `SWITCHYARD_HOST_IP` is unset**, so auto-URL is a documented no-op (Traefik is unmanaged there and domains wouldn't route); add a domain by hand in the Domains tab if needed.
+It is idempotent — if the app already carries a `*.traefik.me`/`*.sslip.io` domain it returns that host instead of creating a second one — and best-effort: a failure to mint the URL never fails the deploy (the app is just left domain-less). The minted domain is created with HTTPS, so the Overview tab elects it as the Public URL. Without `SWITCHYARD_HOST_IP` (Docker Desktop and a default manual/dev setup), deploy-time auto-URL is a no-op. The separate **Generate URL** action in Networking uses `generateHostFor()` to attach an HTTP `.localhost` domain on the selected port instead. Routing still needs a proxy; CLI/desktop installs support opt-in local ingress (`switchyard local-ingress up`, default HTTP port `8080`).
 
 ## Live logs and metrics over SSE
 
@@ -107,7 +109,7 @@ Shared plumbing lives in [`src/lib/sse.ts`](../dashboard/src/lib/sse.ts): SSE he
 
 Both routes export `runtime = "nodejs"` (dockerode needs Node APIs) and `dynamic = "force-dynamic"`. On the client, `LogsTab` and `MetricsTab` are plain `EventSource` consumers: logs keep a capped buffer (trimmed from 2000 back to 1500 lines) with client-side filtering and stick-to-bottom scrolling; metrics keep the last 60 samples in Recharts area charts.
 
-**`DOCKER_SOCKET`.** The socket path defaults to `/var/run/docker.sock` and can be overridden with the `DOCKER_SOCKET` env var. On Windows, Docker Desktop exposes the engine on a named pipe instead — set:
+**`DOCKER_SOCKET`.** The socket path defaults to `/var/run/docker.sock` and can be overridden with the `DOCKER_SOCKET` env var. CLI/desktop-managed dashboard containers mount this socket automatically. For a dashboard run manually/from source on Windows, Docker Desktop exposes the engine on a named pipe instead — set:
 
 ```dotenv
 DOCKER_SOCKET=//./pipe/docker_engine
@@ -149,7 +151,7 @@ The Railway-style canvas ([`src/components/canvas/FlowCanvas.tsx`](../dashboard/
 
 **Reference graph** ([`src/lib/service-references.ts`](../dashboard/src/lib/service-references.ts)). The pure parser reads `${{ServiceName.VAR}}` tokens from env assignment values, excluding comments. Names resolve exactly within the source's project and environment. The graph groups variables into one directed edge per consumer/target pair, ignores self references, and reports missing or ambiguous targets as node warnings. Solid reference arrows use the target's accent color, variable labels, and tooltips saying "references".
 
-**Inferred fallback.** `inferEdges()` retains the case-insensitive env-substring heuristic for service `appName` or `name` longer than two characters. It ignores comments and explicit reference tokens, so unresolved tokens cannot create inferred edges. The graph merges one inferred edge per pair only when no explicit edge exists. These hints remain available for today's plain connection strings, are muted and dashed with no variable label, and have an "inferred: … (heuristic)" tooltip. Inference can produce false positives, including across project/environment boundaries. Both tooltip types expose names only, never env values. A legend appears only when there are edges.
+**Inferred fallback.** `inferEdges()` retains the case-insensitive env-substring heuristic for service `appName` or `name` longer than two characters. It ignores comments and explicit reference tokens, so unresolved tokens cannot create inferred edges. The graph merges one inferred edge per pair only when no explicit edge exists. These hints remain available for today's plain connection strings, are muted and dashed with no variable label, and have an "inferred: … (heuristic)" tooltip. Inference stays within the source's project and environment, but can still produce false positives. Both tooltip types expose names only, never env values. A legend appears only when there are edges.
 
 This is visualization only: `${{…}}` references are not resolved at deployment time, and target-variable existence/runtime connectivity are not validated. Colocated Vitest tests cover parsing, scope, warnings, explicit precedence, inferred deduplication, and self references.
 
@@ -177,9 +179,11 @@ Clicking a node (or a card in the grid view) opens the service drawer.
 
 | Kind | Tabs |
 |---|---|
-| Database | Overview (lifecycle, connection string, facts) · Variables · Metrics · Logs · Settings (name, version, external port, CPU/mem, password reveal, danger zone) |
-| Application | Overview · Variables · Domains (attach host, auto-SSL) · Deploys (history) · Metrics · Logs · Settings |
-| Compose | Overview · Compose (YAML editor with save & deploy) · Logs · Settings |
+| Database | Overview · Variables · Volumes · Metrics · Logs · Console · Backups · Settings |
+| Application | Overview · Variables · Deploy · Build · Networking · Deploys · Schedules · Volumes · Metrics · Logs · Console · Settings |
+| Compose | Overview · Variables · Networking · Deploys · Compose · Volumes · Metrics · Logs · Console · Settings |
+
+**Data** is inserted after **Overview** for databases whose engine is `postgres` or whose image contains `postgres`, and compose stacks with an `image:` value containing `postgres` (case-insensitive).
 
 Metrics and Logs tabs are keyed by `appName` and mount their `EventSource` only while active.
 
@@ -211,7 +215,7 @@ const nextConfig: NextConfig = {
 | `DOKPLOY_EMAIL` | — | Dokploy admin email (BFF sign-in) |
 | `DOKPLOY_PASSWORD` | — | Dokploy admin password |
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker Engine socket; `//./pipe/docker_engine` on Windows |
-| `SWITCHYARD_HOST_IP` | — | Host public/advertise IP. When set, app deploys mint an auto-URL (traefik.me / sslip.io) with no DNS. Unset = auto-URL disabled (dev / Docker Desktop). The CLI sets it on Linux. |
+| `SWITCHYARD_HOST_IP` | — | Host public/advertise IP. When set, app quick-deploys attempt an auto-URL (traefik.me / sslip.io) with no DNS. Unset = deploy-time auto-URL disabled; Generate URL uses HTTP `.localhost`. The CLI detects it on Linux. |
 | `SWITCHYARD_STORE_URL` | — | Postgres URL for durable metrics/logs. Unset = persistence off (dev). Set by the CLI to the `switchyard-metrics` service. |
 | `SWITCHYARD_ALERTS` | on | Crash-loop alerting; `0`/`false`/`off` disables it. |
 | `SWITCHYARD_ALERT_NOTIFICATION` | first | Which Dokploy notification channel to alert through (name or id). |
