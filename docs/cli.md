@@ -76,21 +76,42 @@ Re-running `up` converges: same config → no-op; changed config or a newer CLI
 version → the container is recreated (that's also the upgrade path:
 `npx switchyard-cli@latest up`).
 
+The CLI mounts the named Docker volume `switchyard-data` at `/app/data` and
+sets `SWITCHYARD_AGENT_KEY_FILE=/app/data/agent-key.json`. This explicit setting
+keeps the dashboard's development default unchanged. Saved agent provider,
+API key, and OAuth state, plus other files written under `/app/data` (including
+dashboard backups), survive container replacements. The desktop app calls the
+same launcher and inherits this storage.
+
+On the first replacement of an older container without this volume, the
+launcher migrates its saved agent key file before removing the old container.
+If migration fails, replacement aborts and the old container is retained so
+the settings can be recovered. An identical file already in the volume is safe
+to retry; conflicting contents abort instead of overwriting either copy.
+This migration does not recover files from a container that has already been
+deleted or copy other legacy files outside the agent key file.
+
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `switchyard up` | Install/converge/upgrade the whole stack (idempotent) |
 | `switchyard deploy [path]` | Upload and deploy a local directory to Dokploy (see flags below) |
+| `switchyard link` | Remember an existing project, environment, and application for this directory |
+| `switchyard variables [list\|set\|unset]` | List or edit application variables (values are masked by default) |
 | `switchyard status` | Services, container health, URLs, config path |
-| `switchyard down` | Stop the control plane; deployed workloads keep running and volumes survive |
-| `switchyard down --purge` | Also delete control-plane data and stored admin credentials; deployed workloads and their volumes remain orphaned |
+| `switchyard down` | Stop the control plane and remove the Switchyard container; deployed workloads keep running and volumes survive, including `switchyard-data` |
+| `switchyard down --purge` | Also delete control-plane data, stored admin credentials, and saved agent settings/backups in `switchyard-data`; deployed workloads and their volumes remain orphaned |
 | `switchyard config list \| get <k> \| set <k> <v>` | Read/change persisted settings; `set` recreates the container |
 | `switchyard local-ingress up \| down` | Opt-in demo Traefik on alternate ports so domains route locally over **HTTP** (see below) |
 | `switchyard doctor` | Read-only prerequisite + health check |
 | `switchyard logs [switchyard\|dokploy] [-f]` | Tail the dashboard container or the Dokploy service logs |
 | `switchyard open` | Open the dashboard in a browser |
 | `switchyard claude [args...]` | Launch Claude Code (installs it first if needed) |
+
+`down --purge` verifies that `switchyard-data` was removed and reports a failure
+if Docker cannot remove it (for example, another container still uses it).
+Plain `down` preserves the volume for the next `up`.
 
 ### `up` flags
 
@@ -124,15 +145,24 @@ switchyard deploy . --service web --project demos --detach
 | Argument / flag | Meaning |
 |---|---|
 | `[path]` | Directory to upload (default: the current directory) |
-| `--service <name>` | Reuse or create an application with this exact name (default: directory name) |
+| `--service <name>` | Reuse or create an application with this exact name in the linked or selected environment (default: linked service or directory name) |
 | `--project <name>` | Reuse or create a project with this exact name |
 | `--detach` | Return once the deployment is queued, without waiting for the result |
+| `--include-env` | Allow `.env` and `.env.*` files through the env-file guard; ignore rules still apply |
 
-Without `--project`, the CLI uses the only existing project, or creates
+With no target flags, deploy uses `.switchyard/link.json` in the current
+directory, even when uploading a different `[path]`. `--service` overrides
+the linked application within its environment. `--project` selects a project
+by name and ignores the link; without `--service`, the application name then
+defaults to the upload directory name. A stale link fails with guidance to
+run `switchyard link` again.
+
+Without a link or `--project`, the CLI uses the only existing project, or creates
 `Default` if there are none. If several projects exist, choose one with
 `--project`. Within that project it uses the `production` environment, or
 the only environment if there is no `production`; ambiguous selections fail
-with guidance instead of choosing a target silently.
+with guidance instead of choosing a target silently. The application name
+defaults to the upload directory name when no link or `--service` is supplied.
 
 The directory needs a root `Dockerfile`, or a project Dokploy can build with
 Nixpacks: Node (`package.json`), Python (`requirements.txt`, `pyproject.toml`,
@@ -145,8 +175,12 @@ remain configured. Packing honors
 (or `Dockerfile.dockerignore`, which takes precedence when present).
 Negation (`!`) rules apply within each ignore system; Docker rules never
 override Git exclusions. The `Dockerfile` and Docker ignore files are
-retained despite Docker exclusions so builds can use them. `.git` and
-`node_modules` are always excluded. Symlinks are skipped with a notice.
+retained despite Docker exclusions so builds can use them. `.git`,
+`.switchyard`, and `node_modules` are always excluded. Files named `.env` or
+`.env.*` at any depth are excluded by default, except `.env.example`; the CLI
+prints the excluded paths. Use `--include-env` to opt in to uploading these
+files (it does not override Git or Docker ignore rules). Symlinks are skipped
+with a notice.
 Both the total included file size and the ZIP are
 limited to 100 MiB; use ignore rules to remove build output or other large
 files if the upload is too large. Dokploy's ZIP extraction does not preserve
@@ -159,6 +193,48 @@ produce an error before deployment. By default it polls the new deployment
 for up to 15 minutes and exits with an error on failure or timeout. It prints
 an existing application URL when available; attach a domain in the dashboard
 if the application has none. Deploy does not create domains.
+
+### Link a directory
+
+```bash
+switchyard link --project demos --service web
+switchyard deploy
+```
+
+`link` selects existing resources only. `--project` and `--service` accept
+an exact name or ID. Without `--project`, there must be only one project.
+The environment is `production`, or the only environment if there is no
+`production`. Without `--service`, it selects the application matching the
+current directory name, or the only application. Ambiguous selections fail
+with guidance.
+
+The command writes project, environment, and application IDs to
+`.switchyard/link.json` in the current directory and prints a reminder to
+add `.switchyard/` to your `.gitignore`. It does not edit `.gitignore` for
+you. Re-run `link` to change the target or replace a stale link.
+
+### Manage application variables
+
+```bash
+switchyard variables                         # same as variables list
+switchyard variables list --reveal
+switchyard variables set NODE_ENV=production 'GREETING=hello world'
+switchyard variables unset GREETING
+switchyard variables set NODE_ENV=production --deploy
+switchyard variables list --service web
+```
+
+Variables use the linked application. `--service <name-or-id>` selects a
+different application in the linked environment; without a link, it must
+uniquely identify an existing application across projects and environments.
+These commands use the local Dokploy configured by `switchyard up`.
+
+`list` masks values unless `--reveal` is given. `set KEY=VALUE...` and
+`unset KEY...` preserve other variables, comments, and lines in the app's env
+configuration. Changes print `redeploy to apply`; add `--deploy` to queue a
+deployment of the application's configured source immediately instead.
+New keys must use letters, digits, and underscores, without a leading digit.
+Values that cannot be represented safely in dotenv are rejected before saving.
 
 ## Configuration
 

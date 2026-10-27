@@ -5,35 +5,19 @@ import { loadConfig, type SwitchyardConfig } from "../core/config.js";
 import { packDirectory } from "../core/deploy-pack.js";
 import { apiRequest, httpReady, signInCookie, uploadApplication } from "../core/dokploy-api.js";
 import { UserError } from "../core/errors.js";
+import { defaultEnvironment, linkedApplication, linkedEnvironment, readLink, type Application, type Project } from "../core/link.js";
 import { sleep } from "../core/util.js";
 
 export interface DeployFlags {
   service?: string;
   project?: string;
   detach?: boolean;
+  includeEnv?: boolean;
 }
 
 export interface DeployClient {
   request<T>(path: string, init?: { method?: "GET" | "POST"; body?: unknown }): Promise<T>;
   upload(applicationId: string, archive: Uint8Array): Promise<void>;
-}
-
-interface Application {
-  applicationId: string;
-  name: string;
-  domains?: { host: string; https?: boolean; path?: string | null }[];
-}
-
-interface Environment {
-  environmentId: string;
-  name: string;
-  applications?: Application[];
-}
-
-interface Project {
-  projectId: string;
-  name: string;
-  environments: Environment[];
 }
 
 interface Deployment {
@@ -48,9 +32,10 @@ export function createDeployCommand(
   return new Command("deploy")
     .description("Deploy a directory to Dokploy (the Railway up equivalent)")
     .argument("[path]", "directory to deploy", ".")
-    .option("--service <name>", "application name (default: directory name)")
-    .option("--project <name>", "project to reuse or create (default: the only project)")
+    .option("--service <name>", "application name (default: linked service or directory name)")
+    .option("--project <name>", "project to reuse or create (default: linked project or the only project)")
     .option("--detach", "return once the upload has queued a deployment")
+    .option("--include-env", "allow .env and .env.* files in the upload (ignore rules still apply)")
     .action(action);
 }
 
@@ -92,14 +77,18 @@ export async function deployDirectory(
   path: string,
   flags: DeployFlags,
   client: DeployClient,
-  options: { log?: (message: string) => void; pollIntervalMs?: number; timeoutMs?: number } = {},
+  options: { log?: (message: string) => void; pollIntervalMs?: number; timeoutMs?: number; directory?: string } = {},
 ): Promise<void> {
   const log = options.log ?? console.log;
-  const name = flags.service ?? basename(resolve(path));
+  let name = flags.service ?? basename(resolve(path));
   if (!name.trim() || (flags.project !== undefined && !flags.project.trim())) {
     throw new UserError("Service and project names must not be empty.");
   }
-  const packed = await packDirectory(path);
+  const link = flags.project === undefined ? await readLink(options.directory) : undefined;
+  const packed = await packDirectory(path, { includeEnv: flags.includeEnv });
+  if (packed.excludedEnvFiles.length > 0) {
+    log(`Excluded env files: ${packed.excludedEnvFiles.join(", ")}. Use --include-env to opt in (ignore rules still apply).`);
+  }
   const nixpacksFiles = ["package.json", "requirements.txt", "pyproject.toml", "Pipfile", "go.mod"];
   const buildType = packed.hasDockerfile ? "dockerfile" : "nixpacks";
   if (!packed.hasDockerfile && !nixpacksFiles.some((file) => packed.files.includes(file))) {
@@ -111,7 +100,8 @@ export async function deployDirectory(
   }
 
   let projects = await client.request<Project[]>("project.all");
-  const matches = flags.project ? projects.filter((p) => p.name === flags.project) : projects;
+  const linked = link ? linkedEnvironment(projects, link) : undefined;
+  const matches = linked ? [linked.project] : flags.project ? projects.filter((p) => p.name === flags.project) : projects;
   if (matches.length > 1) {
     throw new UserError(flags.project
       ? `More than one project is named ${flags.project}; rename duplicates in the dashboard.`
@@ -128,19 +118,16 @@ export async function deployDirectory(
     project = projects.find((p) => p.projectId === created.project.projectId);
     if (!project) throw new UserError(`Created project ${projectName}, but Dokploy did not return its environment. Check the dashboard.`);
   }
-  const production = project.environments.filter((e) => e.name.toLowerCase() === "production");
-  const environments = production.length > 0 ? production : project.environments;
-  if (environments.length !== 1) {
-    throw new UserError(`Project ${project.name} needs a single production environment (or a single environment). Rename the intended environment to production in the dashboard.`);
-  }
-  const environment = environments[0]!;
-  const applications = (environment.applications ?? []).filter((a) => a.name === name);
+  const environment = linked?.environment ?? defaultEnvironment(project);
+  const linkedService = link && !flags.service ? linkedApplication(environment, link) : undefined;
+  const applications = linkedService ? [linkedService] : (environment.applications ?? []).filter((a) => a.name === name);
   if (applications.length > 1) {
     throw new UserError(`More than one application is named ${name} in ${project.name}/${environment.name}; rename duplicates in the dashboard.`);
   }
   const application = applications[0] ?? await client.request<Application>("application.create", {
     method: "POST", body: { name, appName: name, environmentId: environment.environmentId, sourceType: "drop" },
   });
+  name = application.name;
   const { applicationId } = application;
   const deploymentPath = `deployment.all?applicationId=${encodeURIComponent(applicationId)}`;
   const previous = await client.request<Deployment[]>(deploymentPath);

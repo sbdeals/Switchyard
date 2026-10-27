@@ -9,6 +9,7 @@ import { UserError } from "../core/errors.js";
 import { ensureLocalIngress, removeLocalIngress } from "../core/local-ingress.js";
 import { inspectPurgeResources } from "../core/purge.js";
 import { serviceExists, waitServicesConverged } from "../core/swarm.js";
+import { removeSwitchyardDataVolume } from "../core/switchyard-data.js";
 import { randomSecret } from "../core/util.js";
 import type { PlatformModule } from "./types.js";
 
@@ -226,5 +227,6 @@ export const dockerDesktopPlatform: PlatformModule = {
       const result = await inspectPurgeResources();
       if (result.error) throw new UserError(result.error);
     }
+    await removeSwitchyardDataVolume(opts.purge, log);
   },
 };

@@ -21,8 +21,8 @@ export async function downCommand(flags: DownFlags): Promise<void> {
 
   if (!flags.yes && process.stdin.isTTY) {
     const message = flags.purge
-      ? "Delete control-plane data? Deployed workloads and their volumes will be left orphaned."
-      : "Stop the control plane? Deployed workloads keep running; data volumes survive.";
+      ? "Delete control-plane data, including dashboard settings and backups in switchyard-data? Deployed workloads and their volumes will be left orphaned."
+      : "Stop the control plane and remove the Switchyard container? Deployed workloads keep running; data volumes survive.";
     if (!(await askConfirm({ message, initialValue: !flags.purge }))) {
       p.cancel("Nothing changed.");
       return;
