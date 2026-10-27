@@ -20,6 +20,7 @@ export interface PackedDirectory {
   totalBytes: number;
   hasDockerfile: boolean;
   skippedSymlinks: string[];
+  excludedEnvFiles: string[];
 }
 
 function glob(pattern: string): string {
@@ -139,7 +140,7 @@ function crc32(data: Buffer): number {
 }
 
 /** Root-relative ZIP for Dokploy's dropDeployment; no external archiver required. */
-export async function packDirectory(path: string, { maxBytes = DEFAULT_DEPLOY_MAX_BYTES }: { maxBytes?: number } = {}): Promise<PackedDirectory> {
+export async function packDirectory(path: string, { maxBytes = DEFAULT_DEPLOY_MAX_BYTES, includeEnv = false }: { maxBytes?: number; includeEnv?: boolean } = {}): Promise<PackedDirectory> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 22 || maxBytes > DEFAULT_DEPLOY_MAX_BYTES) {
     throw new UserError(`Archive size limit must be between 22 and ${DEFAULT_DEPLOY_MAX_BYTES} bytes.`);
   }
@@ -157,6 +158,7 @@ export async function packDirectory(path: string, { maxBytes = DEFAULT_DEPLOY_MA
   const centralParts: Buffer[] = [];
   const files: string[] = [];
   const skippedSymlinks: string[] = [];
+  const excludedEnvFiles: string[] = [];
   let totalBytes = 0;
   let localSize = 0;
   let centralSize = 0;
@@ -195,9 +197,14 @@ export async function packDirectory(path: string, { maxBytes = DEFAULT_DEPLOY_MA
     const entries = await readdir(directory, { withFileTypes: true });
     entries.sort((a, b) => a.name.localeCompare(b.name, "en"));
     for (const entry of entries) {
-      if (entry.name === ".git" || entry.name === "node_modules") continue;
+      if (entry.name === ".git" || entry.name === "node_modules" || entry.name === ".switchyard") continue;
       const name = relative ? `${relative}/${entry.name}` : entry.name;
       if (entry.name.includes("\\")) throw new UserError(`Cannot pack a filename containing a backslash: ${name}`);
+      if (!includeEnv && !entry.isDirectory() &&
+        (entry.name === ".env" || (entry.name.startsWith(".env.") && entry.name !== ".env.example"))) {
+        excludedEnvFiles.push(name);
+        continue;
+      }
       if (ignored(name, entry.isDirectory(), gitRules)) continue;
       if (entry.isSymbolicLink()) {
         skippedSymlinks.push(name);
@@ -233,5 +240,6 @@ export async function packDirectory(path: string, { maxBytes = DEFAULT_DEPLOY_MA
     totalBytes,
     hasDockerfile: files.includes("Dockerfile"),
     skippedSymlinks,
+    excludedEnvFiles,
   };
 }
