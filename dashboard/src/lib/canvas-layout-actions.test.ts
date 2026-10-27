@@ -172,6 +172,19 @@ describe("canvas layout actions", () => {
     expect(positionsForCanvasSync([], false)).toEqual({ valid: { x: 1, y: 2 } });
   });
 
+  it("preserves hidden project positions when tidying a filtered canvas and undoing", () => {
+    const saved = { a: { x: 7, y: 8 }, hidden: { x: 900, y: -300 } };
+    savePositions(saved);
+    actions.tidy(target);
+    advanceFrame(350);
+    expect(positions).toEqual(target);
+    expect(loadPositions()).toEqual({ ...target, hidden: saved.hidden });
+    actions.undo();
+    advanceFrame(700);
+    expect(positions).toEqual(initial);
+    expect(loadPositions()).toEqual(saved);
+  });
+
   it("persists the destination immediately and animates without intermediate storage writes", () => {
     actions.tidy(target);
     expect(stored.get(CANVAS_POSITIONS_KEY)).toBe(JSON.stringify(target));

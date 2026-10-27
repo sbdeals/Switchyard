@@ -25,7 +25,7 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("@/lib/session", () => ({
   SESSION_COOKIE: "switchyard_session",
-  openSession: () => ({ email: "test@example.test" }),
+  openSession: vi.fn(() => ({ email: "test@example.test" })),
 }));
 vi.mock("@/lib/collector", () => ({ ensureCollector: mocks.ensureCollector }));
 vi.mock("@/components/Workspace", () => ({
@@ -86,7 +86,7 @@ describe("workspace load failures", () => {
     expect(html).toContain("Workspace loaded");
     expect(html).toContain("Sign out");
     expect(mocks.workspace.mock.calls[0][0]).toEqual({
-      services: [], projects: [], graph: { edges: [], warnings: {} }, notificationScope: expect.any(String),
+      services: [], projects: [], graph: { edges: [], warnings: {} }, notificationScope: expect.any(String), userId: expect.any(String),
     });
   });
 
