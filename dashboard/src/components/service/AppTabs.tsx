@@ -69,6 +69,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { ComposeExportButton } from "@/components/service/ComposeExportDialog";
 import type { DiagnosisTab } from "@/lib/deploy-diagnosis";
 import { DiagnosisCard } from "@/components/service/DiagnosisCard";
 import { ConfigAsCodePanel } from "@/components/service/ConfigAsCodePanel";
@@ -122,6 +123,7 @@ export function AppOverviewTab({ app }: { app: Application }) {
         <Info label="Build" value={app.buildType ?? "—"} />
         <Info label="Replicas" value={String(app.replicas ?? 1)} />
       </div>
+      <ComposeExportButton key={app.id} id={app.id} name={app.name} />
     </div>
   );
 }

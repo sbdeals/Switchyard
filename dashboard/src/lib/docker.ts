@@ -10,6 +10,7 @@
 import "server-only";
 import Docker from "dockerode";
 import type { Duplex } from "node:stream";
+import { parseDockerLogLines, type LogStream } from "./log-export";
 import type { ImageServiceKind, RunningServiceImage } from "./image-update";
 import { sumContainerSamples, toContainerSample, type ContainerSample } from "./container-stats";
 
@@ -278,6 +279,7 @@ export async function inspectServiceImages(
 export interface LogLine {
   ts: number;
   text: string;
+  stream?: LogStream;
 }
 
 /**
@@ -619,12 +621,12 @@ export async function containerHealth(appName: string): Promise<ContainerHealth>
 }
 
 /** Read the last `tail` log lines (non-following), demuxed and timestamp-split. */
-export async function readRecentLogs(appName: string, tail = 200): Promise<LogLine[]> {
-  const id = await findContainerId(appName);
+export async function readRecentLogs(appName: string, tail = 200, allowed?: Set<string>): Promise<LogLine[]> {
+  const id = await findContainerId(appName, allowed);
   if (!id) return [];
   const container = docker.getContainer(id);
   // follow:false returns the whole log slice as one Buffer, so we demux it
-  // synchronously (see demuxDockerFrames) rather than through a stream. The
+  // synchronously, retaining stdout/stderr, rather than through a stream. The
   // daemon call is bounded so a wedged container can't hang the caller.
   const buf = (await withTimeout(
     container.logs({
@@ -638,15 +640,7 @@ export async function readRecentLogs(appName: string, tail = 200): Promise<LogLi
     `Reading logs for ${appName}`,
   )) as unknown as Buffer;
 
-  return demuxDockerFrames(Buffer.isBuffer(buf) ? buf : Buffer.from(buf))
-    .split("\n")
-    .filter((l) => l.trim().length > 0)
-    .map((line) => {
-      const m = line.match(/^(\S+)\s([\s\S]*)$/);
-      const parsed = m ? Date.parse(m[1]) : NaN;
-      const ts = Number.isNaN(parsed) ? Date.now() : parsed;
-      return { ts, text: m ? m[2] : line };
-    });
+  return parseDockerLogLines(Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
 }
 
 // --- Postgres data browser (Data tab) ---------------------------------------
