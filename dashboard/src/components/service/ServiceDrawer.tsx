@@ -6,7 +6,6 @@ import { useDialogFocus } from "@/components/use-focus-trap";
 import { DirtyGuardScope } from "@/components/DirtyGuard";
 import {
   X,
-  Database as DatabaseIcon,
   Rocket,
   Cpu,
   ScrollText,
@@ -14,9 +13,7 @@ import {
   SlidersHorizontal,
   KeyRound,
   Plug,
-  Box,
   Globe,
-  Layers,
   FileCode,
   Archive,
   Hammer,
@@ -29,6 +26,8 @@ import {
 import type { Database, DatabasePatch, Service } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { LAST_DEPLOY_LABEL, serviceAccent, serviceLabel } from "@/lib/service-meta";
+import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
+import { ServiceLogo } from "@/components/canvas/ServiceNode";
 import { lifecycleAction, updateDatabaseAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
@@ -425,16 +424,17 @@ function Header({
   titleId: string;
 }) {
   const accent = serviceAccent(service);
-  const Icon = service.kind === "database" ? DatabaseIcon : service.kind === "compose" ? Layers : Box;
+  const logos = useTemplateLogos();
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
       <div className="flex items-center gap-3">
-        <div
-          className="flex size-11 items-center justify-center rounded-xl"
-          style={{ backgroundColor: `${accent}1a`, color: accent }}
-        >
-          <Icon className="size-5.5" />
-        </div>
+        <ServiceLogo
+          service={service}
+          logo={resolveServiceLogo(service, logos)}
+          accent={accent}
+          size="size-11"
+          rounded="rounded-xl"
+        />
         <div>
           <div className="flex items-center gap-2">
             <h2 id={titleId} className="font-semibold">

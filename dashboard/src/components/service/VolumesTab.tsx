@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import {
   Database as VolumeIcon,
   FolderTree,
@@ -20,6 +20,7 @@ import {
   type MountsResult,
 } from "@/app/actions";
 import { inputCls, Field } from "@/components/service/primitives";
+import { parseComposeVolumes, type ComposeVolume } from "@/lib/compose-volumes";
 import { cn } from "@/lib/utils";
 import { MAX_FILE_CONTENT_BYTES, validateMount } from "@/lib/mounts";
 
@@ -39,6 +40,11 @@ function mountSource(m: Mount): string {
 export function VolumesTab({ service }: { service: Service }) {
   const serviceType: MountServiceType =
     service.kind === "database" ? service.engine : service.kind;
+  const composeFile = service.kind === "compose" ? service.composeFile : undefined;
+  const declared = useMemo(
+    () => composeFile === undefined ? { volumes: [], error: null } : parseComposeVolumes(composeFile),
+    [composeFile]
+  );
   const [mounts, setMounts] = useState<Mount[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -78,6 +84,15 @@ export function VolumesTab({ service }: { service: Service }) {
       </p>
 
       {loadError && <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>}
+      {declared.error && <p role="alert" className="text-xs text-[var(--color-danger)]">{declared.error}</p>}
+
+      {declared.volumes.length > 0 && (
+        <div className="space-y-2">
+          {declared.volumes.map((volume, i) => (
+            <ComposeVolumeRow key={`${volume.serviceName}:${volume.target}:${i}`} volume={volume} />
+          ))}
+        </div>
+      )}
 
       {mounts === null && !loadError ? (
         <div className="flex items-center justify-center gap-2 py-6 text-xs text-[var(--color-fg-subtle)]">
@@ -119,7 +134,7 @@ export function VolumesTab({ service }: { service: Service }) {
           )}
         </div>
       ) : (
-        mounts && (
+        mounts && !loadError && !declared.error && declared.volumes.length === 0 && (
           <p className="text-xs text-[var(--color-fg-subtle)]">No mounts attached.</p>
         )
       )}
@@ -149,6 +164,34 @@ export function VolumesTab({ service }: { service: Service }) {
           <Plus className="size-4" /> Add mount
         </button>
       )}
+    </div>
+  );
+}
+
+function ComposeVolumeRow({ volume }: { volume: ComposeVolume }) {
+  const label = volume.type === "volume"
+    ? volume.source ? "Persistent named volume" : "Anonymous volume"
+    : volume.type === "bind" ? "Bind mount"
+      : volume.type === "tmpfs" ? "Temporary (tmpfs)" : "Compose mount";
+  const source = volume.source ?? (volume.type === "volume" ? "Anonymous volume" : "—");
+
+  return (
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <span className="flex items-center gap-1 rounded-md bg-[var(--color-bg-elevated)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-fg-muted)]">
+          {volume.type === "bind" ? <FolderTree className="size-3.5" /> : <VolumeIcon className="size-3.5" />}
+          {label}
+        </span>
+        <span className="min-w-0 flex-1 truncate font-mono text-xs" title={volume.target}>
+          {volume.target}
+        </span>
+      </div>
+      <div className="mt-1 truncate font-mono text-[11px] text-[var(--color-fg-subtle)]" title={source}>
+        {source}
+      </div>
+      <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
+        Declared in compose · {volume.serviceName}
+      </p>
     </div>
   );
 }
