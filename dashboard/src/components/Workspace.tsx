@@ -11,24 +11,32 @@ import { QuickDeployMenu } from "@/components/QuickDeployMenu";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { ServiceDrawer } from "@/components/service/ServiceDrawer";
+import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { AgentPanel } from "@/components/agent/AgentPanel";
+import { useServiceDeeplink } from "@/components/use-service-deeplink";
+import { DirtyGuardProvider } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
 import { emptySelection, reconcileSelection, replaceSelection, toggleSelection } from "@/lib/bulk-selection";
 import { BULK_ACTION_LABELS, type BulkAction } from "@/lib/bulk-actions";
 
 type View = "canvas" | "grid";
 
-export function Workspace({
-  services,
-  projects,
-  edges,
-}: {
+type WorkspaceProps = {
   services: Service[];
   projects: ProjectNode[];
   edges: ServiceEdge[];
-}) {
+};
+
+export function Workspace(props: WorkspaceProps) {
+  return <DirtyGuardProvider><WorkspaceContent {...props} /></DirtyGuardProvider>;
+}
+
+function WorkspaceContent({
+  services,
+  projects,
+  edges,
+}: WorkspaceProps) {
   const [view, setView] = useState<View>("canvas");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [bulkSelection, setBulkSelection] = useState(emptySelection);
   const [bulkRequest, setBulkRequest] = useState<{ action: BulkAction; services: Service[] } | null>(null);
@@ -41,17 +49,9 @@ export function Workspace({
   const onCanvasSelection = useCallback((ids: string[]) => {
     setBulkSelection((current) => replaceSelection(current, serviceIds, ids));
   }, [serviceIds]);
-  const openService = useCallback((service: Service) => setSelectedId(service.id), []);
   const router = useRouter();
-
-  // Re-resolve the selected service from fresh props so the drawer updates.
-  const selected = services.find((s) => s.id === selectedId) ?? null;
-
-  // Open the new service's drawer and pull fresh state in.
-  const onDeployed = (id: string) => {
-    setSelectedId(id);
-    router.refresh();
-  };
+  const drawer = useServiceDeeplink(services);
+  const { onDeployed } = drawer;
 
   return (
     <MotionConfig reducedMotion="user">
@@ -116,7 +116,9 @@ export function Workspace({
       {services.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
-        <FlowCanvas services={services} edges={edges} onSelect={openService} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} />
+        <PanelErrorBoundary>
+          <FlowCanvas services={services} edges={edges} onSelect={(s) => drawer.open(s.id)} selectedIds={selection.ids} onSelectionChange={onCanvasSelection} selectionDisabled={bulkRequest !== null} />
+        </PanelErrorBoundary>
       ) : (
         <>
         <p className="mb-3 text-xs text-[var(--color-fg-subtle)]">Select services with the checkboxes. Shift-click to select a range.</p>
@@ -126,7 +128,7 @@ export function Workspace({
               <ServiceCard
                 key={`${s.kind}:${s.id}`}
                 service={s}
-                onOpen={() => setSelectedId(s.id)}
+                onOpen={() => drawer.open(s.id)}
                 selected={selection.ids.includes(s.id)}
                 selectionDisabled={bulkRequest !== null}
                 onToggleSelection={(shift) => setBulkSelection((current) => toggleSelection(current, serviceIds, s.id, shift))}
@@ -138,7 +140,12 @@ export function Workspace({
       )}
 
       {bulkRequest && <BulkActionDialog {...bulkRequest} onClose={() => setBulkRequest(null)} />}
-      <ServiceDrawer service={selected} onClose={() => setSelectedId(null)} />
+      <ServiceDrawer service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
+      {drawer.notFound && (
+        <div role="status" className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-4 py-2 text-sm shadow-lg">
+          Service not found
+        </div>
+      )}
       <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
       <AgentPanel />
     </div>

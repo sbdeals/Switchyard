@@ -62,6 +62,22 @@ describe("bulk runner", () => {
     expect(result.map((entry) => entry.status)).toEqual(["failed", "failed", "failed", "failed", "ok"]);
   });
 
+  it("scrubs reported and thrown failures before publishing progress", async () => {
+    const snapshots: BulkProgress[][] = [];
+    const result = await runBulkAction([0, 1, 2], async (item) => {
+      if (item === 0) return { ok: false, error: "Failed postgres://admin:bulk-password@localhost/db" };
+      if (item === 1) throw new Error("API_KEY=bulk-api-key");
+      throw { password: "bulk-object-secret" };
+    }, (progress) => snapshots.push(progress));
+
+    expect(result.every((entry) => entry.status === "failed")).toBe(true);
+    expect(result[2].message).toBe("Service action failed");
+    const published = JSON.stringify([result, snapshots]);
+    for (const secret of ["bulk-password", "bulk-api-key", "bulk-object-secret"]) {
+      expect(published).not.toContain(secret);
+    }
+  });
+
   it("does not let consumers mutate its internal progress", async () => {
     const result = await runBulkAction(["a"], async () => ({ ok: true }), (progress) => {
       progress[0].status = "failed";

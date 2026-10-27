@@ -1,4 +1,5 @@
 import type { Action, Engine, Service } from "./dokploy";
+import { redactErrorMessage } from "./error-redaction";
 
 export type BulkAction = "redeploy" | "restart" | "stop" | "start";
 export type BulkProgress = {
@@ -68,11 +69,11 @@ export async function runBulkAction<T>(
         const result = await execute(items[index]);
         progress[index] = result.ok
           ? { status: "ok", message: "Completed" }
-          : { status: "failed", message: result.error };
+          : { status: "failed", message: redactErrorMessage(result.error, "Service action failed") };
       } catch (error) {
         progress[index] = {
           status: "failed",
-          message: error instanceof Error ? error.message : String(error),
+          message: redactErrorMessage(error, "Service action failed"),
         };
       }
       publish();
