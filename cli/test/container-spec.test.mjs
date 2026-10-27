@@ -1,7 +1,35 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import test, { mock } from "node:test";
 
-import { defaultConfig, metricsStoreUrl, renderContainer } from "../dist/lib.js";
+import { defaultConfig, ensureSwitchyard, metricsStoreUrl, renderContainer, UserError } from "../dist/lib.js";
+
+test("ensureSwitchyard rejects invalid replacement ports before any Docker calls", async () => {
+  const spawn = mock.method(childProcess, "spawn", () => {
+    throw new Error("Unexpected Docker call");
+  });
+  syncBuiltinESMExports();
+  try {
+    for (const key of ["dokployPort", "dashboardPort", "localIngressHttpPort", "localIngressHttpsPort"]) {
+      for (const value of [0, -1, 65536, "abc", 1.5, NaN, Infinity, null, "3001"]) {
+        await assert.rejects(
+          ensureSwitchyard({ ...defaultConfig(), [key]: value }, "1.0.0", () => {}),
+          (err) => {
+            assert.ok(err instanceof UserError);
+            assert.ok(err.message.includes(key));
+            assert.match(err.message, /integer between 1 and 65535/);
+            return true;
+          },
+        );
+      }
+    }
+    assert.equal(spawn.mock.callCount(), 0);
+  } finally {
+    spawn.mock.restore();
+    syncBuiltinESMExports();
+  }
+});
 
 test("hash is stable for identical config", () => {
   const a = renderContainer(defaultConfig("linux"), "1.0.0");
