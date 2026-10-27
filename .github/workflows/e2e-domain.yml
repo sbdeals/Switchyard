@@ -17,13 +17,16 @@ on:
       - ".github/workflows/e2e-domain.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   e2e-domain:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -39,9 +42,15 @@ jobs:
       - name: Install Dokploy (bundles Traefik on 80/443)
         run: |
           set -euxo pipefail
-          # Dokploy's installer initializes Swarm and creates postgres/redis/
-          # dokploy plus a Traefik container published on 80/443.
-          curl -sSL https://dokploy.com/install.sh | sudo -E bash
+          # Dokploy's installer initializes Swarm and creates postgres/dokploy
+          # plus a Traefik container published on 80/443.
+          installer="$RUNNER_TEMP/dokploy-install.sh"
+          curl -fsSL --retry 3 \
+            https://github.com/Dokploy/dokploy/releases/download/v0.30.10/install.sh \
+            -o "$installer"
+          # Release asset SHA-256; downstream image tags/downloads remain mutable.
+          echo "75f321e7e5b9dce38b1bf22b54b0f84afcdae510daf6f6f05539f631f94fd071  $installer" | sha256sum --check --strict
+          sudo -E env DOKPLOY_VERSION=v0.30.10 bash "$installer"
 
       - name: Show stack state
         if: always()
