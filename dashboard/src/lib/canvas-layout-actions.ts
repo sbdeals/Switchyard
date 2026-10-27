@@ -109,7 +109,8 @@ export function createCanvasLayoutActions({
         onUndoAvailable(false);
       }, UNDO_MS);
       const positions = copyPositions(target);
-      savePositions(positions);
+      // Tidy only changes visible nodes; keep layouts in filtered-out projects.
+      savePositions({ ...loadPositions(), ...positions });
       animate(positions);
     },
     undo() {
