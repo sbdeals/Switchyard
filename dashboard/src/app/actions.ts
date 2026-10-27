@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
+import { randomUUID } from "node:crypto";
 import {
   createDatabase,
   databaseAction,
@@ -75,6 +76,7 @@ import {
   type ApplicationPatch,
   type HealthCheckSwarm,
   type BuildTypePatch,
+  type DockerRegistryPatch,
   type DomainInput,
   type Engine,
   type DokployTemplate,
@@ -112,6 +114,7 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import { validateMount } from "@/lib/mounts";
 import { preserveUrlCredentials } from "@/lib/url-credentials";
 import { redactErrorMessage } from "@/lib/error-redaction";
 import { validateRedirect, validateBasicAuth } from "@/lib/app-security";
@@ -495,12 +498,13 @@ export async function saveAppBuildTypeAction(
 
 /**
  * Point a docker-image application at an image, optionally with private
- * registry credentials. Empty credentials mean a public image.
+ * registry credentials. Empty credentials preserve stored values; clearing
+ * credentials requires the explicit clearCredentials flag.
  */
 export async function setAppDockerSourceAction(
   id: string,
   dockerImage: string,
-  registry?: { username: string; password: string; registryUrl: string },
+  registry?: DockerRegistryPatch,
   redeploy = false
 ): Promise<ActionResult> {
   const secrets: (string | null | undefined)[] = [registry?.username, registry?.password, registry?.registryUrl];
@@ -509,12 +513,20 @@ export async function setAppDockerSourceAction(
     if (!image) throw new Error("Image is required.");
     secrets.push(dockerImage, image);
     const stored = await getApplicationSource(id);
-    secrets.push(stored.dockerImage, stored.registryUrl);
-    const hasCreds = registry && (registry.username || registry.password || registry.registryUrl);
+    secrets.push(stored.dockerImage, stored.registryUrl, stored.username, stored.password);
+    const hasCreds = registry && (
+      registry.clearCredentials || registry.username || registry.password || registry.registryUrl != null
+    );
     await setAppDockerSource(
       id,
       preserveUrlCredentials(image, stored.dockerImage),
-      hasCreds ? { ...registry, registryUrl: preserveUrlCredentials(registry.registryUrl, stored.registryUrl) } : undefined
+      hasCreds ? {
+        ...registry,
+        registryUrl: registry.registryUrl == null
+          ? registry.registryUrl
+          : preserveUrlCredentials(registry.registryUrl, stored.registryUrl),
+      } : undefined,
+      stored
     );
     if (redeploy) await applicationAction(id, "deploy");
   }, "Could not save Docker source.", secrets);
@@ -987,21 +999,80 @@ export async function listMountsAction(
   try {
     return { ok: true, mounts: await listMounts(serviceType, serviceId) };
   } catch (e) {
-    return fail(e);
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not load mounts." };
   }
 }
 
 export async function createMountAction(input: CreateMountInput): Promise<ActionResult> {
-  return wrap(() => createMount(input));
+  try {
+    const mounts = await listMounts(input.serviceType, input.serviceId);
+    // Dokploy writes filePath beneath its managed files directory. Never accept
+    // a client-supplied source path, or reuse a filename belonging to another mount.
+    const mount = {
+      type: input.type,
+      mountPath: input.mountPath,
+      ...(input.type === "volume" ? { volumeName: input.volumeName } : {
+        filePath: `${randomUUID()}.conf`,
+        content: input.content,
+      }),
+    };
+    const error = validateMount(mount, mounts);
+    if (error) return { ok: false, error };
+    await createMount({ serviceType: input.serviceType, serviceId: input.serviceId, ...mount });
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not add mount." };
+  }
 }
 
 export async function updateMountAction(
+  serviceType: MountServiceType,
+  serviceId: string,
   mountId: string,
   patch: MountPatch
 ): Promise<ActionResult> {
-  return wrap(() => updateMount(mountId, patch));
+  try {
+    const mounts = await listMounts(serviceType, serviceId);
+    const existing = mounts.find((mount) => mount.mountId === mountId);
+    if (!existing || existing.type === "bind" || (patch.type && patch.type !== existing.type)) {
+      return { ok: false, error: "Could not update mount." };
+    }
+    const mount = {
+      type: existing.type,
+      mountPath: patch.mountPath ?? existing.mountPath,
+      ...(existing.type === "volume" ? { volumeName: patch.volumeName ?? existing.volumeName ?? "" } : {
+        filePath: existing.filePath ?? "",
+        content: patch.content ?? existing.content ?? "",
+      }),
+    };
+    const error = validateMount(mount, mounts, mountId);
+    if (error) return { ok: false, error };
+    await updateMount(mountId, mount);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not update mount." };
+  }
 }
 
-export async function removeMountAction(mountId: string): Promise<ActionResult> {
-  return wrap(() => removeMount(mountId));
+export async function removeMountAction(
+  serviceType: MountServiceType,
+  serviceId: string,
+  mountId: string
+): Promise<ActionResult> {
+  try {
+    const mounts = await listMounts(serviceType, serviceId);
+    const mount = mounts.find((mount) => mount.mountId === mountId);
+    if (!mount || mount.type === "bind") return { ok: false, error: "Could not remove mount." };
+    await removeMount(mountId);
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: "Could not remove mount." };
+  }
 }

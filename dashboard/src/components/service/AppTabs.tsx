@@ -762,22 +762,23 @@ function BuildStrategyForm({ app }: { app: Application }) {
 
 function DockerSourceForm({ app }: { app: Application }) {
   const [image, setImage] = useState(app.dockerImage ?? "");
-  const [registryUrl, setRegistryUrl] = useState(app.registryUrl ?? "");
-  const [username, setUsername] = useState("");
+  const [registryUrl, setRegistryUrl] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [password, setPassword] = useState("");
+  const [clearCredentials, setClearCredentials] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [redeploy, setRedeploy] = useState(false);
   const [saving, startSave] = useTransition();
   const [saved, flashSaved] = useSavedFlash();
   const [error, setError] = useState<string | null>(null);
 
-  // Credentials are never read back from Dokploy, so treat any input here (or an
-  // image/registry change) as a reason to resubmit the whole docker source.
+  // Null drafts mean untouched: the server rereads their current values.
   const dirty =
     image.trim() !== (app.dockerImage ?? "") ||
-    registryUrl.trim() !== (app.registryUrl ?? "") ||
-    username !== "" ||
-    password !== "";
+    (registryUrl !== null && registryUrl.trim() !== (app.registryUrl ?? "")) ||
+    (username !== null && username.trim() !== "" && username.trim() !== (app.registryUsername ?? "")) ||
+    password !== "" ||
+    clearCredentials;
   useDirtyGuard("Build", dirty);
 
   function save() {
@@ -786,12 +787,19 @@ function DockerSourceForm({ app }: { app: Application }) {
       const res = await setAppDockerSourceAction(
         app.id,
         image,
-        { username: username.trim(), password, registryUrl: registryUrl.trim() },
+        {
+          username: username?.trim() || undefined,
+          password: password || undefined,
+          registryUrl: registryUrl?.trim(),
+          clearCredentials,
+        },
         redeploy
       );
       if (res.ok) {
-        setUsername("");
+        setRegistryUrl(null);
+        setUsername(null);
         setPassword("");
+        setClearCredentials(false);
         flashSaved();
       } else setError(res.error);
     });
@@ -810,12 +818,13 @@ function DockerSourceForm({ app }: { app: Application }) {
       </Field>
       <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
         <p className="text-[11px] text-[var(--color-fg-subtle)]">
-          Private registry credentials (leave blank for public images).
+          Leave username or password blank to keep saved credentials. Clear credentials for public images.
         </p>
         <Field label="Registry URL" hint="optional">
           <input
-            value={registryUrl}
+            value={registryUrl ?? app.registryUrl ?? ""}
             onChange={(e) => setRegistryUrl(e.target.value)}
+            disabled={clearCredentials}
             placeholder="registry.example.com"
             className={inputCls}
           />
@@ -823,8 +832,9 @@ function DockerSourceForm({ app }: { app: Application }) {
         <div className="grid grid-cols-2 gap-3">
           <Field label="Username">
             <input
-              value={username}
+              value={username ?? app.registryUsername ?? ""}
               onChange={(e) => setUsername(e.target.value)}
+              disabled={clearCredentials}
               autoComplete="off"
               className={inputCls}
             />
@@ -835,6 +845,8 @@ function DockerSourceForm({ app }: { app: Application }) {
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder={app.hasRegistryPassword ? "Password saved — leave blank to keep" : ""}
+                disabled={clearCredentials}
                 autoComplete="off"
                 className={inputCls}
               />
@@ -850,6 +862,15 @@ function DockerSourceForm({ app }: { app: Application }) {
             </div>
           </Field>
         </div>
+        <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
+          <input
+            type="checkbox"
+            checked={clearCredentials}
+            onChange={(e) => setClearCredentials(e.target.checked)}
+            className="accent-[var(--color-brand)]"
+          />
+          Clear credentials (including registry URL) on save
+        </label>
       </div>
       <div className="flex items-center justify-between">
         <RedeployToggle checked={redeploy} onChange={setRedeploy} />
