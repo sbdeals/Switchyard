@@ -1,4 +1,4 @@
-import { queryMetrics, storeEnabled } from "@/lib/store";
+import { queryMetrics, storeEnabled, storeAvailable } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 /**
  * Metric history over a time range from the durable store.
  *   GET /api/services/metrics/history?app=<appName>&since=<ms>&until=<ms>
- * Returns { enabled, samples }. When no store is configured `enabled` is false
- * and the client falls back to live-only mode.
+ * Returns { enabled, samples }. When the store is off or backing off `enabled`
+ * is false and the client falls back to live-only mode.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -25,5 +25,5 @@ export async function GET(request: Request) {
   const until = Number.isFinite(untilParam) && untilParam > 0 ? untilParam : now;
 
   const samples = await queryMetrics(app, since, until);
-  return Response.json({ enabled: true, samples });
+  return Response.json({ enabled: storeAvailable(), samples });
 }
