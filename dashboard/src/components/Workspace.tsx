@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, Search, ScrollText } from "lucide-react";
+import { Activity, Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, Search, ScrollText } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Activity, Boxes, RefreshCw, Network, LayoutGrid, FolderGit2, ScrollText } from "lucide-react";
-import { useRouter } from "next/navigation";
 import type { Service, ProjectNode, ServiceEdge } from "@/lib/dokploy";
 import { ServiceCard } from "@/components/ServiceCard";
 import { QuickDeployMenu } from "@/components/QuickDeployMenu";
