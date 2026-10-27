@@ -153,8 +153,10 @@ switchyard config set imageTag latest                # track latest instead of t
 
 Editing the JSON by hand is fine too — run `switchyard up` afterwards to
 converge (it recreates the container only when the rendered spec's hash
-changed). `switchyard config list` redacts secrets unless you pass
-`--show-secrets`.
+changed). `switchyard config list` and `set` confirmations redact
+`adminPassword`, `sessionSecret`, and `storePassword` unless you pass
+`--show-secrets`. `switchyard config get <key>` always returns the raw value,
+including secrets, without requiring `--show-secrets`.
 
 If service DNS doesn't work in your setup, point the container at the host
 instead:
