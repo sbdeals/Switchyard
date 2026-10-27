@@ -20,9 +20,11 @@ import {
 import "@xyflow/react/dist/style.css";
 import type { ServiceReferenceGraph } from "@/lib/service-references";
 import type { ProjectNode, Service } from "@/lib/dokploy";
+import { applySelectionChanges } from "@/lib/bulk-selection";
 import { serviceAccent } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
+import { useTheme } from "@/components/ThemeProvider";
 import { CanvasResizeFit } from "@/components/canvas/CanvasResizeFit";
 import { canvasAutoLayout } from "@/lib/canvas-auto-layout";
 import {
@@ -60,15 +62,22 @@ export function FlowCanvas({
   services,
   graph,
   onSelect,
+  selectedIds,
+  onSelectionChange,
+  selectionDisabled = false,
   projects,
   onDeployed,
 }: {
   services: Service[];
   graph: ServiceReferenceGraph;
   onSelect: (service: Service) => void;
+  selectedIds: string[];
+  onSelectionChange: (ids: string[]) => void;
+  selectionDisabled?: boolean;
   projects: ProjectNode[];
   onDeployed: (id: string) => void;
 }) {
+  const { theme } = useTheme();
   const canvasRef = useRef<HTMLDivElement>(null);
   const flowRef = useRef<ReactFlowInstance | null>(null);
   const [creation, setCreation] = useState<{ screen: Point; flow: Point } | null>(null);
@@ -86,6 +95,11 @@ export function FlowCanvas({
   // Catalog logos for Railway-style node icons (null while the catalog loads).
   const logos = useTemplateLogos();
   const [hoveredEdge, setHoveredEdge] = useState<{ id: string; x: number; y: number } | null>(null);
+  const selectedIdsRef = useRef(selectedIds);
+
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds;
+  }, [selectedIds]);
 
   const buildNodes = useCallback(
     (overrides: Positions, current: Node[] = []): Node[] => {
@@ -118,6 +132,7 @@ export function FlowCanvas({
           nodes.push({
             id: service.id,
             type: "service",
+            selected: selectedIds.includes(service.id),
             position: { x, y: rowY + row * ROW_H },
             data: {
               service,
@@ -132,7 +147,7 @@ export function FlowCanvas({
       }
       return mergeNodePositions(nodes, saved, current);
     },
-    [services, onSelect, logos, graph.warnings, createdPositions]
+    [services, onSelect, logos, graph.warnings, selectedIds, createdPositions]
   );
 
   const buildEdges = useCallback(
@@ -141,7 +156,7 @@ export function FlowCanvas({
         const source = services.find((s) => s.id === e.source);
         const target = services.find((s) => s.id === e.target);
         const inferred = e.kind === "inferred";
-        const accent = inferred ? "var(--color-fg-subtle)" : target ? serviceAccent(target) : "#a06bff";
+        const accent = inferred ? "var(--color-fg-subtle)" : target ? serviceAccent(target) : "var(--color-brand)";
         const description = e.kind === "reference"
           ? `${source?.name} references ${target?.name}: ${e.variables.map((v) => `${target?.name}.${v}`).join(", ")}`
           : `inferred: ${source?.name} mentions ${target?.name} in its env (heuristic)`;
@@ -227,7 +242,15 @@ export function FlowCanvas({
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      onNodesChange(changes);
+      const allowed = selectionDisabled
+        ? changes.filter((change) => change.type !== "select")
+        : changes;
+      onNodesChange(allowed);
+      const selectionChanges = allowed.filter((change) => change.type === "select");
+      if (selectionChanges.length > 0) {
+        selectedIdsRef.current = applySelectionChanges(selectedIdsRef.current, selectionChanges);
+        onSelectionChange(selectedIdsRef.current);
+      }
       // Persist positions after a drag — but only the nodes the user actually
       // dragged. Saving every node's position (the old behavior) froze the
       // auto-layout into localStorage, so default-layout improvements never
@@ -250,7 +273,7 @@ export function FlowCanvas({
         });
       }
     },
-    [onNodesChange, setNodes]
+    [onNodesChange, setNodes, onSelectionChange, selectionDisabled]
   );
 
   return (
@@ -268,8 +291,11 @@ export function FlowCanvas({
         event.preventDefault();
         openAt(canvasCenter(bounds));
       }}
-      className="h-[calc(100vh-9rem)] w-full overflow-hidden rounded-2xl border border-[var(--color-border)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+      className="relative h-[calc(100vh-9rem)] w-full overflow-hidden rounded-2xl border border-[var(--color-border)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
     >
+      <p className="pointer-events-none absolute left-3 top-3 z-10 rounded-lg bg-[var(--color-surface)] px-2 py-1 text-xs text-[var(--color-fg-muted)]">
+        Shift-drag or Shift/Ctrl/⌘-click to select services
+      </p>
       <ReactFlow
         onInit={(flow) => { flowRef.current = flow; }}
         onPaneClick={() => canvasRef.current?.focus()}
@@ -301,8 +327,12 @@ export function FlowCanvas({
         onEdgeMouseLeave={() => setHoveredEdge(null)}
         onMoveStart={() => setHoveredEdge(null)}
         nodeTypes={nodeTypes}
+        elementsSelectable={!selectionDisabled}
+        multiSelectionKeyCode={["Shift", "Control", "Meta"]}
+        selectionKeyCode={selectionDisabled ? null : "Shift"}
+        deleteKeyCode={null}
         nodesDraggable={!animating}
-        colorMode="dark"
+        colorMode={theme}
         fitView
         fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
         proOptions={{ hideAttribution: true }}
@@ -310,7 +340,7 @@ export function FlowCanvas({
         maxZoom={1.5}
       >
         <CanvasResizeFit />
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#ffffff2b" />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="var(--color-canvas-dots)" bgColor="var(--color-bg)" />
         {edges.length > 0 && (
           <Panel position="top-left">
             <div aria-label="Connection legend" className="flex gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[11px] text-[var(--color-fg-muted)]">
@@ -361,7 +391,7 @@ export function FlowCanvas({
               ? serviceAccent((n.data as ServiceNodeData).service)
               : "transparent"
           }
-          maskColor="#0a0a0fcc"
+          maskColor="var(--color-canvas-mask)"
           className="!bg-[var(--color-bg-elevated)]"
         />
       </ReactFlow>
