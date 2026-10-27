@@ -22,6 +22,7 @@ import {
 import { inputCls, Field } from "@/components/service/primitives";
 import { parseComposeVolumes, type ComposeVolume } from "@/lib/compose-volumes";
 import { cn } from "@/lib/utils";
+import { formatVolumeBytes, type VolumeUsage } from "@/lib/volume-usage";
 import { MAX_FILE_CONTENT_BYTES, validateMount } from "@/lib/mounts";
 
 const TYPE_META: Record<MountType, { label: string; icon: React.ReactNode }> = {
@@ -46,6 +47,8 @@ export function VolumesTab({ service }: { service: Service }) {
     [composeFile]
   );
   const [mounts, setMounts] = useState<Mount[] | null>(null);
+  const [usage, setUsage] = useState<VolumeUsage[]>([]);
+  const [usageAvailable, setUsageAvailable] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -54,6 +57,8 @@ export function VolumesTab({ service }: { service: Service }) {
   const applyResult = useCallback((res: MountsResult) => {
     if (res.ok) {
       setMounts(res.mounts);
+      setUsage(res.usage);
+      setUsageAvailable(res.usageAvailable);
       setLoadError(null);
     } else {
       setLoadError(res.error);
@@ -84,6 +89,7 @@ export function VolumesTab({ service }: { service: Service }) {
       </p>
 
       {loadError && <p role="alert" className="text-xs text-[var(--color-danger)]">{loadError}</p>}
+      {!usageAvailable && <p className="text-xs text-[var(--color-fg-subtle)]">Volume disk usage: unknown. Docker usage is unavailable.</p>}
       {declared.error && <p role="alert" className="text-xs text-[var(--color-danger)]">{declared.error}</p>}
 
       {declared.volumes.length > 0 && (
@@ -120,6 +126,7 @@ export function VolumesTab({ service }: { service: Service }) {
               <MountRow
                 key={m.mountId}
                 mount={m}
+                sizeBytes={usage.find((v) => v.mountId === m.mountId)?.sizeBytes ?? null}
                 serviceType={serviceType}
                 serviceId={service.id}
                 pending={pending}
@@ -134,10 +141,20 @@ export function VolumesTab({ service }: { service: Service }) {
           )}
         </div>
       ) : (
-        mounts && !loadError && !declared.error && declared.volumes.length === 0 && (
+        mounts && !loadError && !declared.error && declared.volumes.length === 0 && usage.length === 0 && (
           <p className="text-xs text-[var(--color-fg-subtle)]">No mounts attached.</p>
         )
       )}
+
+      {usage.filter((v) => !v.mountId).map((volume) => (
+        <div key={volume.dockerName} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="min-w-0 truncate font-mono" title={volume.dockerName ?? volume.volumeName}>{volume.volumeName}</span>
+            <span className="shrink-0 text-[var(--color-fg-muted)]">{formatVolumeBytes(volume.sizeBytes)} on disk</span>
+          </div>
+          <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">Managed in the Compose file</p>
+        </div>
+      ))}
 
       {adding ? (
         <MountForm
@@ -198,6 +215,7 @@ function ComposeVolumeRow({ volume }: { volume: ComposeVolume }) {
 
 function MountRow({
   mount,
+  sizeBytes,
   serviceType,
   serviceId,
   pending,
@@ -206,6 +224,7 @@ function MountRow({
   onDeleted,
 }: {
   mount: Mount;
+  sizeBytes: number | null;
   serviceType: MountServiceType;
   serviceId: string;
   pending: boolean;
@@ -245,7 +264,7 @@ function MountRow({
               onClick={onEdit}
               disabled={pending}
               aria-label={`Edit mount ${mount.mountPath}`}
-              className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
+              className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] disabled:opacity-40"
             >
               <Pencil className="size-3.5" />
             </button>
@@ -253,7 +272,7 @@ function MountRow({
               onClick={remove}
               disabled={pending}
               aria-label={`Remove mount ${mount.mountPath}`}
-              className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
+              className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
             >
               {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
             </button>
@@ -263,6 +282,9 @@ function MountRow({
       <div className="mt-1 truncate font-mono text-[11px] text-[var(--color-fg-subtle)]" title={mountSource(mount)}>
         {mountSource(mount)}
       </div>
+      {mount.type === "volume" && (
+        <p className="mt-1 text-xs text-[var(--color-fg-muted)]">{formatVolumeBytes(sizeBytes)} on disk</p>
+      )}
       {error && <p role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );
@@ -328,7 +350,7 @@ function MountForm({
         <button
           onClick={onCancel}
           aria-label="Cancel"
-          className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
         >
           <X className="size-3.5" />
         </button>

@@ -14,6 +14,7 @@ import { DokployUnavailable } from "@/components/DokployUnavailable";
 import { ErrorPanel } from "@/components/ErrorPanel";
 import { redactErrorMessage } from "@/lib/error-redaction";
 import { classifyWorkspaceError } from "@/lib/workspace-error";
+import { readProjectVolumeUsage } from "@/lib/volume-usage.server";
 
 // Always fetch fresh state from Dokploy.
 export const dynamic = "force-dynamic";
@@ -63,6 +64,11 @@ export default async function Page() {
     ? createHash("sha256").update(session.email.trim().toLowerCase()).digest("hex")
     : null;
   const notificationScope = createHash("sha256").update(session?.email ?? "").digest("hex");
+  const volumeUsage = await readProjectVolumeUsage(result.services);
+  const projects = result.projects.map((project) => ({
+    ...project,
+    volumeSizeBytes: volumeUsage[project.projectId] === undefined ? 0 : volumeUsage[project.projectId],
+  }));
 
   return (
     <>
@@ -70,7 +76,7 @@ export default async function Page() {
       <Suspense>
         <Workspace
           services={result.services.map(redactServiceForClient)}
-          projects={result.projects}
+          projects={projects}
           graph={buildServiceReferenceGraph(result.services)}
           userId={userId}
           notificationScope={notificationScope}

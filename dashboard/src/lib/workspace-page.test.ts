@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   redirect: new Error("NEXT_REDIRECT"),
 }));
 
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 vi.mock("@/lib/dokploy", () => ({
   loadWorkspace: mocks.loadWorkspace,
 }));
