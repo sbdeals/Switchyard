@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { VariablesTab } from "../components/service/VariablesTab";
 import { loadServiceEnvAction } from "@/app/actions";
+import { DirtyGuardProvider } from "../components/DirtyGuard";
 import type { ComposeService } from "./dokploy";
 import { setVariable, sharedReference } from "./shared-variables";
 import { initialVariablesEditorState, variablesEditorReducer } from "./variables-editor";
@@ -110,7 +111,9 @@ describe("variables editor", () => {
       deployments: [],
     };
 
-    const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+      createElement(VariablesTab, { service }),
+    ));
 
     expect(html).toContain('role="status"');
     expect(html).toContain('aria-label="Loading environment variables"');

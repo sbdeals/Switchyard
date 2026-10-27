@@ -1,7 +1,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadDatabaseCredentialsAction } from "../app/database-credentials-actions";
+import { getDatabaseConnectionAction } from "../app/db-connect-actions";
+import { DirtyGuardProvider } from "../components/DirtyGuard";
 import { ServiceDrawer } from "../components/service/ServiceDrawer";
 import { ENGINES, type Database, type Engine } from "./dokploy";
 
@@ -28,7 +29,7 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-const genericFailure = { ok: false, error: "Could not load database credentials." };
+const genericFailure = { ok: false, error: "Could not load database credentials. Please try again." };
 
 function projectsWith(engine: Engine, id: string) {
   return [{
@@ -57,11 +58,11 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("loadDatabaseCredentialsAction", () => {
+describe("getDatabaseConnectionAction", () => {
   it.each(ENGINES)("does not fetch %s credentials for another account", async (engine) => {
     mocks.fetch.mockResolvedValueOnce(Response.json(projectsWith(engine, "owned-id")));
 
-    expect(await loadDatabaseCredentialsAction(engine, "other-account-id")).toEqual(genericFailure);
+    expect(await getDatabaseConnectionAction(engine, "other-account-id")).toEqual(genericFailure);
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
     expect(mocks.fetch.mock.calls[0][0]).toMatch(/\/api\/project\.all$/);
     expect(mocks.fetch.mock.calls[0][1].headers.Cookie).toBe("test-user-session");
@@ -74,7 +75,7 @@ describe("loadDatabaseCredentialsAction", () => {
       .mockResolvedValueOnce(Response.json(projectsWith(engine, id)))
       .mockResolvedValueOnce(Response.json({ databasePassword: password, env: "TOKEN=private-env" }));
 
-    expect(await loadDatabaseCredentialsAction(engine, id)).toEqual({ ok: true, password });
+    expect(await getDatabaseConnectionAction(engine, id)).toEqual({ ok: true, password });
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
     expect(mocks.fetch.mock.calls[1][0]).toContain(
       `/api/${engine}.one?${engine}Id=${encodeURIComponent(id)}`,
@@ -85,45 +86,45 @@ describe("loadDatabaseCredentialsAction", () => {
   it("rejects an ID owned under a different engine", async () => {
     mocks.fetch.mockResolvedValueOnce(Response.json(projectsWith("mysql", "shared-id")));
 
-    expect(await loadDatabaseCredentialsAction("postgres", "shared-id")).toEqual(genericFailure);
+    expect(await getDatabaseConnectionAction("postgres", "shared-id")).toEqual(genericFailure);
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
 
   it.each(["application", "compose", "destination"])("rejects non-database type %s", async (engine) => {
-    expect(await loadDatabaseCredentialsAction(engine as Engine, "id")).toEqual(genericFailure);
+    expect(await getDatabaseConnectionAction(engine as Engine, "id")).toEqual(genericFailure);
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
-  it.each([null, undefined])("returns null for a missing password (%s)", async (password) => {
+  it.each([null, undefined])("returns a generic error for a missing password (%s)", async (password) => {
     mocks.fetch
       .mockResolvedValueOnce(Response.json(projectsWith("postgres", "owned-id")))
       .mockResolvedValueOnce(Response.json({ databasePassword: password }));
 
-    expect(await loadDatabaseCredentialsAction("postgres", "owned-id")).toEqual({ ok: true, password: null });
+    expect(await getDatabaseConnectionAction("postgres", "owned-id")).toEqual(genericFailure);
   });
 
   it("does not expose backend error details", async () => {
     mocks.fetch.mockResolvedValueOnce(new Response("private backend detail", { status: 500 }));
 
-    expect(await loadDatabaseCredentialsAction("postgres", "id")).toEqual(genericFailure);
+    expect(await getDatabaseConnectionAction("postgres", "id")).toEqual(genericFailure);
   });
 
   it("preserves a login redirect for an invalid session", async () => {
     mocks.openSession.mockReturnValue(null);
 
-    await expect(loadDatabaseCredentialsAction("postgres", "id")).rejects.toBe(mocks.redirect);
+    await expect(getDatabaseConnectionAction("postgres", "id")).rejects.toBe(mocks.redirect);
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
   it("preserves a login redirect when Dokploy rejects the session", async () => {
     mocks.fetch.mockResolvedValueOnce(new Response(null, { status: 401 }));
 
-    await expect(loadDatabaseCredentialsAction("postgres", "id")).rejects.toBe(mocks.redirect);
+    await expect(getDatabaseConnectionAction("postgres", "id")).rejects.toBe(mocks.redirect);
   });
 });
 
 describe("database drawer rendering", () => {
-  it("waits for the on-demand credential load instead of using the page prop", () => {
+  it("keeps credentials out of the overview and waits for explicit reveal in Connect", () => {
     const service: Database = {
       kind: "database",
       engine: "postgres",
@@ -148,11 +149,18 @@ describe("database drawer rendering", () => {
       command: null,
     };
 
-    const html = renderToStaticMarkup(createElement(ServiceDrawer, { service, onClose: vi.fn() }));
+    const renderTab = (tab: "overview" | "connect") => renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+      createElement(ServiceDrawer, { service, tab, sessionKey: "test", onTabChange: vi.fn(), onClose: vi.fn() }),
+    ));
+    const overview = renderTab("overview");
+    const html = renderTab("connect");
 
-    expect(html).toContain("Loading database credentials…");
+    expect(overview).not.toContain("database-credentials-prop-sentinel");
+    expect(overview).not.toContain("postgresql://");
+
+    expect(html).toContain("Show password");
     expect(html).not.toContain("database-credentials-prop-sentinel");
-    expect(html).not.toContain("postgresql://");
+    expect(html).toContain("postgresql://");
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 });

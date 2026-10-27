@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SharedVariableEditor, SharedVariablesPanel } from "../components/SharedVariablesPanel";
+import { DirtyGuardProvider } from "../components/DirtyGuard";
 import { VariablesTab } from "../components/service/VariablesTab";
 import type { ComposeService, ProjectNode } from "./dokploy";
 import { variablesEditorReducer } from "./variables-editor";
@@ -153,7 +154,7 @@ describe("service shared reference rendering", () => {
 
   it("renders only a loading state before the service environment is requested", () => {
     Object.assign(mocks.editorState, { value: "", baseline: null, loadError: null });
-    const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null, createElement(VariablesTab, { service })));
     expect(html).toContain('aria-label="Loading environment variables"');
     expect(html).not.toContain("service-prop-must-not-be-read");
     expect(html).not.toContain("<textarea");
@@ -163,7 +164,7 @@ describe("service shared reference rendering", () => {
   });
 
   it("offers a collapsed reference picker and labels defined and missing references without revealing shared values", () => {
-    const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null, createElement(VariablesTab, { service })));
     expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>Add shared reference<\/button>/);
     expect(html).not.toContain('aria-label="Shared reference scope"');
     expect(html).toContain('aria-label="Shared reference status"');
@@ -182,14 +183,14 @@ describe("service shared reference rendering", () => {
     Object.assign(mocks.editorState, variablesEditorReducer(mocks.editorState, {
       type: "loaded", env: '# comment\nMULTI="first\nsecond"\nDUP=old\nDUP=new\n',
     }));
-    const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null, createElement(VariablesTab, { service })));
     expect(html).toContain(">2 variables</span>");
     expect(html).not.toContain('aria-label="Shared reference status"');
   });
 
   it("does not mark references missing while shared variables are still loading", () => {
     mocks.useSharedVariableKeys.mockReturnValue(null);
-    const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null, createElement(VariablesTab, { service })));
     expect(html).toMatch(/role="status"[^>]*>Checking shared variables…/);
     expect(html).not.toContain("Missing — deployment will fail");
     expect(html).not.toContain('aria-label="Shared reference status"');
@@ -197,14 +198,14 @@ describe("service shared reference rendering", () => {
 
   it("reports read failures without claiming a reference is missing", () => {
     mocks.useSharedVariableKeys.mockReturnValue({ error: "Could not load shared variables" });
-    const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null, createElement(VariablesTab, { service })));
     expect(html).toMatch(/role="alert"[^>]*>Could not load shared variables/);
     expect(html).not.toContain("Missing — deployment will fail");
   });
 
   it("does not fall back to page props after an environment load failure", () => {
     Object.assign(mocks.editorState, { value: "", baseline: null, loadError: "Access denied" });
-    const html = renderToStaticMarkup(createElement(VariablesTab, { service }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null, createElement(VariablesTab, { service })));
     expect(html).toMatch(/role="alert"[^>]*>Access denied/);
     expect(html).not.toContain("service-prop-must-not-be-read");
     expect(html).not.toContain("<textarea");
