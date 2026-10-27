@@ -32,6 +32,6 @@ export {
   type ContainerRow,
   type RepairResult,
 } from "./core/repair.js";
-export { renderContainer } from "./core/switchyard-container.js";
+export { ensureSwitchyard, renderContainer } from "./core/switchyard-container.js";
 export { generatePassword, isValidEmail, parsePort, randomSecret, sha256 } from "./core/util.js";
 export { CLI_VERSION } from "./version.js";
