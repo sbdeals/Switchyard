@@ -100,8 +100,8 @@ deleted or copy other legacy files outside the agent key file.
 | `switchyard link` | Remember an existing project, environment, and application for this directory |
 | `switchyard variables [list\|set\|unset]` | List or edit application variables (values are masked by default) |
 | `switchyard status` | Services, container health, URLs, config path |
-| `switchyard down` | Stop the stack; data volumes survive, including `switchyard-data` |
-| `switchyard down --purge` | Also delete network, secrets, and volumes, including saved agent settings/backups in `switchyard-data` (fresh slate; clears stored admin creds) |
+| `switchyard down` | Stop the control plane and remove the Switchyard container; deployed workloads keep running and volumes survive, including `switchyard-data` |
+| `switchyard down --purge` | Also delete control-plane data, stored admin credentials, and saved agent settings/backups in `switchyard-data`; deployed workloads and their volumes remain orphaned |
 | `switchyard config list \| get <k> \| set <k> <v>` | Read/change persisted settings; `set` recreates the container |
 | `switchyard local-ingress up \| down` | Opt-in demo Traefik on alternate ports so domains route locally over **HTTP** (see below) |
 | `switchyard doctor` | Read-only prerequisite + health check |
