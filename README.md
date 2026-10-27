@@ -150,6 +150,11 @@ Re-running `up` is safe: it converges, and upgrades when a newer version is
 out. Settings are changed *after* setup with
 `switchyard config set <key> <value>`. Full reference: [docs/cli.md](docs/cli.md).
 
+The CLI and desktop app keep saved agent settings and dashboard files in the
+`switchyard-data` Docker volume, mounted at `/app/data`, across upgrades and
+container replacements. `switchyard down` keeps it; `switchyard down --purge`
+deletes it, including agent credentials and any dashboard backups.
+
 Deploy a local directory with `switchyard deploy` (the Railway `up`
 equivalent), or `switchyard deploy ./my-app --service web --project demos`.
 Add `--detach` to return after queuing. `switchyard up` still starts the
