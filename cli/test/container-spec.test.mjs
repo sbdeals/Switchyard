@@ -3,7 +3,15 @@ import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import test, { mock } from "node:test";
 
-import { defaultConfig, ensureSwitchyard, metricsStoreUrl, renderContainer, UserError } from "../dist/lib.js";
+import {
+  defaultConfig,
+  ensureSwitchyard,
+  metricsStoreUrl,
+  MIGRATION_INSPECT_FORMAT,
+  renderContainer,
+  sha256,
+  UserError,
+} from "../dist/lib.js";
 
 test("ensureSwitchyard rejects invalid replacement ports before any Docker calls", async () => {
   const spawn = mock.method(childProcess, "spawn", () => {
@@ -31,12 +39,29 @@ test("ensureSwitchyard rejects invalid replacement ports before any Docker calls
   }
 });
 
+test("migration inspect format renders a complete JSON object", () => {
+  const inspected = {
+    State: { Running: true },
+    Mounts: [{ Type: "bind", Source: "/var/run/docker.sock", Destination: "/var/run/docker.sock", RW: true }],
+    Config: { Env: ["HOME=/root"], User: "", WorkingDir: "/app" },
+  };
+  const rendered = MIGRATION_INSPECT_FORMAT.replace(/\{\{json (\.[\w.]+)\}\}/g, (_, field) =>
+    JSON.stringify(field.slice(1).split(".").reduce((value, key) => value[key], inspected)),
+  );
+  assert.deepEqual(JSON.parse(rendered), {
+    Running: inspected.State.Running,
+    Mounts: inspected.Mounts,
+    Config: inspected.Config,
+  });
+});
+
 test("hash is stable for identical config", () => {
   const a = renderContainer(defaultConfig("linux"), "1.0.0");
   const b = renderContainer(defaultConfig("linux"), "1.0.0");
   assert.equal(a.hash, b.hash);
-  // Preserve the pre-transport-change fingerprint: no unnecessary recreate.
-  assert.equal(a.hash, "74b16c6619f54139b143b3ebd41ff0ee4849ef8bb3b1b2f5fd9931203ef5ee4f");
+  // Secret transport (runEnv) must not change the fingerprint; the data volume
+  // mount and agent key location intentionally do (one recreate to attach it).
+  assert.equal(a.hash, "1d3369f375dc9fe2eb65d53834153d40f876218c9c04de943c3f3f5527d36844");
 });
 
 test("hash changes when a container-relevant setting changes", () => {
@@ -84,6 +109,40 @@ test("run args carry the BFF env and labels", () => {
   assert.ok(plan.runArgs.includes("DOKPLOY_URL=http://dokploy:3000"));
   assert.ok(plan.runArgs.includes(`switchyard.config-hash=${plan.hash}`));
   assert.equal(plan.runArgs.at(-1), plan.image);
+});
+
+test("dashboard data mount and agent key location are rendered and fingerprinted", () => {
+  const plan = renderContainer(defaultConfig("linux"), "1.0.0");
+  const values = (flag) => plan.runArgs.flatMap((arg, index) =>
+    arg === flag ? [plan.runArgs[index + 1]] : [],
+  );
+  assert.deepEqual(values("-v"), [
+    "/var/run/docker.sock:/var/run/docker.sock",
+    "switchyard-data:/app/data",
+  ]);
+  assert.ok(values("-e").includes("SWITCHYARD_AGENT_KEY_FILE=/app/data/agent-key.json"));
+
+  const env = Object.fromEntries(values("-e").map((entry) => {
+    const separator = entry.indexOf("=");
+    // Secrets are passed by name only; their values travel in runEnv.
+    if (separator === -1) return [entry, plan.runEnv[entry]];
+    return [entry.slice(0, separator), entry.slice(separator + 1)];
+  }));
+  const spec = {
+    image: plan.image,
+    network: values("--network")[0],
+    publish: values("-p")[0],
+    socket: values("-v")[0],
+    data: values("-v")[1],
+    env,
+    restart: values("--restart")[0],
+  };
+  assert.equal(plan.hash, sha256(JSON.stringify(spec)));
+  const { data, ...withoutData } = spec;
+  assert.notEqual(plan.hash, sha256(JSON.stringify(withoutData)));
+  const withoutKeyLocation = { ...spec, env: { ...env } };
+  delete withoutKeyLocation.env.SWITCHYARD_AGENT_KEY_FILE;
+  assert.notEqual(plan.hash, sha256(JSON.stringify(withoutKeyLocation)));
 });
 
 test("session secret is passed to the dashboard and folds into the hash", () => {
