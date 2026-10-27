@@ -581,17 +581,20 @@ export interface PsqlResult {
 /**
  * Run one psql invocation inside a Postgres container and capture its output.
  *
- * The SQL is delivered over the exec's **stdin**, never interpolated into argv
- * or a shell — `Cmd` is a fixed `psql` argument vector, so no query text can be
- * reinterpreted as arguments or shell metacharacters. psql runs in `--csv` mode
+ * Read-only SQL is passed as one `--command` argument, prefixed with a SQL
+ * comment so psql always sends it to the server, never interpreting meta-commands.
+ * PGOPTIONS makes transactions read-only without adding command tags to the CSV;
+ * standard_conforming_strings matches the classifier's literal handling. `-X`
+ * prevents psqlrc from overriding these settings. Write mode keeps using stdin.
+ * Neither path uses a shell. psql runs in `--csv` mode
  * with `ON_ERROR_STOP=1` (so a SQL error exits non-zero) and a distinctive null
  * marker so the parser can tell SQL NULL from an empty string. `-w` prevents a
  * password prompt from silently consuming the SQL on stdin; PGPASSWORD (from the
  * container's own env) covers password-auth images.
  *
- * We DON'T half-close stdin to signal end-of-input: over a Windows named pipe
- * (Docker Desktop) the FIN races the data flush, so psql can see an empty stdin
- * and exit 0 with no output. Instead we terminate the input with `\n;\n\q\n`:
+ * In write mode we DON'T half-close stdin to signal end-of-input: over a Windows
+ * named pipe (Docker Desktop) the FIN races the data flush, so psql can see an
+ * empty stdin and exit 0 with no output. Instead we end input with `\n;\n\q\n`:
  * the `;` completes the trailing statement (so a missing final semicolon still
  * runs) and psql's `\q` makes it exit cleanly. An unterminated string/comment
  * therefore never reaches `\q`; that case is caught by the timeout below, which
@@ -602,15 +605,15 @@ export interface PsqlResult {
 export async function runPsqlCsv(
   target: { id: string; identity: PgIdentity },
   sql: string,
-  opts: { timeoutMs?: number; maxBytes?: number; nullMarker: string },
+  opts: { timeoutMs?: number; maxBytes?: number; nullMarker: string; readOnly?: boolean },
 ): Promise<PsqlResult | null> {
-  const { timeoutMs = 20_000, maxBytes = 5_000_000, nullMarker } = opts;
+  const { timeoutMs = 20_000, maxBytes = 5_000_000, nullMarker, readOnly = true } = opts;
   const container = docker.getContainer(target.id);
   const { user, db, password } = target.identity;
 
   const exec = await withTimeout(
     container.exec({
-      // Fixed argv. The SQL is NOT here — it is written to stdin below.
+      // SQL in read-only mode is a single argument, never shell-interpolated.
       Cmd: [
         "psql",
         "-U",
@@ -623,8 +626,14 @@ export async function runPsqlCsv(
         "ON_ERROR_STOP=1",
         "-P",
         `null=${nullMarker}`,
+        ...(readOnly ? ["-X", "--command", `/* Read-only query */\n${sql}`] : []),
       ],
-      Env: password ? [`PGPASSWORD=${password}`] : [],
+      Env: [
+        ...(password ? [`PGPASSWORD=${password}`] : []),
+        ...(readOnly
+          ? ["PGOPTIONS=-c default_transaction_read_only=on -c standard_conforming_strings=on"]
+          : []),
+      ],
       AttachStdin: true,
       AttachStdout: true,
       AttachStderr: true,
@@ -660,10 +669,9 @@ export async function runPsqlCsv(
   collect(outS, (t) => (stdout += t));
   collect(errS, (t) => (stderr += t));
 
-  // Send the SQL followed by a terminator + `\q` (see the doc comment for why we
-  // don't half-close). psql runs the statement(s), then quits and closes the
-  // exec stream, which resolves the wait below.
-  stream.write(Buffer.from(`${sql}\n;\n\\q\n`, "utf8"));
+  // Write mode uses a terminator + `\q` rather than half-closing stdin (see above).
+  // Read-only mode exits after --command, without interpreting any input as psql.
+  if (!readOnly) stream.write(Buffer.from(`${sql}\n;\n\\q\n`, "utf8"));
 
   await new Promise<void>((resolve) => {
     let done = false;
