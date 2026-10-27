@@ -20,6 +20,13 @@ vi.mock("react", async (importOriginal) => ({
 vi.mock("@/lib/dokploy", () => ({
   loadWorkspace: mocks.loadWorkspace,
 }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => ({ value: "test-session" }) }),
+}));
+vi.mock("@/lib/session", () => ({
+  SESSION_COOKIE: "switchyard_session",
+  openSession: () => ({ email: "test@example.test" }),
+}));
 vi.mock("@/lib/collector", () => ({ ensureCollector: mocks.ensureCollector }));
 vi.mock("@/components/Workspace", () => ({
   Workspace: mocks.workspace,
@@ -79,7 +86,7 @@ describe("workspace load failures", () => {
     expect(html).toContain("Workspace loaded");
     expect(html).toContain("Sign out");
     expect(mocks.workspace.mock.calls[0][0]).toEqual({
-      services: [], projects: [], graph: { edges: [], warnings: {} },
+      services: [], projects: [], graph: { edges: [], warnings: {} }, notificationScope: expect.any(String),
     });
   });
 

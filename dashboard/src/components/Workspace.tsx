@@ -17,7 +17,10 @@ import { AgentPanel } from "@/components/agent/AgentPanel";
 import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { ProjectLogs } from "@/components/ProjectLogs";
 import { useServiceDeeplink } from "@/components/use-service-deeplink";
-import { DirtyGuardProvider } from "@/components/DirtyGuard";
+import { DeployNotifications } from "@/components/DeployNotifications";
+import { useWorkspacePolling } from "@/components/use-workspace-polling";
+import type { DeploymentEvent } from "@/lib/deploy-notifications";
+import { DirtyGuardProvider, useGuardedNavigation } from "@/components/DirtyGuard";
 import { cn } from "@/lib/utils";
 
 type View = "canvas" | "grid" | "logs";
@@ -26,6 +29,7 @@ type WorkspaceProps = {
   services: Service[];
   projects: ProjectNode[];
   graph: ServiceReferenceGraph;
+  notificationScope: string;
 };
 
 export function Workspace(props: WorkspaceProps) {
@@ -33,15 +37,34 @@ export function Workspace(props: WorkspaceProps) {
 }
 
 function WorkspaceContent({
-  services,
-  projects,
-  graph,
+  services: initialServices,
+  projects: initialProjects,
+  graph: initialGraph,
+  notificationScope,
 }: WorkspaceProps) {
   const [view, setView] = useState<View>("canvas");
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [deployment, setDeployment] = useState<DeploymentEvent | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
   const router = useRouter();
+  const { services, projects, graph } = useWorkspacePolling({
+    services: initialServices,
+    projects: initialProjects,
+    graph: initialGraph,
+  }, projectId);
+  const currentProject = projects.some((p) => p.projectId === projectId) ? projectId : null;
+  const visibleServices = currentProject ? services.filter((s) => s.projectId === currentProject) : services;
+  const visibleIds = new Set(visibleServices.map((s) => s.id));
+  const visibleGraph = currentProject
+    ? { edges: graph.edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target)), warnings: graph.warnings }
+    : graph;
   const drawer = useServiceDeeplink(services);
+  const { navigate } = useGuardedNavigation();
+  const openService = (id: string) => navigate(() => {
+    setDeployment(null);
+    drawer.open(id);
+  }, drawer.service?.id === id && drawer.tab === "overview");
   const { onDeployed } = drawer;
 
   return (
@@ -60,6 +83,32 @@ function WorkspaceContent({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="Current project"
+            value={currentProject ?? ""}
+            onChange={(e) => {
+              const nextProject = e.target.value || null;
+              navigate(() => {
+                setProjectId(nextProject);
+                setDeployment(null);
+                drawer.close();
+              });
+            }}
+            className="max-w-40 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-2 py-2 text-xs"
+          >
+            <option value="">All projects</option>
+            {projects.map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}
+          </select>
+          <DeployNotifications
+            key={notificationScope}
+            services={services}
+            projectId={currentProject}
+            storageKey={`switchyard:deploy-activity:v1:${notificationScope}`}
+            onViewLogs={(event) => navigate(() => {
+              setDeployment(event);
+              drawer.open(event.serviceId, "logs");
+            })}
+          />
           <div className="flex rounded-lg border border-[var(--color-border-strong)] p-0.5">
             <ViewToggle active={view === "canvas"} onClick={() => setView("canvas")}>
               <Network className="size-3.5" /> Canvas
@@ -95,39 +144,40 @@ function WorkspaceContent({
       </header>
 
       {view === "logs" ? (
-        <ProjectLogs projects={projects} />
-      ) : services.length === 0 ? (
+        <ProjectLogs key={currentProject ?? "all"} projects={projects} selectedProjectId={currentProject} />
+      ) : visibleServices.length === 0 ? (
         <EmptyState projects={projects} onDeployed={onDeployed} />
       ) : view === "canvas" ? (
         <PanelErrorBoundary>
-          <FlowCanvas services={services} graph={graph} projects={projects} onDeployed={onDeployed} onSelect={(s) => drawer.open(s.id)} />
+          <FlowCanvas services={visibleServices} graph={visibleGraph} projects={projects} onDeployed={onDeployed} onSelect={(s) => openService(s.id)} />
         </PanelErrorBoundary>
       ) : (
         <motion.div layout className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
-            {services.map((s) => (
-              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => drawer.open(s.id)} />
+            {visibleServices.map((s) => (
+              <ServiceCard key={`${s.kind}:${s.id}`} service={s} onOpen={() => openService(s.id)} />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
 
-      <ServiceDrawer services={services} onSelectService={drawer.open} service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
+      <ServiceDrawer deploymentId={deployment?.serviceId === drawer.service?.id ? deployment?.deploymentId : undefined} services={services} onSelectService={openService} service={drawer.service} tab={drawer.tab} sessionKey={drawer.scope} onTabChange={drawer.selectTab} onClose={drawer.close} />
       {drawer.notFound && (
         <div role="status" className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-4 py-2 text-sm shadow-lg">
           Service not found
         </div>
       )}
-      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
+      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} services={services} />
       {activityOpen && (
         <ActivityPanel
           projects={projects}
           onClose={() => setActivityOpen(false)}
-          onSelect={(entry) => {
+          onSelect={(entry) => navigate(() => {
             setActivityOpen(false);
+            setDeployment(null);
             drawer.open(entry.serviceId, "deployments");
             router.refresh();
-          }}
+          })}
         />
       )}
       <AgentPanel />
