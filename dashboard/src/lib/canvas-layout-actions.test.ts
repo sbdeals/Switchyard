@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Node } from "@xyflow/react";
 import {
   createCanvasLayoutActions,
   loadPositions,
   positionsForCanvasSync,
   savePositions,
 } from "./canvas-layout-actions";
-import { CANVAS_POSITIONS_KEY, placeService, type Positions } from "./canvas-layout";
+import { CANVAS_POSITIONS_KEY, mergeNodePositions, placeService, type Positions } from "./canvas-layout";
 
 describe("canvas layout actions", () => {
   let stored: Map<string, string>;
@@ -113,6 +114,47 @@ describe("canvas layout actions", () => {
     actions.undo();
     advanceFrame(700);
     expect(loadPositions()).toEqual(placed);
+  });
+
+  it("restores saved nodes before placing new nodes without persisting automatic positions", () => {
+    const saved = { a: { x: 0, y: 0 } };
+    stored.set(CANVAS_POSITIONS_KEY, JSON.stringify(saved));
+    const defaults: Node[] = [
+      { id: "new", position: { x: 0, y: 0 }, data: {} },
+      { id: "a", position: { x: 0, y: 104 }, data: {} },
+    ];
+    const result = mergeNodePositions(defaults, positionsForCanvasSync([], false));
+    expect(result.map((node) => node.position)).toEqual([{ x: 0, y: 104 }, saved.a]);
+    expect(loadPositions()).toEqual(saved);
+    expect(storage.setItem).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("keeps Tidy and Undo positions through canvas merges (storage blocked: %s)", (blocked) => {
+    const created = placeService({}, "a", { x: 123, y: -45 });
+    positions = { ...initial, ...created };
+    const before = structuredClone(positions);
+    if (blocked) {
+      storage.getItem.mockImplementation(() => { throw new Error("blocked"); });
+      storage.setItem.mockImplementation(() => { throw new Error("blocked"); });
+    }
+    savePositions(created);
+    const defaults: Node[] = Object.entries(initial).map(([id, position]) => ({ id, position, data: {} }));
+    const sync = () => {
+      const current = defaults.map((node) => ({ ...node, position: positions[node.id] }));
+      const merged = mergeNodePositions(defaults, {
+        ...loadPositions(), ...created, ...positionsForCanvasSync(current, true),
+      }, current);
+      return Object.fromEntries(merged.map((node) => [node.id, node.position]));
+    };
+    actions.tidy(target);
+    advanceFrame(175);
+    expect(sync()).toEqual(positions);
+    advanceFrame(350);
+    expect(sync()).toEqual(target);
+    actions.undo();
+    advanceFrame(700);
+    expect(sync()).toEqual(before);
+    if (!blocked) expect(loadPositions()).toEqual(created);
   });
 
   it.each(["null", "[]", "false", "12", '\"text\"'])(
