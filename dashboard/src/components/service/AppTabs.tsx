@@ -67,6 +67,7 @@ import {
   useSavedFlash,
 } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { DeploymentCommitInfo } from "@/components/service/DeploymentCommitInfo";
 import {
   durationBarHeight,
   formatAbsoluteTime,
@@ -701,11 +702,12 @@ export function DeploymentHistory({ deployments: history, serviceKind, onNavigat
               <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color(d.status) }} />
               {d.rollbackId && <span className="sr-only">{d.status}</span>}
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm">{d.title}</div>
+                {!d.commit?.subject && <div className="truncate text-sm">{d.title}</div>}
+                <DeploymentCommitInfo commit={d.commit} />
                 {d.description && d.description !== d.title && (
                   <p className="whitespace-pre-wrap break-words text-xs text-[var(--color-fg-muted)]">{d.description}</p>
                 )}
-                                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-fg-subtle)]">
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-fg-subtle)]">
                   <span title={formatAbsoluteTime(d.createdAt)}>
                     {now === null ? "—" : formatRelativeTime(d.createdAt, now)}
                   </span>
