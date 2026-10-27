@@ -10,11 +10,16 @@ import { DirtyGuardProvider } from "../components/DirtyGuard";
 import { redactServiceForClient } from "./service-redaction";
 
 // Keep these render tests local: server actions and unrelated drawer panels never run.
-vi.mock("@/app/actions", () => ({
-  quickDeployDatabaseAction: vi.fn(), quickDeployImageAction: vi.fn(), quickDeployRepoAction: vi.fn(),
-  createComposeAction: vi.fn(), listTemplatesAction: vi.fn(), quickDeployTemplateAction: vi.fn(),
-  lifecycleAction: vi.fn(), updateDatabaseAction: vi.fn(),
+// #74's session-expiry banner pulls in client-actions, which wraps every server action at import time.
+vi.mock("@/app/actions", () => new Proxy({} as Record<string, unknown>, {
+  has: (_target, key) => typeof key === "string" && key.endsWith("Action"),
+  get: (target, key) => {
+    if (typeof key !== "string" || !key.endsWith("Action")) return undefined;
+    return (target[key] ??= vi.fn());
+  },
 }));
+vi.mock("@/app/db-connect-actions", () => ({ getDatabaseConnectionAction: vi.fn() }));
+vi.mock("@/app/login/actions", () => ({ logoutAction: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),

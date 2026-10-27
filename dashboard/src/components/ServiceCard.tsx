@@ -102,7 +102,7 @@ export function ServiceCard({
         <StatusBadge status={service.status} runtime={service.runtime} />
       </div>
 
-      <div className="mt-3 flex items-center justify-between">
+      <div className="mt-3 flex items-center justify-between gap-2">
         <span className="truncate text-xs text-[var(--color-fg-subtle)]">
           {service.projectName} / {service.environmentName}
         </span>
@@ -111,13 +111,13 @@ export function ServiceCard({
             type="button"
             onClick={deploy}
             disabled={pending}
-            className="relative z-10 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40"
+            className="relative z-10 inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-deep)] disabled:opacity-40 max-lg:min-h-10"
           >
             {action === "start" ? <Play className="size-3.5" /> : <Rocket className="size-3.5" />}
             {action === "start" ? "Start" : "Deploy"}
           </button>
         ) : (
-          <ChevronRight className="size-4 text-[var(--color-fg-subtle)] transition-transform group-hover:translate-x-0.5" />
+          <ChevronRight className="size-4 shrink-0 text-[var(--color-fg-subtle)] transition-transform group-hover:translate-x-0.5" />
         )}
       </div>
 
