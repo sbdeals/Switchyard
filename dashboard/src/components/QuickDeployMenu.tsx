@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, useMemo, useState, useTransition } from "react";
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Plus,
@@ -27,6 +28,7 @@ import {
 } from "@/app/actions";
 import { GithubDeployModal } from "@/components/GithubDeployModal";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { anchoredMenuPosition, type Point } from "@/lib/canvas-layout";
 
 /**
  * One-click provisioning: pick a database engine (auto name/password/version) or
@@ -36,13 +38,17 @@ import { useDialogFocus } from "@/components/use-focus-trap";
 export function QuickDeployMenu({
   projects,
   onDeployed,
+  anchor,
+  onClose,
 }: {
   projects: ProjectNode[];
   onDeployed: (id: string) => void;
+  anchor?: Point;
+  onClose?: () => void;
 }) {
   const dialogId = useId();
   const catalogId = useId();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!anchor);
   const [githubOpen, setGithubOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +72,11 @@ export function QuickDeployMenu({
   );
   const [target, setTarget] = useState<string>("");
   const targetEnv = target || envOptions[0]?.id;
+
+  function close() {
+    setOpen(false);
+    onClose?.();
+  }
 
   function run(key: string, fn: () => Promise<{ ok: true; id: string } | { ok: false; error: string }>) {
     setError(null);
@@ -114,9 +125,9 @@ export function QuickDeployMenu({
     );
   }, [templates, query]);
 
-  return (
+  const content = (
     <div className="relative">
-      <button
+      {!anchor && <button
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -124,15 +135,16 @@ export function QuickDeployMenu({
         className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[var(--color-brand-deep)]"
       >
         <Plus className="size-4" /> New service
-      </button>
+      </button>}
 
       <AnimatePresence>
         {open && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+            <div className="fixed inset-0 z-40" onClick={close} />
             <FocusTrapPanel
-              onClose={() => setOpen(false)}
               id={dialogId}
+              onClose={close}
+              anchor={anchor}
               role="dialog"
               aria-modal="true"
               aria-label="New service"
@@ -140,7 +152,7 @@ export function QuickDeployMenu({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.12 }}
-              className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl"
+              className={`${anchor ? "fixed max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto" : "absolute right-0 mt-2 overflow-hidden"} z-50 w-80 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-2xl`}
             >
               {envOptions.length > 1 && (
                 <select
@@ -357,12 +369,16 @@ export function QuickDeployMenu({
 
       <GithubDeployModal
         open={githubOpen}
-        onClose={() => setGithubOpen(false)}
+        onClose={() => {
+          setGithubOpen(false);
+          onClose?.();
+        }}
         environmentId={targetEnv}
         onDeployed={onDeployed}
       />
     </div>
   );
+  return anchor ? createPortal(content, document.body) : content;
 }
 
 /**
@@ -372,9 +388,37 @@ export function QuickDeployMenu({
  */
 function FocusTrapPanel({
   onClose,
+  anchor,
   ...props
-}: { onClose: () => void } & React.ComponentProps<typeof motion.div>) {
-  const ref = useDialogFocus<HTMLDivElement>(onClose);
+}: { onClose: () => void; anchor?: Point } & React.ComponentProps<typeof motion.div>) {
+  const focusRef = useDialogFocus<HTMLDivElement>(onClose);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    focusRef(node);
+    panelRef.current = node;
+  }, [focusRef]);
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!anchor || !panel) return;
+    // Measure again when the catalog expands or the viewport changes.
+    const position = () => {
+      const point = anchoredMenuPosition(anchor,
+        { width: window.innerWidth, height: window.innerHeight },
+        { width: panel.offsetWidth, height: panel.offsetHeight });
+      panel.style.left = `${point.x}px`;
+      panel.style.top = `${point.y}px`;
+    };
+    position();
+    const observer = new ResizeObserver(position);
+    observer.observe(panel);
+    window.addEventListener("resize", position);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", position);
+    };
+  }, [anchor]);
+
   return <motion.div {...props} ref={ref} />;
 }
 
