@@ -234,8 +234,8 @@ function RedirectsSection({ app }: { app: Application }) {
           <p className="text-[11px] text-[var(--color-fg-subtle)]">
             Matches the full URL. Use {"${1}"} for capture groups. Editor supports a subset of Traefik regular expressions.
           </p>
-          <div className="flex items-center gap-2">
-            <label className="mr-auto flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="mr-auto flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)] max-lg:min-h-10">
               <input
                 type="checkbox"
                 checked={permanent}
@@ -321,8 +321,8 @@ function PortsSection({ app, services, onSelectService }: PortConflictProps & { 
       ) : (
         <Empty>No published ports.</Empty>
       )}
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
+      <div className="grid grid-cols-2 items-end gap-2 sm:flex">
+        <div className="min-w-0 flex-1">
           <Field label="Published">
             <input
               value={published}
@@ -333,7 +333,7 @@ function PortsSection({ app, services, onSelectService }: PortConflictProps & { 
             />
           </Field>
         </div>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Field label="Target">
             <input
               value={target}
@@ -344,7 +344,7 @@ function PortsSection({ app, services, onSelectService }: PortConflictProps & { 
             />
           </Field>
         </div>
-        <div className="w-24">
+        <div className="min-w-0 sm:w-24">
           <Field label="Protocol">
             <select
               value={protocol}
