@@ -22,6 +22,7 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("@/app/actions", () => ({}));
 vi.mock("@/app/db-connect-actions", () => ({}));
+vi.mock("@/app/deploy-actions", () => ({ deployOptionsAction: vi.fn() }));
 vi.mock("@/components/DirtyGuard", () => ({ useDirtyGuard: vi.fn(), DirtyGuardScope: ({ children }: { children: ReactNode }) => children }));
 vi.mock("@/components/use-focus-trap", () => ({ useDialogFocus: () => vi.fn() }));
 vi.mock("@/components/service/primitives", async (importOriginal) => ({
