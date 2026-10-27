@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { DomainHttpsToggle, useDomainHttps } from "@/components/service/DomainHttpsToggle";
 import { validatePort } from "@/lib/validation";
 import { DomainStatus } from "@/components/service/DomainStatus";
 import { validateComposeFile } from "@/lib/compose-validation";
@@ -132,6 +133,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
   const services = compose.serviceNames ?? [];
   const [serviceName, setServiceName] = useState(services[0] ?? "");
   const [host, setHost] = useState("");
+  const httpsOptions = useDomainHttps(host);
   const [port, setPort] = useState("80");
   const [defaults, setDefaults] = useState({ serviceName, port });
   const [pending, start] = useTransition();
@@ -150,7 +152,8 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
         compose.id,
         serviceName,
         host,
-        Number(port)
+        Number(port),
+        httpsOptions.https
       );
       if (res.ok) {
         setHost("");
@@ -183,7 +186,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-[var(--color-fg-muted)]">
-        Attach a domain to one service in this stack (auto-SSL via Let&apos;s Encrypt). Point the
+        Attach a domain to one service in this stack. Point the
         domain&apos;s DNS at this server for it to resolve.
       </p>
 
@@ -263,6 +266,7 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
           Add
         </button>
       </div>
+      <DomainHttpsToggle {...httpsOptions} />
       {generated && (
         <p role="status" className="break-words text-xs text-[var(--color-ok)]">
           Attached {generated} → {serviceName} — it appears in the list above.
