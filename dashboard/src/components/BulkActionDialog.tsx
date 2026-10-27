@@ -4,7 +4,7 @@ import { useId, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/dokploy";
-import { appLifecycleAction, composeLifecycleAction, lifecycleAction } from "@/app/actions";
+import { appLifecycleAction, composeLifecycleAction, lifecycleAction } from "@/lib/client-actions";
 import {
   BULK_ACTION_LABELS,
   canConfirmBulkAction,

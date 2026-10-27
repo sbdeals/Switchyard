@@ -3,7 +3,7 @@
 import { useId, useRef, useState, useTransition } from "react";
 import { ChevronDown, Loader2, Rocket } from "lucide-react";
 import type { Application } from "@/lib/dokploy";
-import { appLifecycleAction } from "@/app/actions";
+import { appLifecycleAction } from "@/lib/client-actions";
 import { deployOptionsAction } from "@/app/deploy-actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
 import {

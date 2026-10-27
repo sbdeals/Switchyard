@@ -78,6 +78,7 @@ export const githubRepositoriesAction = guardAction(serverActions.githubReposito
 export const githubBranchesAction = guardAction(serverActions.githubBranchesAction);
 export const quickDeployGithubAction = guardAction(serverActions.quickDeployGithubAction);
 export const appLifecycleAction = guardAction(serverActions.appLifecycleAction);
+export const duplicateServiceAction = guardAction(serverActions.duplicateServiceAction);
 export const updateApplicationAction = guardAction(serverActions.updateApplicationAction);
 export const saveApplicationEnvAction = guardAction(serverActions.saveApplicationEnvAction);
 export const saveAppBuildTypeAction = guardAction(serverActions.saveAppBuildTypeAction);
