@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Plus, Pencil, Trash2, FolderGit2, Layers, Loader2, GitCompareArrows } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { ProjectNode } from "@/lib/dokploy";
+import type { ProjectNode, Service } from "@/lib/dokploy";
+import { deleteImpact } from "@/lib/delete-impact";
+import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import {
   createProjectAction,
   renameProjectAction,
@@ -22,16 +24,24 @@ export function ProjectsPanel({
   open,
   onClose,
   projects,
+  services,
 }: {
   open: boolean;
   onClose: () => void;
   projects: ProjectNode[];
+  services: Service[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [newProject, setNewProject] = useState("");
   const [newEnv, setNewEnv] = useState<Record<string, string>>({});
+  const [deleting, setDeleting] = useState<{
+    name: string;
+    resource: string;
+    impact: string[];
+    confirm: () => Promise<ActionResult>;
+  } | null>(null);
   const [compareProjectId, setCompareProjectId] = useState<string | null>(null);
   const comparingProject = projects.find((project) => project.projectId === compareProjectId && project.environments.length >= 2);
   const [duplicate, setDuplicate] = useState<{ project: ProjectNode; environmentId: string; name: string } | null>(null);
@@ -126,8 +136,12 @@ export function ProjectsPanel({
                       title="Delete project"
                       danger
                       onClick={() => {
-                        if (confirm(`Delete project "${p.name}" and everything in it?`))
-                          act(() => removeProjectAction(p.projectId));
+                        setDeleting({
+                          name: p.name,
+                          resource: "project",
+                          impact: deleteImpact(services.filter((s) => s.projectId === p.projectId), p.environments.length),
+                          confirm: () => removeProjectAction(p.projectId),
+                        });
                       }}
                     >
                       <Trash2 className="size-3.5" />
@@ -163,8 +177,12 @@ export function ProjectsPanel({
                           title="Delete environment"
                           danger
                           onClick={() => {
-                            if (confirm(`Delete environment "${e.name}"?`))
-                              act(() => removeEnvironmentAction(e.environmentId));
+                            setDeleting({
+                              name: e.name,
+                              resource: "environment",
+                              impact: deleteImpact(services.filter((s) => s.projectId === p.projectId && s.environmentId === e.environmentId)),
+                              confirm: () => removeEnvironmentAction(e.environmentId),
+                            });
                           }}
                         >
                           <Trash2 className="size-3" />
@@ -237,6 +255,16 @@ export function ProjectsPanel({
               </div>
             </div>}
           </FocusTrapPanel>
+          {deleting && (
+            <DeleteConfirmDialog
+              name={deleting.name}
+              resource={deleting.resource}
+              impact={deleting.impact}
+              onConfirm={deleting.confirm}
+              onClose={() => setDeleting(null)}
+              onDeleted={() => router.refresh()}
+            />
+          )}
         </motion.div>
       )}
     </AnimatePresence>
