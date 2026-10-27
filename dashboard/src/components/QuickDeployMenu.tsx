@@ -350,7 +350,7 @@ export function QuickDeployMenu({
               >
                 <span
                   className="flex size-7 items-center justify-center rounded-md"
-                  style={{ backgroundColor: "#2dd4bf1a", color: "#2dd4bf" }}
+                  style={{ backgroundColor: "var(--color-teal-soft)", color: "var(--color-teal)" }}
                 >
                   {busy === "compose" ? <Loader2 className="size-4 animate-spin" /> : <Layers className="size-4" />}
                 </span>
@@ -366,7 +366,7 @@ export function QuickDeployMenu({
               >
                 <span
                   className="flex size-7 items-center justify-center rounded-md"
-                  style={{ backgroundColor: "#a78bfa1a", color: "#a78bfa" }}
+                  style={{ backgroundColor: "var(--color-violet-soft)", color: "var(--color-violet)" }}
                 >
                   <LayoutTemplate className="size-4" />
                 </span>

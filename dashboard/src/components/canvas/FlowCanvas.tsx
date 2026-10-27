@@ -23,6 +23,7 @@ import { serviceAccent } from "@/lib/service-meta";
 import { resolveServiceLogo, useTemplateLogos } from "@/lib/service-logo";
 import { ServiceNode, type ServiceNodeData } from "@/components/canvas/ServiceNode";
 import { pruneCanvasPositions } from "@/lib/canvas-positions";
+import { useTheme } from "@/components/ThemeProvider";
 import { CanvasResizeFit } from "@/components/canvas/CanvasResizeFit";
 import { canvasAutoLayout } from "@/lib/canvas-auto-layout";
 import {
@@ -77,6 +78,7 @@ export function FlowCanvas({
   projects: ProjectNode[];
   onDeployed: (id: string) => void;
 }) {
+  const { theme } = useTheme();
   const canvasRef = useRef<HTMLDivElement>(null);
   const flowRef = useRef<ReactFlowInstance | null>(null);
   const [creation, setCreation] = useState<{ screen: Point; flow: Point } | null>(null);
@@ -148,7 +150,7 @@ export function FlowCanvas({
       serviceEdges.map((e) => {
         const source = services.find((s) => s.id === e.source);
         const target = services.find((s) => s.id === e.target);
-        const accent = target ? serviceAccent(target) : "#a06bff";
+        const accent = target ? serviceAccent(target) : "var(--color-brand)";
         return {
           id: `${e.source}->${e.target}`,
           source: e.source,
@@ -309,7 +311,7 @@ export function FlowCanvas({
         selectionKeyCode={selectionDisabled ? null : "Shift"}
         deleteKeyCode={null}
         nodesDraggable={!animating}
-        colorMode="dark"
+        colorMode={theme}
         fitView
         fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
         proOptions={{ hideAttribution: true }}
@@ -317,7 +319,7 @@ export function FlowCanvas({
         maxZoom={1.5}
       >
         <CanvasResizeFit />
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="#ffffff2b" />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="var(--color-canvas-dots)" bgColor="var(--color-bg)" />
         <Controls className="!border-[var(--color-border-strong)] !bg-[var(--color-surface)]" />
         <Panel position="top-right">
           <button
@@ -354,7 +356,7 @@ export function FlowCanvas({
               ? serviceAccent((n.data as ServiceNodeData).service)
               : "transparent"
           }
-          maskColor="#0a0a0fcc"
+          maskColor="var(--color-canvas-mask)"
           className="!bg-[var(--color-bg-elevated)]"
         />
       </ReactFlow>

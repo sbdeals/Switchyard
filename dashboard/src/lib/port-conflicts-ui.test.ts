@@ -22,6 +22,7 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("@/app/actions", () => ({}));
 vi.mock("@/app/db-connect-actions", () => ({}));
+vi.mock("@/components/use-shared-variables", () => ({ useSharedVariableKeys: () => null }));
 vi.mock("@/app/compose-export-actions", () => ({ loadComposeExportAction: vi.fn() }));
 vi.mock("@/components/DirtyGuard", () => ({ useDirtyGuard: vi.fn(), DirtyGuardScope: ({ children }: { children: ReactNode }) => children }));
 vi.mock("@/components/use-focus-trap", () => ({ useDialogFocus: () => vi.fn() }));
