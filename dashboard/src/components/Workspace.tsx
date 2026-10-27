@@ -134,7 +134,7 @@ function WorkspaceContent({
             Apps and databases across your Dokploy projects.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <select
             aria-label="Current project"
             value={currentProject ?? ""}
@@ -367,13 +367,13 @@ function EmptyState({
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-border-strong)] py-20 text-center"
+      className="flex min-w-0 flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-border-strong)] px-4 py-20 text-center sm:px-0"
     >
       <div className="flex size-14 items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
         <Boxes className="size-7" />
       </div>
       <h2 className="mt-4 font-medium">No services yet</h2>
-      <p className="mb-5 mt-1 max-w-sm text-sm text-[var(--color-fg-muted)]">
+      <p className="mb-5 mt-1 w-full max-w-sm text-sm text-[var(--color-fg-muted)]">
         Deploy an app from a Docker image, or spin up a managed database in one click.
       </p>
       <QuickDeployMenu projects={projects} onDeployed={onDeployed} />
