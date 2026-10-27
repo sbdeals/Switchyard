@@ -1,10 +1,13 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const loadWorkspace = vi.hoisted(() => vi.fn());
 
-vi.mock("next/navigation", () => ({ unstable_rethrow: () => {} }));
+vi.mock("next/navigation", () => ({
+  unstable_rethrow: () => {},
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 vi.mock("@/lib/dokploy", () => ({ loadWorkspace, inferEdges: () => [] }));
 vi.mock("@/lib/collector", () => ({ ensureCollector: () => {} }));
 vi.mock("@/components/Workspace", () => ({
@@ -16,6 +19,8 @@ vi.mock("@/components/LogoutButton", () => ({
 
 import Page from "../app/page";
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("workspace landmark", () => {
   it("wraps the loaded workspace and controls in one main landmark", async () => {
     loadWorkspace.mockResolvedValueOnce({ services: [], projects: [] });
@@ -25,11 +30,17 @@ describe("workspace landmark", () => {
     expect(html).toMatch(/^<main>.*Sign out.*Workspace contents.*<\/main>$/);
   });
 
-  it("keeps the connection error inside one main landmark", async () => {
-    loadWorkspace.mockRejectedValueOnce(new Error("Test connection failure"));
+  it.each([
+    [new Error("Test workspace failure"), "Something went wrong"],
+    [Object.assign(new Error("Test connection failure"), { code: "ECONNREFUSED" }), "Can&#x27;t reach Dokploy"],
+  ])("keeps the error panel inside one main landmark (%s)", async (error, heading) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    loadWorkspace.mockRejectedValueOnce(error);
     const html = renderToStaticMarkup(await Page());
 
     expect(html.match(/<main(?:\s|>)/g)).toHaveLength(1);
-    expect(html).toMatch(/^<main\s[^>]*>.*<h1.*Test connection failure.*<\/main>$/);
+    expect(html).toMatch(/^<button>Sign out<\/button><main\s[^>]*>.*<\/main>$/);
+    expect(html).toContain(`>${heading}</h1>`);
+    expect(html).toContain("Retry");
   });
 });
