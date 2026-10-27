@@ -183,13 +183,13 @@ export function GithubDeployModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
             transition={{ duration: 0.15 }}
-            className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-5 shadow-2xl"
+            className="fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-4 shadow-2xl sm:p-5 max-lg:[&_a]:min-h-10 max-lg:[&_button]:min-h-10 max-lg:[&_button]:min-w-10 max-lg:[&_select]:min-h-10"
           >
             <div className="mb-4 flex items-center gap-2.5">
-              <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--color-surface)] text-[var(--color-fg)]">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface)] text-[var(--color-fg)]">
                 <GitFork className="size-4.5" />
               </span>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <h2 id="github-deploy-title" className="text-sm font-semibold">Deploy from GitHub</h2>
                 <p className="text-[11px] text-[var(--color-fg-subtle)]">
                   Private repos, auto-deploy on push.
@@ -198,7 +198,7 @@ export function GithubDeployModal({
               <button
                 onClick={handleClose}
                 aria-label="Close"
-                className="rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
+                className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)]"
               >
                 <X className="size-4" />
               </button>
@@ -214,7 +214,7 @@ export function GithubDeployModal({
                   No GitHub App is connected yet. Create and install one in Dokploy, then come back
                   and refresh — your installations will appear here.
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <a
                     href={connectUrl}
                     target="_blank"
@@ -285,7 +285,7 @@ export function GithubDeployModal({
                   </select>
                 </Labeled>
 
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                   <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-fg-subtle)]">
                     <Lock className="size-3" /> Pushes to the branch auto-deploy.
                   </span>

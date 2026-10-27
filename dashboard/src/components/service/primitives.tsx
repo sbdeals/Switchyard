@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
 import { preferredPublicDomain } from "@/lib/domain-https";
 
 export const inputCls =
-  "w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50";
+  "min-w-0 w-full rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-brand)] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50";
 
 // --- hooks --------------------------------------------------------------------
 
@@ -165,8 +165,8 @@ export function Field({
   const generated = useId();
   const { nodes, id } = labelTarget(children, generated);
   return (
-    <div>
-      <div className="mb-1.5 flex items-baseline justify-between">
+    <div className="min-w-0">
+      <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
         <label htmlFor={id} className="text-xs font-medium text-[var(--color-fg-muted)]">
           {label}
         </label>
@@ -179,7 +179,7 @@ export function Field({
 
 export function Info({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+    <div className="min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
       <div className="text-xs text-[var(--color-fg-subtle)]">{label}</div>
       <div className={cn("mt-0.5 truncate text-sm", mono && "font-mono text-xs")} title={value}>
         {value}
@@ -199,7 +199,7 @@ export function CopyButton({ text }: { text: string }) {
         flash();
       }}
       aria-label="Copy to clipboard"
-      className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+      className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
     >
       {copied ? <Check className="size-3.5 text-[var(--color-ok)]" /> : <Copy className="size-3.5" />}
       <span aria-live="polite" className="sr-only">
@@ -226,7 +226,7 @@ export function RemoveBtn({
       onClick={onClick}
       disabled={pending}
       aria-label={label}
-      className="shrink-0 rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
+      className="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)] disabled:opacity-40"
     >
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
     </button>
@@ -311,19 +311,21 @@ export function LifecycleButtons({
   pending,
   error,
   run,
+  deployControl,
 }: {
   status: ServiceStatus;
   runtime?: ServiceRuntime;
   pending: boolean;
   error: string | null;
   run: (action: Action) => void;
+  deployControl?: React.ReactNode;
 }) {
   const action = resolveServiceAction(status, runtime);
   return (
     <>
       <div className="flex flex-wrap gap-2">
         {action === "deploy" ? (
-          <Btn onClick={() => run("deploy")} disabled={pending} primary>
+          deployControl ?? <Btn onClick={() => run("deploy")} disabled={pending} primary>
             <Rocket className="size-3.5" /> Deploy
           </Btn>
         ) : action === "stop" ? (
@@ -336,7 +338,7 @@ export function LifecycleButtons({
           </Btn>
         ) : null}
         {action !== "deploy" && (
-          <Btn onClick={() => run("deploy")} disabled={pending || !action}>
+          deployControl ?? <Btn onClick={() => run("deploy")} disabled={pending || !action}>
             <RefreshCw className="size-3.5" /> Redeploy
           </Btn>
         )}
@@ -367,7 +369,7 @@ export function SaveRow({
   label?: string;
 }) {
   return (
-    <div className="flex items-center justify-end gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
       {error && (
         <span role="alert" className="text-xs text-[var(--color-danger)]">
           {error}
@@ -416,7 +418,7 @@ export function DangerZone({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] disabled:opacity-50"
+        className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--color-danger)]/50 px-3 py-2 text-xs font-medium text-[var(--color-danger)] [overflow-wrap:anywhere] hover:bg-[var(--color-danger-soft)] disabled:opacity-50"
       >
         <Trash2 className="size-3.5" /> Destroy {service.name}
       </button>
