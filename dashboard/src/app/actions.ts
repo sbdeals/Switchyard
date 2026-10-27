@@ -7,10 +7,7 @@ import {
   createDatabase,
   databaseAction,
   createProject,
-  renameProject,
-  removeProject,
   createEnvironment,
-  renameEnvironment,
   removeEnvironment,
   listProjects,
   loadWorkspace,
@@ -119,6 +116,13 @@ import {
 } from "@/lib/dokploy";
 import { ENGINE_META } from "@/lib/engines";
 import { randomPassword, randomServiceName } from "@/lib/names";
+import {
+  getProjectSettings,
+  updateProjectSettings,
+  updateProjectEnvironment,
+  deleteProjectSettings,
+} from "@/lib/project-settings-server";
+import type { ProjectSettings } from "@/lib/project-settings";
 import { domainTlsOptions } from "@/lib/domain-https";
 import { readServiceVolumes } from "@/lib/volume-usage.server";
 import type { VolumeUsage } from "@/lib/volume-usage";
@@ -383,16 +387,25 @@ export async function loadServiceCommandsAction(
 export async function createProjectAction(name: string): Promise<ActionResult> {
   return wrap(() => createProject(name));
 }
-export async function renameProjectAction(id: string, name: string): Promise<ActionResult> {
-  return wrap(() => renameProject(id, name));
+export async function getProjectSettingsAction(id: string): Promise<{ ok: true; project: ProjectSettings } | { ok: false; error: string }> {
+  try {
+    return { ok: true, project: await getProjectSettings(id) };
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: redactErrorMessage(e, "Could not load project settings.") };
+  }
 }
-export async function removeProjectAction(id: string): Promise<ActionResult> {
-  return wrap(async () => {
-    if (!(await listProjects()).some((project) => project.projectId === id)) {
-      throw new Error("Project not found in this workspace.");
-    }
-    await removeProject(id);
-  });
+export async function updateProjectAction(id: string, name: string, description: string): Promise<ActionResult> {
+  return wrapSensitive(() => updateProjectSettings(id, name, description), "Could not update project settings.");
+}
+export async function removeProjectAction(
+  id: string,
+  typedName: string,
+  selectedProjectId: string | null,
+  acknowledged: boolean,
+  reviewedInventory: string,
+): Promise<ActionResult> {
+  return wrapSensitive(() => deleteProjectSettings(id, typedName, selectedProjectId, acknowledged, reviewedInventory), "Could not delete project.");
 }
 export async function createEnvironmentAction(
   projectId: string,
@@ -401,7 +414,7 @@ export async function createEnvironmentAction(
   return wrap(() => createEnvironment(projectId, name));
 }
 export async function renameEnvironmentAction(id: string, name: string): Promise<ActionResult> {
-  return wrap(() => renameEnvironment(id, name));
+  return wrapSensitive(() => updateProjectEnvironment(id, name), "Could not rename environment.");
 }
 export async function removeEnvironmentAction(id: string): Promise<ActionResult> {
   return wrap(async () => {
