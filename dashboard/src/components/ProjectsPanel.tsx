@@ -17,6 +17,7 @@ import {
   type ActionResult,
 } from "@/app/actions";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { formatVolumeBytes } from "@/lib/volume-usage";
 import { SharedVariablesPanel } from "@/components/SharedVariablesPanel";
 import { EnvironmentCompare } from "@/components/EnvironmentCompare";
 import { DuplicateEnvironmentForm } from "@/components/DuplicateEnvironmentForm";
@@ -158,6 +159,9 @@ export function ProjectsPanel({
                     </IconBtn>
                   </div>
 
+                  <p className="mt-2 pl-6 text-xs text-[var(--color-fg-muted)]">
+                    Volume disk usage: {formatVolumeBytes(p.volumeSizeBytes)}
+                  </p>
                   {p.environments.length >= 2 && (
                     <button
                       id={`compare-project-${p.projectId}`}

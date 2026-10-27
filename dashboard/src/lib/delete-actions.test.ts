@@ -30,6 +30,8 @@ const api = vi.hoisted(() => ({
 }));
 const revalidatePath = vi.hoisted(() => vi.fn());
 
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/docker", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/docker")>()), listVolumeDiskUsage: vi.fn(async () => null) }));
 vi.mock("@/lib/dokploy", () => api);
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: vi.fn() }));
