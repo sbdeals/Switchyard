@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { Globe, ExternalLink, Plus, Loader2 } from "lucide-react";
 import type { ComposeService } from "@/lib/dokploy";
+import { validatePort } from "@/lib/validation";
 import { DomainStatus } from "@/components/service/DomainStatus";
 import { validateComposeFile } from "@/lib/compose-validation";
 import { getPortWarnings, parseComposePorts } from "@/lib/port-conflicts";
@@ -37,8 +38,8 @@ export function ComposeOverviewTab({ compose }: { compose: ComposeService }) {
   const { pending, error, run } = useComposeLifecycle(compose);
   return (
     <div className="space-y-5">
-      <PublicUrlBar domains={compose.domains} status={compose.status} />
-      <LifecycleButtons status={compose.status} pending={pending} error={error} run={run} />
+      <PublicUrlBar domains={compose.domains} status={compose.status} runtime={compose.runtime} />
+      <LifecycleButtons status={compose.status} runtime={compose.runtime} pending={pending} error={error} run={run} />
       <p className="text-xs text-[var(--color-fg-muted)]">
         A raw <code className="font-mono">docker-compose</code> stack. Edit the file in the Compose
         tab, then deploy.
@@ -140,14 +141,16 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
 
   function add() {
     if (!host.trim() || !serviceName.trim()) return;
-    setError(null);
+    const validationError = validatePort(port);
+    setError(validationError);
     setGenerated(null);
+    if (validationError) return;
     start(async () => {
       const res = await createComposeDomainAction(
         compose.id,
         serviceName,
         host,
-        Number(port) || 80
+        Number(port)
       );
       if (res.ok) {
         setHost("");
@@ -159,14 +162,16 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
   // Attach a random routable host to the selected service, on the current port.
   function generate() {
     if (!serviceName.trim()) return;
-    setError(null);
+    const validationError = validatePort(port);
+    setError(validationError);
     setGenerated(null);
+    if (validationError) return;
     start(async () => {
       const res = await generateComposeDomainAction(
         compose.id,
         serviceName,
         serviceName,
-        Number(port) || 80
+        Number(port)
       );
       if (res.ok) {
         setGenerated(res.host);
@@ -242,7 +247,8 @@ export function ComposeDomainsTab({ compose }: { compose: ComposeService }) {
           <Field label="Port">
             <input
               value={port}
-              onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ""))}
+              onChange={(e) => setPort(e.target.value)}
+              inputMode="numeric"
               className={inputCls}
             />
           </Field>
@@ -281,6 +287,13 @@ export function ComposeSettingsTab({
         label="Created"
         value={compose.createdAt ? new Date(compose.createdAt).toLocaleString() : "—"}
       />
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold">Resources</h3>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          Compose limits and reservations live in <code className="font-mono">deploy.resources</code>
+          {" "}in the compose file. Edit them in the Compose tab.
+        </p>
+      </section>
       <DangerZone
         service={compose}
         message="Destroying removes the stack and all its containers."

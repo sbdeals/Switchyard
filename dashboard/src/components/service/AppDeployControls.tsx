@@ -67,6 +67,7 @@ export function AppDeployControls({ app }: { app: Application }) {
     <div className="space-y-3">
       <LifecycleButtons
         status={app.status}
+        runtime={app.runtime}
         pending={busy}
         error={error ?? lifecycle.error}
         run={lifecycle.run}

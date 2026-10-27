@@ -88,13 +88,15 @@ function output(result) {
 
 // The fake executable shims use /bin/sh; both CLI platform paths run on Unix.
 const unix = { skip: process.platform === "win32" };
+// #81 deliberately replaces "fresh slate" with control-plane-only success:
+// deployed workloads survive. Keep #51's retry, survivor, and credential checks.
 for (const platform of ["linux", "docker-desktop"]) {
   test(`${platform}: in-use volumes fail purge and retain their credentials`, unix, (t) => {
     const f = fixture(t, platform, { "volume/dokploy-postgres": -1, "volume/switchyard-metrics": -1 });
     const result = f.run();
     const text = output(result);
     assert.equal(result.status, 1, text);
-    assert.doesNotMatch(text, /Stack removed — a fresh slate/);
+    assert.doesNotMatch(text, /Control plane removed/);
     assert.match(text, /dokploy-postgres/);
     assert.match(text, /switchyard-metrics/);
     assert.match(text, /(?:retry|re-run).*down --purge/is);
@@ -105,7 +107,7 @@ for (const platform of ["linux", "docker-desktop"]) {
     const f = fixture(t, platform, { "volume/dokploy": -1 });
     const result = f.run();
     assert.equal(result.status, 1, output(result));
-    assert.doesNotMatch(output(result), /Stack removed — a fresh slate/);
+    assert.doesNotMatch(output(result), /Control plane removed/);
     assert.equal(f.config().adminEmail, credentials.adminEmail);
     assert.equal(f.config().adminPassword, credentials.adminPassword);
     assert.equal(f.config().storePassword, "");
@@ -116,13 +118,13 @@ for (const platform of ["linux", "docker-desktop"]) {
     const f = fixture(t, platform, { "network/dokploy-network": 9, "volume/dokploy": 2 });
     const first = f.run();
     assert.equal(first.status, 0, output(first));
-    assert.match(output(first), /Stack removed — a fresh slate/);
+    assert.match(output(first), /Control plane removed/);
     for (const key of Object.keys(credentials)) assert.equal(f.config()[key], "");
     assert.equal(f.state().attempts["volume/dokploy"], 3);
     assert.equal(f.state().attempts["network/dokploy-network"], 10);
     const second = f.run();
     assert.equal(second.status, 0, output(second));
-    assert.match(output(second), /Stack removed — a fresh slate/);
+    assert.match(output(second), /Control plane removed/);
   });
 
   test(`${platform}: failed volume verification keeps credentials`, unix, (t) => {
@@ -139,8 +141,60 @@ for (const platform of ["linux", "docker-desktop"]) {
     assert.equal(result.status, 1, text);
     assert.match(text, /dokploy-network/);
     assert.match(text, /dokploy_auth_secret/);
-    assert.doesNotMatch(text, /Stack removed — a fresh slate/);
+    assert.doesNotMatch(text, /Control plane removed/);
     for (const key of Object.keys(credentials)) assert.equal(f.config()[key], "");
+  });
+
+  for (const [description, attachments] of [
+    ["local containers", { containerAttachments: [{ name: "dokploy-user-app" }] }],
+    ["remote Swarm services", { serviceAttachments: { "dokploy-user-service": ["dokploy-network-id"] } }],
+  ]) {
+    test(`${platform}: purge preserves the shared network for ${description} and is idempotent`, unix, (t) => {
+      const f = fixture(t, platform, { "network/dokploy-network": -1 }, attachments);
+      for (let run = 0; run < 2; run++) {
+        const result = f.run();
+        assert.equal(result.status, 0, output(result));
+        assert.match(output(result), /Control plane removed/);
+        assert.deepEqual(f.state().resources, { network: ["dokploy-network"], secret: [], volume: [] });
+        for (const key of Object.keys(credentials)) assert.equal(f.config()[key], "");
+        for (const [key, value] of Object.entries(attachments)) assert.deepEqual(f.state()[key], value);
+        assert.ok(f.state().calls.filter((args) => args[0] === "rm" || args[1] === "rm")
+          .every((args) => !args.some((arg) => /dokploy-user/.test(arg))));
+      }
+    });
+  }
+
+  for (const [description, extraState] of [
+    ["unknown attachments", { attachmentFailure: true }],
+    ["control-plane task endpoints", { containerAttachments: [{ name: "dokploy.1.task", service: "dokploy" }] }],
+    ["control-plane ingress endpoints", { containerAttachments: [{ name: "switchyard-traefik" }] }],
+    ["unrelated workload services", { serviceAttachments: { "user-app": ["other-network-id"] } }],
+    ["unverified service attachments", { serviceAttachments: { "user-app": ["dokploy-network-id"] }, serviceInspectFailure: true }],
+  ]) {
+    test(`${platform}: ${description} cannot excuse a surviving network`, unix, (t) => {
+      const f = fixture(t, platform, { "network/dokploy-network": -1 }, extraState);
+      const result = f.run();
+      assert.equal(result.status, 1, output(result));
+      assert.match(output(result), /dokploy-network/);
+      assert.doesNotMatch(output(result), /Control plane removed/);
+      assert.deepEqual(f.state().resources.volume, []);
+      for (const key of Object.keys(credentials)) assert.equal(f.config()[key], "");
+    });
+  }
+
+  test(`${platform}: a workload network does not excuse surviving secrets or data`, unix, (t) => {
+    const f = fixture(t, platform, {
+      "network/dokploy-network": -1,
+      "secret/dokploy_auth_secret": -1,
+      "volume/dokploy-postgres": -1,
+    }, { containerAttachments: [{ name: "user-app" }] });
+    const result = f.run();
+    assert.equal(result.status, 1, output(result));
+    assert.match(output(result), /dokploy_auth_secret/);
+    assert.match(output(result), /dokploy-postgres/);
+    assert.equal(f.config().adminPassword, credentials.adminPassword);
+    assert.equal(f.config().adminEmail, credentials.adminEmail);
+    assert.equal(f.config().storePassword, "");
   });
 }
 
