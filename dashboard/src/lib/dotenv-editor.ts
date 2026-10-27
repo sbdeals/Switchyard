@@ -1,3 +1,4 @@
+import { variablesEditorReducer } from "./variables-editor";
 import { parseDotenvRaw } from "./dotenv-raw";
 
 export type EditorMode = "rows" | "raw";
@@ -38,15 +39,16 @@ export function createEditorState(env: string | null): EditorState {
 
 /** Keep drafts and confirmation snapshots local until the existing save succeeds. */
 export function dotenvEditorReducer(state: EditorState, action: EditorAction): EditorState {
+  const variables = { value: state.text, baseline: state.baseline, loadError: state.loadError };
   const loaded = state.baseline !== null && state.loadError === null;
   switch (action.type) {
     case "loaded":
-      return createEditorState(action.env);
+      return createEditorState(variablesEditorReducer(variables, action).baseline);
     case "failed":
-      return { ...state, loadError: action.error, review: null, exporting: null };
+      return { ...state, loadError: variablesEditorReducer(variables, action).loadError, review: null, exporting: null };
     case "edit":
       if (!loaded) return state;
-      return { ...state, text: action.text, review: null, exporting: null };
+      return { ...state, text: variablesEditorReducer(variables, { type: "edited", value: action.text }).value, review: null, exporting: null };
     case "mode":
       if (!loaded) return state;
       if (action.mode === "rows" && parseDotenvRaw(state.text).errors.length) return state;
@@ -67,6 +69,6 @@ export function dotenvEditorReducer(state: EditorState, action: EditorAction): E
       return { ...state, exporting: null };
     case "saved":
       // Preserve edits made while the submitted review snapshot was saving.
-      return { ...state, baseline: action.text, review: null, exporting: null };
+      return { ...state, baseline: variablesEditorReducer(variables, { type: "saved", submittedValue: action.text }).baseline, review: null, exporting: null };
   }
 }

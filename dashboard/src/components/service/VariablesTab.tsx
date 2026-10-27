@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useReducer, useState, useTransition } from "react";
+import { useDirtyGuard } from "@/components/DirtyGuard";
 import type { Service } from "@/lib/dokploy";
 import {
   loadServiceEnvAction,
@@ -42,7 +43,8 @@ export function VariablesTab({ service }: { service: Service }) {
   const parsed = parseDotenvRaw(editor.text);
   const baseline = parseDotenvRaw(editor.baseline ?? "");
   const changes = diffDotenvRaw(baseline.variables, parsed.variables);
-  const dirty = editor.baseline !== null && editor.text !== editor.baseline;
+  const dirty = editor.baseline !== null && editor.loadError === null && editor.text !== editor.baseline;
+  useDirtyGuard("Variables", dirty);
   const invalid = parsed.errors.length > 0;
   const reviewing = editor.review !== null;
   const count = Object.keys(parsed.variables).length;

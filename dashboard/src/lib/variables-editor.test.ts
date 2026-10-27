@@ -2,8 +2,10 @@ import { createElement, useReducer } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { VariablesTab } from "../components/service/VariablesTab";
+import { DirtyGuardProvider } from "../components/DirtyGuard";
 import type { ComposeService } from "./dokploy";
 import { createEditorState, dotenvEditorReducer, type EditorState } from "./dotenv-editor";
+import { initialVariablesEditorState, variablesEditorReducer } from "./variables-editor";
 
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof import("react")>();
@@ -43,7 +45,9 @@ const service: ComposeService = {
 // post-action state to check what the component renders after that effect.
 function renderEditor(state: EditorState) {
   vi.mocked(useReducer).mockReturnValueOnce([state, vi.fn()]);
-  return renderToStaticMarkup(createElement(VariablesTab, { service }));
+  return renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+    createElement(VariablesTab, { service }),
+  ));
 }
 
 function button(html: string, label: string) {
@@ -54,9 +58,11 @@ function button(html: string, label: string) {
 
 describe("variables editor", () => {
   it("renders the loading skeleton without exposing the service's env prop", () => {
-    const html = renderToStaticMarkup(createElement(VariablesTab, {
-      service: { ...service, env: "TOKEN=env-redaction-prop-sentinel" },
-    }));
+    const html = renderToStaticMarkup(createElement(DirtyGuardProvider, null,
+      createElement(VariablesTab, {
+        service: { ...service, env: "TOKEN=env-redaction-prop-sentinel" },
+      }),
+    ));
 
     expect(html).toContain('role="status"');
     expect(html).toContain('aria-label="Loading environment variables"');
@@ -136,5 +142,59 @@ describe("variables editor", () => {
     expect(html).not.toContain("Loading environment variables");
     expect(html).not.toContain("<textarea");
     expect(html).not.toContain("<button");
+  });
+});
+
+// Restored from main: the base reducer still backs dotenvEditorReducer.
+describe("variables editor reducer", () => {
+  it("starts loading with no editable environment", () => {
+    expect(initialVariablesEditorState).toEqual({ value: "", baseline: null, loadError: null });
+    expect(variablesEditorReducer(initialVariablesEditorState, {
+      type: "edited", value: "TOKEN=not-loaded",
+    })).toEqual(initialVariablesEditorState);
+  });
+
+  it.each(["TOKEN=loaded", ""])("uses the loaded env (%s) as the clean baseline", (env) => {
+    expect(variablesEditorReducer(initialVariablesEditorState, { type: "loaded", env }))
+      .toEqual({ value: env, baseline: env, loadError: null });
+  });
+
+  it("keeps a failed load unavailable for editing", () => {
+    const failed = variablesEditorReducer(initialVariablesEditorState, {
+      type: "failed", error: "Could not load environment variables.",
+    });
+
+    expect(failed).toEqual({
+      value: "", baseline: null, loadError: "Could not load environment variables.",
+    });
+    expect(variablesEditorReducer(failed, { type: "edited", value: "TOKEN=unsafe" })).toBe(failed);
+  });
+
+  it("keeps the loaded baseline while editing", () => {
+    const loaded = variablesEditorReducer(initialVariablesEditorState, { type: "loaded", env: "TOKEN=old" });
+    const edited = variablesEditorReducer(loaded, { type: "edited", value: "TOKEN=new" });
+
+    expect(edited).toEqual({ value: "TOKEN=new", baseline: "TOKEN=old", loadError: null });
+    expect(loaded.value).toBe("TOKEN=old");
+  });
+
+  it("uses the successfully saved value as the clean baseline", () => {
+    const loaded = variablesEditorReducer(initialVariablesEditorState, { type: "loaded", env: "TOKEN=old" });
+    const edited = variablesEditorReducer(loaded, { type: "edited", value: "TOKEN=new" });
+    const saved = variablesEditorReducer(edited, { type: "saved", submittedValue: "TOKEN=new" });
+
+    expect(saved).toEqual({ value: "TOKEN=new", baseline: "TOKEN=new", loadError: null });
+    expect(edited.baseline).toBe("TOKEN=old");
+  });
+
+  it("keeps newer edits dirty when an earlier submitted value finishes saving", () => {
+    const loaded = variablesEditorReducer(initialVariablesEditorState, { type: "loaded", env: "TOKEN=old" });
+    const submitted = variablesEditorReducer(loaded, { type: "edited", value: "TOKEN=submitted" });
+    const edited = variablesEditorReducer(submitted, { type: "edited", value: "TOKEN=newer" });
+    const saved = variablesEditorReducer(edited, { type: "saved", submittedValue: submitted.value });
+
+    expect(saved.value).toBe("TOKEN=newer");
+    expect(saved.baseline).toBe("TOKEN=submitted");
+    expect(saved.value).not.toBe(saved.baseline);
   });
 });
