@@ -10,6 +10,7 @@ import {
   saveComposeEnvAction,
 } from "@/app/actions";
 import { SaveRow, useSavedFlash } from "@/components/service/primitives";
+import { useDirtyGuard } from "@/components/DirtyGuard";
 
 export function VariablesTab({ service }: { service: Service }) {
   const serviceType = service.kind === "database" ? service.engine : service.kind;
@@ -38,7 +39,8 @@ export function VariablesTab({ service }: { service: Service }) {
     };
   }, [serviceType, service.id]);
 
-  const dirty = value !== baseline;
+  const dirty = baseline !== null && loadError === null && value !== baseline;
+  useDirtyGuard("Variables", dirty);
   const count = value.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).length;
 
   function save() {
