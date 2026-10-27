@@ -1,7 +1,7 @@
 /**
  * Bridge for the bundled status/wizard view. The dashboard (http origin) also
- * gets this preload, but the main process rejects IPC from non-file origins,
- * so exposure there is inert.
+ * gets this preload, but the main process accepts IPC only from the bundled
+ * status view in this window's main frame, so exposure there is inert.
  */
 import { contextBridge, ipcRenderer } from "electron";
 
