@@ -19,11 +19,12 @@
  */
 import "server-only";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 
 import { SESSION_COOKIE, openSession } from "./session";
 import { randomServiceName } from "./names";
 import { rewriteDataBindsToVolumes } from "./template-volumes";
+import { formatBackupError, validateS3Endpoint } from "./backup-errors";
 import {
   deriveComposeRuntime,
   deriveSwarmRuntime,
@@ -95,7 +96,7 @@ export interface ServiceBase {
   environmentId: string;
   environmentName: string;
   dockerImage: string | null;
-  /** Raw env block ("KEY=value\n..."). */
+  /** Raw env block on the server; redacted to null in workspace page props. */
   env: string | null;
   createdAt: string | null;
   // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
@@ -116,8 +117,11 @@ export interface Database extends ServiceBase {
   engine: Engine;
   databaseName: string | null;
   databaseUser: string | null;
+  /** Always null in workspace data; fetched explicitly by the Connect action. */
   databasePassword: string | null;
   externalPort: number | null;
+  /** Host-facing address, when known, for this database's server. */
+  externalHost?: string | null;
   command: string | null;
 }
 
@@ -258,12 +262,17 @@ export interface Application extends ServiceBase {
    * one, so it is reachable independently of any dashboard auth.
    */
   webhookUrl: string | null;
+  /** Whether a webhook can be revealed on demand (safe workspace metadata). */
+  hasWebhook?: boolean;
 }
 
 export interface ComposeService extends ServiceBase {
   kind: "compose";
   composeFile: string | null;
   composeType: string | null;
+  /** Safe metadata computed on the server before composeFile is redacted. */
+  serviceNames?: string[];
+  hasPostgres?: boolean;
   /** Public domains routed to the stack's services (Dokploy `domains`). */
   domains: AppDomain[];
   /** Deploy history for the stack (Dokploy `deployments`). */
@@ -373,6 +382,32 @@ type ReqInit = { method?: "GET" | "POST"; body?: unknown };
  * logic. Prefer the typed helpers where they exist.
  */
 export async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
+  if (!/^(destination|backup)\./.test(path)) return requestDokploy<T>(path, init);
+  const input = init.body && typeof init.body === "object" ? init.body : {};
+  if (/^destination\.(testConnection|create|update)(?:\?|$)/.test(path)) {
+    const error = validateS3Endpoint("endpoint" in input ? input.endpoint : undefined);
+    if (error) throw new Error(error);
+  }
+  return withBackupErrors(() => requestDokploy<T>(path, init), input);
+}
+
+async function withBackupErrors<T>(
+  fn: () => Promise<T>,
+  input: Parameters<typeof formatBackupError>[1] = {}
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    unstable_rethrow(e);
+    // Do not retain the original error as a cause: it may contain credentials.
+    // JSON.parse errors can quote a truncated credential that no longer matches
+    // its literal value, so don't forward the parser's response excerpt either.
+    const error = e instanceof SyntaxError ? "Dokploy returned an invalid JSON response." : e;
+    throw new Error(formatBackupError(error, input));
+  }
+}
+
+async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
   const cookie = await userCookie();
   let res: Response;
   try {
@@ -401,14 +436,19 @@ export async function request<T>(path: string, init: ReqInit = {}): Promise<T> {
     res = attempt!;
   } catch (e) {
     if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
-      throw new Error(`Dokploy ${path} timed out after ${DOKPLOY_TIMEOUT_MS}ms.`);
+      throw new Error(`Dokploy ${path} timed out after ${DOKPLOY_TIMEOUT_MS}ms.`, { cause: e });
     }
     throw e;
   }
   if (res.status === 401) redirect("/login");
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Dokploy ${path} failed (${res.status}): ${body.slice(0, 300)}`);
+    // Backup errors are sanitized and summarized by withBackupErrors first;
+    // truncating here could expose a partial secret or discard rclone's cause.
+    const detail = /^(destination|backup)\./.test(path) ? body : body.slice(0, 300);
+    throw Object.assign(new Error(`Dokploy ${path} failed (${res.status}): ${detail}`), {
+      status: res.status,
+    });
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : null) as T;
@@ -515,6 +555,83 @@ export async function listProjects(): Promise<ProjectNode[]> {
   return projectsFromTree(await rawTree());
 }
 
+/** Check the current user's workspace before reading or editing secret fields. */
+export async function requireServiceOwnership(type: MountServiceType, id: string): Promise<void> {
+  if (typeof type !== "string" || !["application", "compose", ...ENGINES].includes(type) ||
+      typeof id !== "string" || !id.trim()) {
+    throw new Error("Invalid service.");
+  }
+  const tree = await rawTree();
+  const refs = collectIds(tree, (env) => {
+    if (type === "application") return (env.applications ?? []).map((a) => a.applicationId);
+    if (type === "compose") return (env.compose ?? []).map((c) => c.composeId);
+    return ((env[type] ?? []) as Record<string, string>[]).map((item) => item[idKey(type)]);
+  });
+  if (!refs.some((ref) => ref.id === id)) throw new Error("Service unavailable.");
+}
+
+/** Read env only after finding the service in the current user's workspace. */
+export async function getServiceEnvironment(type: MountServiceType, id: string): Promise<string> {
+  await requireServiceOwnership(type, id);
+  const detail = await request<{ env?: string | null }>(
+    `${type}.one?${type}Id=${encodeURIComponent(id)}`
+  );
+  return detail.env ?? "";
+}
+
+export async function getServiceWebhook(id: string): Promise<string | null> {
+  await requireServiceOwnership("application", id);
+  const detail = await request<{ refreshToken?: string | null }>(
+    `application.one?applicationId=${encodeURIComponent(id)}`
+  );
+  return detail.refreshToken ? `${HOST_ORIGIN}/api/deploy/${detail.refreshToken}` : null;
+}
+
+export async function getServiceComposeFile(id: string): Promise<string> {
+  await requireServiceOwnership("compose", id);
+  const detail = await request<{ composeFile?: string | null }>(
+    `compose.one?composeId=${encodeURIComponent(id)}`
+  );
+  return detail.composeFile ?? "";
+}
+
+export async function getServiceCommands(type: MountServiceType, id: string): Promise<{
+  command: string | null;
+  healthCheckSwarm: HealthCheckSwarm | null;
+}> {
+  await requireServiceOwnership(type, id);
+  const detail = await request<{ command?: string | null; healthCheckSwarm?: HealthCheckSwarm | null }>(
+    `${type}.one?${type}Id=${encodeURIComponent(id)}`
+  );
+  return {
+    command: detail.command ?? null,
+    healthCheckSwarm: type === "application" ? detail.healthCheckSwarm ?? null : null,
+  };
+}
+
+/** Server-only source values used to preserve credentials on redacted form saves. */
+export async function getApplicationSource(id: string): Promise<{
+  gitUrl: string | null;
+  dockerImage: string | null;
+  registryUrl: string | null;
+}> {
+  await requireServiceOwnership("application", id);
+  const detail = await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(id)}`
+  );
+  return {
+    gitUrl: detail.customGitUrl ?? null,
+    dockerImage: detail.dockerImage ?? null,
+    registryUrl: detail.registryUrl ?? null,
+  };
+}
+
+export async function getServiceDockerImage(type: Engine, id: string): Promise<string | null> {
+  await requireServiceOwnership(type, id);
+  const detail = await getDetail(type, id);
+  return detail.dockerImage ?? null;
+}
+
 export async function createProject(name: string): Promise<void> {
   await request("project.create", { method: "POST", body: { name } });
 }
@@ -550,6 +667,8 @@ interface RawDatabaseDetail {
   databaseUser?: string | null;
   databasePassword?: string | null;
   externalPort?: number | null;
+  serverId?: string | null;
+  server?: { ipAddress?: string | null } | null;
   createdAt?: string | null;
   env?: string | null;
   cpuLimit?: string | null;
@@ -560,6 +679,32 @@ interface RawDatabaseDetail {
 
 async function getDetail(engine: Engine, id: string): Promise<RawDatabaseDetail> {
   return request<RawDatabaseDetail>(`${engine}.one?${idKey(engine)}=${encodeURIComponent(id)}`);
+}
+
+/** Read a password only after checking the current user's database ownership. */
+export async function getDatabasePassword(engine: Engine, id: string): Promise<string> {
+  if (!ENGINES.includes(engine) || typeof id !== "string" || !id.trim() || id.length > 256) {
+    throw new Error("Invalid database.");
+  }
+  const tree = await rawTree();
+  const owned = collectIds(tree, (env) =>
+    ((env[engine] ?? []) as Record<string, string>[]).map((item) => item[idKey(engine)])
+  ).some((ref) => ref.id === id);
+  if (!owned) throw new Error("Database unavailable.");
+  const detail = await getDetail(engine, id);
+  if (typeof detail.databasePassword !== "string") throw new Error("Password unavailable.");
+  return detail.databasePassword;
+}
+
+function databaseExternalHost(detail: RawDatabaseDetail): string | null {
+  if (detail.serverId) return detail.server?.ipAddress?.trim() || null;
+  const hostIp = process.env.SWITCHYARD_HOST_IP?.trim();
+  if (hostIp) return hostIp;
+  try {
+    return process.env.DOKPLOY_ORIGIN ? new URL(process.env.DOKPLOY_ORIGIN).hostname : null;
+  } catch {
+    return null;
+  }
 }
 
 /** List every database in the tree, enriched with detail. */
@@ -581,8 +726,9 @@ async function listDatabases(tree: RawProject[]): Promise<Database[]> {
         dockerImage: d.dockerImage ?? null,
         databaseName: d.databaseName ?? null,
         databaseUser: d.databaseUser ?? null,
-        databasePassword: d.databasePassword ?? null,
+        databasePassword: null,
         externalPort: d.externalPort ?? null,
+        externalHost: databaseExternalHost(d),
         createdAt: d.createdAt ?? null,
         env: d.env ?? null,
         cpuLimit: d.cpuLimit ?? null,
@@ -1249,15 +1395,53 @@ export async function createComposeDomain(
 }
 
 // Redirects / ports / security: routing config that applies on next deploy.
-// Payload shapes verified against Dokploy v0.29.x (redirects/port/security
-// routers). All three arrays ride along on `application.one`.
+// Redirect/security payloads verified against Dokploy v0.30.10.
+// All three arrays ride along on `application.one`.
+
+/** Check the current user's project tree before accessing HTTP configuration. */
+export async function assertApplicationAccess(
+  applicationId: string,
+  child?: { kind: "redirects" | "security"; id: string }
+): Promise<void> {
+  if (typeof applicationId !== "string" || !applicationId.trim()) {
+    throw new Error("Application is required.");
+  }
+  const tree = await rawTree();
+  const allowed = tree.some((project) =>
+    (project.environments ?? []).some((env) =>
+      (env.applications ?? []).some((app) => app.applicationId === applicationId)
+    )
+  );
+  if (!allowed) throw new Error("Application not found in your projects.");
+  if (child) {
+    if (typeof child.id !== "string" || !child.id.trim()) {
+      throw new Error("HTTP setting is required.");
+    }
+    const app = await request<RawApplicationDetail>(
+      `application.one?applicationId=${encodeURIComponent(applicationId)}`
+    );
+    const found = child.kind === "redirects"
+      ? app.redirects?.some((row) => row.redirectId === child.id)
+      : app.security?.some((row) => row.securityId === child.id);
+    if (!found) throw new Error("HTTP setting not found in this application.");
+  }
+}
 
 /** Add a proxy path-rewrite redirect to an application. */
 export async function createRedirect(
   applicationId: string,
   input: { regex: string; replacement: string; permanent: boolean }
 ): Promise<void> {
-  await request("redirects.create", { method: "POST", body: { applicationId, ...input } });
+  const { regex, replacement, permanent } = input;
+  await request("redirects.create", { method: "POST", body: { applicationId, regex, replacement, permanent } });
+}
+
+export async function updateRedirect(
+  redirectId: string,
+  input: { regex: string; replacement: string; permanent: boolean }
+): Promise<void> {
+  const { regex, replacement, permanent } = input;
+  await request("redirects.update", { method: "POST", body: { redirectId, regex, replacement, permanent } });
 }
 
 export async function deleteRedirect(redirectId: string): Promise<void> {
@@ -1286,7 +1470,16 @@ export async function createSecurity(
   applicationId: string,
   input: { username: string; password: string }
 ): Promise<void> {
-  await request("security.create", { method: "POST", body: { applicationId, ...input } });
+  const { username, password } = input;
+  await request("security.create", { method: "POST", body: { applicationId, username, password } });
+}
+
+export async function updateSecurity(
+  securityId: string,
+  input: { username: string; password: string }
+): Promise<void> {
+  const { username, password } = input;
+  await request("security.update", { method: "POST", body: { securityId, username, password } });
 }
 
 export async function deleteSecurity(securityId: string): Promise<void> {
@@ -1701,6 +1894,7 @@ export async function createCompose(
 }
 
 export async function updateComposeFile(id: string, composeFile: string): Promise<void> {
+  await requireServiceOwnership("compose", id);
   await request("compose.update", { method: "POST", body: { composeId: id, composeFile } });
 }
 
@@ -1998,6 +2192,10 @@ export interface RestoreBackupInput {
  * transport is rejected, a `ws` client against `/drawer-logs` is the fallback.
  */
 export async function restoreBackup(input: RestoreBackupInput): Promise<void> {
+  return withBackupErrors(() => restoreBackupWithLogs(input));
+}
+
+async function restoreBackupWithLogs(input: RestoreBackupInput): Promise<void> {
   const payload = {
     databaseId: input.databaseId,
     databaseType: input.engine,
@@ -2019,12 +2217,12 @@ export async function restoreBackup(input: RestoreBackupInput): Promise<void> {
   if (res.status === 401) redirect("/login");
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Dokploy restore failed (${res.status}): ${body.slice(0, 300)}`);
+    throw new Error(`Dokploy restore failed (${res.status}): ${body}`);
   }
   // Drain the stream to EOF — the subscription closes when the restore finishes.
   const text = await res.text();
   const err = text.match(/Error:\s*([^"\\\n]+)/);
-  if (err) throw new Error(err[1].trim().slice(0, 300));
+  if (err) throw new Error(text);
 }
 
 // --- templates (one-click catalog) ------------------------------------------
