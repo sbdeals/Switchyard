@@ -95,7 +95,7 @@ export interface ServiceBase {
   environmentId: string;
   environmentName: string;
   dockerImage: string | null;
-  /** Raw env block ("KEY=value\n..."). */
+  /** Raw env block on the server; redacted to null in workspace page props. */
   env: string | null;
   createdAt: string | null;
   // Dokploy stores resource limits as Docker-format strings (e.g. "256m", "0.5").
@@ -261,12 +261,17 @@ export interface Application extends ServiceBase {
    * one, so it is reachable independently of any dashboard auth.
    */
   webhookUrl: string | null;
+  /** Whether a webhook can be revealed on demand (safe workspace metadata). */
+  hasWebhook?: boolean;
 }
 
 export interface ComposeService extends ServiceBase {
   kind: "compose";
   composeFile: string | null;
   composeType: string | null;
+  /** Safe metadata computed on the server before composeFile is redacted. */
+  serviceNames?: string[];
+  hasPostgres?: boolean;
   /** Public domains routed to the stack's services (Dokploy `domains`). */
   domains: AppDomain[];
   /** Deploy history for the stack (Dokploy `deployments`). */
@@ -516,6 +521,83 @@ function projectsFromTree(tree: RawProject[]): ProjectNode[] {
 
 export async function listProjects(): Promise<ProjectNode[]> {
   return projectsFromTree(await rawTree());
+}
+
+/** Check the current user's workspace before reading or editing secret fields. */
+export async function requireServiceOwnership(type: MountServiceType, id: string): Promise<void> {
+  if (typeof type !== "string" || !["application", "compose", ...ENGINES].includes(type) ||
+      typeof id !== "string" || !id.trim()) {
+    throw new Error("Invalid service.");
+  }
+  const tree = await rawTree();
+  const refs = collectIds(tree, (env) => {
+    if (type === "application") return (env.applications ?? []).map((a) => a.applicationId);
+    if (type === "compose") return (env.compose ?? []).map((c) => c.composeId);
+    return ((env[type] ?? []) as Record<string, string>[]).map((item) => item[idKey(type)]);
+  });
+  if (!refs.some((ref) => ref.id === id)) throw new Error("Service unavailable.");
+}
+
+/** Read env only after finding the service in the current user's workspace. */
+export async function getServiceEnvironment(type: MountServiceType, id: string): Promise<string> {
+  await requireServiceOwnership(type, id);
+  const detail = await request<{ env?: string | null }>(
+    `${type}.one?${type}Id=${encodeURIComponent(id)}`
+  );
+  return detail.env ?? "";
+}
+
+export async function getServiceWebhook(id: string): Promise<string | null> {
+  await requireServiceOwnership("application", id);
+  const detail = await request<{ refreshToken?: string | null }>(
+    `application.one?applicationId=${encodeURIComponent(id)}`
+  );
+  return detail.refreshToken ? `${HOST_ORIGIN}/api/deploy/${detail.refreshToken}` : null;
+}
+
+export async function getServiceComposeFile(id: string): Promise<string> {
+  await requireServiceOwnership("compose", id);
+  const detail = await request<{ composeFile?: string | null }>(
+    `compose.one?composeId=${encodeURIComponent(id)}`
+  );
+  return detail.composeFile ?? "";
+}
+
+export async function getServiceCommands(type: MountServiceType, id: string): Promise<{
+  command: string | null;
+  healthCheckSwarm: HealthCheckSwarm | null;
+}> {
+  await requireServiceOwnership(type, id);
+  const detail = await request<{ command?: string | null; healthCheckSwarm?: HealthCheckSwarm | null }>(
+    `${type}.one?${type}Id=${encodeURIComponent(id)}`
+  );
+  return {
+    command: detail.command ?? null,
+    healthCheckSwarm: type === "application" ? detail.healthCheckSwarm ?? null : null,
+  };
+}
+
+/** Server-only source values used to preserve credentials on redacted form saves. */
+export async function getApplicationSource(id: string): Promise<{
+  gitUrl: string | null;
+  dockerImage: string | null;
+  registryUrl: string | null;
+}> {
+  await requireServiceOwnership("application", id);
+  const detail = await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(id)}`
+  );
+  return {
+    gitUrl: detail.customGitUrl ?? null,
+    dockerImage: detail.dockerImage ?? null,
+    registryUrl: detail.registryUrl ?? null,
+  };
+}
+
+export async function getServiceDockerImage(type: Engine, id: string): Promise<string | null> {
+  await requireServiceOwnership(type, id);
+  const detail = await getDetail(type, id);
+  return detail.dockerImage ?? null;
 }
 
 export async function createProject(name: string): Promise<void> {
@@ -1725,6 +1807,7 @@ export async function createCompose(
 }
 
 export async function updateComposeFile(id: string, composeFile: string): Promise<void> {
+  await requireServiceOwnership("compose", id);
   await request("compose.update", { method: "POST", body: { composeId: id, composeFile } });
 }
 

@@ -148,14 +148,8 @@ const COMPOSE_TABS: TabId[] = [
  */
 function isPostgresService(s: Service): boolean {
   if (s.kind === "database") return s.engine === "postgres" || /postgres/i.test(s.dockerImage ?? "");
-  if (s.kind === "compose") return composeMentionsPostgres(s.composeFile);
+  if (s.kind === "compose") return s.hasPostgres ?? false;
   return false;
-}
-
-/** True when a compose file has a service whose `image:` references postgres. */
-function composeMentionsPostgres(file: string | null): boolean {
-  if (!file) return false;
-  return /^[ \t]*image:[ \t]*["']?[^\n#"']*postgres/im.test(file);
 }
 
 /** Insert the Data tab right after Overview. */
@@ -452,10 +446,10 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                   <AppOverviewTab app={service} />
                 ))}
               {tab === "connect" && service.kind === "database" && <ConnectTab key={service.id} db={service} />}
-              {tab === "variables" && <VariablesTab service={service} />}
+              {tab === "variables" && <VariablesTab key={`${service.kind}:${service.id}`} service={service} />}
               {tab === "data" && <DataTab key={service.id} service={service} />}
-              {tab === "deploy" && service.kind === "application" && <AppDeployTab app={service} />}
-              {tab === "build" && service.kind === "application" && <AppBuildTab app={service} />}
+              {tab === "deploy" && service.kind === "application" && <AppDeployTab key={service.id} app={service} />}
+              {tab === "build" && service.kind === "application" && <AppBuildTab key={service.id} app={service} />}
               {tab === "domains" && service.kind === "application" && (
                 <NetworkingTab app={service} />
               )}
@@ -463,7 +457,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 <ComposeDomainsTab compose={service} />
               )}
               {tab === "deployments" && service.kind === "application" && (
-                <DeploymentsTab app={service} />
+                <DeploymentsTab key={service.id} app={service} />
               )}
               {tab === "deployments" && service.kind === "compose" && (
                 <DeploymentHistory deployments={service.deployments} />
@@ -472,7 +466,7 @@ export function ServiceDrawer({ service, onClose }: { service: Service | null; o
                 <SchedulesTab app={service} />
               )}
               {tab === "editor" && service.kind === "compose" && (
-                <ComposeEditorTab compose={service} />
+                <ComposeEditorTab key={service.id} compose={service} />
               )}
               {tab === "volumes" && <VolumesTab key={service.id} service={service} />}
               {tab === "metrics" && <MetricsTab key={service.appName} appName={service.appName} active />}
