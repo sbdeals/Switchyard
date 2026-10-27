@@ -16,6 +16,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { safeNextPath } from "@/lib/deeplink";
+
 // Mirror of SESSION_COOKIE in src/lib/session.ts (kept a literal so the proxy
 // bundle stays free of node:crypto).
 const SESSION_COOKIE = "switchyard_session";
@@ -50,6 +52,7 @@ export function proxy(request: NextRequest): NextResponse {
   }
 
   const loginUrl = new URL("/login", request.url);
+  loginUrl.searchParams.set("next", safeNextPath(pathname + request.nextUrl.search));
   return NextResponse.redirect(loginUrl);
 }
 

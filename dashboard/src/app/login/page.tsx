@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { safeNextPath } from "@/lib/deeplink";
 import { SESSION_COOKIE, openSession } from "@/lib/session";
 import { LoginForm } from "./LoginForm";
 
@@ -10,14 +11,16 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ expired?: string | string[] }>;
+  searchParams: Promise<{ next?: string | string[]; expired?: string | string[] }>;
 }) {
+  const params = await searchParams;
+  const nextPath = safeNextPath(params.next);
   // Already signed in? Skip the form.
   const store = await cookies();
   if (openSession(store.get(SESSION_COOKIE)?.value)) {
-    redirect("/");
+    redirect(nextPath);
   }
-  const expired = (await searchParams).expired === "1";
+  const expired = params.expired === "1";
 
   return (
     <main className="flex min-h-full items-center justify-center px-6 py-16">
@@ -38,7 +41,7 @@ export default async function LoginPage({
             {expired ? "Your session expired. Sign in again." : "Use your Dokploy account."}
           </p>
         </div>
-        <LoginForm />
+        <LoginForm nextPath={nextPath} />
       </div>
     </main>
   );
