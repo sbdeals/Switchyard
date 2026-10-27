@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { docker, run, runInherit } from "../core/docker.js";
 import { UserError } from "../core/errors.js";
 import { servicePublishedPort } from "../core/swarm.js";
+import { removeSwitchyardDataVolume } from "../core/switchyard-data.js";
 import type { PlatformModule } from "./types.js";
 
 export function isRoot(): boolean {
@@ -167,5 +168,6 @@ export const linuxPlatform: PlatformModule = {
     log(`Stopping the Dokploy stack via ${script} ...`);
     const code = await runScript(script, [], opts.purge ? ["--purge"] : []);
     if (code !== 0) throw new UserError("dokploy-down.sh failed (see output above).");
+    await removeSwitchyardDataVolume(opts.purge, log);
   },
 };
