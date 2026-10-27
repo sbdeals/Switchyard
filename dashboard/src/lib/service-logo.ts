@@ -1,29 +1,16 @@
 "use client";
 
 /**
- * Best-effort logos for service cards/nodes, Railway-style: match a service to
- * its app's logo in Dokploy's template catalog (postgres elephant, Supabase
- * bolt, n8n knot, ...). Matching is by catalog id against a few candidate
- * slugs derived from the service (name, name minus random suffix, docker image
- * basename, database engine aliases). Misses simply keep the generic icon —
+ * Best-effort logos for service cards/nodes: match a service to its app's logo
+ * in Dokploy's template catalog (Supabase bolt, n8n knot, ...). Matching is by
+ * catalog id against a few candidate slugs derived from the service (name,
+ * name minus random suffix, docker image basename). Misses use local badges —
  * a wrong logo is worse than no logo, so only exact id hits count.
  */
 
 import { useEffect, useState } from "react";
 import type { Service } from "@/lib/dokploy";
 import { listTemplatesAction } from "@/app/actions";
-
-// The catalog has no plain database templates (Dokploy deploys engines
-// natively), so databases get official brand marks from devicon (MIT,
-// jsDelivr-hosted): the postgres elephant, mysql dolphin, and friends.
-const DEVICON = "https://cdn.jsdelivr.net/gh/devicons/devicon/icons";
-const ENGINE_LOGOS: Record<string, string> = {
-  postgres: `${DEVICON}/postgresql/postgresql-original.svg`,
-  mysql: `${DEVICON}/mysql/mysql-original.svg`,
-  mariadb: `${DEVICON}/mariadb/mariadb-original.svg`,
-  mongo: `${DEVICON}/mongodb/mongodb-original.svg`,
-  redis: `${DEVICON}/redis/redis-original.svg`,
-};
 
 /** Candidate catalog ids for a service, most specific first. */
 function candidates(service: Service): string[] {
@@ -45,7 +32,6 @@ export function resolveServiceLogo(
   service: Service,
   logoById: ReadonlyMap<string, string> | null
 ): string | null {
-  if (service.kind === "database") return ENGINE_LOGOS[service.engine] ?? null;
   if (!logoById || logoById.size === 0) return null;
   for (const key of candidates(service)) {
     const hit = logoById.get(key);

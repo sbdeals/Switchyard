@@ -369,7 +369,7 @@ async function userCookie(): Promise<string> {
   return session.dokployCookie;
 }
 
-type ReqInit = { method?: "GET" | "POST"; body?: unknown };
+type ReqInit = { method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal };
 
 /**
  * User-serving Dokploy request. Threads the per-user cookie via next/headers so
@@ -427,7 +427,9 @@ async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
         cache: "no-store",
         // Bound the call so an unresponsive Dokploy backend can't hang the caller
         // indefinitely (e.g. the agent's tool loop, which awaits each tool inline).
-        signal: AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
+        signal: init.signal
+          ? AbortSignal.any([init.signal, AbortSignal.timeout(DOKPLOY_TIMEOUT_MS)])
+          : AbortSignal.timeout(DOKPLOY_TIMEOUT_MS),
       });
       if (await isInvalidOrigin(attempt)) continue;
       workingOrigin = origin;
@@ -760,6 +762,7 @@ export function inferEdges(services: Service[]): ServiceEdge[] {
     if (!haystack) continue;
     for (const b of services) {
       if (a.id === b.id) continue;
+      if (a.projectId !== b.projectId || a.environmentId !== b.environmentId) continue;
       const needles = [b.appName, b.name].filter(Boolean).map((s) => s.toLowerCase());
       if (needles.some((n) => n.length > 2 && haystack.includes(n))) {
         const key = `${a.id}->${b.id}`;
@@ -880,6 +883,9 @@ interface RawApplicationDetail {
   command?: string | null;
   registryUrl?: string | null;
   env?: string | null;
+  buildArgs?: string | null;
+  buildSecrets?: string | null;
+  createEnvFile?: boolean | null;
   createdAt?: string | null;
   cpuLimit?: string | null;
   memoryLimit?: string | null;
@@ -1299,11 +1305,24 @@ export async function saveAppBuildType(id: string, patch: BuildTypePatch): Promi
   await request("application.saveBuildType", { method: "POST", body });
 }
 
-export async function saveApplicationEnvironment(id: string, env: string): Promise<void> {
-  // application.saveEnvironment also accepts build args/secrets; send empty.
+export async function saveApplicationEnvironment(
+  id: string,
+  env: string,
+  settings: { buildArgs?: string; buildSecrets?: string; createEnvFile?: boolean } = {},
+): Promise<void> {
+  const current = await request<RawApplicationDetail>(
+    `application.one?applicationId=${encodeURIComponent(id)}`
+  );
+  // saveEnvironment requires all fields, including build settings unrelated to runtime env.
   await request("application.saveEnvironment", {
     method: "POST",
-    body: { applicationId: id, env, buildArgs: "", buildSecrets: "", createEnvFile: false },
+    body: {
+      applicationId: id,
+      env,
+      buildArgs: settings.buildArgs ?? current.buildArgs ?? "",
+      buildSecrets: settings.buildSecrets ?? current.buildSecrets ?? "",
+      createEnvFile: settings.createEnvFile ?? current.createEnvFile ?? false,
+    },
   });
 }
 
@@ -1728,8 +1747,16 @@ export async function deleteSchedule(scheduleId: string): Promise<void> {
 }
 
 /** Trigger a schedule immediately (run-now); the container must be running. */
-export async function runSchedule(scheduleId: string): Promise<void> {
-  await request("schedule.runManually", { method: "POST", body: { scheduleId } });
+/** Runs a schedule now. Dokploy can answer HTTP 200 with `status: "error"`, so return it. */
+export async function runSchedule(scheduleId: string): Promise<{ status?: string } | null> {
+  return request<{ status?: string } | null>("schedule.runManually", { method: "POST", body: { scheduleId } });
+}
+
+/** A schedule's executions (Dokploy records each run as a deployment of type "schedule"). */
+export async function listScheduleExecutions(scheduleId: string): Promise<AppDeployment[]> {
+  return (await request<AppDeployment[] | null>(
+    `deployment.allByType?id=${encodeURIComponent(scheduleId)}&type=schedule`
+  )) ?? [];
 }
 
 // --- mounts (persistent volumes) --------------------------------------------
@@ -2297,6 +2324,7 @@ export async function deployTemplate(
       `compose.one?composeId=${encodeURIComponent(created.composeId)}`
     );
     const rewrite = rewriteDataBindsToVolumes(detail.composeFile ?? "");
+    if (rewrite.error) console.warn("[templates]", rewrite.error);
     if (rewrite.rewritten.length > 0) {
       await request("compose.update", {
         method: "POST",
@@ -2316,7 +2344,7 @@ export async function deployTemplate(
  * services of all kinds (enriched with per-service detail) plus the
  * project/environment tree.
  */
-export async function loadWorkspace(): Promise<{
+export async function loadWorkspace({ includeRuntime = true }: { includeRuntime?: boolean } = {}): Promise<{
   services: Service[];
   projects: ProjectNode[];
 }> {
@@ -2333,6 +2361,7 @@ export async function loadWorkspace(): Promise<{
   // tie containers to services (compose project / swarm service name — both
   // equal the service's appName). Best-effort: with no reachable Docker
   // socket every badge falls back to the deploy status alone.
+  if (!includeRuntime) return { services, projects: projectsFromTree(tree) };
   try {
     const runtime = await listRuntimeStates();
     for (const s of services) {
