@@ -4,7 +4,8 @@
  * Our BFF runs on the host with access to the Docker socket (the same one
  * Dokploy uses), so we read container logs and stats straight from the Docker
  * API instead of reverse-engineering Dokploy's WebSocket transport. A Dokploy
- * service's `appName` is the prefix of its Swarm task container name.
+ * service's `appName` identifies its Swarm service, stack namespace, or compose
+ * project label.
  */
 import "server-only";
 import Docker from "dockerode";
@@ -174,6 +175,31 @@ export function demuxDockerFrames(buf: Buffer): string {
   return Buffer.concat(parts).toString("utf8");
 }
 
+/** Match exact ownership labels, falling back to legacy names only if unlabeled. */
+export function matchServiceContainers(
+  containers: Docker.ContainerInfo[],
+  appName: string,
+): Docker.ContainerInfo[] {
+  if (!appName) return [];
+  const ownershipLabels = [
+    "com.docker.swarm.service.name",
+    "com.docker.stack.namespace",
+    "com.docker.compose.project",
+  ];
+  const owned = containers.filter((c) =>
+    ownershipLabels.some((label) => c.Labels?.[label] === appName),
+  );
+  if (owned.length > 0) return owned;
+
+  const escapedName = appName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const taskName = new RegExp(`^/?${escapedName}\\.\\d+\\.`);
+  return containers.filter((c) =>
+    ownershipLabels.every((label) => c.Labels?.[label] === undefined) &&
+    c.Labels?.["com.docker.compose.service"] === undefined &&
+    c.Names.some((name) => name.replace(/^\//, "") === appName || taskName.test(name)),
+  );
+}
+
 /**
  * Resolve a Dokploy appName to its running container id (most recent).
  *
@@ -189,16 +215,11 @@ export async function findContainerId(
   if (!appName) return null;
   if (allowed && !allowed.has(appName)) return null;
   const containers = await withTimeout(
-    docker.listContainers({ all: false, filters: { name: [appName] } }),
+    docker.listContainers({ all: false }),
     DOCKER_OP_TIMEOUT_MS,
     `Listing containers for ${appName}`,
   );
-  if (containers.length === 0) return null;
-  // Prefer an exact task match; otherwise the first running one.
-  const match =
-    containers.find((c) => c.Names.some((n) => n.replace(/^\//, "").startsWith(appName))) ??
-    containers[0];
-  return match.Id;
+  return matchServiceContainers(containers, appName)[0]?.Id ?? null;
 }
 
 export interface LogLine {
@@ -496,11 +517,11 @@ export interface PgContainer {
  * List the running Postgres containers that belong to a Dokploy service
  * `appName`. This covers BOTH data models the Data tab supports:
  *   - a Dokploy-managed Postgres database (its single Swarm task container,
- *     name-prefixed by the appName, image `postgres:*`), and
+ *     service-name label equal to appName, image `postgres:*`), and
  *   - Postgres containers inside a compose stack (the stack's containers share
- *     the compose-project name prefix; we keep the ones whose image is postgres).
- * The Docker `name` filter is a substring match, so we re-check the prefix to
- * avoid a coincidental match, then keep only postgres-imaged containers.
+ *     compose-project or stack-namespace label equal to appName; we keep only
+ *     postgres-imaged containers).
+ * Unlabeled legacy containers must have an exact name or Swarm task name match.
  *
  * Callers MUST have already validated `appName` against the user's known
  * Dokploy services (see knownAppNames) — this helper trusts its input, exactly
@@ -509,12 +530,11 @@ export interface PgContainer {
 export async function listPgContainers(appName: string): Promise<PgContainer[]> {
   if (!appName) return [];
   const containers = await withTimeout(
-    docker.listContainers({ all: false, filters: { name: [appName] } }),
+    docker.listContainers({ all: false }),
     DOCKER_OP_TIMEOUT_MS,
     `Listing postgres containers for ${appName}`,
   );
-  return containers
-    .filter((c) => c.Names.some((n) => n.replace(/^\//, "").startsWith(appName)))
+  return matchServiceContainers(containers, appName)
     .filter((c) => /postgres/i.test(c.Image))
     .map((c) => {
       const name = (c.Names[0] ?? "").replace(/^\//, "");
