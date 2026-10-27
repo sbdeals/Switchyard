@@ -38,6 +38,7 @@ import { MetricsTab } from "@/components/service/MetricsTab";
 import { LogsTab } from "@/components/service/LogsTab";
 import { ConsoleTab } from "@/components/service/ConsoleTab";
 import { DataTab } from "@/components/service/DataTab";
+import { ServiceNotes } from "@/components/service/ServiceNotes";
 import { ImageUpdatePanel } from "@/components/service/ImageUpdatePanel";
 import { CopyLinkButton } from "@/components/service/CopyLinkButton";
 import { ConnectTab } from "@/components/service/ConnectTab";
@@ -457,7 +458,7 @@ function Header({
   const logos = useTemplateLogos();
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
         <ServiceLogo
           service={service}
           logo={resolveServiceLogo(service, logos)}
@@ -465,7 +466,7 @@ function Header({
           size="size-11"
           rounded="rounded-xl"
         />
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h2 id={titleId} className="font-semibold">
               {service.name}
@@ -478,6 +479,7 @@ function Header({
           <div className="text-[11px] text-[var(--color-fg-subtle)]">
             Last deploy: {LAST_DEPLOY_LABEL[service.status] ?? service.status}
           </div>
+          <ServiceNotes key={service.id} id={service.id} description={service.description} />
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -526,7 +528,6 @@ function OverviewTab({ db }: { db: Database }) {
 }
 
 function SettingsTab({ db, services, onSelectService, onClose }: PortConflictProps & { db: Database; onClose: () => void }) {
-  const { pending: lifePending, error: lifeError, run } = useDbLifecycle(db);
   const meta = ENGINE_META[db.engine];
   const currentVersion = db.dockerImage?.split(":")[1] ?? meta.versions[0];
 
@@ -606,11 +607,9 @@ function SettingsTab({ db, services, onSelectService, onClose }: PortConflictPro
       <Info label="Created" value={db.createdAt ? new Date(db.createdAt).toLocaleString() : "—"} />
 
       <DangerZone
-        name={db.name}
+        service={db}
         message="Destroying removes the service and its container."
-        pending={lifePending}
-        error={lifeError}
-        onDestroy={() => run("remove", onClose)}
+        onDeleted={onClose}
       />
     </div>
   );

@@ -117,7 +117,7 @@ function WorkspaceContent({
           Service not found
         </div>
       )}
-      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} />
+      <ProjectsPanel open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects} services={services} />
       {activityOpen && (
         <ActivityPanel
           projects={projects}
