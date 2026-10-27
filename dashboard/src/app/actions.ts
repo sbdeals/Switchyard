@@ -244,7 +244,10 @@ export async function lifecycleAction(
   id: string,
   action: Action
 ): Promise<ActionResult> {
-  return wrap(() => databaseAction(engine, id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership(engine, id);
+    await databaseAction(engine, id, action);
+  });
 }
 
 /**
@@ -342,7 +345,12 @@ export async function renameProjectAction(id: string, name: string): Promise<Act
   return wrap(() => renameProject(id, name));
 }
 export async function removeProjectAction(id: string): Promise<ActionResult> {
-  return wrap(() => removeProject(id));
+  return wrap(async () => {
+    if (!(await listProjects()).some((project) => project.projectId === id)) {
+      throw new Error("Project not found in this workspace.");
+    }
+    await removeProject(id);
+  });
 }
 export async function createEnvironmentAction(
   projectId: string,
@@ -354,7 +362,14 @@ export async function renameEnvironmentAction(id: string, name: string): Promise
   return wrap(() => renameEnvironment(id, name));
 }
 export async function removeEnvironmentAction(id: string): Promise<ActionResult> {
-  return wrap(() => removeEnvironment(id));
+  return wrap(async () => {
+    if (!(await listProjects()).some((project) =>
+      project.environments.some((environment) => environment.environmentId === id)
+    )) {
+      throw new Error("Environment not found in this workspace.");
+    }
+    await removeEnvironment(id);
+  });
 }
 
 // --- applications -----------------------------------------------------------
@@ -487,7 +502,10 @@ export async function quickDeployGithubAction(input: {
 }
 
 export async function appLifecycleAction(id: string, action: Action): Promise<ActionResult> {
-  return wrap(() => applicationAction(id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership("application", id);
+    await applicationAction(id, action);
+  });
 }
 
 export async function updateApplicationAction(
@@ -869,7 +887,10 @@ export async function createComposeAction(
 }
 
 export async function composeLifecycleAction(id: string, action: Action): Promise<ActionResult> {
-  return wrap(() => composeAction(id, action));
+  return wrap(async () => {
+    if (action === "remove") await requireServiceOwnership("compose", id);
+    await composeAction(id, action);
+  });
 }
 
 export async function saveComposeFileAction(
@@ -929,7 +950,12 @@ export async function createDestinationAction(
 }
 
 export async function removeDestinationAction(destinationId: string): Promise<ActionResult> {
-  return wrap(() => removeDestination(destinationId));
+  return wrap(async () => {
+    if (!(await listDestinations()).some((destination) => destination.destinationId === destinationId)) {
+      throw new Error("Destination not found in this workspace.");
+    }
+    await removeDestination(destinationId);
+  });
 }
 
 export async function listDatabaseBackupsAction(
