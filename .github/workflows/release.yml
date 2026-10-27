@@ -1,5 +1,5 @@
 # Tag-driven release: `git tag v0.1.0 && git push --tags` publishes
-#   1. ghcr.io/<owner>/switchyard:<version> + :latest   (dashboard image)
+#   1. ghcr.io/<owner>/switchyard:<version>             (dashboard image)
 #   2. switchyard-cli@<version> to npm                  (needs NPM_TOKEN secret)
 #   3. desktop installers (NSIS + DMG/zip) + latest.yml onto the GitHub
 #      release — electron-updater's auto-update feed
@@ -8,11 +8,16 @@
 #      download" intro prepended to the generated notes
 # The image job runs first so the CLI's default tag (its own version) always
 # has a matching image by the time the package is installable.
+# The publish job promotes both latest channels only for the newest stable.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -67,6 +72,8 @@ jobs:
   image:
     needs: check
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tags }}
     permissions:
       contents: read
       packages: write # push the dashboard image to GHCR
@@ -83,9 +90,10 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/switchyard
+          # Stable semver tags otherwise add latest implicitly.
+          flavor: latest=false
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=latest
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: dashboard
@@ -306,8 +314,8 @@ jobs:
           echo "signed installer + rebuilt updater feed uploaded"
 
   # Flip the draft live once the assets a Windows user needs are actually on
-  # it, and mark it the repo's Latest release (so /releases/latest — the README
-  # download link and electron-updater's feed — resolves to it). Runs even if
+  # it, and mark it Latest only if it is the newest stable (so /releases/latest
+  # and the image's latest tag cannot regress). Runs even if
   # a desktop leg failed: a broken macOS build must not strand the release as
   # an invisible draft, but a missing Windows installer fails loudly here and
   # leaves the draft for inspection.
@@ -321,12 +329,21 @@ jobs:
   #   - prepend a "which file do I download" table to the generated notes so
   #     the first thing a visitor sees answers exactly that
   publish:
-    needs: [release, desktop]
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    needs: [release, desktop, image]
+    outputs:
+      is_newest: ${{ steps.latest.outputs.is_newest }}
+    if: ${{ !cancelled() && needs.release.result == 'success' && needs.image.result == 'success' }}
     runs-on: ubuntu-latest
+    # Serialize the decision and both promotions across tags. An early check
+    # could become stale while a newer release finishes building.
+    concurrency:
+      group: ${{ github.workflow }}-latest
+      cancel-in-progress: false
     permissions:
       contents: write # update release assets/notes and publish the draft
+      packages: write # promote the versioned image to latest when this tag is newest
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Locate the tag's release and verify required assets
         id: locate
         env:
@@ -449,18 +466,45 @@ jobs:
             -F "body=@/tmp/notes.md" >/dev/null
           echo "prepended download intro to the release notes"
 
-      - name: Publish the release and mark it Latest
+      - name: Decide whether this is the newest published stable version
+        id: latest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Read all pages; the helper ignores drafts and prereleases.
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            | jq 'add' > "$RUNNER_TEMP/releases.json"
+          is_newest=$(node scripts/release/is-newest.mjs "$GITHUB_REF_NAME" < "$RUNNER_TEMP/releases.json")
+          echo "is_newest=$is_newest" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        if: steps.latest.outputs.is_newest == 'true'
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        if: steps.latest.outputs.is_newest == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote the versioned image to latest
+        if: steps.latest.outputs.is_newest == 'true'
+        env:
+          IMAGE_TAG: ${{ needs.image.outputs.tag }}
+        run: docker buildx imagetools create --tag "${IMAGE_TAG%:*}:latest" "$IMAGE_TAG"
+
+      - name: Publish the release (Latest only for the newest stable)
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ steps.locate.outputs.release_id }}
+          MAKE_LATEST: ${{ steps.latest.outputs.is_newest }}
         run: |
           # tag_name is asserted on publish: a draft can come loose from its
           # tag (observed as an "untagged-…" release when the tag was deleted
           # and re-pushed around a re-run) — harmless when already correct,
           # self-healing when not.
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
-            -f tag_name="$GITHUB_REF_NAME" -F draft=false -f make_latest=true >/dev/null
-          echo "published release $GITHUB_REF_NAME (id $RELEASE_ID) as Latest"
+            -f tag_name="$GITHUB_REF_NAME" -F draft=false -f make_latest="$MAKE_LATEST" >/dev/null
+          echo "published release $GITHUB_REF_NAME (id $RELEASE_ID), latest=$MAKE_LATEST"
 
   # Bump the winget manifest so `winget install sbdeals.Switchyard` serves this
   # release. winget-fetched installers carry no browser mark-of-the-web, so
@@ -474,6 +518,8 @@ jobs:
   # which 404s while the release is still a draft.
   winget:
     needs: publish
+    # Only the newest stable tag moves winget forward (same rule as latest).
+    if: needs.publish.outputs.is_newest == 'true'
     runs-on: windows-latest
     steps:
       - name: Submit manifest update to winget-pkgs (skips without WINGET_TOKEN)

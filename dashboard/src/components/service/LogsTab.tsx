@@ -1,20 +1,33 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Download, Loader2, Search } from "lucide-react";
 import { DEFAULT_LOG_LINE_LIMIT, LOG_LINE_OPTIONS } from "@/lib/log-export";
 import { copyVisibleLogs, downloadServiceLogs } from "@/lib/log-export-client";
 import { Btn } from "./primitives";
+import { AnsiText } from "@/components/service/AnsiText";
+import { parseAnsi, type ParsedAnsi } from "@/lib/ansi";
 
-interface Line {
+interface Line extends ParsedAnsi {
+  id: number;
   ts: number;
-  text: string;
 }
+
+const LogLine = memo(function LogLine({ line }: { line: Line }) {
+  return (
+    <div className="flex gap-3 whitespace-pre-wrap break-all">
+      <span className="shrink-0 select-none text-[var(--color-fg-subtle)]">
+        {new Date(line.ts).toLocaleTimeString()}
+      </span>
+      <span className="text-[var(--color-fg-muted)]"><AnsiText value={line} /></span>
+    </div>
+  );
+});
 
 export function LogsTab({ appName, active }: { appName: string; active: boolean }) {
   // Lines carry a monotonic id assigned on arrival: the buffer is trimmed from
   // the front, so array indexes are not stable React keys.
-  const [lines, setLines] = useState<(Line & { id: number })[]>([]);
+  const [lines, setLines] = useState<Line[]>([]);
   const nextId = useRef(0);
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState("");
@@ -29,12 +42,14 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
     if (!active || !appName) return;
     const es = new EventSource(`/api/services/logs?app=${encodeURIComponent(appName)}`);
     es.onopen = () => setConnected(true);
+    es.addEventListener("reset", () => setLines([]));
     es.onmessage = (e) => {
       try {
-        const line = JSON.parse(e.data) as Line;
+        const raw = JSON.parse(e.data) as { ts: number; text: string };
+        const line = { ...parseAnsi(raw.text), ts: raw.ts, id: nextId.current++ };
         setLines((prev) => {
           const next = prev.length > 2000 ? prev.slice(-1500) : prev;
-          return [...next, { ...line, id: nextId.current++ }];
+          return [...next, line];
         });
       } catch {
         /* ignore */
@@ -50,9 +65,10 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
     }
   }, [lines]);
 
-  const shown = filter
-    ? lines.filter((l) => l.text.toLowerCase().includes(filter.toLowerCase()))
-    : lines;
+  const shown = useMemo(() => {
+    const query = filter.toLowerCase();
+    return query ? lines.filter((l) => l.text.toLowerCase().includes(query)) : lines;
+  }, [lines, filter]);
 
   useEffect(() => {
     if (!notice) return;
@@ -150,14 +166,7 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
             <Loader2 className="size-4 animate-spin" /> waiting for logs…
           </div>
         ) : (
-          shown.map((l) => (
-            <div key={l.id} className="flex gap-3 whitespace-pre-wrap break-all">
-              <span className="shrink-0 select-none text-[var(--color-fg-subtle)]">
-                {new Date(l.ts).toLocaleTimeString()}
-              </span>
-              <span className="text-[var(--color-fg-muted)]">{l.text}</span>
-            </div>
-          ))
+          shown.map((l) => <LogLine key={l.id} line={l} />)
         )}
       </div>
     </div>
