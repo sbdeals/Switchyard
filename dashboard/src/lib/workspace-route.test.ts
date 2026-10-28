@@ -1,3 +1,4 @@
+vi.mock("server-only", () => ({}));
 import type { Service } from "./dokploy";
 import { redactServiceForClient } from "./service-redaction";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -81,7 +82,7 @@ describe("workspace polling endpoint", () => {
     loadWorkspace.mockRejectedValue(new Error("private backend response details"));
     const response = await GET();
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "Workspace unavailable." });
+    expect(await response.json()).toEqual({ error: "Workspace unavailable.", code: "unavailable" });
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(inferEdges).not.toHaveBeenCalled();
   });

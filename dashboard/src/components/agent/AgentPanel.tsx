@@ -1,5 +1,7 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
 import {
   Children,
   cloneElement,
@@ -79,6 +81,8 @@ export function AgentPanel() {
   const [changes, setChanges] = useState<StagedChangeView[]>([]);
   const [applying, setApplying] = useState(false);
   const [applyResults, setApplyResults] = useState<ApplyResult[] | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [changesError, setChangesError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const panelRef = useRef<HTMLElement>(null);
@@ -99,25 +103,25 @@ export function AgentPanel() {
 
   const refreshChanges = useCallback(async () => {
     try {
-      const res = await fetch("/api/agent/changes", { cache: "no-store" });
-      if (!res.ok) return;
+      const res = await apiFetch("/api/agent/changes", { cache: "no-store" });
       const data = (await res.json()) as { configured: boolean; changes: StagedChangeView[] };
+      setChangesError(null);
       setConfigured(data.configured);
       setChanges(data.changes ?? []);
-    } catch {
-      /* ignore transient errors */
+    } catch (error) {
+      setChangesError(error instanceof Error ? error.message : "Changes unavailable.");
     }
   }, []);
 
   const refreshConfig = useCallback(async () => {
     try {
-      const res = await fetch("/api/agent/config", { cache: "no-store" });
-      if (!res.ok) return;
+      const res = await apiFetch("/api/agent/config", { cache: "no-store" });
       const data = (await res.json()) as AgentConfig;
+      setConfigError(null);
       setConfig(data);
       setConfigured(data.configured);
-    } catch {
-      /* ignore transient errors */
+    } catch (error) {
+      setConfigError(error instanceof Error ? error.message : "Agent configuration unavailable.");
     }
   }, []);
 
@@ -172,8 +176,9 @@ export function AgentPanel() {
       { role: "assistant", content: "", tools: [] },
     ]);
     setStreaming(true);
+    let completed = false;
     try {
-      const res = await fetch("/api/agent/chat", {
+      const res = await apiFetch("/api/agent/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: [...history, { role: "user", content: text }] }),
@@ -202,12 +207,14 @@ export function AgentPanel() {
           }
         }
       }
+      completed = true;
     } catch (e) {
       patchLast((m) => ({ ...m, content: m.content + `\n\n⚠️ ${e instanceof Error ? e.message : String(e)}` }));
+      setInput((draft) => draft || text);
     } finally {
       setStreaming(false);
       refreshChanges();
-      router.refresh();
+      if (completed) router.refresh();
     }
   };
 
@@ -240,7 +247,7 @@ export function AgentPanel() {
   const applyChanges = async (ids?: string[]) => {
     setApplying(true);
     try {
-      const res = await fetch("/api/agent/changes", {
+      const res = await apiFetch("/api/agent/changes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "apply", ids }),
@@ -251,20 +258,26 @@ export function AgentPanel() {
         // Auto-dismiss only all-ok results; failures stay until dismissed.
         if (data.results.every((r) => r.ok)) setTimeout(() => setApplyResults(null), 6000);
       }
+      router.refresh();
+    } catch (error) {
+      setApplyResults([{ id: "request", description: "Apply changes", ok: false,
+        error: error instanceof Error ? error.message : "Could not apply changes." }]);
     } finally {
       setApplying(false);
       await refreshChanges();
-      router.refresh();
     }
   };
 
   const discardChanges = async (ids?: string[]) => {
     try {
-      await fetch("/api/agent/changes", {
+      await apiFetch("/api/agent/changes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "discard", ids }),
       });
+    } catch (error) {
+      setApplyResults([{ id: "request", description: "Discard changes", ok: false,
+        error: error instanceof Error ? error.message : "Could not discard changes." }]);
     } finally {
       await refreshChanges();
     }
@@ -323,6 +336,7 @@ export function AgentPanel() {
             </header>
 
             <ConnectionBar config={config} onChanged={refreshConfig} />
+            {(configError || changesError) && <p role="alert" className="px-4 py-2 text-xs text-[var(--color-danger)]">{configError || changesError}</p>}
 
             {configured === false ? (
               <SetupCard />
@@ -492,6 +506,7 @@ function ConnectionBar({ config, onChanged }: { config: AgentConfig | null; onCh
   const presets = config?.presets ?? [];
   const provider = config?.provider ?? "anthropic";
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Which provider-dropdown entry is active: "anthropic", a preset id, or "custom".
   const providerValue = provider === "anthropic" ? "anthropic" : activePreset(config)?.id ?? "custom";
@@ -507,13 +522,18 @@ function ConnectionBar({ config, onChanged }: { config: AgentConfig | null; onCh
 
   const post = async (body: Record<string, unknown>) => {
     setBusy(true);
+    setError(null);
     try {
-      await fetch("/api/agent/config", {
+      await apiFetch("/api/agent/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       onChanged();
+      return true;
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not update the provider.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -526,7 +546,7 @@ function ConnectionBar({ config, onChanged }: { config: AgentConfig | null; onCh
       return;
     }
     // OpenAI-compatible: switch the provider first.
-    await post({ provider: "openai" });
+    if (!await post({ provider: "openai" })) return;
     if (value === "custom") {
       // Clear the endpoint so providerValue derives to "custom" (it's read from
       // baseUrl) and the Endpoint field appears for the user to fill in.
@@ -534,7 +554,7 @@ function ConnectionBar({ config, onChanged }: { config: AgentConfig | null; onCh
       return;
     }
     const preset = presets.find((p) => p.id === value);
-    if (preset?.baseUrl) await post({ baseUrl: preset.baseUrl });
+    if (preset?.baseUrl && !await post({ baseUrl: preset.baseUrl })) return;
     // Default to the endpoint's first suggested model so a model left over from
     // the previous endpoint isn't sent to this one (it would 404). The user can
     // pick another from the now-repopulated dropdown.
@@ -586,6 +606,7 @@ function ConnectionBar({ config, onChanged }: { config: AgentConfig | null; onCh
 
       <KeyField config={config} onChanged={onChanged} />
       <ModelField config={config} onChanged={onChanged} />
+      {error && <p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   );
 }
@@ -608,19 +629,16 @@ function KeyField({ config, onChanged }: { config: AgentConfig | null; onChanged
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch("/api/agent/config", {
+      await apiFetch("/api/agent/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key }),
       });
-      if (!res.ok) {
-        const d = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(d?.error ?? "Request failed.");
-        return;
-      }
       setValue("");
       setEditing(false);
       onChanged();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not save the key.");
     } finally {
       setSaving(false);
     }
@@ -628,13 +646,16 @@ function KeyField({ config, onChanged }: { config: AgentConfig | null; onChanged
 
   const clear = async () => {
     setSaving(true);
+    setError(null);
     try {
-      await fetch("/api/agent/config", {
+      await apiFetch("/api/agent/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clear: true }),
       });
       onChanged();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not remove the key.");
     } finally {
       setSaving(false);
     }
@@ -748,13 +769,13 @@ function ModelField({ config, onChanged }: { config: AgentConfig | null; onChang
       setLoading(true);
       setNote(null);
       try {
-        const res = await fetch("/api/agent/models", { cache: "no-store" });
+        const res = await apiFetch("/api/agent/models", { cache: "no-store" });
         const d = (await res.json()) as { models?: { id: string; label: string }[]; error?: string };
         if (cancelled) return;
         setDynModels(d.models ?? []);
         setNote(d.error ?? null);
-      } catch {
-        if (!cancelled) setNote("Couldn't reach the model list.");
+      } catch (error) {
+        if (!cancelled) setNote(error instanceof Error ? error.message : "Couldn't reach the model list.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -767,13 +788,16 @@ function ModelField({ config, onChanged }: { config: AgentConfig | null; onChang
 
   const post = async (model: string) => {
     setSaving(true);
+    setNote(null);
     try {
-      await fetch("/api/agent/config", {
+      await apiFetch("/api/agent/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model }),
       });
       onChanged();
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "Could not update the model.");
     } finally {
       setSaving(false);
     }

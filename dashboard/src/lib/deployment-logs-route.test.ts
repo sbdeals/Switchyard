@@ -70,8 +70,8 @@ describe("deployment logs endpoint", () => {
   it("returns a safe error if Dokploy refuses the log read", async () => {
     readDeploymentLogs.mockRejectedValue(new Error("internal response details"));
     const response = await GET(request());
-    expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({ error: "Deployment logs unavailable." });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "Deployment logs unavailable.", code: "unavailable" });
   });
 
   it("preserves login redirects from per-user authentication", async () => {

@@ -8,20 +8,22 @@
  * next/headers). The raw Dokploy cookie never reaches the browser. On a Dokploy
  * 401 we clear the Switchyard session and send the user back to /login.
  *
- * The env admin credentials (`DOKPLOY_EMAIL`/`DOKPLOY_PASSWORD`) survive for a
- * SINGLE purpose: the system self-probe `ping()` behind /api/health?deep=1,
- * which the installer uses to prove the container -> Dokploy path. That admin
- * session is never used to serve user requests.
+ * The env admin credentials (`DOKPLOY_EMAIL`/`DOKPLOY_PASSWORD`) serve only the
+ * system self-probe `ping()` behind /api/health?deep=1 and the background
+ * collector's explicit withSystemSession context. That admin session is never
+ * used to serve user requests.
  *
  * Dokploy models a database as a service nested under project -> environment.
  * `project.all` returns the tree but trims nested service objects down to their
  * IDs, so we enrich each database via `<engine>.one`.
  */
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 
-import { SESSION_COOKIE, openSession } from "./session";
+import { SESSION_COOKIE, openSession, sessionFromRequest } from "./session";
 import { randomServiceName } from "./names";
 import { buildDeployOptionsPayload, getDeployOptionsState, type DeployOptionsRequest } from "./deploy-options";
 import { resolveAppPort } from "./app-port";
@@ -394,7 +396,12 @@ export async function signUpToDokploy(
  * valid session means the cookie is forged/expired -> send them to /login.
  * `redirect()` throws NEXT_REDIRECT (never returns), so the return type holds.
  */
+// Opt-in only from the background collector; never inferred from missing cookies.
+const systemSession = new AsyncLocalStorage<string>();
+
 async function userCookie(): Promise<string> {
+  const system = systemSession.getStore();
+  if (system) return system;
   const store = await cookies();
   const session = openSession(store.get(SESSION_COOKIE)?.value);
   if (!session) redirect("/login");
@@ -441,6 +448,19 @@ async function withBackupErrors<T>(
 
 async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
   const cookie = await userCookie();
+  try {
+    return await fetchDokploy<T>(cookie, path, init);
+  } catch (error) {
+    if (error && typeof error === "object" && "status" in error && error.status === 401) {
+      if (systemSession.getStore()) adminCookieCache = null;
+      else redirect("/api/session/expired");
+    }
+    throw error;
+  }
+}
+
+/** Explicit credentials: API authorization never consults the collector context. */
+async function fetchDokploy<T>(cookie: string, path: string, init: ReqInit = {}): Promise<T> {
   let res: Response;
   try {
     // Walk the origin candidates like authFetch: after a dashboard restart the
@@ -474,7 +494,7 @@ async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
     }
     throw e;
   }
-  if (res.status === 401) redirect("/api/session/expired");
+  if (res.status === 401) throw Object.assign(new Error("Dokploy session expired."), { status: 401 });
   if (!res.ok) {
     const body = await res.text();
     // Backup errors are sanitized and summarized by withBackupErrors first;
@@ -489,10 +509,20 @@ async function requestDokploy<T>(path: string, init: ReqInit): Promise<T> {
 }
 
 // --- system probe (admin session) -------------------------------------------
-// The ONLY consumer of the env admin credentials. Kept fully separate from the
-// user-serving path above so an anonymous /api/health?deep=1 probe still works.
+// Only the health probe and explicit background collector use these credentials.
+// User-request validation always passes the caller's cookie to fetchDokploy.
 
 let adminCookieCache: string | null = null;
+
+export function hasSystemCredentials(): boolean {
+  return Boolean(EMAIL && PASSWORD);
+}
+
+/** Background collector only. No request handler may enter this context. */
+export async function withSystemSession<T>(fn: () => Promise<T>): Promise<T> {
+  if (!hasSystemCredentials()) throw new Error("Collector credentials are not configured.");
+  return systemSession.run(adminCookieCache ?? (await adminSignIn()), fn);
+}
 
 async function adminSignIn(): Promise<string> {
   adminCookieCache = await signInToDokploy(EMAIL, PASSWORD);
@@ -2667,26 +2697,67 @@ export async function loadWorkspace({ includeRuntime = true }: { includeRuntime?
   return { services, projects: projectsFromTree(tree) };
 }
 
-/**
- * The set of Swarm `appName`s the CURRENT user's Dokploy workspace manages.
- * The logs/metrics routes validate the requested `?app=` against this before
- * attaching to a container, so an authed user can't tail arbitrary host
- * containers by name. Uses the per-user session (via `request()`).
- */
-// Briefly cached so metrics-style routes that poll every ~20s don't re-walk
-// the whole Dokploy tree on each request.
-let appNamesCache: { at: number; names: Set<string> } | null = null;
-const APP_NAMES_TTL_MS = 30_000;
-
-export async function knownAppNames(): Promise<Set<string>> {
-  const now = Date.now();
-  if (appNamesCache && now - appNamesCache.at < APP_NAMES_TTL_MS) {
-    return appNamesCache.names;
+/** Decrypt first, then validate with Dokploy using this request's own cookie. */
+export async function verifySessionForRequest(request: Request) {
+  const session = sessionFromRequest(request);
+  if (!session) throw Object.assign(new Error("Not signed in."), { status: 401 });
+  const tree = await fetchDokploy<RawProject[]>(session.dokployCookie, "project.all");
+  // Invalid upstream responses must never become an authorization success.
+  if (!Array.isArray(tree) || tree.some((p) => !p || !Array.isArray(p.environments))) {
+    throw new Error("Workspace unavailable.");
   }
-  const { services } = await loadWorkspace();
-  const names = new Set(services.map((s) => s.appName).filter((n): n is string => Boolean(n)));
-  appNamesCache = { at: now, names };
-  return names;
+  return { session, tree };
+}
+
+// Cache name resolution, never authorization. At most 500 session/service pairs
+// across the process; keys contain a SHA-256 digest, never a session token.
+const appNameResolutions = new Map<string, { name: string; expires: number }>();
+const APP_NAME_TTL_MS = 30_000;
+const APP_NAME_CACHE_LIMIT = 500;
+
+/**
+ * Authenticate against a fresh project.all on EVERY request, before consulting
+ * the name cache. Only IDs in that fresh tree can use a cached name, so removal
+ * or transfer revokes access immediately. No Docker/store access happens here.
+ */
+export async function knownAppNamesForRequest(request: Request): Promise<Set<string>> {
+  const { session, tree } = await verifySessionForRequest(request);
+  const sessionHash = createHash("sha256").update(session.dokployCookie).digest("hex");
+  const now = Date.now();
+  for (const [key, entry] of appNameResolutions) {
+    if (entry.expires <= now) appNameResolutions.delete(key);
+  }
+  const types = ["application", "compose", ...ENGINES] as const;
+  const names = await Promise.all(types.flatMap((type) => {
+    const refs = collectIds(tree, (env) => {
+      const entries = env[type === "application" ? "applications" : type] ?? [];
+      return (entries as unknown as Record<string, string>[]).map((entry) => entry[`${type}Id`]);
+    });
+    return refs.map(async ({ id }) => {
+      const key = `${sessionHash}:${type}:${id}`;
+      const cached = appNameResolutions.get(key);
+      if (cached) {
+        // Map insertion order implements LRU eviction.
+        appNameResolutions.delete(key);
+        appNameResolutions.set(key, cached);
+        return cached.name;
+      }
+      const detail = await fetchDokploy<{ appName?: string }>(session.dokployCookie,
+        `${type}.one?${type}Id=${encodeURIComponent(id)}`);
+      if (!detail || typeof detail !== "object") throw new Error("Service unavailable.");
+      const name = typeof detail.appName === "string" ? detail.appName : "";
+      // A missing name may belong to an incomplete service; retry next time.
+      if (name) {
+        appNameResolutions.delete(key);
+        while (appNameResolutions.size >= APP_NAME_CACHE_LIMIT) {
+          appNameResolutions.delete(appNameResolutions.keys().next().value!);
+        }
+        appNameResolutions.set(key, { name, expires: Date.now() + APP_NAME_TTL_MS });
+      }
+      return name;
+    });
+  }));
+  return new Set(names.filter(Boolean));
 }
 
 // ============================================================================

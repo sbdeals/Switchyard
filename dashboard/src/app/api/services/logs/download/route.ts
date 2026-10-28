@@ -1,7 +1,7 @@
 import { unstable_rethrow } from "next/navigation";
 
 import { readRecentLogs } from "@/lib/docker";
-import { knownAppNames } from "@/lib/dokploy";
+import { requireAppAccess } from "@/lib/api-auth";
 import { capLogLines, logDownloadFilename, logDownloadStream } from "@/lib/log-export";
 
 export const runtime = "nodejs";
@@ -12,14 +12,8 @@ export async function GET(request: Request) {
   const app = params.get("app");
   if (!app) return new Response("missing ?app", { status: 400 });
 
-  let allowed: Set<string>;
-  try {
-    allowed = await knownAppNames();
-  } catch (e) {
-    unstable_rethrow(e);
-    return new Response("workspace unavailable", { status: 503 });
-  }
-  if (!allowed.has(app)) return new Response("unknown app", { status: 403 });
+  const allowed = await requireAppAccess(request, app);
+  if (allowed instanceof Response) return allowed;
 
   const format = params.get("format") ?? "log";
   if (format !== "log" && format !== "json") return new Response("unknown format", { status: 400 });
@@ -36,6 +30,6 @@ export async function GET(request: Request) {
     });
   } catch (e) {
     unstable_rethrow(e);
-    return new Response("logs unavailable", { status: 503 });
+    return Response.json({ error: "Logs unavailable.", code: "unavailable" }, { status: 503 });
   }
 }

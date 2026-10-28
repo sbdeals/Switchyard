@@ -1,3 +1,4 @@
+import { apiSessionFailure } from "@/lib/api-auth";
 import { unstable_rethrow } from "next/navigation";
 
 import { inspectServiceImages } from "@/lib/docker";
@@ -22,10 +23,12 @@ export async function GET(request: Request) {
       inspect: inspectServiceImages,
       lookup: lookupRegistryImage,
     });
-    if (!result) return Response.json({ error: "unknown service" }, { status: 403 });
+    if (!result) return Response.json({ error: "unknown service", code: "forbidden" }, { status: 403 });
     return Response.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
+    const denied = apiSessionFailure(error);
+    if (denied) return denied;
     unstable_rethrow(error);
-    return Response.json({ error: "Image check is unavailable. Try again shortly." }, { status: 503 });
+    return Response.json({ error: "Image check is unavailable. Try again shortly.", code: "unavailable" }, { status: 503 });
   }
 }

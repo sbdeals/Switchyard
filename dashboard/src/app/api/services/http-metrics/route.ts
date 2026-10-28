@@ -1,4 +1,4 @@
-import { knownAppNames } from "@/lib/dokploy";
+import { requireAppAccess } from "@/lib/api-auth";
 import { getHttpMetrics } from "@/lib/traefik-metrics";
 
 export const runtime = "nodejs";
@@ -14,18 +14,8 @@ export async function GET(request: Request) {
   const rangeRaw = Number(url.searchParams.get("range"));
   const range = Number.isFinite(rangeRaw) && rangeRaw > 0 ? Math.min(rangeRaw, 1440) : 60;
 
-  // Guard: only serve metrics for a real service. If Dokploy can't be reached to
-  // build the allow-list, fall through (the scraper only holds data for real
-  // Traefik services anyway) rather than blanking out live metrics.
-  let known: Set<string> | null = null;
-  try {
-    known = await knownAppNames();
-  } catch {
-    known = null;
-  }
-  if (known && !known.has(app)) {
-    return Response.json({ available: false, points: [] });
-  }
+  const allowed = await requireAppAccess(request, app);
+  if (allowed instanceof Response) return allowed;
 
   return Response.json(getHttpMetrics(app, range));
 }

@@ -1,3 +1,4 @@
+import { apiSessionFailure } from "@/lib/api-auth";
 import { unstable_rethrow } from "next/navigation";
 
 import { request as dokployRequest } from "@/lib/dokploy";
@@ -23,7 +24,9 @@ export async function GET(request: Request) {
     // Authorization always precedes the shared network result cache.
     return Response.json(await checkDomainStatus(domain), { headers });
   } catch (error) {
+    const denied = apiSessionFailure(error);
+    if (denied) return denied;
     unstable_rethrow(error);
-    return Response.json({ error: "Workspace unavailable" }, { status: 503, headers });
+    return Response.json({ error: "Workspace unavailable", code: "unavailable" }, { status: 503, headers });
   }
 }

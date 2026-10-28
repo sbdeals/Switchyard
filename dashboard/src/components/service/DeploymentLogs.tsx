@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Service } from "@/lib/dokploy";
 import { deploymentForService } from "@/lib/deployment-selection";
+import { apiFetch } from "@/lib/api-client";
 
 export function DeploymentLogs({
   service,
@@ -22,15 +23,14 @@ export function DeploymentLogs({
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({ serviceId: service.id, deploymentId });
-    fetch(`/api/services/deployment-logs?${params}`, { signal: controller.signal })
+    apiFetch(`/api/services/deployment-logs?${params}`, { signal: controller.signal })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Deployment logs unavailable. Try again.");
         const result = await response.json() as { logs: string };
         if (!controller.signal.aborted) setLogs(result.logs);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!controller.signal.aborted) {
-          setError("Deployment logs unavailable. Try again.");
+          setError(error instanceof Error ? error.message : "Deployment logs unavailable. Try again.");
         }
       });
     return () => controller.abort();

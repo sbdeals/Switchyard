@@ -1,3 +1,4 @@
+import { apiSessionFailure } from "@/lib/api-auth";
 import { stripVTControlCharacters } from "node:util";
 import { unstable_rethrow } from "next/navigation";
 
@@ -19,13 +20,15 @@ export async function GET(request: Request) {
   // across sessions or accept a browser-supplied log path.
   let services;
   try {
-    ({ services } = await loadWorkspace());
+    ({ services } = await loadWorkspace({ includeRuntime: false }));
   } catch (error) {
+    const denied = apiSessionFailure(error);
+    if (denied) return denied;
     unstable_rethrow(error);
-    return Response.json({ error: "Workspace unavailable." }, { status: 503 });
+    return Response.json({ error: "Workspace unavailable.", code: "unavailable" }, { status: 503 });
   }
   if (!deploymentForService(services, serviceId, deploymentId)) {
-    return Response.json({ error: "Deployment unavailable." }, { status: 403 });
+    return Response.json({ error: "Deployment unavailable.", code: "forbidden" }, { status: 403 });
   }
 
   try {
@@ -35,7 +38,9 @@ export async function GET(request: Request) {
       { headers: { "Cache-Control": "private, no-store" } }
     );
   } catch (error) {
+    const denied = apiSessionFailure(error);
+    if (denied) return denied;
     unstable_rethrow(error);
-    return Response.json({ error: "Deployment logs unavailable." }, { status: 502 });
+    return Response.json({ error: "Deployment logs unavailable.", code: "unavailable" }, { status: 503 });
   }
 }

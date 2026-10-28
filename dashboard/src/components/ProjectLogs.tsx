@@ -1,5 +1,7 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Loader2, RefreshCw, Search } from "lucide-react";
 import type { ProjectNode } from "@/lib/dokploy";
@@ -103,12 +105,7 @@ function ScopedLogs({ projectId, environmentId }: { projectId: string; environme
     const current = startLogPolling<Snapshot>({
       live: liveRef.current,
       load: async (signal) => {
-        const response = await fetch(`/api/projects/logs?${query}`, { signal, cache: "no-store" });
-        if (!response.ok || response.redirected) {
-          throw new Error(response.status === 401 || response.redirected
-            ? "Your session expired. Sign in again to read logs."
-            : "Could not load project logs. Try refreshing.");
-        }
+        const response = await apiFetch(`/api/projects/logs?${query}`, { signal, cache: "no-store" });
         return response.json() as Promise<Snapshot>;
       },
       onData: (result) => {

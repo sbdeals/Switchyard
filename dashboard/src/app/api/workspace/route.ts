@@ -1,3 +1,4 @@
+import { apiSessionFailure } from "@/lib/api-auth";
 import { unstable_rethrow } from "next/navigation";
 
 import { inferEdges, loadWorkspace } from "@/lib/dokploy";
@@ -14,7 +15,9 @@ export async function GET() {
     const { services, projects } = await loadWorkspace();
     return Response.json({ services: services.map(redactServiceForClient), projects, edges: inferEdges(services), graph: buildServiceReferenceGraph(services) }, { headers });
   } catch (error) {
+    const denied = apiSessionFailure(error);
+    if (denied) return denied;
     unstable_rethrow(error);
-    return Response.json({ error: "Workspace unavailable." }, { status: 503, headers });
+    return Response.json({ error: "Workspace unavailable.", code: "unavailable" }, { status: 503, headers });
   }
 }

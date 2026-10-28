@@ -7,6 +7,7 @@ import { copyVisibleLogs, downloadServiceLogs } from "@/lib/log-export-client";
 import { Btn } from "./primitives";
 import { AnsiText } from "@/components/service/AnsiText";
 import { parseAnsi, type ParsedAnsi } from "@/lib/ansi";
+import { logConnectionError } from "@/lib/api-client";
 
 interface Line extends ParsedAnsi {
   id: number;
@@ -41,8 +42,10 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
 
   useEffect(() => {
     if (!active || !appName) return;
-    const es = new EventSource(`/api/services/logs?app=${encodeURIComponent(appName)}`);
-    es.onopen = () => setConnected(true);
+    const url = `/api/services/logs?app=${encodeURIComponent(appName)}`;
+    const es = new EventSource(url);
+    let probe: AbortController | undefined;
+    es.onopen = () => { probe?.abort(); setConnected(true); setError(null); };
     es.addEventListener("reset", () => setLines([]));
     es.onmessage = (e) => {
       try {
@@ -56,8 +59,16 @@ export function LogsTab({ appName, active }: { appName: string; active: boolean 
         /* ignore */
       }
     };
-    es.onerror = () => setConnected(false);
-    return () => es.close();
+    es.onerror = () => {
+      setConnected(false);
+      probe?.abort();
+      const controller = new AbortController();
+      probe = controller;
+      void logConnectionError(url, controller.signal).catch((error: unknown) => {
+        if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Logs unavailable.");
+      });
+    };
+    return () => { probe?.abort(); es.close(); };
   }, [appName, active]);
 
   useEffect(() => {

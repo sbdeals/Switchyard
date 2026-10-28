@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { DomainStatus as DomainStatusResult } from "@/lib/domain-status";
 import { domainStatusRows } from "@/lib/domain-status-presentation";
+import { apiFetch } from "@/lib/api-client";
 
 type Props = {
   serviceType: "application" | "compose";
@@ -35,12 +36,11 @@ function DomainHealthCheck({ serviceType, serviceId, domainId, host, https }: Pr
     async function check() {
       try {
         const query = new URLSearchParams({ serviceType, serviceId, domainId });
-        const response = await fetch(`/api/services/domain-status?${query}`, {
+        const response = await apiFetch(`/api/services/domain-status?${query}`, {
           signal: controller.signal,
           cache: "no-store",
         });
         const body = await response.json();
-        if (!response.ok) throw new Error(body.error ?? "Could not check domain health");
         if (!controller.signal.aborted) setResult(body);
       } catch (err) {
         if (!controller.signal.aborted) {

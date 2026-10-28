@@ -1,5 +1,7 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -73,7 +75,7 @@ export function DuplicateEnvironmentForm({
     setError(null);
     let completed = false;
     try {
-      const response = await fetch("/api/environments/duplicate", {
+      const response = await apiFetch("/api/environments/duplicate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ options: preflight.summary.options, fingerprint: preflight.fingerprint }),

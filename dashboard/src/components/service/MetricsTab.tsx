@@ -1,5 +1,7 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
 import { useEffect, useState } from "react";
 import {
   Area,
@@ -38,11 +40,10 @@ async function fetchHistory(
   signal: AbortSignal,
 ): Promise<{ enabled: boolean; samples: Sample[] }> {
   const since = Date.now() - windowMs;
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/services/metrics/history?app=${encodeURIComponent(appName)}&since=${since}`,
     { signal, cache: "no-store" },
   );
-  if (!res.ok) return { enabled: false, samples: [] };
   return (await res.json()) as { enabled: boolean; samples: Sample[] };
 }
 
@@ -53,6 +54,8 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
   const [range, setRange] = useState<RangeId>("live");
   // null = unknown (still probing); false = no durable store configured.
   const [storeOn, setStoreOn] = useState<boolean | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [liveError, setLiveError] = useState<string | null>(null);
 
   // Reset the live buffer when the series identity (service or range) changes.
   // Done during render, not in the effect below: calling setState synchronously
@@ -67,6 +70,8 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
     setData([]);
     setIdle(false);
     setUnavailable(false);
+    setHistoryError(null);
+    setLiveError(null);
   }
 
   useEffect(() => {
@@ -75,10 +80,11 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
     return startVisiblePolling({
       load: (signal) => fetchHistory(appName, window, signal),
       onValue: ({ enabled, samples }) => {
+        setHistoryError(null);
         setStoreOn(enabled);
         if (range !== "live") setData(samples);
       },
-      onError: () => setStoreOn(false),
+      onError: (error) => setHistoryError(error instanceof Error ? error.message : "Metric history unavailable."),
       visibility: document,
       intervalMs: null,
     });
@@ -88,19 +94,20 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
     if (!active || !appName || range !== "live") return;
     return startVisiblePolling({
       load: async (signal) => {
-        const res = await fetch(`/api/services/metrics?app=${encodeURIComponent(appName)}`, {
+        const res = await apiFetch(`/api/services/metrics?app=${encodeURIComponent(appName)}`, {
           signal,
           cache: "no-store",
         });
-        if (!res.ok) throw new Error("Metrics unavailable");
         return (await res.json()) as ServiceMetrics;
       },
       onValue: ({ status, sample }) => {
+        setLiveError(null);
         setIdle(status === "not-running");
         setUnavailable(status === "unavailable");
         if (status === "running" && sample) setData((prev) => appendLiveSample(prev, sample));
       },
-      onError: () => {
+      onError: (error) => {
+        setLiveError(error instanceof Error ? error.message : "Metrics unavailable.");
         setIdle(false);
         setUnavailable(true);
       },
@@ -113,6 +120,7 @@ export function MetricsTab({ appName, active }: { appName: string; active: boole
 
   return (
     <div className="space-y-5">
+      {(liveError || historyError) && <p role="alert" className="text-xs text-[var(--color-danger)]">{liveError || historyError}</p>}
       <div className="flex items-center justify-between gap-2">
         <div className="flex rounded-lg border border-[var(--color-border)] p-0.5">
           {RANGES.map((r) => (
@@ -341,23 +349,25 @@ function HttpSection({ appName, active }: { appName: string; active: boolean }) 
   const [rangeMin, setRangeMin] = useState<number>(60);
   const [state, setState] = useState<{ available: boolean; points: HttpPoint[] } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!active || !appName) return;
     return startVisiblePolling({
       load: async (signal) => {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/services/http-metrics?app=${encodeURIComponent(appName)}&range=${rangeMin}`,
           { signal, cache: "no-store" },
         );
-        if (!res.ok) throw new Error("HTTP metrics unavailable");
         return (await res.json()) as { available: boolean; points: HttpPoint[] };
       },
       onValue: (value) => {
+        setFetchError(null);
         setState(value);
         setLoading(false);
       },
-      onError: () => {
+      onError: (error) => {
+        setFetchError(error instanceof Error ? error.message : "HTTP metrics unavailable.");
         setState({ available: false, points: [] });
         setLoading(false);
       },
@@ -406,7 +416,7 @@ function HttpSection({ appName, active }: { appName: string; active: boolean }) 
         </div>
       </div>
 
-      {loading && !state ? (
+      {fetchError ? <p role="alert" className="text-xs text-[var(--color-danger)]">{fetchError}</p> : loading && !state ? (
         <div className="flex items-center justify-center gap-2 py-6 text-xs text-[var(--color-fg-subtle)]">
           <Loader2 className="size-4 animate-spin" /> loading…
         </div>

@@ -1,3 +1,4 @@
+import { requireAppAccess } from "@/lib/api-auth";
 import { queryMetrics, storeEnabled, storeAvailable } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -13,6 +14,9 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const app = url.searchParams.get("app");
   if (!app) return new Response("missing ?app", { status: 400 });
+
+  const allowed = await requireAppAccess(request, app);
+  if (allowed instanceof Response) return allowed;
 
   if (!storeEnabled()) {
     return Response.json({ enabled: false, samples: [] });

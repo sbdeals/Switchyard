@@ -36,7 +36,7 @@ export function startVisiblePolling<T>({
 }: {
   load: (signal: AbortSignal) => Promise<T>;
   onValue: (value: T) => void;
-  onError: () => void;
+  onError: (error: unknown) => void;
   visibility: Visibility;
   intervalMs?: number | null;
 }): () => void {
@@ -51,8 +51,8 @@ export function startVisiblePolling<T>({
     try {
       const value = await load(request.signal);
       if (!disposed && controller === request && !request.signal.aborted) onValue(value);
-    } catch {
-      if (!disposed && controller === request && !request.signal.aborted) onError();
+    } catch (error) {
+      if (!disposed && controller === request && !request.signal.aborted) onError(error);
     } finally {
       if (controller === request) controller = null;
     }

@@ -6,21 +6,9 @@ import { getDatabaseConnectionAction as serverGetDatabaseConnectionAction } from
 import { logoutAction as serverLogoutAction } from "@/app/login/actions";
 import { callAction, SESSION_EXPIRED_MESSAGE, signInHref } from "@/lib/action-call";
 import { useDialogFocus } from "@/components/use-focus-trap";
+import { isSessionExpired, setSessionExpired, subscribeSessionExpiry } from "./session-expiry";
 
 export type { ActionResult, MountsResult, ScheduleExecution } from "@/app/actions";
-
-let sessionExpired = false;
-const listeners = new Set<() => void>();
-
-function setSessionExpired(value: boolean) {
-  sessionExpired = value;
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
-}
 
 /** One boundary for every workspace action, including reads. */
 function guardAction<Args extends unknown[], Result>(action: (...args: Args) => Promise<Result>) {
@@ -32,7 +20,7 @@ function guardAction<Args extends unknown[], Result>(action: (...args: Args) => 
 }
 
 export function SessionExpiredBanner() {
-  const expired = useSyncExternalStore(subscribe, () => sessionExpired, () => false);
+  const expired = useSyncExternalStore(subscribeSessionExpiry, isSessionExpired, () => false);
   const dialogRef = useDialogFocus<HTMLDivElement>(() => setSessionExpired(false));
   if (!expired) return null;
   const { pathname, search, hash } = window.location;
