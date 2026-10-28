@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ execute: vi.fn(), revalidate: vi.fn() }));
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/dokploy", () => ({
+  verifySessionForRequest: vi.fn(async () => ({ tree: [{ projectId: "project", environments: [{ environmentId: "source" }] }] })),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("@/lib/environment-duplicate-server", () => ({
   executeEnvironmentDuplicate: mocks.execute,

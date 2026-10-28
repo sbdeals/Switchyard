@@ -66,9 +66,12 @@ describe("Dokploy request failures", () => {
     expect(classifyWorkspaceError(error)).toBe(status === 403 ? "auth" : "unknown");
   });
 
-  it("turns HTTP 401 into a redirect through the session-clearing route", async () => {
+  it.each([
+    ["project.all", undefined],
+    ["application.update", { method: "POST", body: { applicationId: "test-app" } }],
+  ] as const)("redirects a backend 401 from %s through session recovery for pages and actions", async (path, init) => {
     mocks.fetch.mockResolvedValueOnce(new Response("Unauthorized", { status: 401 }));
-    const error = await request("project.all").catch((error: unknown) => error);
+    const error = await request(path, init).catch((error: unknown) => error);
     expect(error).toHaveProperty("digest", expect.stringContaining(";/api/session/expired;"));
     expect(() => unstable_rethrow(error)).toThrow(error as Error);
   });

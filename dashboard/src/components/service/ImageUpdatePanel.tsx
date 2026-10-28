@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { ImageUpdateResult } from "@/lib/image-update";
+import { apiFetch } from "@/lib/api-client";
 
 const STATUS = {
   "up-to-date": { label: "Up to date", color: "var(--color-ok)", background: "var(--color-ok-soft)" },
@@ -59,13 +60,12 @@ export function ImageUpdatePanel({ kind, id, image }: {
     setError(null);
     try {
       const query = new URLSearchParams({ kind, id });
-      const response = await fetch(`/api/services/image-update?${query}`, { cache: "no-store" });
-      if (!response.ok) throw new Error("Image check unavailable. Please try again.");
+      const response = await apiFetch(`/api/services/image-update?${query}`, { cache: "no-store" });
       const data = await response.json() as { images: ImageUpdateResult[] };
       setImages(data.images);
-    } catch {
+    } catch (error) {
       setImages(null);
-      setError("Image check unavailable. Please try again.");
+      setError(error instanceof Error ? error.message : "Image check unavailable. Please try again.");
     } finally {
       setPending(false);
     }

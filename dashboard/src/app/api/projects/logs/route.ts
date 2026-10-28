@@ -1,3 +1,4 @@
+import { apiSessionFailure } from "@/lib/api-auth";
 import { unstable_rethrow } from "next/navigation";
 
 import { getProjectLogs, logRangeMs, ProjectLogScopeError } from "@/lib/project-logs";
@@ -18,6 +19,8 @@ export async function GET(request: Request) {
     const result = await getProjectLogs(projectId, environmentId, rangeMs, signal);
     return Response.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
+    const denied = apiSessionFailure(error);
+    if (denied) return denied;
     unstable_rethrow(error);
     return Response.json({ error: error instanceof ProjectLogScopeError
       ? "Unknown project or environment"

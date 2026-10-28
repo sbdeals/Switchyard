@@ -24,6 +24,8 @@ export const SESSION_COOKIE = "switchyard_session";
 
 /** How long a Switchyard session cookie lives (Dokploy's own session may expire sooner). */
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+// Desktop and dashboard clocks may differ slightly.
+const MAX_FUTURE_SKEW_MS = 5 * 60_000;
 
 export interface SwitchyardSession {
   /** The Dokploy session cookie ("name=value; ..."), server-side only. */
@@ -50,18 +52,23 @@ function key(): Buffer {
 }
 
 /** Seal a session into a base64url token: base64url(iv | tag | ciphertext). */
-export function sealSession(session: SwitchyardSession): string {
+export function sealSession(session: Omit<SwitchyardSession, "iat"> & { iat?: number }): string {
   const iv = randomBytes(IV_LEN);
   const cipher = createCipheriv("aes-256-gcm", key(), iv);
   const ct = Buffer.concat([
-    cipher.update(Buffer.from(JSON.stringify(session), "utf8")),
+    cipher.update(Buffer.from(JSON.stringify({ ...session, iat: session.iat ?? Date.now() }), "utf8")),
     cipher.final(),
   ]);
   return Buffer.concat([iv, cipher.getAuthTag(), ct]).toString("base64url");
 }
 
-/** Reverse of sealSession. Returns null on any tampering, wrong key, or bad shape. */
-export function openSession(token: string | undefined): SwitchyardSession | null {
+/**
+ * Reject tampering and enforce the seven-day lifetime server-side. Existing web
+ * and desktop issuers already include iat, so their envelopes stay compatible.
+ * Undated legacy envelopes must sign in again: their age cannot be established
+ * safely, and assigning a fresh iat on read would let an old token live forever.
+ */
+export function openSession(token: string | undefined, now = Date.now()): SwitchyardSession | null {
   if (!token) return null;
   try {
     const buf = Buffer.from(token, "base64url");
@@ -76,11 +83,30 @@ export function openSession(token: string | undefined): SwitchyardSession | null
     if (
       !parsed ||
       typeof parsed.dokployCookie !== "string" ||
-      typeof parsed.email !== "string"
+      !parsed.dokployCookie.trim() ||
+      typeof parsed.email !== "string" ||
+      typeof parsed.iat !== "number" ||
+      !Number.isFinite(parsed.iat) ||
+      parsed.iat <= 0
     ) {
       return null;
     }
+    if (now - parsed.iat >= SESSION_MAX_AGE * 1000) return null;
+    if (parsed.iat - now > MAX_FUTURE_SKEW_MS) return null;
     return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** Open only the cookie carried by this request, never a background session. */
+export function sessionFromRequest(request: Request): SwitchyardSession | null {
+  const token = request.headers.get("cookie")?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${SESSION_COOKIE}=`))
+    ?.slice(SESSION_COOKIE.length + 1);
+  try {
+    return openSession(token === undefined ? undefined : decodeURIComponent(token));
   } catch {
     return null;
   }

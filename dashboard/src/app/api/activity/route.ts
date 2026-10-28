@@ -1,3 +1,4 @@
+import { apiSessionFailure } from "@/lib/api-auth";
 import { unstable_rethrow } from "next/navigation";
 
 import { normalizeActivity } from "@/lib/activity";
@@ -20,9 +21,11 @@ export async function GET() {
       }
     );
   } catch (error) {
+    const denied = apiSessionFailure(error);
+    if (denied) return denied;
     unstable_rethrow(error);
     return Response.json(
-      { error: "Activity unavailable" },
+      { error: "Activity unavailable", code: "unavailable" },
       { status: 503, headers: { "Cache-Control": "no-store" } }
     );
   }

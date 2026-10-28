@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api-client";
 import { formatVisibleLogs, logDownloadFilename } from "./log-export";
 
 export async function copyVisibleLogs(lines: { ts: number; text: string }[]): Promise<void> {
@@ -7,8 +8,7 @@ export async function copyVisibleLogs(lines: { ts: number; text: string }[]): Pr
 /** Fetch first so authorization and daemon errors stay visible in the drawer. */
 export async function downloadServiceLogs(app: string, lines: number, format: "log" | "json"): Promise<void> {
   const query = new URLSearchParams({ app, lines: String(lines), format });
-  const response = await fetch(`/api/services/logs/download?${query}`);
-  if (!response.ok) throw new Error(`Could not download logs (${response.status}). Try again.`);
+  const response = await apiFetch(`/api/services/logs/download?${query}`);
   const contentType = format === "json" ? "application/json" : "text/plain";
   if (!response.headers.get("Content-Type")?.startsWith(contentType)) {
     throw new Error("Could not download logs. Sign in and try again.");

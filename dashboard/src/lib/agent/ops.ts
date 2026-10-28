@@ -47,7 +47,7 @@ async function resolveTargetEnv(environmentId?: string): Promise<string> {
 
 /** Find a service by exact id, then by (case-insensitive) name or appName. */
 export async function resolveService(idOrName: string): Promise<Service | null> {
-  const { services } = await loadWorkspace();
+  const { services } = await loadWorkspace({ includeRuntime: false });
   const needle = idOrName.trim().toLowerCase();
   return (
     services.find((s) => s.id === idOrName) ??

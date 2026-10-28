@@ -1,5 +1,5 @@
 import { runExec } from "@/lib/docker";
-import { knownAppNames } from "@/lib/dokploy";
+import { requireAppAccess } from "@/lib/api-auth";
 import { runConsoleCommand } from "@/lib/console-exec";
 
 export const runtime = "nodejs";
@@ -30,15 +30,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "missing app or command" }, { status: 400 });
   }
 
-  // Security guard: only exec into containers that belong to a Dokploy-managed
-  // service. findContainerId matches by name prefix, so without this allowlist
-  // an arbitrary name could resolve an unrelated host container. Exec is
-  // arbitrary code execution, so this endpoint is gated even though the
-  // logs/metrics routes (read-only) are not.
-  const allowed = await knownAppNames();
-  if (!allowed.has(app)) {
-    return Response.json({ error: "unknown or unmanaged service" }, { status: 403 });
-  }
+  const allowed = await requireAppAccess(request, app);
+  if (allowed instanceof Response) return allowed;
 
   try {
     const result = await runConsoleCommand(command, (argv) => runExec(app, argv));

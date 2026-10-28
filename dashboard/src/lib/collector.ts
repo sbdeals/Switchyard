@@ -13,7 +13,7 @@
  * Docker hiccup just skips a cycle.
  */
 import "server-only";
-import { loadWorkspace, notifyThroughDokploy, type Service } from "./dokploy";
+import { hasSystemCredentials, withSystemSession, loadWorkspace, notifyThroughDokploy, type Service } from "./dokploy";
 import { sampleStatsOnce, containerHealth, readRecentLogs } from "./docker";
 import { storeEnabled, writeMetric, writeLogs, pruneOld } from "./store";
 import {
@@ -139,13 +139,23 @@ async function tick(): Promise<void> {
   }
 }
 
-/** Start the collector once. No-op when neither persistence nor alerts are on. */
+/**
+ * Start once with configured system credentials. Main inherited the first
+ * rendering user's request cookie; that could sample without env credentials
+ * while that request/session remained usable. Intentionally disable that unsafe
+ * fallback. CLI and desktop launches both provide these env credentials.
+ */
 export function ensureCollector(): void {
   if (rt.started) return;
   if (!storeEnabled() && !alertsEnabled) return;
   rt.started = true;
+  if (!hasSystemCredentials()) {
+    console.warn("[collector] disabled: DOKPLOY_EMAIL and DOKPLOY_PASSWORD are required for background metrics and alerts.");
+    return;
+  }
   const loop = () => {
-    void tick();
+    // Explicit background credentials; never inherit the rendering user's cookie.
+    void withSystemSession(tick).catch(() => {});
   };
   loop(); // prime immediately so history starts filling
   rt.timer = setInterval(loop, INTERVAL_MS);

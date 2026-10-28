@@ -1,5 +1,7 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ChevronRight, Loader2, TerminalSquare } from "lucide-react";
 import { AnsiText } from "@/components/service/AnsiText";
@@ -66,7 +68,7 @@ export function ConsoleTab({ appName }: { appName: string }) {
     setRunning(true);
     let entry: Entry;
     try {
-      const res = await fetch("/api/services/exec", {
+      const res = await apiFetch("/api/services/exec", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ app: appName, command: cmd }),

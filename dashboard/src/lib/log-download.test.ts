@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/docker", () => ({ readRecentLogs: vi.fn() }));
-vi.mock("@/lib/dokploy", () => ({ knownAppNames: vi.fn() }));
+vi.mock("@/lib/dokploy", () => ({ knownAppNamesForRequest: vi.fn() }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: vi.fn() }));
 
 import { GET } from "../app/api/services/logs/download/route";
 import { readRecentLogs } from "./docker";
-import { knownAppNames } from "./dokploy";
+import { knownAppNamesForRequest } from "./dokploy";
 
 const allowed = new Set(["logs-download-test"]);
 const ts = Date.parse("2026-10-26T12:34:56.000Z");
@@ -14,7 +15,7 @@ const request = (params = "") => new Request(`http://localhost/api/services/logs
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(knownAppNames).mockResolvedValue(allowed);
+  vi.mocked(knownAppNamesForRequest).mockResolvedValue(allowed);
   vi.mocked(readRecentLogs).mockResolvedValue([{ ts, text: "\x1b[32mhello\x1b[0m", stream: "stdout" }]);
 });
 
@@ -27,12 +28,12 @@ describe("GET log download", () => {
   it("rejects unknown apps before reading any container logs", async () => {
     const response = await GET(new Request("http://localhost/api/services/logs/download?app=another-app"));
     expect(response.status).toBe(403);
-    expect(await response.text()).toBe("unknown app");
+    expect(await response.json()).toEqual({ error: "Unknown or unmanaged service.", code: "forbidden" });
     expect(readRecentLogs).not.toHaveBeenCalled();
   });
 
   it("fails closed when the workspace cannot be read", async () => {
-    vi.mocked(knownAppNames).mockRejectedValue(new Error("unavailable"));
+    vi.mocked(knownAppNamesForRequest).mockRejectedValue(new Error("unavailable"));
     expect((await GET(request())).status).toBe(503);
     expect(readRecentLogs).not.toHaveBeenCalled();
   });

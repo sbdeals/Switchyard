@@ -1,3 +1,4 @@
+vi.mock("server-only", () => ({}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Service } from "./dokploy";
@@ -77,15 +78,17 @@ describe("activity route", () => {
     loadWorkspace.mockRejectedValue(new Error("backend-private-details"));
     const response = await GET();
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "Activity unavailable" });
+    expect(await response.json()).toEqual({ error: "Activity unavailable", code: "unavailable" });
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
-  it("preserves the framework redirect for an expired session", async () => {
+  it("returns 401 at the API boundary for an expired session", async () => {
     const error = Object.assign(new Error("NEXT_REDIRECT"), {
       digest: "NEXT_REDIRECT;replace;/login;307;",
     });
     loadWorkspace.mockRejectedValue(error);
-    await expect(GET()).rejects.toBe(error);
+    const response = await GET();
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ code: "unauthenticated" });
   });
 });

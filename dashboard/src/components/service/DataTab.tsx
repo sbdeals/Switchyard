@@ -1,5 +1,7 @@
 "use client";
 
+import { apiFetch, ApiError } from "@/lib/api-client";
+
 import {
   useCallback,
   useEffect,
@@ -64,7 +66,7 @@ interface QueryResult extends Grid {
 
 /** POST to the Data-tab backend. Throws with the server's error message on non-2xx. */
 async function api<T>(body: Record<string, unknown>): Promise<T> {
-  const res = await fetch("/api/services/postgres", {
+  const res = await apiFetch("/api/services/postgres", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -444,7 +446,7 @@ function SqlView({ app, targetKey }: { app: string; targetKey: string }) {
     if (!trimmed || running) return;
     setRunning(true);
     setError(null);
-    fetch("/api/services/postgres", {
+    apiFetch("/api/services/postgres", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ app, op: "query", target: targetKey, sql: trimmed, allowWrites }),
@@ -462,7 +464,7 @@ function SqlView({ app, targetKey }: { app: string; targetKey: string }) {
         }
       })
       .catch((e: unknown) =>
-        setError({ message: e instanceof Error ? e.message : String(e), readonly: false })
+        setError({ message: e instanceof Error ? e.message : String(e), readonly: e instanceof ApiError && e.readonlyRejected })
       )
       .finally(() => setRunning(false));
   }, [app, targetKey, sql, allowWrites, running]);

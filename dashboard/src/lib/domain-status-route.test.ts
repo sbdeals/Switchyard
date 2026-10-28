@@ -1,3 +1,4 @@
+vi.mock("server-only", () => ({}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { dokployRequest, checkDomainStatus, unstableRethrow } = vi.hoisted(() => ({
@@ -65,7 +66,7 @@ describe("domain status route", () => {
     const response = await GET(request());
     expect(response.status).toBe(503);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(await response.json()).toEqual({ error: "Workspace unavailable" });
+    expect(await response.json()).toEqual({ error: "Workspace unavailable", code: "unavailable" });
     expect(unstableRethrow).toHaveBeenCalledWith(error);
     expect(checkDomainStatus).not.toHaveBeenCalled();
   });

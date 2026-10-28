@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { DeploymentDiagnosis, DiagnosisTab } from "@/lib/deploy-diagnosis";
+import { apiFetch } from "@/lib/api-client";
 
 type Props = {
   deploymentId: string;
@@ -20,11 +21,10 @@ export function DiagnosisCard({ deploymentId, serviceKind, onNavigate }: Props) 
     const controller = new AbortController();
     async function load() {
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           `/api/deployments/diagnosis?deploymentId=${encodeURIComponent(deploymentId)}`,
           { signal: controller.signal, cache: "no-store" }
         );
-        if (!response.ok) throw new Error("Build log unavailable. Retry when Dokploy is reachable and the log is ready.");
         const data = await response.json() as { diagnosis: DeploymentDiagnosis };
         if (!controller.signal.aborted) setDiagnosis(data.diagnosis);
       } catch (e) {

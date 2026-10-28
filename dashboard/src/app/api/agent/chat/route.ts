@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import type Anthropic from "@anthropic-ai/sdk";
 import { isAgentConfigured } from "@/lib/agent/client";
 import { runAgentTurn, type AgentEvent } from "@/lib/agent/run";
@@ -28,9 +29,12 @@ function toMessages(raw: unknown): Anthropic.MessageParam[] {
  *    signals, then a final `done` event.
  */
 export async function POST(req: Request) {
+  const denied = await requireApiSession(req);
+  if (denied) return denied;
+
   if (!isAgentConfigured()) {
     return Response.json(
-      { error: "No Anthropic API key configured — add one at the top of the Agent panel." },
+      { error: "No Anthropic API key configured — add one at the top of the Agent panel.", code: "unavailable" },
       { status: 503 }
     );
   }

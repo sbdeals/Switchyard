@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { agentModel } from "@/lib/agent/client";
 import {
   AGENT_MODELS,
@@ -65,15 +66,6 @@ const PROVIDER_PRESETS = [
   { id: "custom", label: "Custom / other", baseUrl: "", keyHint: "", models: [] },
 ] as const;
 
-// The proxy already gates these routes behind the dashboard login; this
-// double-checks the session cookie actually exists before touching the key.
-function assertSession(req: Request): Response | null {
-  const cookie = req.headers.get("cookie") ?? "";
-  if (!/(?:^|;\s*)switchyard_session=/.test(cookie)) {
-    return Response.json({ error: "Not signed in." }, { status: 401 });
-  }
-  return null;
-}
 
 function status() {
   const resolved = resolveAgentKey();
@@ -94,7 +86,7 @@ function status() {
 
 /** GET -> credential + provider status (never the key itself). */
 export async function GET(req: Request) {
-  const denied = assertSession(req);
+  const denied = await requireApiSession(req);
   if (denied) return denied;
   return Response.json(status());
 }
@@ -109,7 +101,7 @@ export async function GET(req: Request) {
  * All take effect immediately, no restart.
  */
 export async function POST(req: Request) {
-  const denied = assertSession(req);
+  const denied = await requireApiSession(req);
   if (denied) return denied;
 
   let body: { key?: unknown; model?: unknown; provider?: unknown; baseUrl?: unknown; clear?: unknown };

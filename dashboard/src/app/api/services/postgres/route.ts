@@ -1,4 +1,4 @@
-import { knownAppNames } from "@/lib/dokploy";
+import { requireAppAccess } from "@/lib/api-auth";
 import {
   fetchRows,
   listTables,
@@ -17,12 +17,10 @@ export const dynamic = "force-dynamic";
  * no user-supplied credentials (see lib/postgres.ts and lib/docker.ts).
  *
  * Security:
- *  - AuthN/Z: this route sits behind the same session gate as every dashboard
- *    API route (src/proxy.ts checks the sealed cookie's presence; knownAppNames
- *    below revalidates the per-user session and, on failure, redirects to
- *    /login). The requested `app` must be one of the current user's Dokploy
- *    services — otherwise an authed user could reach an unrelated host container
- *    by name. This mirrors /api/services/exec.
+ *  - AuthN/Z: requireAppAccess opens the sealed session, validates it against
+ *    Dokploy with this user's cookie, and loads their service tree on EVERY
+ *    request before Docker access. Invalid sessions return 401, unowned apps
+ *    403, and unavailable authorization 503. The proxy is only a coarse gate.
  *  - Read-only: PostgreSQL enforces read-only transactions unless the request
  *    explicitly sets allowWrites. The classifier also rejects statement batches
  *    and provides early feedback (lib/postgres.ts #classifyStatement).
@@ -65,15 +63,8 @@ export async function POST(request: Request) {
   if (!app) return bad("Missing service name.");
   if (!op) return bad("Missing op.");
 
-  // AuthZ: only browse containers belonging to one of the current user's Dokploy
-  // services. knownAppNames also revalidates the session (fail closed).
-  let allowed: Set<string>;
-  try {
-    allowed = await knownAppNames();
-  } catch {
-    return bad("Workspace unavailable.", 503);
-  }
-  if (!allowed.has(app)) return bad("Unknown or unmanaged service.", 403);
+  const allowed = await requireAppAccess(request, app);
+  if (allowed instanceof Response) return allowed;
 
   try {
     if (op === "targets") {

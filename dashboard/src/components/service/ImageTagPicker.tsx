@@ -6,6 +6,7 @@ import { parseImageRef, withImageTag, type ImageTag } from "@/lib/image-ref";
 import { imageTagOptions, nextTagIndex } from "@/lib/image-tag-picker";
 import { Field, inputCls } from "@/components/service/primitives";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api-client";
 
 export function ImageTagPicker({ image, currentImage, onChange }: {
   image: string;
@@ -18,6 +19,7 @@ export function ImageTagPicker({ image, currentImage, onChange }: {
   const [search, setSearch] = useState(false);
   const [active, setActive] = useState(-1);
   const [result, setResult] = useState<{ repository: string; tags: ImageTag[]; available: boolean } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const ref = parseImageRef(image);
   const repository = ref ? `${ref.registry}/${ref.namespace}/${ref.repository}` : "";
   const loaded = result?.repository === repository;
@@ -30,14 +32,16 @@ export function ImageTagPicker({ image, currentImage, onChange }: {
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/images/tags?image=${encodeURIComponent(repository)}`, {
+        const response = await apiFetch(`/api/images/tags?image=${encodeURIComponent(repository)}`, {
           signal: controller.signal,
         });
-        if (!response.ok) throw new Error("Tags unavailable");
         const data: { tags: ImageTag[]; available: boolean } = await response.json();
-        if (!controller.signal.aborted) setResult({ repository, ...data });
-      } catch {
-        if (!controller.signal.aborted) setResult({ repository, tags: [], available: false });
+        if (!controller.signal.aborted) { setResult({ repository, ...data }); setError(null); }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setResult({ repository, tags: [], available: false });
+          setError(error instanceof Error ? error.message : "Tags unavailable.");
+        }
       }
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
@@ -70,7 +74,7 @@ export function ImageTagPicker({ image, currentImage, onChange }: {
     setActive(-1);
   }
 
-  const status = !repository || (loaded && !available)
+  const status = loaded && error ? error : !repository || (loaded && !available)
     ? "Tags unavailable. You can still enter any image reference."
     : !loaded ? "Loading recent tags…"
     : options.length ? "Recent public Docker Hub tags. Type repo:tag to search."

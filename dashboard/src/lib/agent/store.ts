@@ -34,11 +34,9 @@ const rt: StagedRuntime =
   g.__switchyardAgentStaged ?? (g.__switchyardAgentStaged = { byKey: new Map() });
 
 /**
- * Derive a stable per-user key from the request cookies. The dashboard's
- * per-user login (when present) sets a `switchyard_session` cookie; we hash it
- * so the raw session value is never used as a map key. When no such cookie
- * exists (single-tenant admin-BFF deployments), everyone shares one key — which
- * matches how the rest of the dashboard already behaves.
+ * Hash the session token to isolate staged changes without storing raw tokens
+ * as map keys. This is an identifier, NOT authentication: callers must first
+ * verify the session against Dokploy (requireApiSession).
  */
 export function sessionKey(req: Request): string {
   const cookie = req.headers.get("cookie") ?? "";
