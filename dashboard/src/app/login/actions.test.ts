@@ -211,6 +211,46 @@ describe("logoutAction", () => {
     expectCleared();
   });
 
+  it("bounds a hanging origin retry by three seconds total, including time spent on the first origin", async () => {
+    ctx.token = sealed();
+    vi.useFakeTimers();
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    const signals: AbortSignal[] = [];
+    signOut = (init) => {
+      const signal = init.signal!;
+      signals.push(signal);
+      return new Promise((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        if (signals.length === 1) {
+          setTimeout(() => resolve(Response.json({ code: "INVALID_ORIGIN" }, { status: 403 })), 2_000);
+        }
+        // The next origin never responds; only the shared abort can finish it.
+      });
+    };
+    const started = Date.now();
+    const result = redirectedTo(actions.logoutAction);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const origins = fetchMock.mock.calls.map(([, init]) => new Headers(init!.headers).get("origin"));
+    expect(origins[0]).not.toBe(origins[1]);
+    expect(signals[0]).toBe(signals[1]);
+    expect(signals[1].aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(ctx.set).not.toHaveBeenCalled();
+    expect(ctx.redirect).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(Date.now() - started).toBe(3_000);
+    expect(signals[1].aborted).toBe(true);
+    expectCleared();
+    expect(await result).toBe("/login");
+    expect(AbortSignal.timeout).toHaveBeenCalledExactlyOnceWith(3_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects the old sealed cookie on exec after sign-out, even with a warmed name cache", async () => {
     const token = sealed();
     const request = () => new Request("http://dashboard.test/api/services/exec", {
@@ -231,6 +271,36 @@ describe("logoutAction", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0][0])).toBe("http://dokploy.test/api/project.all");
     expect(ctx.runExec).not.toHaveBeenCalled();
+  });
+});
+
+describe.each([
+  { proto: "https", env: "", secure: true },
+  { proto: null, env: "1", secure: true },
+  { proto: "http", env: "", secure: false },
+])("Dokploy-401 cookie recovery ($proto, $env)", ({ proto, env, secure }) => {
+  it.each(["request", "restoreBackup"] as const)("clears with matching attributes after %s redirects", async (kind) => {
+    ctx.token = sealed();
+    revoked = true;
+    vi.stubEnv("SWITCHYARD_ASSUME_HTTPS", env);
+    const dokploy = await import("@/lib/dokploy");
+    const target = await redirectedTo(() => kind === "request"
+      ? dokploy.request("project.all")
+      : dokploy.restoreBackup({
+        databaseId: "user-db-id", engine: "postgres", databaseName: "test-db",
+        backupFile: "test-backup.sql", destinationId: "test-destination-id",
+      }));
+    expect(target).toBe("/api/session/expired");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const response = expireSession(new Request(`http://dashboard.test${target}`, {
+      headers: proto === null ? {} : { "x-forwarded-proto": proto },
+    }));
+    expect(response.cookies.get(session.SESSION_COOKIE)).toMatchObject({
+      value: "", httpOnly: true, sameSite: "lax", path: "/", secure, maxAge: 0,
+    });
+    expect(response.headers.get("set-cookie")).toContain("Expires=Thu, 01 Jan 1970");
+    expect(response.headers.get("location")).toBe("http://dashboard.test/login?expired=1");
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 });
 

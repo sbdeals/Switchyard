@@ -1,7 +1,7 @@
 /**
  * Trust the dashboard proxy's first forwarded scheme, or the explicit TLS
- * opt-in. Plain HTTP stays usable for localhost installs. Kept free of Next.js
- * and server-only imports so Electron's session issuer uses the same policy.
+ * opt-in. Plain HTTP stays usable for localhost installs. Shared by dashboard
+ * session issuance and clearing; Electron issues its own loopback HTTP cookie.
  */
 export function shouldSecureCookie(
   forwardedProto: string | null | undefined,

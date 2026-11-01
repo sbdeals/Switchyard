@@ -15,7 +15,6 @@ import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import type { Session } from "electron";
 
 import type { SwitchyardConfig } from "../../../cli/src/core/config.js";
-import { shouldSecureCookie } from "../../../dashboard/src/lib/session-cookie.js";
 import { log } from "./logging.js";
 
 /** Mirror of SESSION_COOKIE / SESSION_MAX_AGE in dashboard/src/lib/session.ts. */
@@ -75,18 +74,13 @@ export async function establishDashboardSession(
       email: cfg.adminEmail,
       iat: Date.now(),
     });
-    const dashboardUrl = `http://127.0.0.1:${cfg.dashboardPort}`;
     await ses.cookies.set({
-      url: dashboardUrl,
+      url: `http://127.0.0.1:${cfg.dashboardPort}`,
       name: SESSION_COOKIE,
       value: token,
       path: "/",
       httpOnly: true,
       sameSite: "lax",
-      secure: shouldSecureCookie(
-        new URL(dashboardUrl).protocol.slice(0, -1),
-        cfg.assumeHttps ? "1" : process.env.SWITCHYARD_ASSUME_HTTPS,
-      ),
       expirationDate: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE,
     });
     log(`Auto-login: dashboard session minted for ${cfg.adminEmail}.`);
