@@ -6,6 +6,7 @@ vi.mock("./docker", () => ({}));
 
 const fetchMock = vi.fn();
 let names: typeof import("./dokploy").knownAppNamesForRequest;
+let signOut: typeof import("./dokploy").signOutOfDokploy;
 let seal: typeof import("./session").sealSession;
 let ids: string[];
 function request(user = "alice", token?: string) {
@@ -34,11 +35,29 @@ beforeEach(async () => {
     return Response.json({ appName: `${user}-${id}` });
   });
   names = (await import("./dokploy")).knownAppNamesForRequest;
+  signOut = (await import("./dokploy")).signOutOfDokploy;
   seal = (await import("./session")).sealSession;
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe("verified-session app name cache", () => {
+  it.each(["success", "500", "unreachable"])("evicts only the signing-out session's names on %s", async (outcome) => {
+    await names(request("alice"));
+    await names(request("bob"));
+    if (outcome === "unreachable") fetchMock.mockRejectedValueOnce(new Error("Unavailable"));
+    else fetchMock.mockResolvedValueOnce(new Response(null, { status: outcome === "success" ? 200 : 500 }));
+    if (outcome === "success") await signOut("dokploy=alice");
+    else await expect(signOut("dokploy=alice")).rejects.toThrow();
+    fetchMock.mockClear();
+    // Keep the stub session valid to observe eviction even when revocation fails.
+    expect(await names(request("alice"))).toEqual(new Set(["alice-service-id"]));
+    expect(detailCalls()).toHaveLength(1);
+    fetchMock.mockClear();
+    expect(await names(request("bob"))).toEqual(new Set(["bob-service-id"]));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(detailCalls()).toHaveLength(0);
+  });
+
   it("reuses detail resolutions while checking project.all with the caller's cookie on every request", async () => {
     expect(await names(request())).toEqual(new Set(["alice-service-id"]));
     fetchMock.mockClear();

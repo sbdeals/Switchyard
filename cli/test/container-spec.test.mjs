@@ -100,6 +100,21 @@ test("hostIp adds SWITCHYARD_HOST_IP and changes the hash; empty is a no-op", ()
   assert.notEqual(base.hash, withIp.hash);
 });
 
+test("assumeHttps adds its env only when enabled and leaves the default container spec unchanged", () => {
+  const cfg = defaultConfig("linux");
+  const base = renderContainer(cfg, "1.0.0");
+  const legacy = { ...cfg };
+  delete legacy.assumeHttps;
+  assert.deepEqual(base, renderContainer(legacy, "1.0.0"));
+  assert.deepEqual(base, renderContainer({ ...cfg, assumeHttps: false }, "1.0.0"));
+  assert.ok(!base.runArgs.some((arg) => arg.startsWith("SWITCHYARD_ASSUME_HTTPS=")));
+  const enabled = renderContainer({ ...cfg, assumeHttps: true }, "1.0.0");
+  assert.ok(enabled.runArgs.includes("SWITCHYARD_ASSUME_HTTPS=1"));
+  assert.equal(enabled.runArgs[enabled.runArgs.indexOf("SWITCHYARD_ASSUME_HTTPS=1") - 1], "-e");
+  assert.notEqual(base.hash, enabled.hash);
+  assert.deepEqual(base.runEnv, enabled.runEnv);
+});
+
 test("run args carry the BFF env and labels", () => {
   const cfg = { ...defaultConfig("linux"), adminEmail: "a@b.co", adminPassword: "pw" };
   const plan = renderContainer(cfg, "1.0.0");

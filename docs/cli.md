@@ -256,6 +256,7 @@ dashboard container gets its credentials without hand-edited env files).
 | `dokployPort` | `3000` | Host port Dokploy publishes (adopted from existing installs) |
 | `dashboardPort` | `3001` | Host port the dashboard publishes |
 | `expose` | `false` | `false` = bind 127.0.0.1 |
+| `assumeHttps` | `false` | Force Secure session cookies for TLS proxies that omit `X-Forwarded-Proto: https`. Adds `SWITCHYARD_ASSUME_HTTPS=1` only when enabled; plain HTTP sign-in will stop working |
 | `skipTraefik` | `false` on Linux, `true` on Docker Desktop | Skip the reverse proxy |
 | `localIngress` | `false` | Opt-in demo Traefik (see [Local ingress](#local-ingress-demo-domain-routing)); `up` re-converges it when set |
 | `localIngressHttpPort` | `8080` | Host HTTP port for the demo proxy |
@@ -343,6 +344,13 @@ itself speaks plain HTTP. Because of that:
   shout at you first. On an internet-reachable machine, put an HTTPS reverse
   proxy in front — credentials and session cookies should not cross networks
   in the clear.
+- Session cookies are `Secure` when the first `X-Forwarded-Proto` value is
+  `https` (case-insensitive). If your TLS proxy omits it, use
+  `switchyard config set assumeHttps true`. Keep this off for plain HTTP,
+  including the default localhost and desktop install.
+- Logout asks Dokploy to revoke the user's session with a three-second deadline,
+  then clears the browser cookie. Successful revocation also rejects copied
+  cookies; if Dokploy is unavailable, only local sign-out is guaranteed.
 
 ## Migrating an existing install
 

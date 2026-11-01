@@ -1,14 +1,22 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { safeNextPath } from "@/lib/deeplink";
-import { signInToDokploy, signUpToDokploy } from "@/lib/dokploy";
-import { SESSION_COOKIE, SESSION_MAX_AGE, sealSession } from "@/lib/session";
+import { signInToDokploy, signOutOfDokploy, signUpToDokploy } from "@/lib/dokploy";
+import { SESSION_COOKIE, SESSION_MAX_AGE, openSession, sealSession } from "@/lib/session";
+import { shouldSecureCookie } from "@/lib/session-cookie";
 
 export interface LoginState {
   error?: string;
+}
+
+async function cookieSecure(): Promise<boolean> {
+  return shouldSecureCookie(
+    (await headers()).get("x-forwarded-proto"),
+    process.env.SWITCHYARD_ASSUME_HTTPS,
+  );
 }
 
 /**
@@ -43,6 +51,7 @@ async function establishSession(email: string, password: string, nextPath: unkno
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_MAX_AGE,
+    secure: await cookieSecure(),
   });
 
   // Outside the try/catch: redirect() throws NEXT_REDIRECT by design.
@@ -88,9 +97,25 @@ export async function signupAction(_prev: LoginState, formData: FormData): Promi
   return establishSession(email, password, formData.get("next"));
 }
 
-/** Clear the session and return to the login screen. */
+/** Revoke the user's Dokploy session, then clear the browser cookie even on failure. */
 export async function logoutAction(): Promise<void> {
   const store = await cookies();
-  store.delete(SESSION_COOKIE);
+  const session = openSession(store.get(SESSION_COOKIE)?.value);
+  if (session) {
+    try {
+      await signOutOfDokploy(session.dokployCookie);
+    } catch {
+      // Neither upstream bodies nor thrown errors are safe to log with credentials.
+      console.warn("[logout] Dokploy sign-out failed; clearing the local session anyway.");
+    }
+  }
+  store.set(SESSION_COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: await cookieSecure(),
+    maxAge: 0,
+    expires: new Date(0),
+  });
   redirect("/login");
 }

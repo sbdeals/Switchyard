@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: mocks.getCookie, set: mocks.setCookie }),
+  headers: async () => new Headers(),
 }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/lib/dokploy", () => ({

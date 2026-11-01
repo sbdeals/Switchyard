@@ -83,6 +83,7 @@ npm run dev                  # http://localhost:3001  (Dokploy owns :3000)
 | `DOKPLOY_EMAIL` | admin email — used only by the `/api/health?deep=1` probe |
 | `DOKPLOY_PASSWORD` | admin password — same single purpose |
 | `SWITCHYARD_SESSION_SECRET` | signs/encrypts the session cookie (required) |
+| `SWITCHYARD_ASSUME_HTTPS` | `1`/`true` forces Secure session cookies for TLS proxies that omit `X-Forwarded-Proto: https`; off by default for plain HTTP localhost installs |
 
 See `.env.example` for the optional auto-URL (`SWITCHYARD_HOST_IP`) and
 observability persistence/alerting (`SWITCHYARD_STORE_URL`, `SWITCHYARD_ALERT_*`)

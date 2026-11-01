@@ -6,7 +6,8 @@
  * Dokploy session cookie inside a sealed Switchyard session cookie and use it
  * for every request THAT user makes (`request()` -> `userCookie()`, read from
  * next/headers). The raw Dokploy cookie never reaches the browser. On a Dokploy
- * 401 we clear the Switchyard session and send the user back to /login.
+ * 401 we clear the Switchyard session and send the user back to /login. Logout
+ * also revokes that user's Dokploy session so other sealed copies stop working.
  *
  * The env admin credentials (`DOKPLOY_EMAIL`/`DOKPLOY_PASSWORD`) serve only the
  * system self-probe `ping()` behind /api/health?deep=1 and the background
@@ -340,14 +341,20 @@ export interface ProjectNode {
  * (src/app/login/actions.ts) and the admin system probe below.
  */
 /** better-auth POST that walks the origin candidates on INVALID_ORIGIN. */
-async function authFetch(path: string, payload: unknown): Promise<Response> {
+async function authFetch(
+  path: string,
+  payload: unknown,
+  extraHeaders: Record<string, string> = {},
+  signal?: AbortSignal,
+): Promise<Response> {
   let res: Response | null = null;
   for (const origin of originCandidates()) {
     res = await fetch(`${BASE}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Origin: origin },
+      headers: { "Content-Type": "application/json", Origin: origin, ...extraHeaders },
       body: JSON.stringify(payload),
       cache: "no-store",
+      signal,
     });
     if (await isInvalidOrigin(res)) continue;
     workingOrigin = origin;
@@ -370,6 +377,17 @@ export async function signInToDokploy(email: string, password: string): Promise<
     .split(/,(?=[^;]+=[^;]+)/)
     .map((c) => c.split(";")[0].trim())
     .join("; ");
+}
+
+/** Best-effort caller: one short deadline covers all better-auth origin retries. */
+export async function signOutOfDokploy(dokployCookie: string): Promise<void> {
+  try {
+    const res = await authFetch("/api/auth/sign-out", {}, { Cookie: dokployCookie }, AbortSignal.timeout(3_000));
+    // Never include the response body: it may contain session credentials.
+    if (!res.ok) throw new Error(`Dokploy sign-out failed (${res.status}).`);
+  } finally {
+    clearSessionAppNames(dokployCookie);
+  }
 }
 
 /**
@@ -2714,6 +2732,14 @@ export async function verifySessionForRequest(request: Request) {
 const appNameResolutions = new Map<string, { name: string; expires: number }>();
 const APP_NAME_TTL_MS = 30_000;
 const APP_NAME_CACHE_LIMIT = 500;
+
+/** Bounded scan (at most 500 entries); logout clears only this backend session. */
+function clearSessionAppNames(dokployCookie: string): void {
+  const prefix = `${createHash("sha256").update(dokployCookie).digest("hex")}:`;
+  for (const key of appNameResolutions.keys()) {
+    if (key.startsWith(prefix)) appNameResolutions.delete(key);
+  }
+}
 
 /**
  * Authenticate against a fresh project.all on EVERY request, before consulting

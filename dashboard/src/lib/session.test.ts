@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 import { openSession, sealSession, sessionFromRequest, SESSION_MAX_AGE } from "./session";
+import { shouldSecureCookie } from "./session-cookie";
 
 const secret = "test-only-envelope-secret";
 const now = Date.parse("2026-10-27T12:00:00Z");
@@ -20,6 +21,26 @@ beforeEach(() => {
   vi.stubEnv("SWITCHYARD_SESSION_SECRET", secret);
   vi.useFakeTimers();
   vi.setSystemTime(now);
+});
+
+describe("shouldSecureCookie", () => {
+  it.each(["https", "HTTPS", " https , http"])("trusts the first forwarded HTTPS scheme: %s", (proto) => {
+    expect(shouldSecureCookie(proto, undefined)).toBe(true);
+    expect(shouldSecureCookie(proto, "false")).toBe(true);
+  });
+
+  it.each([null, undefined, "", "http", "http, https"])("keeps plain HTTP usable: %s", (proto) => {
+    expect(shouldSecureCookie(proto, undefined)).toBe(false);
+  });
+
+  it.each(["1", "true", "TRUE", " true "])("honors the explicit TLS opt-in: %s", (env) => {
+    expect(shouldSecureCookie(null, env)).toBe(true);
+    expect(shouldSecureCookie("http", env)).toBe(true);
+  });
+
+  it.each([undefined, "", "0", "false", "off", "on", "yes"])("does not enable TLS for other env values: %s", (env) => {
+    expect(shouldSecureCookie(null, env)).toBe(false);
+  });
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
 
