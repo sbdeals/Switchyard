@@ -72,6 +72,7 @@ test("configs written by older CLIs gain new defaults", () => {
     assert.equal(config.dashboardPort, 4000);
     assert.equal(config.dokployPort, 3000); // default filled in
     assert.equal(config.image, "ghcr.io/sbdeals/switchyard");
+    assert.equal(config.assumeHttps, false);
   });
 });
 
@@ -89,6 +90,13 @@ test("coerceConfigValue types and errors", () => {
   assert.equal(coerceConfigValue("adminEmail", "a@b.co"), "a@b.co");
   assert.throws(() => coerceConfigValue("dashboardPort", "abc"), /integer/);
   assert.throws(() => coerceConfigValue("expose", "maybe"), /true or false/);
+});
+
+test("assumeHttps defaults off and accepts the CLI's boolean values", () => {
+  for (const platform of ["linux", "docker-desktop"]) assert.equal(defaultConfig(platform).assumeHttps, false);
+  for (const raw of ["true", "1"]) assert.equal(coerceConfigValue("assumeHttps", raw), true);
+  for (const raw of ["false", "0"]) assert.equal(coerceConfigValue("assumeHttps", raw), false);
+  for (const raw of ["maybe", "", "on"]) assert.throws(() => coerceConfigValue("assumeHttps", raw), /true or false/);
 });
 
 for (const key of PORT_KEYS) {

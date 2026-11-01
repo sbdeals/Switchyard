@@ -56,6 +56,8 @@ export function renderContainer(cfg: SwitchyardConfig, cliVersion: string): Cont
   // when non-empty so an unset value leaves the hash (and Docker Desktop
   // containers) unchanged; a changed IP recreates the container.
   if (cfg.hostIp) env.SWITCHYARD_HOST_IP = cfg.hostIp;
+  // Only add the TLS opt-in when enabled, preserving existing default hashes.
+  if (cfg.assumeHttps) env.SWITCHYARD_ASSUME_HTTPS = "1";
   const runEnv: Record<string, string> = {
     DOKPLOY_PASSWORD: cfg.adminPassword,
     SWITCHYARD_SESSION_SECRET: cfg.sessionSecret,

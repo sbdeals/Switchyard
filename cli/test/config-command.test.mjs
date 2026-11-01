@@ -95,3 +95,21 @@ test("config set persists valid port boundaries with --no-restart", () => {
     }
   });
 });
+
+test("config set assumeHttps persists the boolean and warns only when enabled", () => {
+  withCli((file, _dir, run) => {
+    for (const [value, enabled] of [["true", true], ["false", false], ["1", true], ["0", false]]) {
+      const result = run(["config", "set", "assumeHttps", value, "--no-restart"]);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(JSON.parse(readFileSync(file, "utf8")).assumeHttps, enabled);
+      const output = result.stdout + result.stderr;
+      assert.equal(output.includes("Only use it behind an HTTPS proxy"), enabled);
+      if (enabled) assert.match(output, /over plain HTTP the browser drops the cookie/);
+    }
+    const original = readFileSync(file, "utf8");
+    const result = run(["config", "set", "assumeHttps", "maybe", "--no-restart"]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /assumeHttps must be true or false/);
+    assert.equal(readFileSync(file, "utf8"), original);
+  });
+});
