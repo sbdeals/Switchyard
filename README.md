@@ -30,6 +30,8 @@ Five pieces live here:
 
 <p align="center"><em>Watch the 30-second showreel</em> · <a href="https://github.com/sbdeals/Switchyard/releases/download/v0.2.0/Switchyard-showreel.mp4">full quality</a></p>
 
+<p align="center"><sub>Music: <a href="https://pixabay.com/music/house-house-lounge-592610/">&quot;House Lounge&quot; by VelarioMusic (Pixabay)</a></sub></p>
+
 ![Switchyard canvas with connected services](docs/images/canvas-overview.png)
 
 ## Quick setup
