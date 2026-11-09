@@ -26,6 +26,10 @@ Five pieces live here:
   tools, so Claude Code can deploy apps, provision databases, and read logs
   without dashboard clicks.
 
+[![Switchyard 30-second showreel: one-command install, canvas of connected services, one-click databases, and Claude Code MCP control](docs/media/switchyard-showreel.png)](https://github.com/sbdeals/Switchyard/raw/main/docs/media/switchyard-showreel.mp4)
+
+<p align="center"><em>Watch the 30-second showreel</em> · <a href="https://github.com/sbdeals/Switchyard/releases/download/v0.2.0/Switchyard-showreel.mp4">full quality</a></p>
+
 ![Switchyard canvas with connected services](docs/images/canvas-overview.png)
 
 ## Quick setup
